@@ -1,9 +1,248 @@
+import { useState, useMemo } from 'react'
+import { useStore } from '@/store'
+import { supabase } from '@/lib/supabase'
+import { uid, today, pctColor } from '@/lib/utils'
+import { Plus, Search, Download, Trash2, Eye } from 'lucide-react'
+import type { Order } from '@/types'
+
 export function Orders() {
+  const { orders, workOrders, logs, recipes, loadAll } = useStore()
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [showForm, setShowForm] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+
+  function orderPct(orderId: string): number {
+    const wos = workOrders.filter(w => w.orderId === orderId)
+    if (!wos.length) return 0
+    const total = wos.reduce((s, w) => {
+      const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+      return s + (w.hedef > 0 ? Math.min(100, prod / w.hedef * 100) : 0)
+    }, 0)
+    return Math.round(total / wos.length)
+  }
+
+  const filtered = useMemo(() => {
+    return orders.filter(o => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (!(o.siparisNo + o.musteri + o.mamulAd).toLowerCase().includes(q)) return false
+      }
+      if (statusFilter === 'active') return orderPct(o.id) < 100
+      if (statusFilter === 'done') return orderPct(o.id) >= 100
+      if (statusFilter === 'late') return o.termin && o.termin < today() && orderPct(o.id) < 100
+      return true
+    })
+  }, [orders, search, statusFilter, workOrders, logs])
+
+  async function deleteOrder(id: string) {
+    if (!confirm('Bu siparişi silmek istediğinize emin misiniz?')) return
+    await supabase.from('uys_orders').delete().eq('id', id)
+    await supabase.from('uys_work_orders').delete().eq('order_id', id)
+    loadAll()
+  }
+
+  function exportExcel() {
+    import('xlsx').then(XLSX => {
+      const rows = filtered.map(o => ({
+        'Sipariş No': o.siparisNo, 'Müşteri': o.musteri, 'Tarih': o.tarih,
+        'Termin': o.termin, 'Ürün': o.mamulAd || o.mamulKod, 'Adet': o.adet,
+        'İlerleme': orderPct(o.id) + '%',
+      }))
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Siparişler')
+      XLSX.writeFile(wb, `siparisler_${today()}.xlsx`)
+    })
+  }
+
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-4">Orders</h1>
-      <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-500 text-sm">
-        Bu sayfa henüz geliştirilmedi.
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-xl font-semibold">Siparişler</h1>
+          <p className="text-xs text-zinc-500">{orders.length} sipariş</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white hover:border-border-2 transition-colors">
+            <Download size={13} /> Excel
+          </button>
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold transition-colors">
+            <Plus size={13} /> Yeni Sipariş
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Sipariş no veya müşteri ara..."
+            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+        </div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300 focus:outline-none">
+          <option value="all">Tümü</option>
+          <option value="active">Üretimde</option>
+          <option value="done">Tamamlandı</option>
+          <option value="late">Gecikmeli</option>
+        </select>
+      </div>
+
+      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+        {filtered.length ? (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-zinc-500">
+                <th className="text-left px-4 py-2.5">Sipariş No</th>
+                <th className="text-left px-4 py-2.5">Müşteri</th>
+                <th className="text-left px-4 py-2.5">Ürün</th>
+                <th className="text-right px-4 py-2.5">Adet</th>
+                <th className="text-left px-4 py-2.5">Termin</th>
+                <th className="text-right px-4 py-2.5">İlerleme</th>
+                <th className="text-right px-4 py-2.5">İE</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(o => {
+                const pct = orderPct(o.id)
+                const woCount = workOrders.filter(w => w.orderId === o.id).length
+                const isLate = o.termin && o.termin < today() && pct < 100
+                return (
+                  <tr key={o.id} className="border-b border-border/50 hover:bg-bg-3/50 transition-colors">
+                    <td className="px-4 py-2.5">
+                      <button onClick={() => setSelectedOrder(o)} className="font-mono text-accent hover:underline">{o.siparisNo}</button>
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-300">{o.musteri || '—'}</td>
+                    <td className="px-4 py-2.5 text-zinc-400 max-w-[200px] truncate">{o.mamulAd || o.mamulKod || '—'}</td>
+                    <td className="px-4 py-2.5 text-right font-mono">{o.adet}</td>
+                    <td className={`px-4 py-2.5 font-mono ${isLate ? 'text-red font-semibold' : 'text-zinc-500'}`}>{o.termin || '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-14 h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className={`font-mono text-[11px] w-8 text-right ${pctColor(pct)}`}>{pct}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-zinc-500">{woCount}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={() => setSelectedOrder(o)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={13} /></button>
+                        <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div className="p-8 text-center text-zinc-600 text-sm">{search ? 'Arama sonucu bulunamadı' : 'Henüz sipariş yok'}</div>
+        )}
+      </div>
+
+      {showForm && <NewOrderModal recipes={recipes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); loadAll() }} />}
+      {selectedOrder && <OrderDetailModal order={selectedOrder} workOrders={workOrders.filter(w => w.orderId === selectedOrder.id)} logs={logs} onClose={() => setSelectedOrder(null)} />}
+    </div>
+  )
+}
+
+function NewOrderModal({ recipes, onClose, onSaved }: { recipes: { id: string; mamulKod: string; mamulAd: string; ad: string }[]; onClose: () => void; onSaved: () => void }) {
+  const [siparisNo, setSiparisNo] = useState('')
+  const [musteri, setMusteri] = useState('')
+  const [termin, setTermin] = useState('')
+  const [receteId, setReceteId] = useState('')
+  const [adet, setAdet] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function save() {
+    if (!siparisNo.trim()) { setError('Sipariş No zorunlu'); return }
+    if (!termin) { setError('Termin tarihi zorunlu'); return }
+    setSaving(true)
+    const rc = recipes.find(r => r.id === receteId)
+    const { error: err } = await supabase.from('uys_orders').insert({
+      id: uid(), siparis_no: siparisNo.trim(), musteri: musteri.trim(), tarih: today(), termin,
+      mamul_kod: rc?.mamulKod || '', mamul_ad: rc?.mamulAd || rc?.ad || '', adet,
+      recete_id: receteId, urunler: receteId ? [{ rcId: receteId, mamulKod: rc?.mamulKod, mamulAd: rc?.mamulAd || rc?.ad, adet }] : [],
+      mrp_durum: 'bekliyor', olusturma: today(),
+    })
+    if (err) { setError(err.message); setSaving(false); return }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">Yeni Sipariş</h2>
+        {error && <div className="mb-3 p-2 bg-red/10 border border-red/25 rounded text-xs text-red">{error}</div>}
+        <div className="space-y-3">
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş No *</label>
+          <input value={siparisNo} onChange={e => setSiparisNo(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Müşteri</label>
+          <input value={musteri} onChange={e => setMusteri(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Termin *</label>
+            <input type="date" value={termin} onChange={e => setTermin(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Adet</label>
+            <input type="number" min={1} value={adet} onChange={e => setAdet(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Reçete</label>
+          <select value={receteId} onChange={e => setReceteId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <option value="">— Seçin —</option>
+            {recipes.map(r => <option key={r.id} value={r.id}>{r.mamulKod || r.ad} — {r.mamulAd || r.ad}</option>)}
+          </select></div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white transition-colors">İptal</button>
+          <button onClick={save} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors">
+            {saving ? 'Kaydediliyor...' : 'Oluştur'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OrderDetailModal({ order, workOrders, logs, onClose }: {
+  order: Order; workOrders: { id: string; ieNo: string; malad: string; opAd: string; hedef: number }[];
+  logs: { woId: string; qty: number }[]; onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <div><h2 className="text-lg font-semibold">{order.siparisNo}</h2><p className="text-xs text-zinc-500">{order.musteri} · {order.tarih}</p></div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Ürün</div><div className="text-sm font-medium">{order.mamulAd || '—'}</div></div>
+          <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Adet</div><div className="text-sm font-mono">{order.adet}</div></div>
+          <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Termin</div><div className={`text-sm font-mono ${order.termin && order.termin < today() ? 'text-red' : ''}`}>{order.termin}</div></div>
+        </div>
+        <h3 className="text-sm font-semibold mb-2">İş Emirleri ({workOrders.length})</h3>
+        {workOrders.length ? (
+          <table className="w-full text-xs">
+            <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Ürün</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th><th className="text-right px-3 py-2">Üretilen</th><th className="text-right px-3 py-2">%</th></tr></thead>
+            <tbody>
+              {workOrders.map(w => {
+                const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+                const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
+                return (
+                  <tr key={w.id} className="border-b border-border/50">
+                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
+                    <td className="px-3 py-1.5 text-zinc-300">{w.malad}</td>
+                    <td className="px-3 py-1.5 text-zinc-500">{w.opAd}</td>
+                    <td className="px-3 py-1.5 text-right font-mono">{w.hedef}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-green">{prod}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono font-semibold ${pctColor(pct)}`}>{pct}%</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        ) : <div className="p-4 text-center text-zinc-600 text-xs">İş emri yok</div>}
       </div>
     </div>
   )
