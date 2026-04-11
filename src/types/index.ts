@@ -1,0 +1,306 @@
+// ═══ CORE TYPES ═══
+
+export interface Order {
+  id: string
+  siparisNo: string
+  musteri: string
+  tarih: string
+  termin: string
+  not: string
+  urunler: OrderItem[]
+  mamulKod: string
+  mamulAd: string
+  adet: number
+  receteId: string
+  mrpDurum: string
+  durum: string
+  oncelik: number
+  olusturma: string
+}
+
+export interface OrderItem {
+  rcId: string
+  mamulKod: string
+  mamulAd: string
+  adet: number
+}
+
+export interface WorkOrder {
+  id: string
+  orderId: string
+  rcId: string
+  sira: number
+  kirno: string
+  opId: string
+  opKod: string
+  opAd: string
+  istId: string
+  istKod: string
+  istAd: string
+  malkod: string
+  malad: string
+  hedef: number
+  mpm: number
+  hm: HammaddeItem[]
+  ieNo: string
+  whAlloc: number
+  hazirlikSure: number
+  islemSure: number
+  durum: string
+  bagimsiz: boolean
+  siparisDisi: boolean
+  mamulKod: string
+  mamulAd: string
+  mamulAuto: boolean
+  operatorId: string | null
+  not: string
+  olusturma: string
+}
+
+export interface HammaddeItem {
+  malkod: string
+  malad: string
+  miktarTotal: number
+}
+
+export interface ProductionLog {
+  id: string
+  woId: string
+  tarih: string
+  qty: number
+  fire: number
+  operatorlar: LogOperator[]
+  duruslar: LogDurus[]
+  not: string
+  malkod: string
+  ieNo: string
+  operatorId: string | null
+  vardiya: string
+}
+
+export interface LogOperator {
+  id: string
+  ad: string
+  bas: string
+  bit: string
+}
+
+export interface LogDurus {
+  sebep: string
+  bas: string
+  bit: string
+  not: string
+}
+
+export interface Material {
+  id: string
+  kod: string
+  ad: string
+  tip: string
+  birim: string
+  boy: number
+  en: number
+  kalinlik: number
+  cap: number
+  icCap: number
+  minStok: number
+  opId: string
+  opKod: string
+}
+
+export interface Operation {
+  id: string
+  kod: string
+  ad: string
+}
+
+export interface Station {
+  id: string
+  kod: string
+  ad: string
+  opIds: string[]
+}
+
+export interface Operator {
+  id: string
+  kod: string
+  ad: string
+  bolum: string
+  aktif: boolean
+  sifre: string
+}
+
+export interface Recipe {
+  id: string
+  rcKod: string
+  ad: string
+  bomId: string
+  mamulKod: string
+  mamulAd: string
+  satirlar: RecipeRow[]
+}
+
+export interface RecipeRow {
+  id: string
+  kirno: string
+  malkod: string
+  malad: string
+  tip: string
+  miktar: number
+  birim: string
+  opId: string
+  istId: string
+  hazirlikSure: number
+  islemSure: number
+}
+
+export interface BomTree {
+  id: string
+  mamulKod: string
+  mamulAd: string
+  ad: string
+  rows: BomRow[]
+}
+
+export interface BomRow {
+  id: string
+  kirno: string
+  malkod: string
+  malad: string
+  tip: string
+  miktar: number
+  birim: string
+}
+
+export interface StokHareket {
+  id: string
+  tarih: string
+  malkod: string
+  malad: string
+  miktar: number
+  tip: 'giris' | 'cikis'
+  logId: string
+  woId: string
+  aciklama: string
+}
+
+export interface CuttingPlan {
+  id: string
+  hamMalkod: string
+  hamMalad: string
+  hamBoy: number
+  hamEn: number
+  kesimTip: string
+  durum: string
+  satirlar: CuttingRow[]
+  tarih: string
+  gerekliAdet: number
+}
+
+export interface CuttingRow {
+  id: string
+  hamAdet: number
+  fireMm: number
+  kesimler: CuttingItem[]
+  durum: string
+}
+
+export interface CuttingItem {
+  woId: string
+  malkod: string
+  malad: string
+  parcaBoy: number
+  parcaEn: number
+  adet: number
+  tamamlandi: number
+}
+
+export interface Tedarik {
+  id: string
+  malkod: string
+  malad: string
+  miktar: number
+  birim: string
+  orderId: string
+  siparisNo: string
+  durum: string
+  geldi: boolean
+  teslimTarihi: string
+  tedarikcId: string
+  tedarikcAd: string
+  not: string
+  tarih: string
+}
+
+export interface Tedarikci {
+  id: string
+  kod: string
+  ad: string
+  adres: string
+  tel: string
+  email: string
+  not: string
+}
+
+export interface DurusKodu {
+  id: string
+  kod: string
+  ad: string
+  kategori: string
+}
+
+export interface Customer {
+  id: string
+  ad: string
+  kod: string
+}
+
+export interface Sevk {
+  id: string
+  orderId: string
+  siparisNo: string
+  musteri: string
+  tarih: string
+  kalemler: SevkKalem[]
+  not: string
+}
+
+export interface SevkKalem {
+  malkod: string
+  malad: string
+  miktar: number
+}
+
+export interface OperatorNote {
+  id: string
+  opId: string
+  opAd: string
+  tarih: string
+  saat: string
+  mesaj: string
+  okundu: boolean
+}
+
+export interface ActiveWork {
+  id: string
+  opId: string
+  opAd: string
+  woId: string
+  woAd: string
+  baslangic: string
+  tarih: string
+}
+
+export interface FireLog {
+  id: string
+  logId: string
+  woId: string
+  tarih: string
+  malkod: string
+  malad: string
+  qty: number
+  ieNo: string
+  opAd: string
+  operatorlar: LogOperator[]
+  not: string
+}
