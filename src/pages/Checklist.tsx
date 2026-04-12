@@ -5,6 +5,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Plus, Search, Pencil, Trash2, Camera, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { ChecklistItem } from '@/types'
 
 const ONCELIK_RENK: Record<string, string> = { dusuk: 'text-zinc-500', normal: 'text-accent', yuksek: 'text-amber', acil: 'text-red' }
