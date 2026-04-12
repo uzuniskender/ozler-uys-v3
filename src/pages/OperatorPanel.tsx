@@ -8,13 +8,16 @@ import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
 
 export function OperatorPanel() {
-  const { operators } = useStore()
+  const { operators, loadAll, loading } = useStore()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
   const [oprId, setOprId] = useState('')
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
   const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'>('isler')
+
+  // Veri yükle (Layout dışında olduğu için)
+  useEffect(() => { loadAll() }, [])
 
   // Auth'dan gelen operatör otomatik girişi
   useEffect(() => {
