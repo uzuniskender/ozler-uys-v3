@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -7,6 +8,7 @@ import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
 
 export function OperatorPanel() {
   const { operators } = useStore()
+  const navigate = useNavigate()
   const [oprId, setOprId] = useState('')
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
@@ -38,7 +40,7 @@ export function OperatorPanel() {
     )
   }
 
-  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { setLoggedIn(false); setOprId(''); setSifre('') }} />
+  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { setLoggedIn(false); setOprId(''); setSifre(''); navigate('/') }} />
 }
 
 function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
