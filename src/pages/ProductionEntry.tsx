@@ -1,3 +1,4 @@
+import { stokTuketimIsle, fireIEOlustur } from '@/features/production/stokTuketim'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -159,10 +160,21 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
       })
     }
 
+    // HM stok tüketimi (#8)
+    await stokTuketimIsle(woId, q, logId, workOrders)
+
+    // Fire → sipariş dışı İE teklifi (#6)
+    if (f > 0 && f >= 5) {
+      const createFireIE = confirm(`${f} adet fire oluştu. Telafi için yeni İE oluşturulsun mu?`)
+      if (createFireIE) {
+        const ieNo = await fireIEOlustur(woId, f, workOrders)
+        if (ieNo) toast.info('Fire İE oluşturuldu: ' + ieNo)
+      }
+    }
+
     onSaved()
   }
 
-  // Bölüm operatörleri
   const bolumOprs = operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
 
   return (
