@@ -64,7 +64,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   const [entryWO, setEntryWO] = useState<string | null>(null)
 
   const acikWOs = useMemo(() => {
-    const bolumUpper = (opr.bolum || '').toUpperCase().trim()
+    const bolumUpper = (opr.bolum || '').trim().toUpperCase()
     if (!bolumUpper) {
       // Bölüm yoksa tüm açık İE'leri göster
       return workOrders.filter(w => {
@@ -73,23 +73,34 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
         return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
       })
     }
-    // Bölüm eşleştir: operasyon tablosundan + İE opAd'dan
-    const bolumOpIds = new Set(operations.filter(o => {
-      const opBolum = (o.bolum || '').toUpperCase().trim()
-      const opAd = (o.ad || '').toUpperCase().trim()
-      return opBolum === bolumUpper || opAd === bolumUpper || opAd.includes(bolumUpper) || bolumUpper.includes(opAd)
-    }).map(o => o.id))
 
-    const filtered = workOrders.filter(w => {
+    // v2 mantığı: operasyonların BÖLÜM alanı ile eşleştir
+    const myOpIds: string[] = []
+    operations.forEach(o => {
+      const oBolum = (o.bolum || '').trim().toUpperCase()
+      const oAd = (o.ad || '').trim().toUpperCase()
+      // Bölüm eşleşmesi VEYA operasyon adı tam eşleşme
+      if ((oBolum && oBolum === bolumUpper) || oAd === bolumUpper) {
+        if (!myOpIds.includes(o.id)) myOpIds.push(o.id)
+      }
+    })
+
+    if (!myOpIds.length) {
+      // Eşleşme bulunamadı — opAd içerik araması yap (fallback)
+      workOrders.forEach(w => {
+        const opAd = (w.opAd || '').trim().toUpperCase()
+        if (opAd === bolumUpper || opAd.includes(bolumUpper) || bolumUpper.includes(opAd)) {
+          if (w.opId && !myOpIds.includes(w.opId)) myOpIds.push(w.opId)
+        }
+      })
+    }
+
+    return workOrders.filter(w => {
       if (w.hedef <= 0) return false
-      const opAdUpper = (w.opAd || '').toUpperCase().trim()
-      const opKodUpper = (w.opKod || '').toUpperCase().trim()
-      const match = bolumOpIds.has(w.opId) || opAdUpper === bolumUpper || opAdUpper.includes(bolumUpper) || bolumUpper.includes(opAdUpper) || opKodUpper === bolumUpper
-      if (!match) return false
+      if (!myOpIds.includes(w.opId)) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
       return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
     })
-    return filtered
   }, [workOrders, logs, operations, opr.bolum])
 
   const myActive = activeWork.find(a => a.opId === oprId)
@@ -166,23 +177,16 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
             })}
             {!acikWOs.length && (
               <div className="p-6 text-center">
-                <div className="text-zinc-500 mb-3">"{opr.bolum}" bölümünde açık iş emri yok</div>
-                <div className="text-[10px] text-zinc-600 mb-3">Operatör bölümü İE operasyon adıyla eşleşmiyor olabilir.</div>
-                <button onClick={() => {
-                  // Tüm açık İE'leri görmek için bölümü temizle (geçici)
-                  const allOpen = workOrders.filter(w => {
-                    if (w.hedef <= 0) return false
-                    const pr = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-                    return pr < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi'
-                  })
-                  if (allOpen.length) {
-                    toast.info(`Toplam ${allOpen.length} açık İE var. Operasyonlar: ${[...new Set(allOpen.map(w => w.opAd))].join(', ')}`)
-                  } else {
-                    toast.info('Hiç açık İE yok')
-                  }
-                }} className="px-4 py-2 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">
-                  🔍 Tüm açık İE operasyonlarını göster
-                </button>
+                <div className="text-zinc-500 mb-2">"{opr.bolum}" bölümünde açık iş emri yok</div>
+                <div className="text-[10px] text-zinc-600 mb-3">
+                  Operasyonlar sayfasında "{opr.bolum}" bölümüne atanmış operasyon var mı kontrol edin.
+                </div>
+                <div className="text-[10px] text-zinc-700 bg-bg-2 rounded-lg p-3 text-left font-mono">
+                  Operatör bölüm: "{opr.bolum}"<br/>
+                  Eşleşen operasyonlar: {operations.filter(o => (o.bolum || '').trim().toUpperCase() === (opr.bolum || '').trim().toUpperCase()).map(o => o.ad).join(', ') || 'YOK'}<br/>
+                  Toplam açık İE: {workOrders.filter(w => w.hedef > 0 && logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi').length}<br/>
+                  İE operasyonları: {[...new Set(workOrders.filter(w => w.hedef > 0).map(w => w.opAd))].join(', ')}
+                </div>
               </div>
             )}
           </div>

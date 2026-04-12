@@ -33,6 +33,14 @@ export function Operations() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Operasyonlar</h1><p className="text-xs text-zinc-500">{operations.length} operasyon</p></div>
         <div className="flex gap-2">
+          <button onClick={async () => {
+            const bos = operations.filter(o => !o.bolum)
+            if (!bos.length) { toast.info('Tüm operasyonların bölümü zaten dolu'); return }
+            for (const o of bos) {
+              await supabase.from('uys_operations').update({ bolum: o.ad }).eq('id', o.id)
+            }
+            loadAll(); toast.success(bos.length + ' operasyonun bölümü güncellendi (ad → bölüm)')
+          }} className="px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20">🔄 Bölümleri Doldur</button>
           <button onClick={() => { import('xlsx').then(XLSX => {
             const rows = operations.map(o => ({ Kod: o.kod, Ad: o.ad, Bölüm: o.bolum || '' }))
             const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
