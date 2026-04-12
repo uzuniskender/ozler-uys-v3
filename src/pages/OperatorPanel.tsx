@@ -62,10 +62,17 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
   const acikWOs = useMemo(() => {
     const bolumUpper = (opr.bolum || '').toUpperCase()
-    const bolumOpIds = new Set(operations.filter(o => (o.bolum || '').toUpperCase() === bolumUpper).map(o => o.id))
+    // Operasyonları bölüm eşleştir: tam eşleşme VEYA operasyon adı bölümü içeriyor
+    const bolumOpIds = new Set(operations.filter(o => {
+      const opBolum = (o.bolum || '').toUpperCase()
+      const opAd = (o.ad || '').toUpperCase()
+      return opBolum === bolumUpper || opAd === bolumUpper || opAd.includes(bolumUpper) || bolumUpper.includes(opAd)
+    }).map(o => o.id))
     return workOrders.filter(w => {
       if (w.hedef <= 0) return false
-      if (!bolumOpIds.has(w.opId) && (w.opAd || '').toUpperCase() !== bolumUpper) return false
+      const opAdUpper = (w.opAd || '').toUpperCase()
+      // Eşleşme: opId bölüm operasyonlarında VEYA opAd bölümü içeriyor
+      if (!bolumOpIds.has(w.opId) && opAdUpper !== bolumUpper && !opAdUpper.includes(bolumUpper) && !bolumUpper.includes(opAdUpper)) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
       return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
     })
