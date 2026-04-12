@@ -9,7 +9,7 @@ import { Search, Plus, UserCheck, UserX } from 'lucide-react'
 export function Operators() {
   const { operators, loadAll } = useStore()
   const [search, setSearch] = useState('')
-  const [bolumFilter, setBolumFilter] = useState('')
+  const [bolumFilter, setBolumFilter] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
   const [editOpr, setEditOpr] = useState<typeof operators[0] | null>(null)
   const [tab, setTab] = useState<'liste'|'izin'>('liste')
@@ -21,7 +21,7 @@ export function Operators() {
 
   const filtered = useMemo(() => {
     return operators.filter(o => {
-      if (bolumFilter && o.bolum !== bolumFilter) return false
+      if (bolumFilter.size > 0 && !bolumFilter.has(o.bolum)) return false
       if (search) return (o.kod + o.ad + o.bolum).toLowerCase().includes(search.toLowerCase())
       return true
     })
@@ -77,10 +77,7 @@ export function Operators() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ad veya kod ara..."
             className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
-        <select value={bolumFilter} onChange={e => setBolumFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="">Tüm Bölümler</option>
-          {bolumler.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
+        <MultiCheckDropdown label="Bölüm" options={bolumler} selected={bolumFilter} onChange={setBolumFilter} />
       </div>
 
       {grouped.map(([bolum, oprs]) => (

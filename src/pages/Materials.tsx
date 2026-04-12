@@ -10,7 +10,7 @@ import type { Material } from '@/types'
 export function Materials() {
   const { materials, operations, loadAll } = useStore()
   const [search, setSearch] = useState('')
-  const [tipFilter, setTipFilter] = useState('')
+  const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
 
@@ -18,7 +18,7 @@ export function Materials() {
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
-      if (tipFilter && m.tip !== tipFilter) return false
+      if (tipFilter.size > 0 && !tipFilter.has(m.tip) && !tipFilter.has(m.hammaddeTipi)) return false
       if (search) return (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
@@ -94,10 +94,7 @@ export function Materials() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Kod veya ad ara..."
             className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
-        <select value={tipFilter} onChange={e => setTipFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="">Tüm Tipler</option>
-          {tipler.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         <div className="max-h-[65vh] overflow-y-auto">

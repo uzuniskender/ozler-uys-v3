@@ -14,24 +14,23 @@ const DURUM_ICON: Record<string, typeof Clock> = { bekliyor: Clock, devam: Alert
 export function Checklist() {
   const { checklist, loadAll } = useStore()
   const [search, setSearch] = useState('')
-  const [tipFilter, setTipFilter] = useState('all')
-  const [durumFilter, setDurumFilter] = useState('aktif')
+  const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
+  const [durumFilterSet, setDurumFilterSet] = useState<Set<string>>(new Set(['bekliyor', 'devam']))
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<ChecklistItem | null>(null)
   const [detailItem, setDetailItem] = useState<ChecklistItem | null>(null)
 
   const filtered = useMemo(() => {
     return checklist.filter(c => {
-      if (tipFilter !== 'all' && c.tip !== tipFilter) return false
-      if (durumFilter === 'aktif' && (c.durum === 'tamamlandi' || c.durum === 'iptal')) return false
-      if (durumFilter === 'tamamlandi' && c.durum !== 'tamamlandi') return false
+      if (tipFilter.size > 0 && !tipFilter.has(c.tip)) return false
+      if (durumFilterSet.size > 0 && !durumFilterSet.has(c.durum)) return false
       if (search) return (c.baslik + c.aciklama + c.atanan + c.kategori).toLowerCase().includes(search.toLowerCase())
       return true
     }).sort((a, b) => {
       const op = { acil: 0, yuksek: 1, normal: 2, dusuk: 3 }
       return (op[a.oncelik] || 2) - (op[b.oncelik] || 2) || (b.tarih || '').localeCompare(a.tarih || '')
     })
-  }, [checklist, search, tipFilter, durumFilter])
+  }, [checklist, search, tipFilter, durumFilterSet])
 
   async function deleteCL(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -58,12 +57,15 @@ export function Checklist() {
       <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
-        <select value={tipFilter} onChange={e => setTipFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tümü</option><option value="gorev">Görevler</option><option value="istek">İstekler</option>
-        </select>
-        <select value={durumFilter} onChange={e => setDurumFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tüm Durumlar</option><option value="aktif">Aktif</option><option value="tamamlandi">Tamamlanan</option>
-        </select>
+        <MultiCheckDropdown label="Tip" options={[
+          { value: 'gorev', label: 'Görevler' },
+          { value: 'istek', label: 'İstekler' },
+        ]} selected={tipFilter} onChange={setTipFilter} />
+        <MultiCheckDropdown label="Durum" options={[
+          { value: 'bekliyor', label: 'Bekliyor' },
+          { value: 'devam', label: 'Devam Ediyor' },
+          { value: 'tamamlandi', label: 'Tamamlanan' },
+        ]} selected={durumFilterSet} onChange={setDurumFilterSet} />
       </div>
 
       <div className="space-y-2">
