@@ -495,6 +495,7 @@ function NewIEModal({ operations, orders, onClose, onSaved }: {
   orders: { id: string; siparisNo: string }[]
   onClose: () => void; onSaved: () => void
 }) {
+  const { materials } = useStore()
   const [malkod, setMalkod] = useState('')
   const [malad, setMalad] = useState('')
   const [hedef, setHedef] = useState('')
@@ -525,26 +526,32 @@ function NewIEModal({ operations, orders, onClose, onSaved }: {
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni İş Emri</h2>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu</label>
-            <input value={malkod} onChange={e => setMalkod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hedef Adet *</label>
-            <input type="number" min={1} value={hedef} onChange={e => setHedef(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme *</label>
+          <select value={malkod} onChange={e => { setMalkod(e.target.value); const m = materials.find(mm => mm.kod === e.target.value); if (m) setMalad(m.ad) }}
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <option value="">— Seçin —</option>
+            {materials.map(m => <option key={m.id} value={m.kod}>{m.kod} — {m.ad}</option>)}
+          </select></div>
+
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
-          <input value={malad} onChange={e => setMalad(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+          <input value={malad} onChange={e => setMalad(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+
           <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hedef Adet *</label>
+            <input type="number" value={hedef} onChange={e => setHedef(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
-            <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+            <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>
-              {operations.map(o => <option key={o.id} value={o.id}>{o.kod} — {o.ad}</option>)}
-            </select></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş (opsiyonel)</label>
-            <select value={orderId} onChange={e => setOrderId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
-              <option value="">— Bağımsız —</option>
-              {orders.map(o => <option key={o.id} value={o.id}>{o.siparisNo}</option>)}
+              {operations.map(o => <option key={o.id} value={o.id}>{o.ad}</option>)}
             </select></div>
           </div>
+
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş Bağla (opsiyonel)</label>
+          <select value={orderId} onChange={e => setOrderId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <option value="">— Bağımsız İE —</option>
+            {orders.map(o => <option key={o.id} value={o.id}>{o.siparisNo}</option>)}
+          </select></div>
+
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
           <input value={not_} onChange={e => setNot(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
         </div>
@@ -556,3 +563,4 @@ function NewIEModal({ operations, orders, onClose, onSaved }: {
     </div>
   )
 }
+

@@ -153,6 +153,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
   const [boy, setBoy] = useState(String(initial?.boy || ''))
   const [en, setEn] = useState(String(initial?.en || ''))
   const [kalinlik, setKalinlik] = useState(String(initial?.kalinlik || ''))
+  const [cap, setCap] = useState(String(initial?.cap || ''))
   const [minStok, setMinStok] = useState(String(initial?.minStok || ''))
   const [opId, setOpId] = useState(initial?.opId || '')
   const [saving, setSaving] = useState(false)
@@ -182,7 +183,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
     const op = operations.find(o => o.id === opId)
     const row = {
       kod: kod.trim(), ad: ad.trim(), tip, birim, boy: parseFloat(boy) || 0,
-      en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0,
+      en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
     }
     if (initial?.id) {
@@ -205,12 +206,14 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
             <select value={tip} onChange={e => setTip(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="Hammadde">Hammadde</option><option value="YarıMamul">Yarı Mamul</option>
               <option value="Mamul">Mamul</option><option value="Sarf">Sarf</option>
-              {tipler.filter(t => !['Hammadde','YarıMamul','Mamul','Sarf'].includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
+              <option value="Boru">Boru</option><option value="Profil">Profil</option>
+              <option value="Levha">Levha</option><option value="Sac">Sac</option>
+              {tipler.filter(t => !['Hammadde','YarıMamul','Mamul','Sarf','Boru','Profil','Levha','Sac'].includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
             </select></div>
           </div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
           <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Birim</label>
             <select value={birim} onChange={e => setBirim(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option><option>Litre</option><option>Takım</option>
@@ -221,6 +224,8 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
             <input type="number" value={en} onChange={e => setEn(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Kalınlık</label>
             <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Çap (mm)</label>
+            <input type="number" value={cap} onChange={e => setCap(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
           <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden boy/en tahmin et</button>
           <div className="grid grid-cols-2 gap-3">

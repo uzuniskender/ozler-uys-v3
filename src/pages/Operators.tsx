@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { Search, Plus, UserCheck, UserX, Calendar } from 'lucide-react'
+import { Search, Plus, UserCheck, UserX } from 'lucide-react'
 
 export function Operators() {
   const { operators, loadAll } = useStore()
@@ -63,8 +63,10 @@ export function Operators() {
       </div>
 
       <div className="flex gap-1 mb-4">
-        <button onClick={() => setTab('liste')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'liste' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Operatör Listesi</button>
-        <button onClick={() => setTab('izin')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'izin' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}><Calendar size={12} /> İzin / Mesai</button>
+        <select value={tab} onChange={e => setTab(e.target.value as 'liste'|'izin')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          <option value="liste">Operatör Listesi</option>
+          <option value="izin">İzin / Mesai</option>
+        </select>
       </div>
 
       {tab === 'liste' && (<>

@@ -108,8 +108,10 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4">
-        <button onClick={() => setTab('isler')} className={`flex-1 py-2 rounded-lg text-xs font-medium ${tab === 'isler' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>İşlerim</button>
-        <button onClick={() => setTab('mesaj')} className={`flex-1 py-2 rounded-lg text-xs font-medium ${tab === 'mesaj' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Mesaj Gönder</button>
+        <select value={tab} onChange={e => setTab(e.target.value as 'isler'|'mesaj')} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          <option value="isler">İşlerim</option>
+          <option value="mesaj">Mesajlar</option>
+        </select>
       </div>
 
       {tab === 'isler' && (

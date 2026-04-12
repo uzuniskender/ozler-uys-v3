@@ -129,9 +129,11 @@ export function Warehouse() {
       </div>
 
       <div className="flex gap-1 mb-4">
-        <button onClick={() => setTab('stok')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'stok' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Anlık Stok</button>
-        <button onClick={() => setTab('hareketler')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'hareketler' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Hareketler</button>
-        <button onClick={() => setTab('sayim')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'sayim' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Stok Sayım</button>
+        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          <option value="stok">Anlık Stok</option>
+          <option value="hareketler">Hareketler</option>
+          <option value="sayim">Stok Sayım</option>
+        </select>
       </div>
 
       <div className="flex gap-2 mb-4">

@@ -346,10 +346,10 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
         </div>
 
         <div className="flex gap-1 mb-3">
-          <button onClick={() => setTab('ie')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'ie' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>İş Emirleri ({workOrders.length})</button>
-          <button onClick={async () => { if (!mrpDone) runMRP(); setTab('mrp') }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'mrp' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
-            <Calculator size={12} /> MRP {mrpDone && `(${mrpRows.length})`}
-          </button>
+          <select value={tab} onChange={e => { const v = e.target.value as 'ie'|'mrp'; if (v === 'mrp' && !mrpDone) runMRP(); setTab(v) }} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+            <option value="ie">İş Emirleri ({workOrders.length})</option>
+            <option value="mrp">MRP {mrpDone ? `(${mrpRows.length})` : ''}</option>
+          </select>
           <span className="flex-1" />
           {order.receteId && <button onClick={async () => {
             if (!await showConfirm('Mevcut İE\'ler silinip reçeteden yeniden oluşturulacak. Devam?')) return

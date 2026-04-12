@@ -149,11 +149,19 @@ function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | n
           <textarea value={aciklama} onChange={e => setAciklama(e.target.value)} rows={3} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 resize-none focus:outline-none focus:border-accent" /></div>
           <div className="grid grid-cols-3 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Atanan</label>
-            <input value={atanan} onChange={e => setAtanan(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none" placeholder="Kişi" /></div>
+            <select value={atanan} onChange={e => setAtanan(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="">— Seçin —</option>
+              {[...new Set(checklist.map(c => c.atanan).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>)}
+              <option value="_yeni">+ Yeni kişi...</option>
+            </select></div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Termin</label>
             <input type="date" value={termin} onChange={e => setTermin(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none" /></div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Kategori</label>
-            <input value={kategori} onChange={e => setKategori(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none" placeholder="Üretim, Kalite..." /></div>
+            <select value={kategori} onChange={e => setKategori(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="">— Seçin —</option>
+              <option>Üretim</option><option>Kalite</option><option>Bakım</option><option>İSG</option><option>Genel</option>
+              {[...new Set(checklist.map(c => c.kategori).filter(k => k && !['Üretim','Kalite','Bakım','İSG','Genel'].includes(k)))].map(k => <option key={k} value={k}>{k}</option>)}
+            </select></div>
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">

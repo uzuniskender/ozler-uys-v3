@@ -59,11 +59,11 @@ export function Reports() {
 
   return (
     <div>
-      <div className="mb-4"><h1 className="text-xl font-semibold">Raporlar</h1></div>
-      <div className="flex gap-1 mb-4 overflow-x-auto">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${tab === t.id ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400 hover:text-white'}`}>{t.label}</button>
-        ))}
+      <div className="flex items-center gap-3 mb-4">
+        <h1 className="text-xl font-semibold">Raporlar</h1>
+        <select value={tab} onChange={e => setTab(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          {tabs.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
       </div>
 
       {tab === 'ozet' && (
