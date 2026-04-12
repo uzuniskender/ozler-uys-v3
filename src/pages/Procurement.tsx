@@ -27,8 +27,20 @@ export function Procurement() {
   }, [tedarikler, search, durumFilter])
 
   async function markGeldi(id: string) {
+    const ted = tedarikler.find(t => t.id === id)
+    if (!ted) return
+
+    // Tedarik durumunu güncelle
     await supabase.from('uys_tedarikler').update({ geldi: true, durum: 'geldi' }).eq('id', id)
-    loadAll(); toast.success('Tedarik geldi olarak işaretlendi')
+
+    // Stok girişi oluştur
+    await supabase.from('uys_stok_hareketler').insert({
+      id: uid(), tarih: today(), malkod: ted.malkod, malad: ted.malad,
+      miktar: ted.miktar, tip: 'giris',
+      aciklama: 'Tedarik girişi' + (ted.siparisNo ? ' — ' + ted.siparisNo : '') + (ted.tedarikcAd ? ' — ' + ted.tedarikcAd : ''),
+    })
+
+    loadAll(); toast.success('Tedarik geldi + stok girişi yapıldı: ' + ted.malkod + ' × ' + ted.miktar)
   }
 
   async function del(id: string) {
