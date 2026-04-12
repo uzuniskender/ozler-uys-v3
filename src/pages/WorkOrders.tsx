@@ -73,7 +73,7 @@ export function WorkOrders() {
     return workOrders.filter(w => {
       if (statusFilter.size > 0) {
         const pct = wPct(w)
-        const wDurum = w.durum || (pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor')
+        const wDurum = w.durum === 'iptal' ? 'iptal' : w.durum === 'beklemede' ? 'beklemede' : pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor'
         if (!statusFilter.has(wDurum)) return false
       }
       if (search) {
@@ -186,6 +186,20 @@ export function WorkOrders() {
         <div><h1 className="text-xl font-semibold">İş Emirleri</h1><p className="text-xs text-zinc-500">{workOrders.length} toplam</p></div>
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+          <button onClick={async () => {
+            let count = 0
+            for (const w of workOrders) {
+              if (w.durum === 'iptal' || w.durum === 'beklemede') continue
+              const pct = wPct(w); const pr = wProd(w.id)
+              const yeniDurum = pct >= 100 ? 'tamamlandi' : pr > 0 ? 'uretimde' : 'bekliyor'
+              if (w.durum !== yeniDurum) {
+                await supabase.from('uys_work_orders').update({ durum: yeniDurum }).eq('id', w.id)
+                count++
+              }
+            }
+            if (count > 0) { loadAll(); toast.success(count + ' İE durumu güncellendi') }
+            else toast.info('Tüm durumlar güncel')
+          }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">🔄 Durumları Güncelle</button>
           <button onClick={() => setShowNewIE(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>
         </div>
       </div>
@@ -252,7 +266,14 @@ export function WorkOrders() {
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <select value={w.durum || (wPct(w) >= 100 ? 'tamamlandi' : wProd(w.id) > 0 ? 'uretimde' : 'bekliyor')} onChange={e => setDurum(w.id, e.target.value)}
+                      <select value={(() => {
+                        const pct = wPct(w); const pr = wProd(w.id)
+                        if (w.durum === 'iptal') return 'iptal'
+                        if (w.durum === 'beklemede') return 'beklemede'
+                        if (pct >= 100) return 'tamamlandi'
+                        if (pr > 0) return 'uretimde'
+                        return 'bekliyor'
+                      })()} onChange={e => setDurum(w.id, e.target.value)}
                         className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${w.durum === 'tamamlandi' ? 'text-green' : w.durum === 'iptal' ? 'text-red' : 'text-accent'}`}>
                         <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                       </select>
