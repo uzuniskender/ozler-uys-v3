@@ -35,7 +35,14 @@ export function Suppliers() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Tedarikçiler</h1><p className="text-xs text-zinc-500">{tedarikciler.length} tedarikçi</p></div>
-        <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarikçi</button>
+        <div className="flex gap-2">
+          <button onClick={() => { import('xlsx').then(XLSX => {
+            const rows = tedarikciler.map(t => ({ Kod: t.kod, Ad: t.ad, Adres: t.adres, Tel: t.tel, Email: t.email }))
+            const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws, 'Tedarikçiler'); XLSX.writeFile(wb, 'tedarikciler.xlsx')
+          })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
+          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarikçi</button>
+        </div>
       </div>
       <div className="relative max-w-xs mb-4"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>

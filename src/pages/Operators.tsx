@@ -59,7 +59,14 @@ export function Operators() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Operatörler</h1><p className="text-xs text-zinc-500">{operators.length} operatör · {operators.filter(o => o.aktif).length} aktif</p></div>
-        <button onClick={async () => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>
+        <div className="flex gap-2">
+          <button onClick={() => { import('xlsx').then(XLSX => {
+            const rows = operators.map(o => ({ Kod: o.kod, Ad: o.ad, Bölüm: o.bolum, Aktif: o.aktif ? 'Evet' : 'Hayır' }))
+            const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws, 'Operatörler'); XLSX.writeFile(wb, 'operatorler.xlsx')
+          })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
+          <button onClick={async () => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>
+        </div>
       </div>
 
       <div className="flex gap-1 mb-4">

@@ -51,7 +51,14 @@ export function Checklist() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Checklist / İstekler</h1><p className="text-xs text-zinc-500">{gorevCount} görev · {istekCount} istek açık</p></div>
-        <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ekle</button>
+        <div className="flex gap-2">
+          <button onClick={() => { import('xlsx').then(XLSX => {
+            const rows = checklist.map(c => ({ Tip: c.tip, Başlık: c.baslik, Kategori: c.kategori, Atanan: c.atanan, Öncelik: c.oncelik, Durum: c.durum, Tarih: c.tarih, Termin: c.termin }))
+            const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws, 'Checklist'); XLSX.writeFile(wb, 'checklist.xlsx')
+          })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
+          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ekle</button>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
