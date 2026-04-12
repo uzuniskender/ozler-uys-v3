@@ -190,7 +190,11 @@ function QuickEntry({ woId, oprId, oprAd, onDone }: { woId: string; oprId: strin
 }
 
 function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onSent: () => void }) {
+  const { operatorNotes, loadAll } = useStore()
   const [mesaj, setMesaj] = useState('')
+
+  // Bu operatörün mesajları
+  const myNotes = operatorNotes.filter(n => n.opId === oprId).sort((a, b) => (b.tarih + b.saat).localeCompare(a.tarih + a.saat))
 
   async function send() {
     if (!mesaj.trim()) return
@@ -200,17 +204,47 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
       id: uid(), op_id: oprId, op_ad: oprAd, tarih: today(), saat,
       mesaj: mesaj.trim(), okundu: false,
     })
-    setMesaj(''); onSent()
+    setMesaj(''); loadAll(); onSent()
   }
 
   return (
-    <div className="bg-bg-2 border border-border rounded-lg p-4">
-      <h3 className="text-sm font-semibold mb-3">Yönetime Mesaj</h3>
-      <textarea value={mesaj} onChange={e => setMesaj(e.target.value)} placeholder="Mesajınızı yazın..." rows={4}
-        className="w-full px-3 py-2 bg-bg-3 border border-border rounded-lg text-sm text-zinc-200 resize-none focus:outline-none focus:border-accent" />
-      <button onClick={send} disabled={!mesaj.trim()} className="mt-2 w-full flex items-center justify-center gap-1.5 py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
-        <Send size={13} /> Gönder
-      </button>
+    <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+      <div className="px-4 py-2 border-b border-border text-sm font-semibold">💬 Mesajlar</div>
+
+      {/* Mesaj geçmişi */}
+      <div className="max-h-[300px] overflow-y-auto p-3 space-y-3">
+        {myNotes.length === 0 && <div className="text-xs text-zinc-600 text-center py-4">Henüz mesaj yok</div>}
+        {myNotes.map(n => (
+          <div key={n.id}>
+            {/* Operatör mesajı */}
+            <div className="flex items-end gap-2">
+              <div className="flex-1 bg-accent/10 rounded-lg rounded-bl-none px-3 py-2 text-xs text-zinc-200">
+                <div className="text-[10px] text-zinc-500 mb-0.5">{n.tarih} {n.saat}</div>
+                {n.mesaj}
+              </div>
+            </div>
+            {/* Yönetim cevabı */}
+            {n.cevap && (
+              <div className="flex items-end gap-2 mt-1.5 pl-6">
+                <div className="flex-1 bg-green/10 rounded-lg rounded-br-none px-3 py-2 text-xs text-zinc-200">
+                  <div className="text-[10px] text-green mb-0.5">{n.cevaplayan || 'Yönetim'} · {n.cevapTarih}</div>
+                  {n.cevap}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Yeni mesaj */}
+      <div className="p-3 border-t border-border flex gap-2">
+        <input value={mesaj} onChange={e => setMesaj(e.target.value)} placeholder="Mesaj yazın..."
+          onKeyDown={e => e.key === 'Enter' && send()}
+          className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+        <button onClick={send} disabled={!mesaj.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+          <Send size={13} />
+        </button>
+      </div>
     </div>
   )
 }

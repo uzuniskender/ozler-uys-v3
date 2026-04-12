@@ -114,6 +114,8 @@ const M = {
     id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
     tarih: (r.tarih || '') as string, saat: (r.saat || '') as string,
     mesaj: (r.mesaj || '') as string, okundu: !!r.okundu,
+    cevap: (r.cevap || '') as string, cevaplayan: (r.cevaplayan || '') as string,
+    cevapTarih: (r.cevap_tarih || '') as string,
   }),
   activeWork: (r: Record<string, unknown>): ActiveWork => ({
     id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,

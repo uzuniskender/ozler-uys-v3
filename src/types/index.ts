@@ -280,6 +280,9 @@ export interface OperatorNote {
   saat: string
   mesaj: string
   okundu: boolean
+  cevap?: string
+  cevaplayan?: string
+  cevapTarih?: string
 }
 
 export interface ActiveWork {

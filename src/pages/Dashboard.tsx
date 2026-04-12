@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { showConfirm } from '@/lib/prompt'
+import { showConfirm, showPrompt } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -221,17 +221,37 @@ export function Dashboard() {
               </>
             )}
           </div>
-          <div className="divide-y divide-border/50">
-            {operatorNotes.slice(0, 10).map(n => (
-              <div key={n.id} className={`px-4 py-2 flex items-center gap-3 text-xs ${!n.okundu ? 'bg-accent/5' : ''}`}>
-                <span className={`font-medium ${!n.okundu ? 'text-white' : 'text-zinc-400'}`}>{n.opAd}</span>
-                <span className="font-mono text-zinc-600">{n.tarih} {n.saat}</span>
-                <span className="flex-1 text-zinc-300 truncate">{n.mesaj}</span>
-                {!n.okundu ? (
-                  <button onClick={async () => { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id); loadAll() }}
-                    className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20 whitespace-nowrap">✓ Okundu</button>
-                ) : <span className="text-[10px] text-zinc-600">okundu</span>}
-                <button onClick={async () => { if (!await showConfirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
+          <div className="divide-y divide-border/50 max-h-[400px] overflow-y-auto">
+            {operatorNotes.sort((a, b) => (b.tarih + b.saat).localeCompare(a.tarih + a.saat)).slice(0, 20).map(n => (
+              <div key={n.id} className={`px-4 py-2 text-xs ${!n.okundu ? 'bg-accent/5' : ''}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`font-medium ${!n.okundu ? 'text-white' : 'text-zinc-400'}`}>{n.opAd}</span>
+                  <span className="font-mono text-zinc-600 text-[10px]">{n.tarih} {n.saat}</span>
+                  <span className="flex-1" />
+                  {!n.okundu && (
+                    <button onClick={async () => { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id); loadAll() }}
+                      className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">✓</button>
+                  )}
+                  <button onClick={async () => {
+                    const cevap = await showPrompt('Cevap yaz — ' + n.opAd, 'Cevabınız...')
+                    if (!cevap) return
+                    const now = new Date()
+                    const cevapTarih = today() + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+                    await supabase.from('uys_operator_notes').update({ cevap, cevaplayan: 'Yönetim', cevap_tarih: cevapTarih, okundu: true }).eq('id', n.id)
+                    loadAll(); toast.success('Cevap gönderildi')
+                  }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">💬 Cevapla</button>
+                  <button onClick={async () => { if (!await showConfirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
+                </div>
+                {/* Operatör mesajı */}
+                <div className="bg-bg-3/50 rounded-lg px-3 py-2 text-zinc-300 mb-1">{n.mesaj}</div>
+                {/* Cevap */}
+                {n.cevap && (
+                  <div className="ml-6 bg-accent/5 border-l-2 border-accent/30 rounded-r-lg px-3 py-2 text-zinc-300">
+                    <span className="text-accent text-[10px] font-medium">{n.cevaplayan || 'Yönetim'}</span>
+                    <span className="text-zinc-600 text-[10px] ml-2">{n.cevapTarih}</span>
+                    <div className="mt-0.5">{n.cevap}</div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
