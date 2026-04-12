@@ -153,6 +153,25 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
   const [opId, setOpId] = useState(initial?.opId || '')
   const [saving, setSaving] = useState(false)
 
+  // #34: Boy/En Tahmin — benzer malzemelerden öner
+  const { materials: allMaterials } = useStore()
+  function tahminEt() {
+    if (!kod) return
+    const prefix = kod.replace(/\d{2,}$/, '') // Son rakamları kaldır
+    const benzerler = allMaterials.filter(m => m.kod.startsWith(prefix) && m.kod !== kod && m.boy > 0)
+    if (benzerler.length) {
+      const avg = { boy: Math.round(benzerler.reduce((a, m) => a + m.boy, 0) / benzerler.length), en: Math.round(benzerler.reduce((a, m) => a + (m.en || 0), 0) / benzerler.length) }
+      if (!boy || boy === '0') setBoy(String(avg.boy))
+      if ((!en || en === '0') && avg.en > 0) setEn(String(avg.en))
+      toast.info(`${benzerler.length} benzer malzemeden tahmin: Boy=${avg.boy}, En=${avg.en}`)
+    } else {
+      // Ad'dan rakam çıkarmayı dene
+      const nums = ad.match(/(\d{3,})/g)
+      if (nums && nums.length >= 1) { setBoy(nums[0]); toast.info('Ad\'dan tahmin: Boy=' + nums[0]) }
+      else toast.info('Tahmin yapılamadı — benzer malzeme yok')
+    }
+  }
+
   async function save() {
     if (!kod.trim() || !ad.trim()) { toast.error('Kod ve Ad zorunlu'); return }
     setSaving(true)
@@ -199,6 +218,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Kalınlık</label>
             <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
+          <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden boy/en tahmin et</button>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Min Stok</label>
             <input type="number" value={minStok} onChange={e => setMinStok(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>

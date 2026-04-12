@@ -49,24 +49,54 @@ export function CuttingPlans() {
           <table className="w-full text-xs">
             <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">Gerekli</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
             <tbody>
-              {cuttingPlans.map(p => (
-                <tr key={p.id} className="border-b border-border/30 hover:bg-bg-3/30 cursor-pointer" onClick={() => setSelected(selected === p.id ? null : p.id)}>
-                  <td className="px-4 py-2"><div className="font-mono text-accent text-[11px]">{p.hamMalkod}</div><div className="text-zinc-500 text-[10px]">{p.hamMalad}</div></td>
-                  <td className="px-4 py-2 text-zinc-400">{p.kesimTip}</td>
-                  <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
-                  <td className="px-4 py-2 text-right font-mono">{p.gerekliAdet} adet</td>
-                  <td className="px-4 py-2">
-                    <select value={p.durum} onChange={e => { e.stopPropagation(); updateDurum(p.id, e.target.value) }}
-                      className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${p.durum === 'tamamlandi' ? 'text-green' : p.durum === 'kismi' ? 'text-amber' : 'text-accent'}`}>
-                      <option value="bekliyor">Bekliyor</option><option value="kismi">Kısmi</option><option value="tamamlandi">Tamamlandı</option>
-                    </select>
-                  </td>
-                  <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => artikStokaGir(p.id, p.hamMalkod, p.hamMalad, 0)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green mr-1" title="Artık stoka gir">♻</button>
-                    <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
-                  </td>
-                </tr>
-              ))}
+              {cuttingPlans.map(p => {
+                const isOpen = selected === p.id
+                const satirlar = p.satirlar || []
+                return (
+                  <tr key={p.id} className="border-b border-border/30 hover:bg-bg-3/30 cursor-pointer" onClick={() => setSelected(isOpen ? null : p.id)}>
+                    <td className="px-4 py-2"><div className="font-mono text-accent text-[11px]">{p.hamMalkod}</div><div className="text-zinc-500 text-[10px]">{p.hamMalad}</div>
+                      {/* #31: Kesim Görsel SVG */}
+                      {isOpen && p.hamBoy > 0 && satirlar.length > 0 && (
+                        <div className="mt-2 mb-1">
+                          <svg width="100%" height="32" viewBox={`0 0 ${p.hamBoy} 30`} className="bg-bg-3 rounded overflow-hidden">
+                            {(() => {
+                              let x = 0
+                              const colors = ['#06b6d4', '#f59e0b', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6']
+                              const rects = satirlar.map((s, i) => {
+                                const boy = (s as unknown as Record<string, number>).boy || (s as unknown as Record<string, number>).hamAdet || 100
+                                const rect = <rect key={i} x={x} y={2} width={Math.max(1, boy - 2)} height={26} rx={2} fill={colors[i % colors.length]} opacity={0.7}><title>{(s as unknown as Record<string, string>).malad || ''} — {boy}mm</title></rect>
+                                x += boy
+                                return rect
+                              })
+                              if (x < p.hamBoy) rects.push(<rect key="fire" x={x} y={2} width={p.hamBoy - x - 2} height={26} rx={2} fill="#ef4444" opacity={0.2}><title>Fire: {p.hamBoy - x}mm</title></rect>)
+                              return rects
+                            })()}
+                          </svg>
+                          <div className="flex gap-2 mt-1 flex-wrap">
+                            {satirlar.map((s, i) => {
+                              const colors = ['text-cyan-400', 'text-amber-400', 'text-green-400', 'text-purple-400', 'text-pink-400', 'text-teal-400']
+                              return <span key={i} className={`text-[9px] ${colors[i % colors.length]}`}>■ {(s as unknown as Record<string, string>).malad || 'Parça'} {(s as unknown as Record<string, number>).boy || ''}mm ×{(s as unknown as Record<string, number>).adet || 1}</span>
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-zinc-400">{p.kesimTip}</td>
+                    <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
+                    <td className="px-4 py-2 text-right font-mono">{p.gerekliAdet} adet</td>
+                    <td className="px-4 py-2">
+                      <select value={p.durum} onChange={e => { e.stopPropagation(); updateDurum(p.id, e.target.value) }}
+                        className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${p.durum === 'tamamlandi' ? 'text-green' : p.durum === 'kismi' ? 'text-amber' : 'text-accent'}`}>
+                        <option value="bekliyor">Bekliyor</option><option value="kismi">Kısmi</option><option value="tamamlandi">Tamamlandı</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => artikStokaGir(p.id, p.hamMalkod, p.hamMalad, 0)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green mr-1" title="Artık stoka gir">♻</button>
+                      <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz kesim planı yok</div>}
