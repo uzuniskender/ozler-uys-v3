@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { toast } from 'sonner'
+import { toast, Toaster } from 'sonner'
 
 interface LoginProps {
   onLogin: (username: string, password: string) => Promise<{ error: unknown }>
@@ -44,6 +44,7 @@ export function Login({ onLogin, onGuest, onOperatorLogin }: LoginProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg-0">
+      <Toaster theme="dark" position="bottom-right" richColors />
       <div className="w-full max-w-sm">
         <form onSubmit={handleSubmit} className="bg-bg-1 border border-border rounded-xl p-8">
           <div className="text-center mb-6">

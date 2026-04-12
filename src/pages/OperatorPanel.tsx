@@ -14,7 +14,7 @@ export function OperatorPanel() {
   const [oprId, setOprId] = useState('')
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
-  const [tab, setTab] = useState<'isler'|'mesaj'>('isler')
+  const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'>('isler')
 
   // Auth'dan gelen operatör otomatik girişi
   useEffect(() => {
@@ -55,7 +55,7 @@ export function OperatorPanel() {
 
 function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
-  tab: string; setTab: (t: 'isler'|'mesaj') => void; onLogout: () => void
+  tab: string; setTab: (t: 'isler'|'mesaj'|'ozet') => void; onLogout: () => void
 }) {
   const { workOrders, logs, activeWork, operations, durusKodlari, loadAll } = useStore()
   const [entryWO, setEntryWO] = useState<string | null>(null)
@@ -113,6 +113,9 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
           <button onClick={() => setTab('mesaj')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'mesaj' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
             💬 Mesajlar
           </button>
+          <button onClick={() => setTab('ozet')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'ozet' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+            📊 Özet
+          </button>
         </div>
 
         {tab === 'isler' && (
@@ -145,6 +148,60 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
         )}
 
         {tab === 'mesaj' && <MesajForm oprId={oprId} oprAd={opr.ad} onSent={() => toast.success('Mesaj gönderildi')} />}
+
+        {tab === 'ozet' && (() => {
+          const bugunLogs = logs.filter(l => l.tarih === today() && l.operatorlar?.some((o: any) => o.id === oprId))
+          const toplamUretim = bugunLogs.reduce((a, l) => a + l.qty, 0)
+          const toplamFire = bugunLogs.reduce((a, l) => a + (l.fire || 0), 0)
+          const isEmriSayisi = new Set(bugunLogs.map(l => l.woId)).size
+          const toplamDurusDk = bugunLogs.reduce((a, l) => a + ((l.duruslar || []) as any[]).reduce((s: number, d: any) => s + (d.sure || 0), 0), 0)
+          return (
+            <div className="space-y-3">
+              <div className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Bugünkü Performans</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-bg-1 border border-border rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-green">{toplamUretim}</div>
+                  <div className="text-[10px] text-zinc-500 mt-1">Toplam Üretim</div>
+                </div>
+                <div className="bg-bg-1 border border-border rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-red">{toplamFire}</div>
+                  <div className="text-[10px] text-zinc-500 mt-1">Toplam Fire</div>
+                </div>
+                <div className="bg-bg-1 border border-border rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-accent">{isEmriSayisi}</div>
+                  <div className="text-[10px] text-zinc-500 mt-1">İş Emri</div>
+                </div>
+                <div className="bg-bg-1 border border-border rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-amber">{toplamDurusDk}<span className="text-sm">dk</span></div>
+                  <div className="text-[10px] text-zinc-500 mt-1">Toplam Duruş</div>
+                </div>
+              </div>
+              {bugunLogs.length > 0 && (
+                <div className="bg-bg-1 border border-border rounded-xl p-3">
+                  <div className="text-[10px] text-zinc-500 font-semibold mb-2">KAYITLAR</div>
+                  {bugunLogs.map(l => {
+                    const w2 = workOrders.find(x => x.id === l.woId)
+                    const opers = l.operatorlar as any[] || []
+                    const saat = opers.find((o: any) => o.id === oprId)
+                    return (
+                      <div key={l.id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+                        <div>
+                          <div className="text-xs font-medium">{w2?.malad?.slice(0, 40) || '—'}</div>
+                          <div className="text-[10px] text-zinc-500 font-mono">{saat?.bas || ''} → {saat?.bit || ''}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-green">+{l.qty}</div>
+                          {l.fire > 0 && <div className="text-[10px] text-red">Fire: {l.fire}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {!bugunLogs.length && <div className="p-8 text-center text-zinc-600 text-sm">Bugün henüz kayıt yok</div>}
+            </div>
+          )
+        })()}
 
         {/* Üretim Kayıt Modal */}
         {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} durusKodlari={durusKodlari}
