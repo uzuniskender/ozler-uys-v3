@@ -53,7 +53,19 @@ export function OperatorPanel() {
     )
   }
 
-  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { signOut(); window.location.hash = '#/'; window.location.reload() }} />
+  // Veri henüz yüklenmediyse (operators boş → opr undefined) loading göster
+  if (!opr) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-0">
+        <div className="text-center">
+          <div className="text-zinc-500 text-sm mb-2">Veriler yükleniyor...</div>
+          <div className="text-zinc-600 text-xs">Lütfen bekleyin</div>
+        </div>
+      </div>
+    )
+  }
+
+  return <OperatorMain oprId={oprId} opr={opr} tab={tab} setTab={setTab} onLogout={() => { signOut(); window.location.hash = '#/'; window.location.reload() }} />
 }
 
 function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
