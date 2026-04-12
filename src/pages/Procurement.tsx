@@ -1,3 +1,4 @@
+import { SearchSelect } from '@/components/ui/SearchSelect'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -108,7 +109,7 @@ export function Procurement() {
 function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
   initial: Record<string, unknown> | null
   tedarikciler: { id: string; kod: string; ad: string }[]
-  orders: { id: string; siparisNo: string }[]
+  orders: { id: string; siparisNo: string; musteri?: string }[]
   onClose: () => void; onSave: (data: Record<string, unknown>, editId?: string) => void
 }) {
   const [malkod, setMalkod] = useState((initial as Record<string, unknown>)?.malkod as string || '')
@@ -119,6 +120,7 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
   const [orderId, setOrderId] = useState((initial as Record<string, unknown>)?.orderId as string || '')
   const [teslim, setTeslim] = useState((initial as Record<string, unknown>)?.teslimTarihi as string || '')
   const [not_, setNot] = useState((initial as Record<string, unknown>)?.not as string || '')
+  const { materials } = useStore()
 
   const ted = tedarikciler.find(t => t.id === tedarikcId)
   const ord = orders.find(o => o.id === orderId)
@@ -129,21 +131,17 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Tedarik Düzenle' : 'Yeni Tedarik'}</h2>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label><input value={malkod} onChange={e => setMalkod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label><SearchSelect options={materials.map(m => ({ value: m.kod, label: m.kod, sub: m.ad }))} value={malkod} onChange={(v, l) => { setMalkod(v); if (!malad) setMalad(materials.find(m => m.kod === v)?.ad || l) }} placeholder="Malzeme kodu ara..." /></div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Miktar *</label><input type="number" value={miktar} onChange={e => setMiktar(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı</label><input value={malad} onChange={e => setMalad(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Tedarikçi</label>
-            <select value={tedarikcId} onChange={e => setTedarikcId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-              <option value="">— Seçin —</option>
-              {tedarikciler.map(t => <option key={t.id} value={t.id}>{t.ad}</option>)}
-            </select></div>
+            <SearchSelect options={tedarikciler.map(t => ({ value: t.id, label: t.ad }))} value={tedarikcId} onChange={(v) => setTedarikcId(v)} placeholder="Tedarikçi ara..." allowNew={false} />
+            </div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş</label>
-            <select value={orderId} onChange={e => setOrderId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-              <option value="">— Seçin —</option>
-              {orders.map(o => <option key={o.id} value={o.id}>{o.siparisNo}</option>)}
-            </select></div>
+            <SearchSelect options={orders.map(o => ({ value: o.id, label: o.siparisNo, sub: o.musteri }))} value={orderId} onChange={(v) => setOrderId(v)} placeholder="Sipariş ara..." allowNew={false} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Teslim Tarihi</label><input type="date" value={teslim} onChange={e => setTeslim(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>

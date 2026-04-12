@@ -8,6 +8,7 @@ import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, ArrowUp, ArrowDown } from 'lucide-react'
 import type { Order } from '@/types'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Orders() {
   const { orders, workOrders, logs, recipes, loadAll } = useStore()
@@ -245,7 +246,12 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş No *</label>
           <input value={siparisNo} onChange={e => setSiparisNo(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Müşteri</label>
-          <input value={musteri} onChange={e => setMusteri(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          {(() => {
+            const { customers, orders: allOrders } = useStore.getState()
+            const musteriSet = new Set([...customers.map(c => c.ad || c.kod), ...allOrders.map(o => o.musteri)].filter(Boolean))
+            const opts = [...musteriSet].sort((a, b) => a.localeCompare(b, 'tr')).map(m => ({ value: m, label: m }))
+            return <SearchSelect options={opts} value={musteri} onChange={(v) => setMusteri(v)} placeholder="Müşteri ara veya yaz..." allowNew />
+          })()}</div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Termin *</label>
             <input type="date" value={termin} onChange={e => setTermin(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
