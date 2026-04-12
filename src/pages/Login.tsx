@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 interface LoginProps {
   onLogin: (username: string, password: string) => Promise<{ error: unknown }>
   onGuest?: () => void
-  onOperatorLogin?: (oprId: string) => void
+  onOperatorLogin?: (oprId: string, oprAd: string) => void
 }
 
 export function Login({ onLogin, onGuest, onOperatorLogin }: LoginProps) {
@@ -104,7 +104,7 @@ export function Login({ onLogin, onGuest, onOperatorLogin }: LoginProps) {
                 </div>
               )}
               {selOprId && (
-                <button onClick={() => { if (onOperatorLogin) onOperatorLogin(selOprId) }}
+                <button onClick={() => { if (onOperatorLogin) { const opr = oprData.find(o => o.id === selOprId); onOperatorLogin(selOprId, opr?.ad || '') } }}
                   className="w-full py-2.5 bg-green hover:bg-green/80 text-black font-semibold rounded-lg text-sm transition-colors">
                   Giriş Yap →
                 </button>

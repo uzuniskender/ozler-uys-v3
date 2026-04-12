@@ -1,9 +1,10 @@
 import { useState } from 'react'
 
 interface AuthUser {
-  role: 'admin' | 'guest'
+  role: 'admin' | 'guest' | 'operator'
   username: string
   loginTime: string
+  oprId?: string
 }
 
 const AUTH_KEY = 'uys_v3_auth'
@@ -42,8 +43,14 @@ export function useAuth() {
     setUser(authUser)
   }
 
+  function operatorLogin(oprId: string, oprAd: string) {
+    const authUser: AuthUser = { role: 'operator', username: oprAd, loginTime: new Date().toISOString(), oprId }
+    localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
+    setUser(authUser)
+  }
+
   return {
-    session: user, user, loading, signIn, signOut, guestLogin,
-    isAuthenticated: !!user, isGuest: user?.role === 'guest', isAdmin: user?.role === 'admin',
+    session: user, user, loading, signIn, signOut, guestLogin, operatorLogin,
+    isAuthenticated: !!user, isGuest: user?.role === 'guest', isAdmin: user?.role === 'admin', isOperator: user?.role === 'operator',
   }
 }

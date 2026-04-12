@@ -79,16 +79,15 @@ function AppContent() {
 }
 
 export default function App() {
-  const { session, loading: authLoading, signIn, signOut, guestLogin, isGuest } = useAuth()
+  const { session, loading: authLoading, signIn, signOut, guestLogin, operatorLogin, isGuest, isOperator } = useAuth()
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
   }
 
   if (!session) {
-    return <Login onLogin={signIn} onGuest={guestLogin} onOperatorLogin={(oprId) => {
-      localStorage.setItem('uys_opr_login', oprId)
-      guestLogin()
+    return <Login onLogin={signIn} onGuest={guestLogin} onOperatorLogin={(oprId, oprAd) => {
+      operatorLogin(oprId, oprAd)
       setTimeout(() => { window.location.hash = '#/operator' }, 100)
     }} />
   }
@@ -99,6 +98,11 @@ export default function App() {
       {isGuest && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-amber/90 text-black text-center text-xs py-1 font-semibold">
           👁 MİSAFİR MODU — Salt okunur · <button onClick={signOut} className="underline">Çıkış</button>
+        </div>
+      )}
+      {isOperator && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-green/90 text-black text-center text-xs py-1 font-semibold">
+          🏭 OPERATÖR MODU — {session.username} · <button onClick={signOut} className="underline">Çıkış</button>
         </div>
       )}
       <AppContent />

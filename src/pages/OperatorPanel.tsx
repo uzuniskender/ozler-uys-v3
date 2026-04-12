@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
+import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -9,20 +10,19 @@ import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
 export function OperatorPanel() {
   const { operators } = useStore()
   const navigate = useNavigate()
+  const { user, signOut } = useAuth()
   const [oprId, setOprId] = useState('')
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
   const [tab, setTab] = useState<'isler'|'mesaj'>('isler')
 
-  // Login sayfasından gelen operatör otomatik girişi
+  // Auth'dan gelen operatör otomatik girişi
   useEffect(() => {
-    const autoOpr = localStorage.getItem('uys_opr_login')
-    if (autoOpr) {
-      localStorage.removeItem('uys_opr_login')
-      setOprId(autoOpr)
+    if (user?.role === 'operator' && user.oprId && !loggedIn) {
+      setOprId(user.oprId)
       setLoggedIn(true)
     }
-  }, [])
+  }, [user])
 
   const opr = operators.find(o => o.id === oprId)
 
@@ -50,7 +50,7 @@ export function OperatorPanel() {
     )
   }
 
-  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { setLoggedIn(false); setOprId(''); setSifre(''); navigate('/') }} />
+  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { signOut(); navigate('/') }} />
 }
 
 function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
