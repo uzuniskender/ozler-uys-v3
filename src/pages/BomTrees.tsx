@@ -94,6 +94,7 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
 function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => void; onSaved: () => void }) {
   const [rows, setRows] = useState(bom.rows || [])
+  const [viewMode, setViewMode] = useState<'edit'|'tree'>('edit')
 
   function updateRow(i: number, field: string, value: string | number) { setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r)) }
   function addRow(parentKirno: string) {
@@ -113,8 +114,43 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div><h2 className="text-lg font-semibold">{bom.ad || bom.mamulAd}</h2><p className="text-xs text-zinc-500">{bom.mamulKod} · {rows.length} satır</p></div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+          <div className="flex gap-2 items-center">
+            <button onClick={() => setViewMode('edit')} className={`px-2 py-1 rounded text-[10px] ${viewMode === 'edit' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Düzenle</button>
+            <button onClick={() => setViewMode('tree')} className={`px-2 py-1 rounded text-[10px] ${viewMode === 'tree' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Ağaç Görünüm</button>
+            <button onClick={async () => {
+              const { materials: mats2 } = useStore.getState(); const hmRows = rows.filter(r => r.tip === 'Hammadde').filter(r => { const m = mats2.find(mm => mm.kod === r.malkod); return m && m.boy > 0 })
+              if (!hmRows.length) { toast.error('Kesim yapılacak hammadde yok (boy bilgisi olan)'); return }
+              const { optimizeKesim, kesimPlaniKaydet } = await import('@/features/production/cutting')
+              const { materials: mats } = useStore.getState()
+              const satirlar = hmRows.map(r => { const m = mats2.find(mm => mm.kod === r.malkod); return { malkod: r.malkod, malad: r.malad, boy: m?.boy || 0, adet: r.miktar || 1 } })
+              const hmMalz = mats.filter(m => m.tip === 'Hammadde' && m.boy > 0) as unknown as import('@/types').Material[]
+              const sonuclar = optimizeKesim(satirlar, hmMalz)
+              if (sonuclar.length) { await kesimPlaniKaydet(sonuclar); toast.success(sonuclar.length + ' kesim planı oluşturuldu') }
+              else toast.error('Uygun ham malzeme bulunamadı')
+            }} className="px-2 py-1 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20">✂ Kesim Hesapla</button>
+            <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg ml-2">✕</button>
+          </div>
         </div>
+
+        {viewMode === 'tree' ? (
+          <div className="bg-bg-2 border border-border rounded-lg p-4 font-mono text-xs">
+            {rows.sort((a, b) => a.kirno.localeCompare(b.kirno)).map((r, i) => {
+              const depth = (r.kirno || '').split('.').length - 1
+              const tipColor = r.tip === 'Hammadde' ? 'text-green' : r.tip === 'YarıMamul' ? 'text-amber' : r.tip === 'Mamul' ? 'text-accent' : 'text-zinc-400'
+              return (
+                <div key={i} style={{ paddingLeft: `${depth * 20}px` }} className="py-1 flex items-center gap-2">
+                  <span className="text-zinc-600">{depth > 0 ? '├─' : '●'}</span>
+                  <span className={tipColor}>{r.kirno}</span>
+                  <span className="text-accent">{r.malkod}</span>
+                  <span className="text-zinc-300">{r.malad}</span>
+                  <span className="text-zinc-500">×{r.miktar} {r.birim}</span>
+                  <span className={`text-[9px] px-1 py-0.5 rounded ${r.tip === 'Hammadde' ? 'bg-green/10 text-green' : r.tip === 'YarıMamul' ? 'bg-amber/10 text-amber' : 'bg-accent/10 text-accent'}`}>{r.tip}</span>
+                </div>
+              )
+            })}
+          </div>
+        ) : (<>
+
         <table className="w-full text-xs">
           <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-2 py-2 w-20">Kırılım</th><th className="text-left px-2 py-2">Malzeme Kodu</th><th className="text-left px-2 py-2">Malzeme Adı</th><th className="text-left px-2 py-2 w-24">Tip</th><th className="text-right px-2 py-2 w-16">Miktar</th><th className="text-left px-2 py-2 w-16">Birim</th><th className="px-2 py-2 w-16"></th></tr></thead>
           <tbody>
@@ -137,6 +173,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
             })}
           </tbody>
         </table>
+        </>)}
         <div className="flex justify-between mt-4">
           <button onClick={() => addRow('1')} className="flex items-center gap-1 px-3 py-1.5 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"><Plus size={12} /> Kök Bileşen</button>
           <div className="flex gap-2">

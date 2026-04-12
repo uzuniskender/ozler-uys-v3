@@ -202,7 +202,7 @@ export function Orders() {
                 <tr key={o.id} className={`border-b border-border/50 hover:bg-bg-3/50 ${selIds.has(o.id) ? 'bg-accent/5' : ''}`}>
                   <td className="px-2 py-2.5"><input type="checkbox" checked={selIds.has(o.id)} onChange={() => selToggle(o.id)} className="accent-accent" /></td>
                   <td className="px-4 py-2.5"><button onClick={() => setSelectedOrder(o)} className="font-mono text-accent hover:underline">{o.siparisNo}</button></td>
-                  <td className="px-4 py-2.5 text-zinc-300">{o.musteri || '—'}</td>
+                  <td className="px-4 py-2.5">{o.musteri ? <button onClick={() => setSearch(o.musteri)} className="text-zinc-300 hover:text-accent hover:underline">{o.musteri}</button> : <span className="text-zinc-600">—</span>}</td>
                   <td className="px-4 py-2.5 text-zinc-400 max-w-[200px] truncate">{o.mamulAd || o.mamulKod || '—'}</td>
                   <td className="px-4 py-2.5 text-right font-mono">{o.adet}</td>
                   <td className={`px-4 py-2.5 font-mono ${isLate ? 'text-red font-semibold' : 'text-zinc-500'}`}>{o.termin || '—'}</td>

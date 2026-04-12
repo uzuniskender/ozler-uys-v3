@@ -65,6 +65,24 @@ export function Warehouse() {
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => stokOnar()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-amber" title="Negatif stokları sıfırla">🔧 Onar</button>
+          <button onClick={() => {
+            const lines = prompt('Toplu stok girişi — her satır: malzeme_kodu,miktar\nÖrnek:\nH-001,100\nH-002,50')
+            if (!lines) return
+            const rows = lines.split('\n').filter(l => l.includes(','))
+            let count = 0
+            rows.forEach(async line => {
+              const [malkod, miktarStr] = line.split(',').map(s => s.trim())
+              const miktar = parseFloat(miktarStr) || 0
+              if (!malkod || miktar <= 0) return
+              const mat = materials.find(m => m.kod === malkod)
+              await supabase.from('uys_stok_hareketler').insert({
+                id: uid(), tarih: today(), malkod, malad: mat?.ad || malkod,
+                miktar, tip: 'giris', aciklama: 'Toplu giriş',
+              })
+              count++
+            })
+            setTimeout(() => { loadAll(); toast.success(count + ' stok girişi yapıldı') }, 1000)
+          }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📦 Toplu Giriş</button>
           <button onClick={() => setShowGiris(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Manuel Giriş/Çıkış</button>
         </div>
       </div>
