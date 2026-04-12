@@ -10,7 +10,6 @@ interface AuthUser {
 }
 
 const AUTH_KEY = 'uys_v3_auth'
-// Admin olabilecek e-posta adresleri (whitelist)
 const ADMIN_EMAILS = ['uzuniskender@gmail.com']
 
 function getStored(): AuthUser | null {
@@ -24,9 +23,7 @@ export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(getStored())
   const [loading, setLoading] = useState(true)
 
-  // Supabase OAuth session kontrolü (sayfa yüklendiğinde + callback sonrası)
   useEffect(() => {
-    // Mevcut session'ı kontrol et
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const email = session.user.email || ''
@@ -34,8 +31,7 @@ export function useAuth() {
           const authUser: AuthUser = {
             role: 'admin',
             username: session.user.user_metadata?.full_name || email.split('@')[0],
-            email,
-            loginTime: new Date().toISOString(),
+            email, loginTime: new Date().toISOString(),
           }
           localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
           setUser(authUser)
@@ -44,24 +40,25 @@ export function useAuth() {
       setLoading(false)
     })
 
-    // Auth değişikliklerini dinle (OAuth callback sonrası)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(AUTH_KEY)
+        setUser(null)
+        setLoading(false)
+        return
+      }
       if (session?.user) {
         const email = session.user.email || ''
         if (ADMIN_EMAILS.includes(email)) {
           const authUser: AuthUser = {
             role: 'admin',
             username: session.user.user_metadata?.full_name || email.split('@')[0],
-            email,
-            loginTime: new Date().toISOString(),
+            email, loginTime: new Date().toISOString(),
           }
           localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
           setUser(authUser)
         } else {
-          // Whitelist'te olmayan hesap — çıkış yap
           supabase.auth.signOut()
-          localStorage.removeItem(AUTH_KEY)
-          setUser(null)
         }
       }
       setLoading(false)
@@ -73,15 +70,12 @@ export function useAuth() {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin + window.location.pathname,
-      },
+      options: { redirectTo: window.location.origin + window.location.pathname },
     })
     if (error) return { error: error.message }
     return { error: null }
   }
 
-  // Eski şifre ile giriş (fallback — hala çalışır)
   async function signIn(username: string, password: string) {
     const ADMIN_PASS = 'admin123'
     const customPass = localStorage.getItem('uys_admin_pass')
@@ -95,9 +89,10 @@ export function useAuth() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    try { await supabase.auth.signOut() } catch {}
     localStorage.removeItem(AUTH_KEY)
     setUser(null)
+    window.location.reload()
   }
 
   function guestLogin() {
