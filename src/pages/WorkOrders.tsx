@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, operators, loadAll } = useStore()
+  const { workOrders, logs, orders, operations, operators, stokHareketler, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi']))
 
@@ -43,6 +43,22 @@ export function WorkOrders() {
 
   function wProd(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
   function wPct(w: { id: string; hedef: number }): number { return w.hedef > 0 ? Math.min(100, Math.round(wProd(w.id) / w.hedef * 100)) : 0 }
+
+  // Stok kontrol badge
+  function stokBadge(w: { id: string; hm?: { malkod: string; miktarTotal: number }[]; hedef: number }): 'ok' | 'eksik' | 'yok' | null {
+    if (!w.hm?.length) return null
+    const kalan = Math.max(0, w.hedef - wProd(w.id))
+    if (kalan <= 0) return null
+    const stokMap: Record<string, number> = {}
+    stokHareketler.forEach(h => { stokMap[h.malkod] = (stokMap[h.malkod] || 0) + (h.tip === 'giris' ? h.miktar : -h.miktar) })
+    let ok = true, yok = false
+    w.hm.forEach(h => {
+      const stok = stokMap[h.malkod] || 0
+      if (stok < h.miktarTotal) ok = false
+      if (stok <= 0) yok = true
+    })
+    return ok ? 'ok' : yok ? 'yok' : 'eksik'
+  }
 
   const filtered = useMemo(() => {
     return workOrders.filter(w => {
@@ -161,7 +177,7 @@ export function WorkOrders() {
                 return (
                   <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
                     <td className="px-2 py-1.5"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggleSelect(w.id)} className="accent-accent" /></td>
-                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
+                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo} {(() => { const sb = stokBadge(w); return sb === 'ok' ? <span className="text-green text-[9px]" title="Stok yeterli">●</span> : sb === 'eksik' ? <span className="text-amber text-[9px]" title="Stok eksik">●</span> : sb === 'yok' ? <span className="text-red text-[9px]" title="Stok yok">●</span> : null })()}</td>
                     <td className="px-3 py-1.5 text-zinc-300 max-w-[180px] truncate">{w.malad}</td>
                     <td className="px-3 py-1.5 text-zinc-500">{w.opAd || '—'}</td>
                     <td className="px-3 py-1.5 text-right font-mono cursor-pointer hover:text-accent" onClick={() => updateHedef(w.id)} title="Tıkla: hedef güncelle">{w.hedef}</td>

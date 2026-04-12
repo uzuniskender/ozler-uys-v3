@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Download, Plus } from 'lucide-react'
+import { Search, Download, Plus, Upload } from 'lucide-react'
 
 export function Warehouse() {
   const { stokHareketler, materials, loadAll } = useStore()
@@ -48,6 +48,37 @@ export function Warehouse() {
     loadAll(); toast.success(negatifler.length + ' malzeme düzeltildi')
   }
 
+  // Stok Excel Import
+  function importExcel() {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.xlsx,.xls'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      const XLSX = await import('xlsx')
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+      if (!rows.length) { toast.error('Excel boş'); return }
+      let count = 0
+      for (const row of rows) {
+        const malkod = String(row['Kod'] || row['Malzeme Kodu'] || row['malkod'] || '').trim()
+        const miktar = parseFloat(String(row['Miktar'] || row['miktar'] || row['Stok'] || '0')) || 0
+        const tip = String(row['Tip'] || row['tip'] || 'giris').toLowerCase().includes('çık') ? 'cikis' : 'giris'
+        if (!malkod || miktar <= 0) continue
+        const mat = materials.find(m => m.kod === malkod)
+        await supabase.from('uys_stok_hareketler').insert({
+          id: uid(), tarih: today(), malkod, malad: mat?.ad || malkod,
+          miktar, tip, aciklama: 'Excel import',
+        })
+        count++
+      }
+      loadAll(); toast.success(count + ' stok hareketi yüklendi')
+    }
+    input.click()
+  }
+
   function exportExcel() {
     import('xlsx').then(XLSX => {
       const rows = filteredStok.map(s => ({ Kod: s.malkod, Malzeme: s.malad, Stok: Math.round(s.miktar * 100) / 100 }))
@@ -63,6 +94,7 @@ export function Warehouse() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Depolar</h1><p className="text-xs text-zinc-500">{stokHareketler.length} hareket · {stokMap.length} malzeme</p></div>
         <div className="flex gap-2">
+          <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => stokOnar()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-amber" title="Negatif stokları sıfırla">🔧 Onar</button>
           <button onClick={() => {

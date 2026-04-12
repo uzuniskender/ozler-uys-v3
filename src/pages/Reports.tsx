@@ -21,6 +21,7 @@ export function Reports() {
     { id: 'maltuket', label: 'Malzeme Tüketim' },
     { id: 'trend', label: 'Trend' },
     { id: 'istperf', label: 'İstasyon Perf.' },
+    { id: 'oprsaat', label: 'Operatör Saat' },
   ]
 
   const todayStr = today()
@@ -348,6 +349,38 @@ export function Reports() {
               <tbody>{data.map(d => (<tr key={d.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{d.ad}</td><td className="px-4 py-1.5 text-right font-mono">{d.woCount}</td><td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td></tr>))}</tbody></table>
               </>
             ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+          </div>
+        )
+      })()}
+
+      {/* Operatör Saat Analizi */}
+      {tab === 'oprsaat' && (() => {
+        const oprSaatMap: Record<string, { ad: string; toplamDk: number; uretim: number; gunler: Set<string> }> = {}
+        logs.forEach(l => {
+          l.operatorlar?.forEach((o: { id?: string; ad?: string; bas?: string; bit?: string }) => {
+            const key = o.ad || 'Tanımsız'
+            if (!oprSaatMap[key]) oprSaatMap[key] = { ad: key, toplamDk: 0, uretim: 0, gunler: new Set() }
+            oprSaatMap[key].uretim += l.qty
+            oprSaatMap[key].gunler.add(l.tarih)
+            if (o.bas && o.bit && o.bit >= o.bas) {
+              const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
+              const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
+              oprSaatMap[key].toplamDk += Math.max(0, e - b)
+            }
+          })
+        })
+        const data = Object.values(oprSaatMap).map(o => ({
+          ...o, gunSayisi: o.gunler.size,
+          saatStr: Math.floor(o.toplamDk / 60) + 's ' + (o.toplamDk % 60) + 'dk',
+          adetSaat: o.toplamDk > 0 ? Math.round(o.uretim / (o.toplamDk / 60) * 10) / 10 : 0,
+        })).sort((a, b) => b.uretim - a.uretim)
+        return (
+          <div className="bg-bg-2 border border-border rounded-lg p-4">
+            <h3 className="text-sm font-semibold mb-3">Operatör Saat Analizi ({data.length})</h3>
+            {data.length ? (
+              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operatör</th><th className="text-right px-4 py-2">Toplam Süre</th><th className="text-right px-4 py-2">Üretim</th><th className="text-right px-4 py-2">Gün</th><th className="text-right px-4 py-2">Adet/Saat</th></tr></thead>
+              <tbody>{data.map(o => (<tr key={o.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{o.ad}</td><td className="px-4 py-1.5 text-right font-mono text-accent">{o.saatStr}</td><td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td><td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{o.adetSaat}</td></tr>))}</tbody></table>
+            ) : <div className="p-8 text-center text-zinc-600">Operatör saat verisi yok — üretim girişinde başlama/bitiş saati girilmeli</div>}
           </div>
         )
       })()}
