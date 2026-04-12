@@ -4,7 +4,7 @@ import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer,
-  Sevk, OperatorNote, ActiveWork, FireLog
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -50,6 +50,7 @@ const M = {
   }),
   operation: (r: Record<string, unknown>): Operation => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
+    bolum: (r.bolum || '') as string,
   }),
   station: (r: Record<string, unknown>): Station => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
@@ -125,6 +126,16 @@ const M = {
     qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
     operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
   }),
+  checklist: (r: Record<string, unknown>): ChecklistItem => ({
+    id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],
+    baslik: (r.baslik || '') as string, aciklama: (r.aciklama || '') as string,
+    atanan: (r.atanan || '') as string, oncelik: (r.oncelik || 'normal') as ChecklistItem['oncelik'],
+    durum: (r.durum || 'bekliyor') as ChecklistItem['durum'], tarih: (r.tarih || '') as string,
+    termin: (r.termin || '') as string, kategori: (r.kategori || '') as string,
+    resimler: (r.resimler || []) as ChecklistItem['resimler'],
+    tamamlanma: (r.tamamlanma || '') as string, olusturan: (r.olusturan || '') as string,
+    notlar: (r.notlar || '') as string,
+  }),
 }
 
 interface UYSStore {
@@ -134,7 +145,7 @@ interface UYSStore {
   stokHareketler: StokHareket[]; cuttingPlans: CuttingPlan[]
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
-  activeWork: ActiveWork[]; fireLogs: FireLog[]
+  activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
   loading: boolean; synced: boolean
   loadAll: () => Promise<void>
   setOrders: (orders: Order[]) => void
@@ -161,13 +172,14 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
   { key: 'operatorNotes', table: 'uys_operator_notes', mapper: M.operatorNote },
   { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
   { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
+  { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
 ]
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [],
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
   loading: true, synced: false,
 
   loadAll: async () => {
