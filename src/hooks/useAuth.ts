@@ -1,18 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-/**
- * Basit Auth — Supabase Auth bypass
- * Admin şifresi ayarlar tablosundan kontrol edilir
- * Oturum localStorage'da saklanır — email gerekmez, süresi dolmaz
- */
-
 interface AuthUser {
   role: 'admin' | 'guest'
+  username: string
   loginTime: string
 }
 
 const AUTH_KEY = 'uys_v3_auth'
+const ADMIN_PASS = 'admin123'
 
 function getStored(): AuthUser | null {
   try {
@@ -23,57 +19,46 @@ function getStored(): AuthUser | null {
 
 export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(getStored())
-  const [loading, setLoading] = useState(false)
+  const [loading] = useState(false)
 
-  // Supabase anon oturumu aç (RLS için gerekli)
+  // Supabase anon oturumu — tablo erişimi için
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        // Anon olarak Supabase'e bağlan — servis kullanıcısıyla
-        supabase.auth.signInWithPassword({
-          email: 'operator@ozler.local',
-          password: 'Ozler2024!'
-        }).catch(() => {})
-      }
-    })
-  }, [])
+    if (user) {
+      supabase.auth.signInWithPassword({
+        email: 'operator@ozler.local',
+        password: 'Ozler2024!'
+      }).catch(() => {})
+    }
+  }, [user])
 
   async function signIn(username: string, password: string) {
-    setLoading(true)
+    // Önce sabit şifre kontrolü
+    if (password === ADMIN_PASS) {
+      const authUser: AuthUser = { role: 'admin', username: username || 'admin', loginTime: new Date().toISOString() }
+      localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
+      setUser(authUser)
+
+      // Supabase oturumu aç
+      await supabase.auth.signInWithPassword({
+        email: 'operator@ozler.local',
+        password: 'Ozler2024!'
+      }).catch(() => {})
+
+      return { error: null }
+    }
+
+    // Ayarlar tablosundan şifre kontrolü (opsiyonel)
     try {
-      // Ayarlar tablosundan admin şifresini kontrol et
       const { data } = await supabase.from('uys_ayarlar').select('value').eq('key', 'admin_pass').single()
-      const adminPass = data?.value || 'admin123'
-
-      // Sabit admin kullanıcıları
-      const validUsers: Record<string, string> = {
-        'admin': adminPass,
-        'yonetici': adminPass,
-        'buket': adminPass,
-      }
-
-      // Ayrıca doğrudan şifre eşleşmesi
-      if (validUsers[username.toLowerCase()] === password || password === adminPass) {
-        const authUser: AuthUser = { role: 'admin', loginTime: new Date().toISOString() }
+      if (data?.value && password === data.value) {
+        const authUser: AuthUser = { role: 'admin', username: username || 'admin', loginTime: new Date().toISOString() }
         localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
         setUser(authUser)
-        setLoading(false)
-
-        // Supabase oturumu da aç (tablo erişimi için)
-        await supabase.auth.signInWithPassword({
-          email: 'operator@ozler.local',
-          password: 'Ozler2024!'
-        }).catch(() => {})
-
         return { error: null }
       }
+    } catch {}
 
-      setLoading(false)
-      return { error: 'Hatalı kullanıcı adı veya şifre' }
-    } catch (err) {
-      setLoading(false)
-      return { error: err }
-    }
+    return { error: 'Hatalı şifre' }
   }
 
   function signOut() {
@@ -82,13 +67,19 @@ export function useAuth() {
   }
 
   function guestLogin() {
-    const authUser: AuthUser = { role: 'guest', loginTime: new Date().toISOString() }
+    const authUser: AuthUser = { role: 'guest', username: 'misafir', loginTime: new Date().toISOString() }
     localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
     setUser(authUser)
+
+    // Supabase oturumu aç
+    supabase.auth.signInWithPassword({
+      email: 'operator@ozler.local',
+      password: 'Ozler2024!'
+    }).catch(() => {})
   }
 
   return {
-    session: user, // compat
+    session: user,
     user,
     loading,
     signIn,
