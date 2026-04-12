@@ -229,9 +229,51 @@ export function DataManagement() {
         </div>
       </div>
 
-      {/* #35: Fabrika Sıfırlama */}
+      {/* #35: Sıfırlama İşlemleri */}
       <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
-        <div className="text-sm font-semibold text-red mb-2">⚠ Tehlikeli İşlemler</div>
+        <div className="text-sm font-semibold text-red mb-3">⚠ Sıfırlama İşlemleri</div>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <button onClick={async () => {
+            if (!await showConfirm('Tüm siparişler, iş emirleri, üretim logları ve sevkiyatlar silinecek. Devam?')) return
+            for (const t of ['uys_sevkler','uys_fire_logs','uys_logs','uys_work_orders','uys_orders']) {
+              await supabase.from(t).delete().neq('id', '___impossible___')
+            }
+            store.loadAll(); toast.success('Siparişler sıfırlandı')
+          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
+            📋 Siparişleri Sıfırla
+            <div className="text-[10px] text-red/60 mt-0.5">Siparişler, İE'ler, loglar, sevkiyatlar</div>
+          </button>
+
+          <button onClick={async () => {
+            if (!await showConfirm('Tüm iş emirleri ve üretim logları silinecek. Siparişler kalacak. Devam?')) return
+            for (const t of ['uys_fire_logs','uys_logs','uys_work_orders']) {
+              await supabase.from(t).delete().neq('id', '___impossible___')
+            }
+            store.loadAll(); toast.success('İş emirleri sıfırlandı')
+          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
+            🔧 İş Emirlerini Sıfırla
+            <div className="text-[10px] text-red/60 mt-0.5">İE'ler, üretim logları, fire logları</div>
+          </button>
+
+          <button onClick={async () => {
+            if (!await showConfirm('Tüm stok hareketleri silinecek. Devam?')) return
+            await supabase.from('uys_stok_hareketler').delete().neq('id', '___impossible___')
+            store.loadAll(); toast.success('Depo sıfırlandı')
+          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
+            📦 Depoyu Sıfırla
+            <div className="text-[10px] text-red/60 mt-0.5">Tüm stok hareketleri</div>
+          </button>
+
+          <button onClick={async () => {
+            if (!await showConfirm('Tüm tedarik kayıtları silinecek. Devam?')) return
+            await supabase.from('uys_tedarikler').delete().neq('id', '___impossible___')
+            store.loadAll(); toast.success('Tedarikler sıfırlandı')
+          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
+            🚚 Tedarikleri Sıfırla
+            <div className="text-[10px] text-red/60 mt-0.5">Tüm tedarik kayıtları</div>
+          </button>
+        </div>
+
         <button onClick={async () => {
           if (!await showConfirm('TÜM VERİLER SİLİNECEK! Bu işlem geri alınamaz. Devam etmek istiyor musunuz?')) return
           const onay = await showPrompt('Onaylamak için "SIFIRLA" yazın'); if (onay !== 'SIFIRLA') return
@@ -240,8 +282,8 @@ export function DataManagement() {
           }
           store.loadAll()
           toast.success('Tüm veriler sıfırlandı')
-        }} className="px-4 py-2 bg-red/10 border border-red/25 text-red rounded-lg text-xs hover:bg-red/20">
-          Fabrika Sıfırlama (Tüm Verileri Sil)
+        }} className="w-full px-4 py-2 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold">
+          💀 Fabrika Sıfırlama (Tüm Verileri Sil)
         </button>
       </div>
     </div>
