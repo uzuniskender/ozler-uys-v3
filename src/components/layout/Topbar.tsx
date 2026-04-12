@@ -13,15 +13,27 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const { synced, loadAll } = useStore()
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
+  const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
 
   return (
     <>
+    {isTestMode && (
+      <div className="bg-amber text-black text-center text-xs font-bold py-1">
+        ⚠ TEST ORTAMI — Veriler gerçek sisteme kaydedilmektedir, test sonrası temizleyin
+        <button onClick={() => { localStorage.removeItem('uys_test_mode'); window.location.reload() }} className="ml-3 px-2 py-0.5 bg-black/20 rounded text-[10px]">Kapat</button>
+      </div>
+    )}
     <header className="h-12 bg-bg-1 border-b border-border flex items-center px-4 gap-3">
       <button onClick={onMenuClick} className="lg:hidden text-zinc-400 hover:text-white">
         <Menu size={20} />
       </button>
 
       <div className="flex-1" />
+
+      {!isTestMode && (
+        <button onClick={() => { localStorage.setItem('uys_test_mode', 'true'); window.location.reload() }}
+          className="text-[10px] text-zinc-600 hover:text-amber px-2 py-0.5 rounded" title="Test modunu aç">🧪 Test</button>
+      )}
 
       {user && (
         <span className="text-[11px] text-zinc-500 font-mono">{user.username}</span>

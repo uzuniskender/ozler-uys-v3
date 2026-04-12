@@ -190,6 +190,30 @@ export function DataManagement() {
         </button>
       </div>
 
+      {/* Test Modu */}
+      <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
+        <div className="text-sm font-semibold text-zinc-300 mb-2">🧪 Test Ortamı</div>
+        <p className="text-xs text-zinc-500 mb-3">Açıldığında ekranın üstünde sarı "TEST ORTAMI" banner'ı görünür. Test verilerini ayırt etmek için kullanın.</p>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={localStorage.getItem('uys_test_mode') === 'true'}
+              onChange={e => { localStorage.setItem('uys_test_mode', String(e.target.checked)); window.location.reload() }}
+              className="accent-amber" />
+            <span className="text-xs text-zinc-300">Test Modu {localStorage.getItem('uys_test_mode') === 'true' ? '(Açık)' : '(Kapalı)'}</span>
+          </label>
+          {localStorage.getItem('uys_test_mode') === 'true' && (
+            <button onClick={async () => {
+              if (!await showConfirm('"TEST" içeren tüm sipariş ve iş emirleri silinecek. Devam?')) return
+              const { data: testOrders } = await supabase.from('uys_orders').select('id').ilike('siparis_no', '%TEST%')
+              if (testOrders) { for (const o of testOrders) { await supabase.from('uys_orders').delete().eq('id', o.id) } }
+              const { data: testWOs } = await supabase.from('uys_work_orders').select('id').ilike('ie_no', '%TEST%')
+              if (testWOs) { for (const w of testWOs) { await supabase.from('uys_work_orders').delete().eq('id', w.id) } }
+              store.loadAll(); toast.success('Test verileri temizlendi')
+            }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Test Verilerini Temizle</button>
+          )}
+        </div>
+      </div>
+
       {/* Admin Şifre */}
       <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
         <div className="text-sm font-semibold text-zinc-300 mb-2">🔐 Admin Şifre (Silme Koruması)</div>

@@ -4,7 +4,7 @@ import { useStore } from '@/store'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator
 } from 'lucide-react'
 
 const NAV = [
@@ -16,6 +16,7 @@ const NAV = [
     { path: '/work-orders', label: 'İş Emirleri', icon: Clock, badge: 'workOrders' },
     { path: '/production', label: 'Üretim Girişi', icon: PlusCircle },
     { path: '/cutting', label: 'Kesim Planları', icon: Scissors, badge: 'cuttingPlans' },
+    { path: '/mrp', label: 'MRP', icon: Calculator },
     { path: '/warehouse', label: 'Depolar', icon: Warehouse, badge: 'stokHareketler' },
     { path: '/shipment', label: 'Sevkiyat', icon: Truck, badge: 'sevkler' },
   ]},

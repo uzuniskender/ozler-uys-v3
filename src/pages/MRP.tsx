@@ -1,0 +1,224 @@
+import { useState, useMemo } from 'react'
+import { useStore } from '@/store'
+import { supabase } from '@/lib/supabase'
+import { uid, today } from '@/lib/utils'
+import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
+import { Download } from 'lucide-react'
+import { hesaplaMRP } from '@/features/production/mrp'
+
+export function MRP() {
+  const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, loadAll } = useStore()
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
+  const [sonuc, setSonuc] = useState<ReturnType<typeof hesaplaMRP>>([])
+  const [hesaplandi, setHesaplandi] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+
+  // Aktif siparişler
+  const aktifOrders = useMemo(() =>
+    orders.filter(o => o.durum !== 'Tamamlandı' && o.durum !== 'İptal').sort((a, b) => (a.termin || '').localeCompare(b.termin || '')),
+    [orders])
+
+  function toggleOrder(id: string) {
+    setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))) }
+  function selectNone() { setSelectedOrders(new Set()) }
+
+  function orderPct(orderId: string) {
+    const wos = workOrders.filter(w => w.orderId === orderId)
+    if (!wos.length) return 0
+    const total = wos.reduce((a, w) => a + w.hedef, 0)
+    const done = wos.reduce((a, w) => a + logs.filter(l => l.woId === w.id).reduce((s, l) => s + l.qty, 0), 0)
+    return total > 0 ? Math.min(100, Math.round(done / total * 100)) : 0
+  }
+
+  // Kesim planı kontrolü
+  const kesimEksik = useMemo(() => {
+    if (!selectedOrders.size) return 0
+    const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
+    const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap(s => (s.kesimler || []).map((k: { woId?: string }) => k.woId))))
+    return workOrders.filter(w => {
+      if (!selectedOrders.has(w.orderId)) return false
+      if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+      if (planliWoIds.has(w.id)) return false
+      return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
+    }).length
+  }, [selectedOrders, workOrders, cuttingPlans])
+
+  function hesapla() {
+    if (!selectedOrders.size) { toast.error('Sipariş seçin'); return }
+    const allRows: ReturnType<typeof hesaplaMRP> = []
+    for (const orderId of selectedOrders) {
+      const ord = orders.find(o => o.id === orderId)
+      if (!ord?.receteId) continue
+      const rc = recipes.find(r => r.id === ord.receteId)
+      if (!rc) continue
+      const rows = hesaplaMRP(orderId, ord.adet, rc, stokHareketler, tedarikler, [])
+      rows.forEach(r => {
+        const existing = allRows.find(x => x.malkod === r.malkod)
+        if (existing) { existing.brut += r.brut; existing.net += r.net }
+        else allRows.push({ ...r })
+      })
+    }
+    setSonuc(allRows.sort((a, b) => b.net - a.net))
+    setHesaplandi(true)
+    toast.success(allRows.length + ' kalem hesaplandı')
+  }
+
+  const eksikler = sonuc.filter(s => s.net > 0)
+  const yeterliler = sonuc.filter(s => s.net <= 0)
+
+  async function topluTedarikOlustur() {
+    const secili = sonuc.filter(s => selectedRows.has(s.malkod) && s.net > 0)
+    if (!secili.length) { toast.error('Tedarik oluşturulacak malzeme seçin'); return }
+    if (!await showConfirm(`${secili.length} malzeme için tedarik oluşturulacak. Devam?`)) return
+    let count = 0
+    for (const s of secili) {
+      await supabase.from('uys_tedarikler').insert({
+        id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
+        birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false,
+        not_: 'MRP önerisi',
+      })
+      count++
+    }
+    loadAll(); setSelectedRows(new Set())
+    toast.success(count + ' tedarik oluşturuldu')
+  }
+
+  function exportExcel() {
+    if (!sonuc.length) return
+    import('xlsx').then(XLSX => {
+      const rows = sonuc.map(s => ({
+        'Malzeme Kodu': s.malkod, 'Malzeme Adı': s.malad, 'Tip': s.tip || '',
+        'Brüt İhtiyaç': Math.round(s.brut * 100) / 100, 'Stok': Math.round(s.stok * 100) / 100,
+        'Açık Tedarik': Math.round((s.acikTedarik || 0) * 100) / 100,
+        'Net İhtiyaç': Math.round(s.net * 100) / 100,
+        'Durum': s.net <= 0 ? 'Yeterli' : s.stok > 0 ? 'Eksik' : 'Yok', 'Birim': s.birim || 'Adet',
+      }))
+      const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'MRP'); XLSX.writeFile(wb, `mrp_raporu_${today()}.xlsx`)
+      toast.success('MRP Excel indirildi')
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div><h1 className="text-xl font-semibold">📊 MRP — Malzeme İhtiyaç Planlaması</h1>
+          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş</p></div>
+        {hesaplandi && <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>}
+      </div>
+
+      {/* Sipariş Seçimi */}
+      <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold text-zinc-500 uppercase">Siparişler — tıklayarak seç/kaldır</div>
+          <div className="flex gap-2">
+            <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
+            <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[250px] overflow-y-auto">
+          {aktifOrders.map(o => {
+            const sel = selectedOrders.has(o.id)
+            const pct = orderPct(o.id)
+            return (
+              <button key={o.id} onClick={() => toggleOrder(o.id)}
+                className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : 'bg-bg-3 border border-border'}`}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={sel} readOnly className="accent-accent" />
+                  <span className="font-mono font-medium">{o.siparisNo}</span>
+                  <span className="text-zinc-500 ml-auto">{pct}%</span>
+                </div>
+                <div className="text-zinc-500 truncate mt-0.5">{o.musteri}</div>
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex items-center gap-3 mt-3">
+          <button onClick={hesapla} disabled={!selectedOrders.size}
+            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+            Hesapla →
+          </button>
+          <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş seçili</span>
+        </div>
+      </div>
+
+      {/* Kesim Uyarısı */}
+      {kesimEksik > 0 && (
+        <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg text-xs text-red">
+          🚫 <strong>{kesimEksik} kesim İE'si</strong> için kesim planı oluşturulmamış. MRP sonuçları eksik olabilir.
+        </div>
+      )}
+
+      {/* Sonuç */}
+      {hesaplandi && (
+        <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-3">
+            <span className="px-2 py-1 bg-red/10 text-red rounded text-[10px] font-semibold">⚠ {eksikler.length} eksik</span>
+            <span className="px-2 py-1 bg-green/10 text-green rounded text-[10px] font-semibold">✓ {yeterliler.length} yeterli</span>
+            <span className="flex-1" />
+            {selectedRows.size > 0 && (
+              <button onClick={topluTedarikOlustur} className="px-3 py-1.5 bg-accent text-white rounded-lg text-[10px] font-semibold">
+                + Toplu Tedarik ({selectedRows.size})
+              </button>
+            )}
+            <button onClick={() => {
+              setSelectedRows(new Set(eksikler.map(s => s.malkod)))
+            }} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">☑ Eksikleri Seç</button>
+          </div>
+          <div className="max-h-[400px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-bg-2">
+                <tr className="border-b border-border text-zinc-500">
+                  <th className="px-2 py-2 w-6"><input type="checkbox" onChange={e => setSelectedRows(e.target.checked ? new Set(eksikler.map(s => s.malkod)) : new Set())} className="accent-accent" /></th>
+                  <th className="text-left px-3 py-2">Malzeme Kodu</th>
+                  <th className="text-left px-3 py-2">Malzeme Adı</th>
+                  <th className="text-left px-3 py-2">Tip</th>
+                  <th className="text-right px-3 py-2">Brüt</th>
+                  <th className="text-right px-3 py-2">Stok</th>
+                  <th className="text-right px-3 py-2">Açık Ted.</th>
+                  <th className="text-right px-3 py-2">Net</th>
+                  <th className="text-left px-3 py-2">Durum</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sonuc.map(s => {
+                  const durum = s.net <= 0 ? 'yeterli' : s.stok > 0 ? 'eksik' : 'yok'
+                  const color = durum === 'yeterli' ? 'text-green' : durum === 'eksik' ? 'text-amber' : 'text-red'
+                  return (
+                    <tr key={s.malkod} className="border-b border-border/30 hover:bg-bg-3/30">
+                      <td className="px-2 py-1.5">{durum !== 'yeterli' && <input type="checkbox" checked={selectedRows.has(s.malkod)} onChange={() => {
+                        setSelectedRows(prev => { const n = new Set(prev); n.has(s.malkod) ? n.delete(s.malkod) : n.add(s.malkod); return n })
+                      }} className="accent-accent" />}</td>
+                      <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
+                      <td className="px-3 py-1.5 text-zinc-300">{s.malad}</td>
+                      <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{s.tip || '—'}</span></td>
+                      <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut * 100) / 100}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok * 100) / 100}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{(s.acikTedarik || 0) > 0 ? Math.round(s.acikTedarik! * 100) / 100 : '—'}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net * 100) / 100}</td>
+                      <td className={`px-3 py-1.5 font-semibold ${color}`}>{durum === 'yeterli' ? '✓ Yeterli' : durum === 'eksik' ? '⚠ Eksik' : '✗ Yok'}</td>
+                      <td className="px-3 py-1.5">{durum !== 'yeterli' && (
+                        <button onClick={async () => {
+                          await supabase.from('uys_tedarikler').insert({
+                            id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
+                            birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, not_: 'MRP',
+                          })
+                          loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
+                        }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>
+                      )}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

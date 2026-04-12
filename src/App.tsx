@@ -11,6 +11,7 @@ import { Orders } from '@/pages/Orders'
 import { WorkOrders } from '@/pages/WorkOrders'
 import { ProductionEntry } from '@/pages/ProductionEntry'
 import { CuttingPlans } from '@/pages/CuttingPlans'
+import { MRP } from '@/pages/MRP'
 import { Warehouse } from '@/pages/Warehouse'
 import { Shipment } from '@/pages/Shipment'
 import { BomTrees } from '@/pages/BomTrees'
@@ -54,6 +55,7 @@ function AppContent() {
           <Route path="/work-orders" element={<WorkOrders />} />
           <Route path="/production" element={<ProductionEntry />} />
           <Route path="/cutting" element={<CuttingPlans />} />
+          <Route path="/mrp" element={<MRP />} />
           <Route path="/warehouse" element={<Warehouse />} />
           <Route path="/shipment" element={<Shipment />} />
           <Route path="/bom" element={<BomTrees />} />
