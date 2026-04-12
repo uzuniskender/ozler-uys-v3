@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -13,6 +13,16 @@ export function OperatorPanel() {
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
   const [tab, setTab] = useState<'isler'|'mesaj'>('isler')
+
+  // Login sayfasından gelen operatör otomatik girişi
+  useEffect(() => {
+    const autoOpr = localStorage.getItem('uys_opr_login')
+    if (autoOpr) {
+      localStorage.removeItem('uys_opr_login')
+      setOprId(autoOpr)
+      setLoggedIn(true)
+    }
+  }, [])
 
   const opr = operators.find(o => o.id === oprId)
 

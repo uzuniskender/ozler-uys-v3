@@ -86,7 +86,11 @@ export default function App() {
   }
 
   if (!session) {
-    return <Login onLogin={signIn} onGuest={guestLogin} />
+    return <Login onLogin={signIn} onGuest={guestLogin} onOperatorLogin={(oprId) => {
+      localStorage.setItem('uys_opr_login', oprId)
+      guestLogin()
+      setTimeout(() => { window.location.hash = '#/operator' }, 100)
+    }} />
   }
 
   return (
