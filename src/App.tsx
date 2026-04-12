@@ -68,14 +68,14 @@ function AppContent() {
 }
 
 export default function App() {
-  const { session, loading: authLoading, signIn, signOut, guestLogin, operatorLogin, isGuest, isOperator } = useAuth()
+  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator } = useAuth()
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
   }
 
   if (!session) {
-    return <Login onLogin={signIn} onGuest={guestLogin} onOperatorLogin={(oprId, oprAd) => {
+    return <Login onLogin={signIn} onGoogleLogin={signInWithGoogle} onGuest={guestLogin} onOperatorLogin={(oprId, oprAd) => {
       operatorLogin(oprId, oprAd)
       setTimeout(() => { window.location.hash = '#/operator' }, 100)
     }} />
