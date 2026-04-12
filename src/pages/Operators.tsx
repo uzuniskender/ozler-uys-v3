@@ -5,6 +5,7 @@ import { uid, today } from '@/lib/utils'
 import { showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Plus, UserCheck, UserX } from 'lucide-react'
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 
 export function Operators() {
   const { operators, loadAll } = useStore()

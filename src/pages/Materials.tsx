@@ -5,6 +5,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Download, Plus, Pencil, Trash2, Upload } from 'lucide-react'
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
 
 export function Materials() {
