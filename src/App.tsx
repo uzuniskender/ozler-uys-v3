@@ -30,21 +30,10 @@ import { Checklist } from '@/pages/Checklist'
 
 function AppContent() {
   const { signOut } = useAuth()
-  const { loadAll, loading } = useStore()
+  const { loadAll } = useStore()
   useRealtime()
 
   useEffect(() => { loadAll() }, [loadAll])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg-0">
-        <div className="text-center">
-          <div className="text-accent text-sm font-semibold mb-2">Veriler yükleniyor...</div>
-          <div className="text-zinc-600 text-xs font-mono">Supabase tablolarından okunuyor</div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <HashRouter>
