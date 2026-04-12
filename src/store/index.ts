@@ -43,7 +43,7 @@ const M = {
   }),
   material: (r: Record<string, unknown>): Material => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    tip: (r.tip || '') as string, birim: (r.birim || 'Adet') as string,
+    tip: (r.tip || '') as string, hammaddeTipi: (r.hammadde_tipi || '') as string, birim: (r.birim || 'Adet') as string,
     boy: (r.boy as number) || 0, en: (r.en as number) || 0, kalinlik: (r.kalinlik as number) || 0,
     cap: (r.cap as number) || 0, icCap: (r.ic_cap as number) || 0, minStok: (r.min_stok as number) || 0,
     opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string,

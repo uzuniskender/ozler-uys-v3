@@ -118,7 +118,7 @@ export function Materials() {
                   <tr key={m.id} className="border-b border-border/30 hover:bg-bg-3/30">
                     <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{m.kod}</td>
                     <td className="px-4 py-1.5 text-zinc-300">{m.ad}</td>
-                    <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}</span></td>
+                    <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span></td>
                     <td className="px-4 py-1.5 text-zinc-500">{m.birim}</td>
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.boy || '—'}</td>
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>
@@ -149,6 +149,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')
   const [tip, setTip] = useState(initial?.tip || 'Hammadde')
+  const [hammaddeTipi, setHammaddeTipi] = useState(initial?.hammaddeTipi || '')
   const [birim, setBirim] = useState(initial?.birim || 'Adet')
   const [boy, setBoy] = useState(String(initial?.boy || ''))
   const [en, setEn] = useState(String(initial?.en || ''))
@@ -182,7 +183,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
     setSaving(true)
     const op = operations.find(o => o.id === opId)
     const row = {
-      kod: kod.trim(), ad: ad.trim(), tip, birim, boy: parseFloat(boy) || 0,
+      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? hammaddeTipi : '', birim, boy: parseFloat(boy) || 0,
       en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
     }
@@ -202,15 +203,22 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
           <div className="grid grid-cols-2 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label>
             <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Tip</label>
-            <select value={tip} onChange={e => setTip(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Tipi</label>
+            <select value={tip} onChange={e => { setTip(e.target.value); if (e.target.value !== 'Hammadde') setHammaddeTipi('') }} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="Hammadde">Hammadde</option><option value="YarıMamul">Yarı Mamul</option>
               <option value="Mamul">Mamul</option><option value="Sarf">Sarf</option>
-              <option value="Boru">Boru</option><option value="Profil">Profil</option>
-              <option value="Levha">Levha</option><option value="Sac">Sac</option>
-              {tipler.filter(t => !['Hammadde','YarıMamul','Mamul','Sarf','Boru','Profil','Levha','Sac'].includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
             </select></div>
           </div>
+          {tip === 'Hammadde' && (
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
+            <select value={hammaddeTipi} onChange={e => setHammaddeTipi(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="">— Seçin —</option>
+              <option value="Boru">Boru</option><option value="Profil">Profil</option>
+              <option value="Levha">Levha</option><option value="Sac">Sac</option>
+              <option value="Çubuk">Çubuk</option><option value="Lama">Lama</option>
+              <option value="Diğer">Diğer</option>
+            </select></div>
+          )}
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
           <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           <div className="grid grid-cols-5 gap-3">

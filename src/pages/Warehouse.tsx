@@ -5,13 +5,14 @@ import { uid, today } from '@/lib/utils'
 import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 
 export function Warehouse() {
   const { stokHareketler, materials, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'>('stok')
   const [showGiris, setShowGiris] = useState(false)
-  const [tipFilter, setTipFilter] = useState('')
+  const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
 
   // Malzeme tipleri
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
@@ -27,8 +28,8 @@ export function Warehouse() {
 
   const filteredStok = useMemo(() => {
     let result = stokMap
-    if (tipFilter) {
-      const tipMalkodlar = new Set(materials.filter(m => m.tip === tipFilter).map(m => m.kod))
+    if (tipFilter.size > 0) {
+      const tipMalkodlar = new Set(materials.filter(m => tipFilter.has(m.tip) || tipFilter.has(m.hammaddeTipi)).map(m => m.kod))
       result = result.filter(s => tipMalkodlar.has(s.malkod))
     }
     if (search) { const q = search.toLowerCase(); result = result.filter(s => (s.malkod + s.malad).toLowerCase().includes(q)) }
@@ -141,10 +142,9 @@ export function Warehouse() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
-        <select value={tipFilter} onChange={e => setTipFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="">Tüm Tipler</option>
-          {tipler.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <MultiCheckDropdown label="Malzeme Tipi"
+          options={tipler}
+          selected={tipFilter} onChange={setTipFilter} />
       </div>
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">

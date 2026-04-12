@@ -97,6 +97,7 @@ export interface Material {
   kod: string
   ad: string
   tip: string
+  hammaddeTipi: string
   birim: string
   boy: number
   en: number
