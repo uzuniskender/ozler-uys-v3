@@ -8,7 +8,7 @@ import { Search, Download, Plus } from 'lucide-react'
 export function Warehouse() {
   const { stokHareketler, materials, loadAll } = useStore()
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'stok'|'hareketler'>('stok')
+  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'>('stok')
   const [showGiris, setShowGiris] = useState(false)
 
   const stokMap = useMemo(() => {
@@ -56,6 +56,7 @@ export function Warehouse() {
       <div className="flex gap-1 mb-4">
         <button onClick={() => setTab('stok')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'stok' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Anlık Stok</button>
         <button onClick={() => setTab('hareketler')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'hareketler' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Hareketler</button>
+        <button onClick={() => setTab('sayim')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'sayim' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Stok Sayım</button>
       </div>
 
       <div className="relative max-w-xs mb-4">
@@ -93,6 +94,47 @@ export function Warehouse() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {tab === 'sayim' && (
+          <div className="p-4">
+            <p className="text-xs text-zinc-500 mb-3">Fiziksel sayım sonuçlarını girin — sistem stoğuyla karşılaştırılır.</p>
+            <div className="space-y-2">
+              {filteredStok.slice(0, 30).map(s => (
+                <div key={s.malkod} className="flex items-center gap-3 text-xs">
+                  <span className="font-mono text-accent w-24">{s.malkod}</span>
+                  <span className="flex-1 text-zinc-300">{s.malad}</span>
+                  <span className="text-zinc-500 w-16 text-right">Sistem: {Math.round(s.miktar)}</span>
+                  <input type="number" placeholder="Sayım" data-malkod={s.malkod}
+                    className="w-20 px-2 py-1 bg-bg-3 border border-border rounded text-xs text-right focus:outline-none focus:border-accent" />
+                </div>
+              ))}
+            </div>
+            <button onClick={() => {
+              const inputs = document.querySelectorAll('[data-malkod]') as NodeListOf<HTMLInputElement>
+              let farklar = 0
+              inputs.forEach(inp => {
+                const sayim = parseFloat(inp.value)
+                if (isNaN(sayim)) return
+                const malkod = inp.dataset.malkod || ''
+                const stokItem = stokMap.find(s => s.malkod === malkod)
+                if (!stokItem) return
+                const fark = sayim - stokItem.miktar
+                if (Math.abs(fark) > 0.01) {
+                  supabase.from('uys_stok_hareketler').insert({
+                    id: uid(), tarih: today(), malkod, malad: stokItem.malad,
+                    miktar: Math.abs(fark), tip: fark > 0 ? 'giris' : 'cikis',
+                    aciklama: `Sayım farkı: sistem ${Math.round(stokItem.miktar)}, sayım ${sayim}`,
+                  })
+                  farklar++
+                }
+              })
+              if (farklar > 0) { loadAll(); toast.success(farklar + ' fark düzeltmesi kaydedildi') }
+              else toast.info('Fark bulunamadı')
+            }} className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">
+              Sayımı Uygula
+            </button>
+          </div>
         )}
       </div>
 

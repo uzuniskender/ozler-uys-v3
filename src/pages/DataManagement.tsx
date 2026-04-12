@@ -133,6 +133,22 @@ export function DataManagement() {
           <span className="text-sm">{store.synced ? 'Supabase bağlı — normalize tablolardan okunuyor' : 'Çevrimdışı'}</span>
         </div>
       </div>
+
+      {/* #35: Fabrika Sıfırlama */}
+      <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
+        <div className="text-sm font-semibold text-red mb-2">⚠ Tehlikeli İşlemler</div>
+        <button onClick={async () => {
+          if (!confirm('TÜM VERİLER SİLİNECEK! Bu işlem geri alınamaz. Devam etmek istiyor musunuz?')) return
+          if (prompt('Onaylamak için "SIFIRLA" yazın:') !== 'SIFIRLA') return
+          for (const t of tables) {
+            await supabase.from(t.table).delete().neq('id', '___impossible___')
+          }
+          store.loadAll()
+          toast.success('Tüm veriler sıfırlandı')
+        }} className="px-4 py-2 bg-red/10 border border-red/25 text-red rounded-lg text-xs hover:bg-red/20">
+          Fabrika Sıfırlama (Tüm Verileri Sil)
+        </button>
+      </div>
     </div>
   )
 }

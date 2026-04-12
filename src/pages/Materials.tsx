@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Download, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Search, Download, Plus, Pencil, Trash2, Upload } from 'lucide-react'
 import type { Material } from '@/types'
 
 export function Materials() {
@@ -29,6 +29,44 @@ export function Materials() {
     loadAll(); toast.success('Malzeme silindi')
   }
 
+  // #27: Malzeme Excel Import
+  function importExcel() {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.xlsx,.xls'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      const XLSX = await import('xlsx')
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+      if (!rows.length) { toast.error('Excel boş'); return }
+
+      let created = 0
+      for (const row of rows) {
+        const kod = String(row['Kod'] || row['kod'] || row['Malzeme Kodu'] || '').trim()
+        const ad = String(row['Ad'] || row['ad'] || row['Malzeme Adı'] || row['Malzeme'] || '').trim()
+        if (!kod && !ad) continue
+        const existing = materials.find(m => m.kod === kod)
+        if (existing) continue // Var olan malzemeyi atla
+
+        await supabase.from('uys_malzemeler').insert({
+          id: uid(), kod, ad,
+          tip: String(row['Tip'] || row['tip'] || 'Hammadde'),
+          birim: String(row['Birim'] || row['birim'] || 'Adet'),
+          boy: parseFloat(String(row['Boy'] || row['boy'] || 0)) || 0,
+          en: parseFloat(String(row['En'] || row['en'] || 0)) || 0,
+          kalinlik: parseFloat(String(row['Kalınlık'] || row['kalinlik'] || 0)) || 0,
+          min_stok: parseFloat(String(row['Min Stok'] || row['min_stok'] || 0)) || 0,
+        })
+        created++
+      }
+      loadAll(); toast.success(created + ' malzeme eklendi')
+    }
+    input.click()
+  }
+
   function exportExcel() {
     import('xlsx').then(XLSX => {
       const rows = filtered.map(m => ({ Kod: m.kod, Ad: m.ad, Tip: m.tip, Birim: m.birim, Boy: m.boy, En: m.en, Kalınlık: m.kalinlik, 'Min Stok': m.minStok }))
@@ -44,6 +82,7 @@ export function Materials() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Malzeme Listesi</h1><p className="text-xs text-zinc-500">{materials.length} malzeme</p></div>
         <div className="flex gap-2">
+          <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>
         </div>

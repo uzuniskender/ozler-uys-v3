@@ -4,12 +4,22 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Recipe, RecipeRow } from '@/types'
-import { Plus, Trash2, Pencil } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download } from 'lucide-react'
 
 export function Recipes() {
   const { recipes, operations, loadAll } = useStore()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
+
+  function exportRecipes() {
+    import('xlsx').then(XLSX => {
+      const rows = recipes.flatMap(r => (r.satirlar || []).map(s => ({
+        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim
+      })))
+      const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Reçeteler'); XLSX.writeFile(wb, 'receteler.xlsx')
+    })
+  }
 
   async function deleteRecipe(id: string) {
     if (!confirm('Bu reçeteyi silmek istediğinize emin misiniz?')) return
@@ -21,7 +31,10 @@ export function Recipes() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete</p></div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Reçete</button>
+        <div className="flex gap-2">
+          <button onClick={exportRecipes} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Reçete</button>
+        </div>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {recipes.length ? (
