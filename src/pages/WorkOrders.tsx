@@ -6,9 +6,13 @@ import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, loadAll } = useStore()
+  const { workOrders, logs, orders, operations, operators, loadAll } = useStore()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('active')
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi']))
+
+  function toggleStatus(s: string) {
+    setStatusFilter(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
+  }
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -42,9 +46,11 @@ export function WorkOrders() {
 
   const filtered = useMemo(() => {
     return workOrders.filter(w => {
-      const pct = wPct(w)
-      if (statusFilter === 'active' && pct >= 100) return false
-      if (statusFilter === 'done' && pct < 100) return false
+      if (statusFilter.size > 0) {
+        const pct = wPct(w)
+        const wDurum = w.durum || (pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor')
+        if (!statusFilter.has(wDurum)) return false
+      }
       if (search) {
         const q = search.toLowerCase(); const ord = orders.find(o => o.id === w.orderId)
         if (!(w.ieNo + w.malad + w.malkod + w.opAd + (ord?.siparisNo || '')).toLowerCase().includes(q)) return false
@@ -102,9 +108,20 @@ export function WorkOrders() {
       <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no, malzeme veya operasyon ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tümü</option><option value="active">Açık</option><option value="done">Tamamlandı</option>
-        </select>
+        <div className="flex gap-3 items-center flex-wrap">
+          {[
+            { id: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
+            { id: 'uretimde', label: 'Üretimde', color: 'text-accent' },
+            { id: 'kismi', label: 'Kısmi', color: 'text-amber' },
+            { id: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
+            { id: 'iptal', label: 'İptal', color: 'text-red' },
+          ].map(s => (
+            <label key={s.id} className={`flex items-center gap-1 text-xs cursor-pointer ${s.color}`}>
+              <input type="checkbox" checked={statusFilter.has(s.id)} onChange={() => toggleStatus(s.id)} className="accent-accent" />
+              {s.label}
+            </label>
+          ))}
+        </div>
         <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option>
         </select>
@@ -172,7 +189,7 @@ export function WorkOrders() {
               <button onClick={() => setDetailWO(null)} className="text-zinc-500 hover:text-white text-lg">✕</button>
             </div>
             <div className="grid grid-cols-5 gap-3 mb-4">
-              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Hedef</div><div className="text-sm font-mono">{detailW.hedef}</div></div>
+              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Hedef</div><input type="number" defaultValue={detailW.hedef} onBlur={async e => { const v = parseInt(e.target.value) || 0; if (v !== detailW.hedef && v > 0) { await supabase.from('uys_work_orders').update({ hedef: v }).eq('id', detailW.id); loadAll(); toast.success('Hedef güncellendi: ' + v) } }} className="text-sm font-mono bg-transparent border-b border-border/50 w-16 focus:outline-none focus:border-accent" /></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Üretilen</div><div className="text-sm font-mono text-green">{wProd(detailW.id)}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Kalan</div><div className="text-sm font-mono text-amber">{Math.max(0, detailW.hedef - wProd(detailW.id))}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">İlerleme</div><div className={`text-sm font-mono font-semibold ${pctColor(wPct(detailW))}`}>{wPct(detailW)}%</div></div>
@@ -187,6 +204,19 @@ export function WorkOrders() {
                 )
               })()}
             </div>
+            {/* Operatör Atama */}
+            <div className="mb-4 flex items-center gap-2 text-xs">
+              <span className="text-zinc-500">Atanan Operatör:</span>
+              <select value={detailW.operatorId || ''} onChange={async e => {
+                const opId = e.target.value || null
+                const op = operators.find(o => o.id === opId)
+                await supabase.from('uys_work_orders').update({ operator_id: opId }).eq('id', detailW.id)
+                loadAll(); toast.success(op ? op.ad + ' atandı' : 'Operatör kaldırıldı')
+              }} className="px-2 py-1 bg-bg-2 border border-border rounded text-xs text-zinc-200">
+                <option value="">— Atanmadı —</option>
+                {operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr')).map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
+              </select>
+            </div>
             {detailW.hm?.length > 0 && (
               <><h3 className="text-sm font-semibold mb-2">Hammadde Bileşenleri</h3>
               <div className="bg-bg-2 border border-border rounded-lg overflow-hidden mb-4">
@@ -198,7 +228,18 @@ export function WorkOrders() {
             <h3 className="text-sm font-semibold mb-2">Üretim Logları</h3>
             {(() => { const woLogs = logs.filter(l => l.woId === detailW.id).sort((a, b) => (b.tarih || '').localeCompare(a.tarih || '')); return woLogs.length ? (
               <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-left px-3 py-2">Operatör</th><th className="text-right px-3 py-2">Adet</th><th className="text-right px-3 py-2">Fire</th></tr></thead>
-              <tbody>{woLogs.map((l, i) => (<tr key={i} className="border-b border-border/30"><td className="px-3 py-1.5 font-mono text-zinc-500">{l.tarih}</td><td className="px-3 py-1.5 text-zinc-300">{l.operatorlar?.map(o => o.ad).join(', ') || '—'}</td><td className="px-3 py-1.5 text-right font-mono text-green">+{l.qty}</td><td className="px-3 py-1.5 text-right font-mono text-red">{l.fire > 0 ? l.fire : ''}</td><td className="px-3 py-1.5 text-right"><button onClick={async () => { if (!confirm('Bu üretim logunu silmek istediğinize emin misiniz?')) return; await supabase.from('uys_logs').delete().eq('id', l.id); await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id); loadAll(); toast.success('Log silindi') }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></td></tr>))}</tbody></table>
+              <tbody>{woLogs.map((l, i) => (<tr key={i} className="border-b border-border/30"><td className="px-3 py-1.5 font-mono text-zinc-500">{l.tarih}</td><td className="px-3 py-1.5 text-zinc-300">{l.operatorlar?.map(o => o.ad).join(', ') || '—'}</td><td className="px-3 py-1.5 text-right font-mono text-green">+{l.qty}</td><td className="px-3 py-1.5 text-right font-mono text-red">{l.fire > 0 ? l.fire : ''}</td><td className="px-3 py-1.5 text-right flex gap-1 justify-end"><button onClick={async () => {
+                const newQty = prompt('Yeni adet:', String(l.qty))
+                if (newQty === null) return
+                const newFire = prompt('Yeni fire:', String(l.fire || 0))
+                const q = parseInt(newQty) || 0; const f = parseInt(newFire || '0') || 0
+                if (q <= 0) { toast.error('Geçersiz adet'); return }
+                await supabase.from('uys_logs').update({ qty: q, fire: f }).eq('id', l.id)
+                // Stok hareketini de güncelle
+                const { data: sh } = await supabase.from('uys_stok_hareketler').select('id').eq('log_id', l.id).eq('tip', 'giris').limit(1)
+                if (sh?.[0]) await supabase.from('uys_stok_hareketler').update({ miktar: q }).eq('id', sh[0].id)
+                loadAll(); toast.success('Log güncellendi')
+              }} className="text-zinc-600 hover:text-amber text-[10px]">Düzenle</button><button onClick={async () => { if (!confirm('Bu üretim logunu silmek istediğinize emin misiniz?')) return; await supabase.from('uys_logs').delete().eq('id', l.id); await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id); loadAll(); toast.success('Log silindi') }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></td></tr>))}</tbody></table>
             ) : <div className="text-zinc-600 text-xs p-3">Henüz üretim logu yok</div> })()}
           </div>
         </div>

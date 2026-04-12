@@ -168,6 +168,7 @@ export function Dashboard() {
                   <button onClick={async () => { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id); loadAll() }}
                     className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20 whitespace-nowrap">✓ Okundu</button>
                 ) : <span className="text-[10px] text-zinc-600">okundu</span>}
+                <button onClick={async () => { if (!confirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
               </div>
             ))}
           </div>

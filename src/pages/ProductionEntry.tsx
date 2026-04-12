@@ -154,10 +154,29 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
-  const [oprId, setOprId] = useState('')
   const [not, setNot] = useState('')
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
+
+  // Çoklu operatör
+  const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>([])
+  const [selOprId, setSelOprId] = useState('')
+
+  const now = new Date()
+  const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+
+  function addOpr() {
+    if (!selOprId) { toast.error('Operatör seçin'); return }
+    const op = operators.find(o => o.id === selOprId)
+    if (!op) return
+    if (oprList.some(o => o.id === selOprId)) { toast.error('Bu operatör zaten ekli'); return }
+    setOprList([...oprList, { id: op.id, ad: op.ad, bas: nowHHMM, bit: nowHHMM }])
+    setSelOprId('')
+  }
+  function removeOpr(i: number) { setOprList(prev => prev.filter((_, idx) => idx !== i)) }
+  function updateOpr(i: number, field: string, value: string) {
+    setOprList(prev => prev.map((o, idx) => idx === i ? { ...o, [field]: value } : o))
+  }
 
   function addDurus() { setDuruslar([...duruslar, { kodId: '', kodAd: '', sure: 0 }]) }
   function removeDurus(i: number) { setDuruslar(prev => prev.filter((_, idx) => idx !== i)) }
@@ -182,17 +201,14 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
     setSaving(true)
 
     const logId = uid()
-    const opr = operators.find(o => o.id === oprId)
     const tarih = today()
-    const now = new Date()
-    const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
 
     // Üretim logu
     await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih, qty: q, fire: f,
-      operatorlar: opr ? [{ id: opr.id, ad: opr.ad, bas: saat, bit: saat }] : [],
+      operatorlar: oprList.length > 0 ? oprList : [],
       duruslar: duruslar.filter(d => d.kodId && d.sure > 0), not_: not, malkod: w.malkod, ie_no: w.ieNo,
-      operator_id: oprId || null, vardiya: '',
+      operator_id: oprList[0]?.id || null, vardiya: '',
     })
 
     // Stok girişi (üretilen mamul)
@@ -208,7 +224,7 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
         id: uid(), log_id: logId, wo_id: woId, tarih,
         malkod: w.malkod, malad: w.malad, qty: f,
         ie_no: w.ieNo, op_ad: w.opAd,
-        operatorlar: opr ? [{ id: opr.id, ad: opr.ad }] : [],
+        operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
         not_: not,
       })
       // Fire stok çıkışı
@@ -235,7 +251,6 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
     onSaved()
   }
 
-  const bolumOprs = operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -277,13 +292,28 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
             </div>
           </div>
 
+          {/* Çoklu Operatör */}
           <div>
-            <label className="text-[11px] text-zinc-500 mb-1 block">Operatör</label>
-            <select value={oprId} onChange={e => setOprId(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-              <option value="">— Seçin —</option>
-              {bolumOprs.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
-            </select>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] text-zinc-500">Operatörler ({oprList.length})</label>
+            </div>
+            <div className="flex gap-2 mb-2">
+              <select value={selOprId} onChange={e => setSelOprId(e.target.value)}
+                className="flex-1 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none">
+                <option value="">— Operatör seçin —</option>
+                {operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr')).map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
+              </select>
+              <button type="button" onClick={addOpr} className="px-3 py-1.5 bg-accent text-white rounded text-xs">+ Ekle</button>
+            </div>
+            {oprList.map((o, i) => (
+              <div key={o.id} className="flex items-center gap-2 mb-1 text-xs">
+                <span className="flex-1 text-zinc-300">{o.ad}</span>
+                <input type="time" value={o.bas} onChange={e => updateOpr(i, 'bas', e.target.value)} className="w-20 px-1 py-0.5 bg-bg-3 border border-border rounded text-[10px] text-zinc-300" title="Başlama" />
+                <span className="text-zinc-600">—</span>
+                <input type="time" value={o.bit} onChange={e => updateOpr(i, 'bit', e.target.value)} className="w-20 px-1 py-0.5 bg-bg-3 border border-border rounded text-[10px] text-zinc-300" title="Bitiş" />
+                <button type="button" onClick={() => removeOpr(i)} className="text-zinc-500 hover:text-red">✕</button>
+              </div>
+            ))}
           </div>
 
           {/* Duruş Girişi */}

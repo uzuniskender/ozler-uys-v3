@@ -340,6 +340,16 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
           <button onClick={() => { if (!mrpDone) runMRP(); setTab('mrp') }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'mrp' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
             <Calculator size={12} /> MRP {mrpDone && `(${mrpRows.length})`}
           </button>
+          <span className="flex-1" />
+          {order.receteId && <button onClick={async () => {
+            if (!confirm('Mevcut İE\'ler silinip reçeteden yeniden oluşturulacak. Devam?')) return
+            // Mevcut İE'leri sil
+            for (const w of workOrders) { await supabase.from('uys_work_orders').delete().eq('id', w.id) }
+            // Yeniden oluştur
+            const { recipes: fullRecipes } = useStore.getState()
+            const count = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, fullRecipes)
+            loadAll(); toast.success(count + ' İE yeniden oluşturuldu')
+          }} className="px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">⛓ Zincirleme Yeniden Çalıştır</button>}
         </div>
 
         {tab === 'ie' && (
