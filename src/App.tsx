@@ -49,6 +49,7 @@ function AppContent() {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/operator" element={<OperatorPanel />} />
         <Route element={<Layout onSignOut={signOut} />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<Orders />} />
@@ -69,7 +70,6 @@ function AppContent() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/data" element={<DataManagement />} />
           <Route path="/procurement" element={<Procurement />} />
-          <Route path="/operator" element={<OperatorPanel />} />
           <Route path="/checklist" element={<Checklist />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
