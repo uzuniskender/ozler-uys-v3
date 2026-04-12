@@ -4,7 +4,7 @@ import type { WorkOrder, Material, Recipe } from '@/types'
 
 interface KesimKesim {
   woId: string; ieNo: string
-  parcaMalkod: string; parcaMalad: string
+  malkod: string; malad: string
   parcaBoy: number; parcaEn?: number
   adet: number; tamamlandi: number
 }
@@ -51,7 +51,7 @@ export function kesimPlanOlustur(
   // HM bazlı gruplama: hamMalkod → ihtiyaçlar
   const gruplar: Record<string, {
     hamMalkod: string; hamMalad: string; hamBoy: number; hamEn: number
-    kesimTip: string; ihtiyaclar: { woId: string; ieNo: string; parcaMalkod: string; parcaMalad: string; parcaBoy: number; parcaEn: number; adet: number }[]
+    kesimTip: string; ihtiyaclar: { woId: string; ieNo: string; malkod: string; malad: string; parcaBoy: number; parcaEn: number; adet: number }[]
   }> = {}
 
   for (const w of workOrders) {
@@ -101,12 +101,12 @@ export function kesimPlanOlustur(
       }
 
       // Aynı WO zaten varsa topla
-      const mevcut = gruplar[hmalkod].ihtiyaclar.find(x => x.woId === w.id && x.parcaMalkod === w.malkod)
+      const mevcut = gruplar[hmalkod].ihtiyaclar.find(x => x.woId === w.id && x.malkod === w.malkod)
       if (mevcut) { mevcut.adet += kalan }
       else {
         gruplar[hmalkod].ihtiyaclar.push({
           woId: w.id, ieNo: w.ieNo || w.id,
-          parcaMalkod: w.malkod, parcaMalad: w.malad || w.malkod,
+          malkod: w.malkod, malad: w.malad || w.malkod,
           parcaBoy: parcaBoy || 0, parcaEn: parcaEn || 0,
           adet: kalan
         })
@@ -154,7 +154,7 @@ export function kesimPlanOlustur(
 
 // Boy kesim optimizasyonu — Decreasing First Fit + Fire Doldurma
 function boykesimOptimum(
-  g: { hamMalkod: string; hamBoy: number; ihtiyaclar: { woId: string; ieNo: string; parcaMalkod: string; parcaMalad: string; parcaBoy: number; parcaEn: number; adet: number }[] },
+  g: { hamMalkod: string; hamBoy: number; ihtiyaclar: { woId: string; ieNo: string; malkod: string; malad: string; parcaBoy: number; parcaEn: number; adet: number }[] },
   allWOs: WorkOrder[],
   materials: Material[],
   logs: { woId: string; qty: number }[]
@@ -184,9 +184,9 @@ function boykesimOptimum(
         const bar = barlar[enIyiBi]
         const adedPerBor = Math.floor(bar.kalan / parcaBoy)
         const konulan = Math.min(adedPerBor, kalanAdet)
-        const mev = bar.kesimler.find(k => k.woId === iht.woId && k.parcaMalkod === iht.parcaMalkod)
+        const mev = bar.kesimler.find(k => k.woId === iht.woId && k.malkod === iht.malkod)
         if (mev) mev.adet += konulan
-        else bar.kesimler.push({ woId: iht.woId, ieNo: iht.ieNo, parcaMalkod: iht.parcaMalkod, parcaMalad: iht.parcaMalad, parcaBoy, adet: konulan, tamamlandi: 0 })
+        else bar.kesimler.push({ woId: iht.woId, ieNo: iht.ieNo, malkod: iht.malkod, malad: iht.malad, parcaBoy, adet: konulan, tamamlandi: 0 })
         bar.kalan -= konulan * parcaBoy
         kalanAdet -= konulan
       } else {
@@ -195,7 +195,7 @@ function boykesimOptimum(
         const konulan = Math.min(adedPerYeni, kalanAdet)
         barlar.push({
           kalan: hamBoy - konulan * parcaBoy,
-          kesimler: [{ woId: iht.woId, ieNo: iht.ieNo, parcaMalkod: iht.parcaMalkod, parcaMalad: iht.parcaMalad, parcaBoy, adet: konulan, tamamlandi: 0 }]
+          kesimler: [{ woId: iht.woId, ieNo: iht.ieNo, malkod: iht.malkod, malad: iht.malad, parcaBoy, adet: konulan, tamamlandi: 0 }]
         })
         kalanAdet -= konulan
       }
@@ -220,7 +220,7 @@ function boykesimOptimum(
       if (!sigacak) continue
       const mev = bar.kesimler.find(k => k.woId === w.id)
       if (mev) mev.adet += sigacak
-      else bar.kesimler.push({ woId: w.id, ieNo: w.ieNo || w.id, parcaMalkod: w.malkod, parcaMalad: w.malad, parcaBoy: pb, adet: sigacak, tamamlandi: 0 })
+      else bar.kesimler.push({ woId: w.id, ieNo: w.ieNo || w.id, malkod: w.malkod, malad: w.malad, parcaBoy: pb, adet: sigacak, tamamlandi: 0 })
       bar.kalan -= sigacak * pb
     }
   }

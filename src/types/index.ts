@@ -209,6 +209,7 @@ export interface CuttingRow {
 
 export interface CuttingItem {
   woId: string
+  ieNo: string
   malkod: string
   malad: string
   parcaBoy: number
