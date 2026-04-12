@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { today, pctColor } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench } from 'lucide-react'
@@ -17,7 +18,7 @@ function StatCard({ value, label, color, icon: Icon }: { value: number | string;
 }
 
 export function Dashboard() {
-  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler } = useStore()
+  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler, loadAll } = useStore()
   const todayStr = today()
 
   // Calculations
@@ -146,9 +147,15 @@ export function Dashboard() {
           <div className="px-4 py-2 border-b border-border text-sm font-semibold flex items-center gap-2">
             {okunmamis.length > 0 ? '📩' : '📬'} Operatör Mesajları
             {okunmamis.length > 0 && (
+              <>
               <span className="bg-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-mono">
                 {okunmamis.length} yeni
               </span>
+              <button onClick={async () => {
+                for (const n of okunmamis) { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id) }
+                loadAll()
+              }} className="ml-auto text-[10px] text-zinc-500 hover:text-accent">Tümünü Okundu Yap</button>
+              </>
             )}
           </div>
           <div className="divide-y divide-border/50">
@@ -157,7 +164,10 @@ export function Dashboard() {
                 <span className={`font-medium ${!n.okundu ? 'text-white' : 'text-zinc-400'}`}>{n.opAd}</span>
                 <span className="font-mono text-zinc-600">{n.tarih} {n.saat}</span>
                 <span className="flex-1 text-zinc-300 truncate">{n.mesaj}</span>
-                {!n.okundu && <span className="w-2 h-2 rounded-full bg-accent" />}
+                {!n.okundu ? (
+                  <button onClick={async () => { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id); loadAll() }}
+                    className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20 whitespace-nowrap">✓ Okundu</button>
+                ) : <span className="text-[10px] text-zinc-600">okundu</span>}
               </div>
             ))}
           </div>
