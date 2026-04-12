@@ -118,13 +118,27 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
   
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs } = useStore()
+  const { workOrders, logs, durusKodlari } = useStore()
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
   const [oprId, setOprId] = useState('')
   const [not, setNot] = useState('')
   const [saving, setSaving] = useState(false)
+  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
+
+  function addDurus() { setDuruslar([...duruslar, { kodId: '', kodAd: '', sure: 0 }]) }
+  function removeDurus(i: number) { setDuruslar(prev => prev.filter((_, idx) => idx !== i)) }
+  function updateDurus(i: number, field: string, value: string | number) {
+    setDuruslar(prev => prev.map((d, idx) => {
+      if (idx !== i) return d
+      if (field === 'kodId') {
+        const dk = durusKodlari.find(k => k.id === value)
+        return { ...d, kodId: value as string, kodAd: dk?.ad || '' }
+      }
+      return { ...d, [field]: value }
+    }))
+  }
 
   const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
   const kalan = w ? Math.max(0, w.hedef - prod) : 0
@@ -145,7 +159,7 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
     await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih, qty: q, fire: f,
       operatorlar: opr ? [{ id: opr.id, ad: opr.ad, bas: saat, bit: saat }] : [],
-      duruslar: [], not_: not, malkod: w.malkod, ie_no: w.ieNo,
+      duruslar: duruslar.filter(d => d.kodId && d.sure > 0), not_: not, malkod: w.malkod, ie_no: w.ieNo,
       operator_id: oprId || null, vardiya: '',
     })
 
@@ -237,6 +251,26 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
               <option value="">— Seçin —</option>
               {bolumOprs.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
             </select>
+          </div>
+
+          {/* Duruş Girişi */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] text-zinc-500">Duruşlar ({duruslar.length})</label>
+              <button type="button" onClick={addDurus} className="text-[11px] text-accent hover:underline">+ Duruş Ekle</button>
+            </div>
+            {duruslar.map((d, i) => (
+              <div key={i} className="flex gap-2 mb-1.5">
+                <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)}
+                  className="flex-1 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none">
+                  <option value="">— Duruş kodu —</option>
+                  {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} — {k.ad}</option>)}
+                </select>
+                <input type="number" min={1} value={d.sure || ''} onChange={e => updateDurus(i, 'sure', parseInt(e.target.value) || 0)}
+                  placeholder="dk" className="w-16 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 text-right focus:outline-none" />
+                <button type="button" onClick={() => removeDurus(i)} className="text-zinc-500 hover:text-red text-xs">✕</button>
+              </div>
+            ))}
           </div>
 
           <div>

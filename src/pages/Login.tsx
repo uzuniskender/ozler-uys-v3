@@ -1,12 +1,12 @@
 import { useState } from 'react'
 
 interface LoginProps {
-  onLogin: (email: string, password: string) => Promise<{ error: unknown }>
+  onLogin: (username: string, password: string) => Promise<{ error: unknown }>
   onGuest?: () => void
 }
 
 export function Login({ onLogin, onGuest }: LoginProps) {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,8 +15,8 @@ export function Login({ onLogin, onGuest }: LoginProps) {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const { error } = await onLogin(email, password)
-    if (error) setError('Giriş başarısız. Email veya şifre hatalı.')
+    const { error } = await onLogin(username, password)
+    if (error) setError('Giriş başarısız. Kullanıcı adı veya şifre hatalı.')
     setLoading(false)
   }
 
@@ -29,13 +29,11 @@ export function Login({ onLogin, onGuest }: LoginProps) {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red/10 border border-red/25 rounded-lg text-xs text-red">
-            {error}
-          </div>
+          <div className="mb-4 p-3 bg-red/10 border border-red/25 rounded-lg text-xs text-red">{error}</div>
         )}
 
         <div className="mb-3">
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
+          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Kullanıcı Adı"
             className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" autoFocus />
         </div>
 
@@ -44,7 +42,7 @@ export function Login({ onLogin, onGuest }: LoginProps) {
             className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
 
-        <button type="submit" disabled={loading || !email || !password}
+        <button type="submit" disabled={loading || !username || !password}
           className="w-full py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white font-semibold rounded-lg text-sm transition-colors">
           {loading ? 'Giriş yapılıyor...' : 'GİRİŞ YAP'}
         </button>
