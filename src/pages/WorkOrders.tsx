@@ -1,20 +1,19 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
+import { supabase } from '@/lib/supabase'
 import { today, pctColor } from '@/lib/utils'
-import { Search, Download } from 'lucide-react'
+import { toast } from 'sonner'
+import { Search, Download, Eye } from 'lucide-react'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders } = useStore()
+  const { workOrders, logs, orders, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
   const [groupBy, setGroupBy] = useState('siparis')
+  const [detailWO, setDetailWO] = useState<string | null>(null)
 
-  function wProd(woId: string): number {
-    return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
-  }
-  function wPct(w: { id: string; hedef: number }): number {
-    return w.hedef > 0 ? Math.min(100, Math.round(wProd(w.id) / w.hedef * 100)) : 0
-  }
+  function wProd(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
+  function wPct(w: { id: string; hedef: number }): number { return w.hedef > 0 ? Math.min(100, Math.round(wProd(w.id) / w.hedef * 100)) : 0 }
 
   const filtered = useMemo(() => {
     return workOrders.filter(w => {
@@ -22,8 +21,7 @@ export function WorkOrders() {
       if (statusFilter === 'active' && pct >= 100) return false
       if (statusFilter === 'done' && pct < 100) return false
       if (search) {
-        const q = search.toLowerCase()
-        const ord = orders.find(o => o.id === w.orderId)
+        const q = search.toLowerCase(); const ord = orders.find(o => o.id === w.orderId)
         if (!(w.ieNo + w.malad + w.malkod + w.opAd + (ord?.siparisNo || '')).toLowerCase().includes(q)) return false
       }
       return true
@@ -33,27 +31,38 @@ export function WorkOrders() {
   const grouped = useMemo(() => {
     const map: Record<string, typeof filtered> = {}
     filtered.forEach(w => {
-      const key = groupBy === 'siparis'
-        ? (orders.find(o => o.id === w.orderId)?.siparisNo || 'Bağımsız')
-        : (w.opAd || 'Tanımsız')
-      if (!map[key]) map[key] = []
-      map[key].push(w)
+      const key = groupBy === 'siparis' ? (orders.find(o => o.id === w.orderId)?.siparisNo || 'Bağımsız') : (w.opAd || 'Tanımsız')
+      if (!map[key]) map[key] = []; map[key].push(w)
     })
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0], 'tr'))
   }, [filtered, groupBy, orders])
+
+  async function setDurum(id: string, durum: string) {
+    await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
+    loadAll(); toast.success('Durum güncellendi: ' + durum)
+  }
+
+  async function updateHedef(id: string) {
+    const val = prompt('Yeni hedef adet:')
+    if (!val) return
+    const hedef = parseInt(val)
+    if (isNaN(hedef) || hedef < 0) return
+    await supabase.from('uys_work_orders').update({ hedef }).eq('id', id)
+    loadAll(); toast.success('Hedef güncellendi: ' + hedef)
+  }
 
   function exportExcel() {
     import('xlsx').then(XLSX => {
       const rows = filtered.map(w => {
         const ord = orders.find(o => o.id === w.orderId)
-        return { 'İE No': w.ieNo, 'Sipariş': ord?.siparisNo || '', 'Malzeme': w.malad, 'Operasyon': w.opAd, 'Hedef': w.hedef, 'Üretilen': wProd(w.id), '%': wPct(w) }
+        return { 'İE No': w.ieNo, 'Sipariş': ord?.siparisNo || '', 'Malzeme': w.malad, 'Operasyon': w.opAd, 'Hedef': w.hedef, 'Üretilen': wProd(w.id), '%': wPct(w), 'Durum': w.durum || '' }
       })
-      const ws = XLSX.utils.json_to_sheet(rows)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'İş Emirleri')
-      XLSX.writeFile(wb, `is_emirleri_${today()}.xlsx`)
+      const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'İş Emirleri'); XLSX.writeFile(wb, `is_emirleri_${today()}.xlsx`)
     })
   }
+
+  const detailW = detailWO ? workOrders.find(w => w.id === detailWO) : null
 
   return (
     <div>
@@ -63,74 +72,84 @@ export function WorkOrders() {
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no, malzeme veya operasyon ara..."
-            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
-        </div>
+        <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no, malzeme veya operasyon ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tümü</option>
-          <option value="active">Açık</option>
-          <option value="done">Tamamlandı</option>
+          <option value="all">Tümü</option><option value="active">Açık</option><option value="done">Tamamlandı</option>
         </select>
         <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="siparis">Siparişe Göre</option>
-          <option value="operasyon">Operasyona Göre</option>
+          <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option>
         </select>
       </div>
 
       {grouped.map(([group, wos]) => (
         <div key={group} className="mb-4">
-          <div className="px-3 py-1.5 bg-bg-3/50 border border-border rounded-t-lg text-[11px] font-semibold text-accent font-mono flex items-center justify-between">
-            <span>{group}</span>
-            <span className="text-zinc-500 font-normal">{wos.length} iş emri</span>
+          <div className="px-3 py-1.5 bg-bg-3/50 border border-border rounded-t-lg text-[11px] font-semibold text-accent font-mono flex justify-between">
+            <span>{group}</span><span className="text-zinc-500 font-normal">{wos.length} iş emri</span>
           </div>
           <div className="bg-bg-2 border border-border border-t-0 rounded-b-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border text-zinc-500">
-                  <th className="text-left px-3 py-2">İE No</th>
-                  <th className="text-left px-3 py-2">Malzeme</th>
-                  <th className="text-left px-3 py-2">Operasyon</th>
-                  <th className="text-left px-3 py-2">İstasyon</th>
-                  <th className="text-right px-3 py-2">Hedef</th>
-                  <th className="text-right px-3 py-2">Üretilen</th>
-                  <th className="text-right px-3 py-2">Kalan</th>
-                  <th className="text-right px-3 py-2">%</th>
-                </tr>
-              </thead>
-              <tbody>
-                {wos.map(w => {
-                  const prod = wProd(w.id)
-                  const pct = wPct(w)
-                  const kalan = Math.max(0, w.hedef - prod)
-                  return (
-                    <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
-                      <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
-                      <td className="px-3 py-1.5 text-zinc-300 max-w-[180px] truncate">{w.malad}</td>
-                      <td className="px-3 py-1.5 text-zinc-500">{w.opAd || '—'}</td>
-                      <td className="px-3 py-1.5 text-zinc-600">{w.istAd || '—'}</td>
-                      <td className="px-3 py-1.5 text-right font-mono">{w.hedef}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-green">{prod}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-amber">{kalan || '—'}</td>
-                      <td className="px-3 py-1.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <div className="w-10 h-1 bg-bg-3 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th><th className="text-right px-3 py-2">Üretilen</th><th className="text-right px-3 py-2">%</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th></tr></thead>
+            <tbody>
+              {wos.map(w => {
+                const prod = wProd(w.id); const pct = wPct(w)
+                return (
+                  <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
+                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
+                    <td className="px-3 py-1.5 text-zinc-300 max-w-[180px] truncate">{w.malad}</td>
+                    <td className="px-3 py-1.5 text-zinc-500">{w.opAd || '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-mono cursor-pointer hover:text-accent" onClick={() => updateHedef(w.id)} title="Tıkla: hedef güncelle">{w.hedef}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-green">{prod}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="w-10 h-1 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} /></div>
+                        <span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <select value={w.durum || 'bekliyor'} onChange={e => setDurum(w.id, e.target.value)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${w.durum === 'tamamlandi' ? 'text-green' : w.durum === 'iptal' ? 'text-red' : 'text-accent'}`}>
+                        <option value="bekliyor">Bekliyor</option><option value="uretimde">Üretimde</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-1.5 text-right"><button onClick={() => setDetailWO(w.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={12} /></button></td>
+                  </tr>
+                )
+              })}
+            </tbody></table>
           </div>
         </div>
       ))}
-
       {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
+
+      {detailW && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setDetailWO(null)}>
+          <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between mb-4">
+              <div><h2 className="text-lg font-semibold">{detailW.ieNo}</h2><p className="text-xs text-zinc-500">{detailW.malad} · {detailW.opAd}</p></div>
+              <button onClick={() => setDetailWO(null)} className="text-zinc-500 hover:text-white text-lg">✕</button>
+            </div>
+            <div className="grid grid-cols-4 gap-3 mb-4">
+              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Hedef</div><div className="text-sm font-mono">{detailW.hedef}</div></div>
+              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Üretilen</div><div className="text-sm font-mono text-green">{wProd(detailW.id)}</div></div>
+              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Kalan</div><div className="text-sm font-mono text-amber">{Math.max(0, detailW.hedef - wProd(detailW.id))}</div></div>
+              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">İlerleme</div><div className={`text-sm font-mono font-semibold ${pctColor(wPct(detailW))}`}>{wPct(detailW)}%</div></div>
+            </div>
+            {detailW.hm?.length > 0 && (
+              <><h3 className="text-sm font-semibold mb-2">Hammadde Bileşenleri</h3>
+              <div className="bg-bg-2 border border-border rounded-lg overflow-hidden mb-4">
+                <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Malzeme</th><th className="text-right px-3 py-2">Toplam İhtiyaç</th></tr></thead>
+                <tbody>{detailW.hm.map((h, i) => (<tr key={i} className="border-b border-border/30"><td className="px-3 py-1.5"><span className="font-mono text-accent text-[11px]">{h.malkod}</span> {h.malad}</td><td className="px-3 py-1.5 text-right font-mono">{h.miktarTotal}</td></tr>))}</tbody>
+                </table>
+              </div></>
+            )}
+            <h3 className="text-sm font-semibold mb-2">Üretim Logları</h3>
+            {(() => { const woLogs = logs.filter(l => l.woId === detailW.id).sort((a, b) => (b.tarih || '').localeCompare(a.tarih || '')); return woLogs.length ? (
+              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-left px-3 py-2">Operatör</th><th className="text-right px-3 py-2">Adet</th><th className="text-right px-3 py-2">Fire</th></tr></thead>
+              <tbody>{woLogs.map((l, i) => (<tr key={i} className="border-b border-border/30"><td className="px-3 py-1.5 font-mono text-zinc-500">{l.tarih}</td><td className="px-3 py-1.5 text-zinc-300">{l.operatorlar?.map(o => o.ad).join(', ') || '—'}</td><td className="px-3 py-1.5 text-right font-mono text-green">+{l.qty}</td><td className="px-3 py-1.5 text-right font-mono text-red">{l.fire > 0 ? l.fire : ''}</td></tr>))}</tbody></table>
+            ) : <div className="text-zinc-600 text-xs p-3">Henüz üretim logu yok</div> })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

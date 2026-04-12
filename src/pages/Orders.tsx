@@ -5,7 +5,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator } from 'lucide-react'
+import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy } from 'lucide-react'
 import type { Order } from '@/types'
 
 export function Orders() {
@@ -36,6 +36,15 @@ export function Orders() {
     })
   }, [orders, search, statusFilter, workOrders, logs])
 
+  async function copyOrder(o: Order) {
+    const newId = uid()
+    const { error } = await supabase.from('uys_orders').insert({
+      id: newId, siparis_no: o.siparisNo + '-KOPYA', musteri: o.musteri, tarih: today(), termin: o.termin,
+      mamul_kod: o.mamulKod, mamul_ad: o.mamulAd, adet: o.adet, recete_id: o.receteId,
+      urunler: o.urunler, mrp_durum: 'bekliyor', olusturma: today(),
+    })
+    if (!error) { loadAll(); toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA') }
+  }
   async function deleteOrder(id: string) {
     if (!confirm('Bu siparişi ve ilişkili iş emirlerini silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_work_orders').delete().eq('order_id', id)
@@ -85,6 +94,7 @@ export function Orders() {
                   <td className="px-4 py-2.5 text-right font-mono text-zinc-500">{woCount}</td>
                   <td className="px-4 py-2.5 text-right"><div className="flex gap-1 justify-end">
                     <button onClick={() => setSelectedOrder(o)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={13} /></button>
+                    <button onClick={() => copyOrder(o)} className="p-1 text-zinc-500 hover:text-green" title="Kopyala"><Copy size={13} /></button>
                     <button onClick={() => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>
                     <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>
                   </div></td>
