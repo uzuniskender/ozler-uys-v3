@@ -12,6 +12,7 @@ export function Login({ onLogin, onGuest }: LoginProps) {
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
+    console.log("📋 Form submit - username:", username, "password length:", password.length)
     e.preventDefault()
     setError('')
     setLoading(true)

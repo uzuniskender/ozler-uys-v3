@@ -13,7 +13,8 @@ const ADMIN_PASS = 'admin123'
 function getStored(): AuthUser | null {
   try {
     const s = localStorage.getItem(AUTH_KEY)
-    return s ? JSON.parse(s) : null
+    if (s) { console.log('📦 Kayıtlı oturum bulundu'); return JSON.parse(s) }
+    return null
   } catch { return null }
 }
 
@@ -21,61 +22,52 @@ export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(getStored())
   const [loading] = useState(false)
 
-  // Supabase anon oturumu — tablo erişimi için
   useEffect(() => {
+    console.log('🔐 Auth durumu:', user ? user.username + ' (' + user.role + ')' : 'giriş yok')
     if (user) {
       supabase.auth.signInWithPassword({
         email: 'operator@ozler.local',
         password: 'Ozler2024!'
-      }).catch(() => {})
+      }).then(r => {
+        if (r.error) console.warn('⚠ Supabase auth:', r.error.message)
+        else console.log('✅ Supabase oturum açıldı')
+      })
     }
   }, [user])
 
   async function signIn(username: string, password: string) {
-    // Önce sabit şifre kontrolü
+    console.log('🔑 Giriş denemesi:', username, '/ şifre uzunluğu:', password.length)
+
     if (password === ADMIN_PASS) {
+      console.log('✅ Şifre doğru — giriş yapılıyor')
       const authUser: AuthUser = { role: 'admin', username: username || 'admin', loginTime: new Date().toISOString() }
       localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
       setUser(authUser)
 
-      // Supabase oturumu aç
       await supabase.auth.signInWithPassword({
         email: 'operator@ozler.local',
         password: 'Ozler2024!'
-      }).catch(() => {})
+      }).catch(e => console.warn('Supabase auth hata:', e))
 
       return { error: null }
     }
 
-    // Ayarlar tablosundan şifre kontrolü (opsiyonel)
-    try {
-      const { data } = await supabase.from('uys_ayarlar').select('value').eq('key', 'admin_pass').single()
-      if (data?.value && password === data.value) {
-        const authUser: AuthUser = { role: 'admin', username: username || 'admin', loginTime: new Date().toISOString() }
-        localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
-        setUser(authUser)
-        return { error: null }
-      }
-    } catch {}
-
+    console.log('❌ Şifre yanlış — beklenen:', ADMIN_PASS, 'gelen:', password)
     return { error: 'Hatalı şifre' }
   }
 
   function signOut() {
+    console.log('🚪 Çıkış yapılıyor')
     localStorage.removeItem(AUTH_KEY)
     setUser(null)
   }
 
   function guestLogin() {
+    console.log('👁 Misafir girişi')
     const authUser: AuthUser = { role: 'guest', username: 'misafir', loginTime: new Date().toISOString() }
     localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
     setUser(authUser)
-
-    // Supabase oturumu aç
-    supabase.auth.signInWithPassword({
-      email: 'operator@ozler.local',
-      password: 'Ozler2024!'
-    }).catch(() => {})
+    supabase.auth.signInWithPassword({ email: 'operator@ozler.local', password: 'Ozler2024!' }).catch(() => {})
   }
 
   return {
