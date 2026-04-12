@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
+import { useRealtime } from '@/hooks/useRealtime'
 import { useStore } from '@/store'
 import { Layout } from '@/components/layout/Layout'
 import { Login } from '@/pages/Login'
@@ -22,29 +24,14 @@ import { DowntimeCodes } from '@/pages/DowntimeCodes'
 import { Reports } from '@/pages/Reports'
 import { DataManagement } from '@/pages/DataManagement'
 
-export default function App() {
-  const { session, loading: authLoading, signIn, signOut } = useAuth()
-  const { loadAll, loading: dataLoading } = useStore()
+function AppContent() {
+  const { signOut } = useAuth()
+  const { loadAll, loading } = useStore()
+  useRealtime()
 
-  useEffect(() => {
-    if (session) {
-      loadAll()
-    }
-  }, [session, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg-0">
-        <div className="text-zinc-500 text-sm">Yükleniyor...</div>
-      </div>
-    )
-  }
-
-  if (!session) {
-    return <Login onLogin={signIn} />
-  }
-
-  if (dataLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-0">
         <div className="text-center">
@@ -80,5 +67,24 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>
+  )
+}
+
+export default function App() {
+  const { session, loading: authLoading, signIn } = useAuth()
+
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
+  }
+
+  if (!session) {
+    return <Login onLogin={signIn} />
+  }
+
+  return (
+    <>
+      <Toaster theme="dark" position="bottom-right" richColors closeButton />
+      <AppContent />
+    </>
   )
 }
