@@ -12,7 +12,7 @@ import type { Order } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Orders() {
-  const { orders, workOrders, logs, recipes, loadAll } = useStore()
+  const { orders, workOrders, logs, recipes, cuttingPlans, materials, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
@@ -117,7 +117,7 @@ export function Orders() {
 
   // Toplu MRP — seçili veya tüm açık siparişler
   async function topluMRP() {
-    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos } = useStore.getState()
+    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos, cuttingPlans: cp, materials: mats } = useStore.getState()
     const hedefOrders = selIds.size > 0
       ? orders.filter(o => selIds.has(o.id))
       : orders.filter(o => orderPct(o.id) < 100 && o.receteId)
@@ -125,19 +125,16 @@ export function Orders() {
     if (!hedefOrders.length) { toast.error('MRP çalıştırılacak sipariş yok'); return }
     if (!await showConfirm(`${hedefOrders.length} sipariş için MRP çalıştırılacak. Devam?`)) return
 
-    let toplamTedarik = 0
-    for (const o of hedefOrders) {
-      const rc = fullRecipes.find(r => r.id === o.receteId)
-      if (!rc) continue
-      const mrpRows = hesaplaMRP(o.id, o.adet, rc, stokHareketler, tedarikler, wos)
-      const count = await mrpTedarikOlustur(o.id, o.siparisNo, mrpRows)
-      toplamTedarik += count
+    const ordIds = hedefOrders.map(o => o.id)
+    const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
+    const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats)
+    const count = await mrpTedarikOlustur(ordIds[0] || '', hedefOrders[0]?.siparisNo || '', mrpRows)
 
-      // MRP durumunu güncelle
+    for (const o of hedefOrders) {
       await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', o.id)
     }
     loadAll()
-    toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${toplamTedarik} tedarik oluşturuldu`)
+    toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${count} tedarik oluşturuldu`)
   }
 
   function downloadTemplate() {
@@ -312,7 +309,7 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
 }
 
 function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; malkod: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
-  const { recipes, stokHareketler, tedarikler, loadAll } = useStore()
+  const { recipes, stokHareketler, tedarikler, cuttingPlans: cp, materials: mats, orders: allOrders, workOrders: allWOs, loadAll } = useStore()
   const [tab, setTab] = useState<'ie'|'mrp'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
   const [mrpDone, setMrpDone] = useState(false)
@@ -320,7 +317,8 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   function runMRP() {
     const rc = recipes.find(r => r.id === order.receteId)
     if (!rc) { toast.error('Reçete bulunamadı'); return }
-    const rows = hesaplaMRP(order.id, order.adet, rc, stokHareketler, tedarikler, [])
+    const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
+    const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats)
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
     toast.success(rows.length + ' malzeme hesaplandı')
   }
