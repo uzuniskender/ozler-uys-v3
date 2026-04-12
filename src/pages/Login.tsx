@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
 
 interface LoginProps {
   onLogin: (username: string, password: string) => Promise<{ error: unknown }>
@@ -15,14 +16,15 @@ export function Login({ onLogin, onGuest, onOperatorLogin }: LoginProps) {
 
   // Operatör girişi
   const [showOpr, setShowOpr] = useState(false)
-  const [oprData, setOprData] = useState<{ id: string; ad: string; kod: string; bolum: string }[]>([])
+  const [oprData, setOprData] = useState<{ id: string; ad: string; kod: string; bolum: string; sifre?: string }[]>([])
   const [selBolum, setSelBolum] = useState('')
   const [selOprId, setSelOprId] = useState('')
+  const [oprSifre, setOprSifre] = useState('')
 
   useEffect(() => {
     if (showOpr && oprData.length === 0) {
       supabase.from('uys_operators').select('*').then(({ data }) => {
-        if (data) setOprData(data.filter((o: any) => o.aktif !== false).map((o: any) => ({ id: o.id, ad: o.ad, kod: o.kod, bolum: o.bolum || '' })))
+        if (data) setOprData(data.filter((o: any) => o.aktif !== false).map((o: any) => ({ id: o.id, ad: o.ad, kod: o.kod, bolum: o.bolum || '', sifre: o.sifre || '' })))
       })
     }
   }, [showOpr])
@@ -104,10 +106,22 @@ export function Login({ onLogin, onGuest, onOperatorLogin }: LoginProps) {
                 </div>
               )}
               {selOprId && (
-                <button onClick={() => { if (onOperatorLogin) { const opr = oprData.find(o => o.id === selOprId); onOperatorLogin(selOprId, opr?.ad || '') } }}
+                <>
+                <div>
+                  <label className="text-[10px] text-zinc-500 mb-1 block">Şifre</label>
+                  <input type="password" value={oprSifre} onChange={e => setOprSifre(e.target.value)} placeholder="Operatör şifresi"
+                    className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 text-center focus:outline-none focus:border-green"
+                    onKeyDown={e => { if (e.key === 'Enter') { const opr = oprData.find(o => o.id === selOprId); if (opr && opr.sifre && opr.sifre !== oprSifre) { toast.error('Şifre hatalı'); return }; if (onOperatorLogin) onOperatorLogin(selOprId, opr?.ad || '') }}} />
+                </div>
+                <button onClick={() => {
+                  const opr = oprData.find(o => o.id === selOprId)
+                  if (opr && opr.sifre && opr.sifre !== oprSifre) { toast.error('Şifre hatalı'); return }
+                  if (onOperatorLogin) onOperatorLogin(selOprId, opr?.ad || '')
+                }}
                   className="w-full py-2.5 bg-green hover:bg-green/80 text-black font-semibold rounded-lg text-sm transition-colors">
                   Giriş Yap →
                 </button>
+                </>
               )}
               <button onClick={() => { setShowOpr(false); setSelBolum(''); setSelOprId('') }}
                 className="w-full py-1.5 text-zinc-500 text-xs hover:text-white">İptal</button>
