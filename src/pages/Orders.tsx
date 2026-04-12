@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { buildWorkOrders } from '@/features/production/autoChain'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -122,7 +123,12 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
     if (initial?.id) {
       await supabase.from('uys_orders').update(row).eq('id', initial.id)
     } else {
-      await supabase.from('uys_orders').insert({ id: uid(), ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
+      const newId = uid()
+      await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
+      if (receteId) {
+        const { recipes: fullRecipes } = useStore.getState(); const woCount = await buildWorkOrders(newId, siparisNo.trim(), receteId, adet, fullRecipes)
+        toast.info(woCount + ' iş emri oluşturuldu')
+      }
     }
     setSaving(false); onSaved()
   }
