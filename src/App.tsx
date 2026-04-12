@@ -23,6 +23,7 @@ import { Suppliers } from '@/pages/Suppliers'
 import { DowntimeCodes } from '@/pages/DowntimeCodes'
 import { Reports } from '@/pages/Reports'
 import { DataManagement } from '@/pages/DataManagement'
+import { OperatorPanel } from '@/pages/OperatorPanel'
 
 function AppContent() {
   const { signOut } = useAuth()
@@ -63,6 +64,7 @@ function AppContent() {
           <Route path="/downtime-codes" element={<DowntimeCodes />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/data" element={<DataManagement />} />
+          <Route path="/operator" element={<OperatorPanel />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

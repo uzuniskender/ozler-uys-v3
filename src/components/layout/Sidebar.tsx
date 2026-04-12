@@ -4,7 +4,7 @@ import { useStore } from '@/store'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat
 } from 'lucide-react'
 
 const NAV = [
@@ -31,6 +31,7 @@ const NAV = [
   { label: 'SİSTEM', items: [
     { path: '/reports', label: 'Raporlar', icon: BarChart3 },
     { path: '/data', label: 'Veri Yönetimi', icon: Database },
+    { path: '/operator', label: 'Operatör Paneli', icon: HardHat },
   ]},
 ]
 
