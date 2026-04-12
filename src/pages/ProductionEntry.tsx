@@ -1,11 +1,11 @@
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle, fireIEOlustur } from '@/features/production/stokTuketim'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Play, CheckCircle } from 'lucide-react'
+import { Search, Play, CheckCircle, ScanBarcode } from 'lucide-react'
 
 export function ProductionEntry() {
   const { workOrders, logs, operators, loadAll } = useStore()
@@ -13,6 +13,32 @@ export function ProductionEntry() {
   const [bolumFilter, setBolumFilter] = useState('')
   const [entryWO, setEntryWO] = useState<string | null>(null)
   const [showToplu, setShowToplu] = useState(false)
+  const [barkodAktif, setBarkodAktif] = useState(false)
+
+  // #18: Barkod Okuyucu
+  const barkodBuf = useRef('')
+  const barkodTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!barkodAktif) return
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Enter' && barkodBuf.current.length > 3) {
+        const code = barkodBuf.current.trim()
+        barkodBuf.current = ''
+        const wo = workOrders.find(w => w.ieNo === code || w.malkod === code)
+        if (wo) { setEntryWO(wo.id); toast.success('Barkod: ' + code) }
+        else toast.error('Barkod eşleşmedi: ' + code)
+        return
+      }
+      if (e.key.length === 1) {
+        barkodBuf.current += e.key
+        if (barkodTimer.current) clearTimeout(barkodTimer.current)
+        barkodTimer.current = setTimeout(() => { barkodBuf.current = '' }, 200)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [barkodAktif, workOrders])
 
   const bolumler = useMemo(() =>
     [...new Set(workOrders.map(w => w.opAd).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
@@ -39,7 +65,12 @@ export function ProductionEntry() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{acikWOs.length} açık iş emri</p></div>
-        <button onClick={() => setShowToplu(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><CheckCircle size={13} /> Toplu Giriş</button>
+        <div className="flex gap-2">
+          <button onClick={() => setBarkodAktif(!barkodAktif)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${barkodAktif ? 'bg-green/20 text-green border border-green/30' : 'bg-bg-2 border border-border text-zinc-400'}`}>
+            <ScanBarcode size={13} /> {barkodAktif ? 'Barkod Açık' : 'Barkod'}
+          </button>
+          <button onClick={() => setShowToplu(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><CheckCircle size={13} /> Toplu Giriş</button>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">

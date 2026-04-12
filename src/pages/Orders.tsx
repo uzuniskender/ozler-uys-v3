@@ -16,6 +16,19 @@ export function Orders() {
   const [showForm, setShowForm] = useState(false)
   const [editOrder, setEditOrder] = useState<Order | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [selIds, setSelIds] = useState<Set<string>>(new Set())
+
+  function selToggle(id: string) { setSelIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
+
+  async function selDeleteAll() {
+    if (!selIds.size) return
+    if (!confirm(`${selIds.size} sipariş SİLİNECEK. Devam?`)) return
+    for (const id of selIds) {
+      await supabase.from('uys_work_orders').delete().eq('order_id', id)
+      await supabase.from('uys_orders').delete().eq('id', id)
+    }
+    setSelIds(new Set()); loadAll(); toast.success(selIds.size + ' sipariş silindi')
+  }
 
   function orderPct(orderId: string): number {
     const wos = workOrders.filter(w => w.orderId === orderId)
@@ -140,15 +153,27 @@ export function Orders() {
           <option value="all">Tümü</option><option value="active">Üretimde</option><option value="done">Tamamlandı</option><option value="late">Gecikmeli</option>
         </select>
       </div>
+
+      {selIds.size > 0 && (
+        <div className="mb-3 p-2 bg-accent/5 border border-accent/20 rounded-lg flex items-center gap-2">
+          <span className="text-xs font-semibold text-accent">{selIds.size} seçili</span>
+          <button onClick={selDeleteAll} className="px-2 py-1 bg-red/10 text-red rounded text-[10px]">Toplu Sil</button>
+          <span className="flex-1" />
+          <button onClick={() => setSelIds(new Set(filtered.map(o => o.id)))} className="text-[10px] text-zinc-500 hover:text-white">Tümü</button>
+          <button onClick={() => setSelIds(new Set())} className="text-[10px] text-zinc-500 hover:text-white">Temizle</button>
+        </div>
+      )}
+
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
-          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Sipariş No</th><th className="text-left px-4 py-2.5">Müşteri</th><th className="text-left px-4 py-2.5">Ürün</th><th className="text-right px-4 py-2.5">Adet</th><th className="text-left px-4 py-2.5">Termin</th><th className="text-right px-4 py-2.5">İlerleme</th><th className="text-right px-4 py-2.5">İE</th><th className="px-4 py-2.5"></th></tr></thead>
+          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="px-2 py-2.5 w-6"><input type="checkbox" onChange={e => e.target.checked ? setSelIds(new Set(filtered.map(o => o.id))) : setSelIds(new Set())} className="accent-accent" /></th><th className="text-left px-4 py-2.5">Sipariş No</th><th className="text-left px-4 py-2.5">Müşteri</th><th className="text-left px-4 py-2.5">Ürün</th><th className="text-right px-4 py-2.5">Adet</th><th className="text-left px-4 py-2.5">Termin</th><th className="text-right px-4 py-2.5">İlerleme</th><th className="text-right px-4 py-2.5">İE</th><th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {filtered.map(o => {
               const pct = orderPct(o.id); const woCount = workOrders.filter(w => w.orderId === o.id).length
               const isLate = o.termin && o.termin < today() && pct < 100
               return (
-                <tr key={o.id} className="border-b border-border/50 hover:bg-bg-3/50">
+                <tr key={o.id} className={`border-b border-border/50 hover:bg-bg-3/50 ${selIds.has(o.id) ? 'bg-accent/5' : ''}`}>
+                  <td className="px-2 py-2.5"><input type="checkbox" checked={selIds.has(o.id)} onChange={() => selToggle(o.id)} className="accent-accent" /></td>
                   <td className="px-4 py-2.5"><button onClick={() => setSelectedOrder(o)} className="font-mono text-accent hover:underline">{o.siparisNo}</button></td>
                   <td className="px-4 py-2.5 text-zinc-300">{o.musteri || '—'}</td>
                   <td className="px-4 py-2.5 text-zinc-400 max-w-[200px] truncate">{o.mamulAd || o.mamulKod || '—'}</td>

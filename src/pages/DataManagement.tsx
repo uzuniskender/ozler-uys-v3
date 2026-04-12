@@ -154,6 +154,40 @@ export function DataManagement() {
         </div>
       </div>
 
+      {/* #24: Sistem Testi */}
+      <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+        <div className="text-sm font-semibold mb-2">🔍 Sistem Testi</div>
+        <button onClick={() => {
+          const sorunlar: string[] = []
+          // Orphan İE kontrolü
+          const orphanWO = store.workOrders.filter(w => w.orderId && !store.orders.find(o => o.id === w.orderId))
+          if (orphanWO.length) sorunlar.push(`${orphanWO.length} İE'nin siparişi bulunamadı (orphan)`)
+          // Negatif stok
+          const stokMap: Record<string, number> = {}
+          store.stokHareketler.forEach(h => { stokMap[h.malkod] = (stokMap[h.malkod] || 0) + (h.tip === 'giris' ? h.miktar : -h.miktar) })
+          const negatif = Object.entries(stokMap).filter(([, v]) => v < -0.01)
+          if (negatif.length) sorunlar.push(`${negatif.length} malzemede negatif stok`)
+          // Reçetesiz sipariş
+          const noRecipe = store.orders.filter(o => !o.receteId)
+          if (noRecipe.length) sorunlar.push(`${noRecipe.length} sipariş reçetesiz`)
+          // İE'siz sipariş
+          const noWO = store.orders.filter(o => !store.workOrders.some(w => w.orderId === o.id))
+          if (noWO.length) sorunlar.push(`${noWO.length} siparişin iş emri yok`)
+          // Hedefi 0 olan İE
+          const zeroHedef = store.workOrders.filter(w => w.hedef <= 0)
+          if (zeroHedef.length) sorunlar.push(`${zeroHedef.length} İE'nin hedefi 0`)
+
+          if (sorunlar.length) {
+            toast.warning(`${sorunlar.length} sorun bulundu`)
+            alert('Sistem Testi Sonuçları:\n\n' + sorunlar.map((s, i) => `${i + 1}. ${s}`).join('\n'))
+          } else {
+            toast.success('Sistem testi başarılı — sorun bulunamadı')
+          }
+        }} className="px-4 py-2 bg-accent/10 border border-accent/25 text-accent rounded-lg text-xs hover:bg-accent/20">
+          Sistem Testi Çalıştır
+        </button>
+      </div>
+
       {/* #35: Fabrika Sıfırlama */}
       <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
         <div className="text-sm font-semibold text-red mb-2">⚠ Tehlikeli İşlemler</div>

@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
-import { uid } from '@/lib/utils'
-import { Search, Plus, UserCheck, UserX } from 'lucide-react'
+import { uid, today } from '@/lib/utils'
+import { toast } from 'sonner'
+import { Search, Plus, UserCheck, UserX, Calendar } from 'lucide-react'
 
 export function Operators() {
   const { operators, loadAll } = useStore()
@@ -10,6 +11,10 @@ export function Operators() {
   const [bolumFilter, setBolumFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editOpr, setEditOpr] = useState<typeof operators[0] | null>(null)
+  const [tab, setTab] = useState<'liste'|'izin'>('liste')
+  const [izinler, setIzinler] = useState<{ id: string; oprId: string; oprAd: string; baslangic: string; bitis: string; tip: string; not: string }[]>(() => {
+    try { return JSON.parse(localStorage.getItem('uys_izinler') || '[]') } catch { return [] }
+  })
 
   const bolumler = useMemo(() => [...new Set(operators.map(o => o.bolum).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')), [operators])
 
@@ -56,6 +61,13 @@ export function Operators() {
         <button onClick={() => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>
       </div>
 
+      <div className="flex gap-1 mb-4">
+        <button onClick={() => setTab('liste')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'liste' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Operatör Listesi</button>
+        <button onClick={() => setTab('izin')} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'izin' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}><Calendar size={12} /> İzin / Mesai</button>
+      </div>
+
+      {tab === 'liste' && (<>
+
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -91,6 +103,53 @@ export function Operators() {
           </div>
         </div>
       ))}
+      </>)}
+
+      {tab === 'izin' && (
+        <div className="bg-bg-2 border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">İzin / Mesai Kayıtları ({izinler.length})</h3>
+            <button onClick={() => {
+              const oprId = prompt('Operatör seçin (sicil no):')
+              if (!oprId) return
+              const opr = operators.find(o => o.kod === oprId || o.ad.toLowerCase().includes((oprId || '').toLowerCase()))
+              if (!opr) { toast.error('Operatör bulunamadı'); return }
+              const baslangic = prompt('Başlangıç tarihi (YYYY-MM-DD):', today())
+              const bitis = prompt('Bitiş tarihi (YYYY-MM-DD):')
+              const tip = prompt('Tip (yıllık/mazeret/rapor/mesai):', 'yıllık')
+              if (!baslangic || !bitis) return
+              const yeni = { id: uid(), oprId: opr.id, oprAd: opr.ad, baslangic, bitis: bitis || baslangic, tip: tip || 'yıllık', not: '' }
+              const updated = [...izinler, yeni]
+              setIzinler(updated); localStorage.setItem('uys_izinler', JSON.stringify(updated))
+              toast.success(opr.ad + ' için izin eklendi')
+            }} className="flex items-center gap-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={12} /> İzin Ekle</button>
+          </div>
+          {izinler.length ? (
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Operatör</th><th className="text-left px-3 py-2">Başlangıç</th><th className="text-left px-3 py-2">Bitiş</th><th className="text-left px-3 py-2">Tip</th><th className="text-right px-3 py-2">Gün</th><th className="px-3 py-2"></th></tr></thead>
+              <tbody>
+                {izinler.sort((a, b) => b.baslangic.localeCompare(a.baslangic)).map(iz => {
+                  const gun = Math.ceil((new Date(iz.bitis).getTime() - new Date(iz.baslangic).getTime()) / 86400000) + 1
+                  return (
+                    <tr key={iz.id} className="border-b border-border/30">
+                      <td className="px-3 py-1.5 text-zinc-300">{iz.oprAd}</td>
+                      <td className="px-3 py-1.5 font-mono text-zinc-500">{iz.baslangic}</td>
+                      <td className="px-3 py-1.5 font-mono text-zinc-500">{iz.bitis}</td>
+                      <td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${iz.tip === 'mesai' ? 'bg-green/10 text-green' : 'bg-amber/10 text-amber'}`}>{iz.tip}</span></td>
+                      <td className="px-3 py-1.5 text-right font-mono">{gun}</td>
+                      <td className="px-3 py-1.5 text-right"><button onClick={() => {
+                        const updated = izinler.filter(i => i.id !== iz.id)
+                        setIzinler(updated); localStorage.setItem('uys_izinler', JSON.stringify(updated))
+                        toast.success('İzin silindi')
+                      }} className="text-zinc-500 hover:text-red text-[10px]">Sil</button></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          ) : <div className="p-4 text-center text-zinc-600 text-xs">Henüz izin kaydı yok</div>}
+        </div>
+      )}
 
       {showForm && <OprFormModal initial={editOpr} bolumler={bolumler} onClose={() => { setShowForm(false); setEditOpr(null) }} onSave={saveOpr} />}
     </div>
