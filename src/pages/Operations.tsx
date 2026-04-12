@@ -4,6 +4,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { Search, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function Operations() {
   const { operations, loadAll } = useStore()
