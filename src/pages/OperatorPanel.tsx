@@ -50,7 +50,7 @@ export function OperatorPanel() {
     )
   }
 
-  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { signOut(); navigate('/') }} />
+  return <OperatorMain oprId={oprId} opr={opr!} tab={tab} setTab={setTab} onLogout={() => { signOut(); window.location.hash = '#/'; window.location.reload() }} />
 }
 
 function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
