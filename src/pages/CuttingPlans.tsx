@@ -123,7 +123,12 @@ export function CuttingPlans() {
                       </select>
                     </td>
                     <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => artikStokaGir(p.id, p.hamMalkod, p.hamMalad, 0)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green mr-1" title="Artık stoka gir">♻</button>
+                      <button onClick={() => {
+                        const toplamKesim = (p.satirlar || []).reduce((a: number, s: any) => a + ((s.parcaBoy || 0) * (s.adet || 0)), 0)
+                        const artik = p.hamBoy - toplamKesim
+                        if (artik <= 0) { toast.error('Artık yok — tüm malzeme kullanıldı'); return }
+                        artikStokaGir(p.id, p.hamMalkod, p.hamMalad, artik)
+                      }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green mr-1" title="Artık stoka gir">♻ Artık</button>
                       <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
                     </td>
                   </tr>
