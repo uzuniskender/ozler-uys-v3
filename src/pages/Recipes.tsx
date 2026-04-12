@@ -207,7 +207,26 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         </div>
 
         <div className="flex justify-between mt-4">
-          <button onClick={() => addRow('1')} className="flex items-center gap-1 px-3 py-1.5 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"><Plus size={12} /> Kök Bileşen Ekle</button>
+          <div className="flex gap-2">
+            <button onClick={() => addRow('1')} className="flex items-center gap-1 px-3 py-1.5 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"><Plus size={12} /> Kök Bileşen</button>
+            <button onClick={async () => {
+              const hmRows = rows.filter(r => r.tip === 'Hammadde')
+              if (!hmRows.length) { toast.error('Hammadde satırı yok'); return }
+              const { materials: mats } = useStore.getState()
+              const satirlar = hmRows.map(r => {
+                const m = mats.find(mm => mm.kod === r.malkod)
+                return { malkod: r.malkod, malad: r.malad, boy: m?.boy || 0, adet: r.miktar || 1 }
+              }).filter(s => s.boy > 0)
+              if (!satirlar.length) { toast.error('Boy bilgisi olan hammadde bulunamadı'); return }
+              const { optimizeKesim, kesimPlaniKaydet } = await import('@/features/production/cutting')
+              const hmMalz = mats.filter(m => m.tip === 'Hammadde' && m.boy > 0) as unknown as import('@/types').Material[]
+              const sonuclar = optimizeKesim(satirlar, hmMalz)
+              if (sonuclar.length) {
+                await kesimPlaniKaydet(sonuclar)
+                toast.success(sonuclar.length + ' kesim planı oluşturuldu')
+              } else toast.error('Uygun ham malzeme bulunamadı')
+            }} className="flex items-center gap-1 px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">✂ Kesim Hesapla</button>
+          </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
             <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>

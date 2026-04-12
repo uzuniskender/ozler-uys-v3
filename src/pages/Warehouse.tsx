@@ -11,6 +11,10 @@ export function Warehouse() {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'>('stok')
   const [showGiris, setShowGiris] = useState(false)
+  const [tipFilter, setTipFilter] = useState('')
+
+  // Malzeme tipleri
+  const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
 
   const stokMap = useMemo(() => {
     const map: Record<string, { malkod: string; malad: string; miktar: number }> = {}
@@ -22,10 +26,14 @@ export function Warehouse() {
   }, [stokHareketler])
 
   const filteredStok = useMemo(() => {
-    if (!search) return stokMap
-    const q = search.toLowerCase()
-    return stokMap.filter(s => (s.malkod + s.malad).toLowerCase().includes(q))
-  }, [stokMap, search])
+    let result = stokMap
+    if (tipFilter) {
+      const tipMalkodlar = new Set(materials.filter(m => m.tip === tipFilter).map(m => m.kod))
+      result = result.filter(s => tipMalkodlar.has(s.malkod))
+    }
+    if (search) { const q = search.toLowerCase(); result = result.filter(s => (s.malkod + s.malad).toLowerCase().includes(q)) }
+    return result
+  }, [stokMap, search, tipFilter, materials])
 
   const filteredHareketler = useMemo(() => {
     const sorted = [...stokHareketler].sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
@@ -126,9 +134,15 @@ export function Warehouse() {
         <button onClick={() => setTab('sayim')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'sayim' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Stok Sayım</button>
       </div>
 
-      <div className="relative max-w-xs mb-4">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+        </div>
+        <select value={tipFilter} onChange={e => setTipFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          <option value="">Tüm Tipler</option>
+          {tipler.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
       </div>
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">

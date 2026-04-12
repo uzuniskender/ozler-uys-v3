@@ -110,7 +110,7 @@ export function ProductionEntry() {
           const kalan = Math.max(0, w.hedef - prod)
           const pct = Math.min(100, Math.round(prod / w.hedef * 100))
           return (
-            <div key={w.id} className="bg-bg-2 border border-border rounded-lg p-3 hover:border-border-2 transition-colors">
+            <div key={w.id} className={`bg-bg-2 border rounded-lg p-3 hover:border-border-2 transition-colors ${prod > 0 ? 'border-green/30' : 'border-red/30'}`}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -270,6 +270,15 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
         const ieNo = await fireIEOlustur(woId, f, workOrders)
         if (ieNo) toast.info('Fire İE oluşturuldu: ' + ieNo)
       }
+    }
+
+    // #1: %100 olduğunda otomatik tamamlandı
+    const yeniToplam = prod + q
+    if (yeniToplam >= w.hedef && w.durum !== 'tamamlandi') {
+      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi', tamamlanma_tarih: today() }).eq('id', woId)
+    } else if (prod === 0 && w.durum !== 'uretimde') {
+      // İlk üretim girişi → durum "üretimde"
+      await supabase.from('uys_work_orders').update({ durum: 'uretimde' }).eq('id', woId)
     }
 
     logAction('Üretim girişi', w.ieNo + ' — ' + (parseInt(qty) || 0) + ' adet')

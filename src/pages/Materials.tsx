@@ -107,6 +107,7 @@ export function Materials() {
                 <th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme Adı</th>
                 <th className="text-left px-4 py-2.5">Tip</th><th className="text-left px-4 py-2.5">Birim</th>
                 <th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">En</th>
+                <th className="text-right px-4 py-2.5">Çap</th><th className="text-right px-4 py-2.5">Kalınlık</th>
                 <th className="text-left px-4 py-2.5">Operasyon</th><th className="px-4 py-2.5"></th>
               </tr>
             </thead>
@@ -121,6 +122,8 @@ export function Materials() {
                     <td className="px-4 py-1.5 text-zinc-500">{m.birim}</td>
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.boy || '—'}</td>
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>
+                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.cap || '—'}</td>
+                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.kalinlik || '—'}</td>
                     <td className="px-4 py-1.5 text-zinc-500 text-[11px]">{op?.ad || '—'}</td>
                     <td className="px-4 py-1.5 text-right">
                       <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>

@@ -87,7 +87,7 @@ export function WorkOrders() {
   const grouped = useMemo(() => {
     const map: Record<string, typeof filtered> = {}
     filtered.forEach(w => {
-      const key = groupBy === 'siparis' ? (orders.find(o => o.id === w.orderId)?.siparisNo || 'Bağımsız') : (w.opAd || 'Tanımsız')
+      const key = groupBy === 'siparis' ? (orders.find(o => o.id === w.orderId)?.siparisNo || 'Bağımsız') : groupBy === 'urun' ? (w.malad || w.malkod || 'Tanımsız') : (w.opAd || 'Tanımsız')
       if (!map[key]) map[key] = []; map[key].push(w)
     })
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0], 'tr'))
@@ -209,7 +209,7 @@ export function WorkOrders() {
           ))}
         </div>
         <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option>
+          <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option><option value="urun">Ürüne Göre</option>
         </select>
       </div>
 
@@ -252,7 +252,7 @@ export function WorkOrders() {
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <select value={w.durum || 'bekliyor'} onChange={e => setDurum(w.id, e.target.value)}
+                      <select value={w.durum || (wPct(w) >= 100 ? 'tamamlandi' : wProd(w.id) > 0 ? 'uretimde' : 'bekliyor')} onChange={e => setDurum(w.id, e.target.value)}
                         className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${w.durum === 'tamamlandi' ? 'text-green' : w.durum === 'iptal' ? 'text-red' : 'text-accent'}`}>
                         <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                       </select>

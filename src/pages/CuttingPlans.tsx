@@ -45,6 +45,37 @@ export function CuttingPlans() {
         <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Scissors size={13} /> Kesim Planı Oluştur</button>
       </div>
 
+      {/* Kesim Önerileri — planlanmamış İE'ler */}
+      {(() => {
+        const { logs } = useStore.getState()
+        const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
+        const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap(s => (s.kesimler || []).map((k: { woId?: string }) => k.woId))))
+        const oneriler = workOrders.filter(w => {
+          if (planliWoIds.has(w.id)) return false
+          if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+          const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+          if (prod >= w.hedef) return false
+          return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
+        })
+        if (!oneriler.length) return null
+        return (
+          <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg">
+            <div className="text-xs font-semibold text-amber mb-2">✂ Kesim Önerileri — {oneriler.length} İE planlanmamış</div>
+            <div className="space-y-1">
+              {oneriler.slice(0, 8).map(w => (
+                <div key={w.id} className="flex items-center gap-3 text-xs">
+                  <span className="font-mono text-accent">{w.ieNo}</span>
+                  <span className="text-zinc-400 truncate flex-1">{w.malad}</span>
+                  <span className="text-zinc-500">{w.opAd}</span>
+                  <span className="font-mono text-zinc-300">{w.hedef} adet</span>
+                </div>
+              ))}
+              {oneriler.length > 8 && <div className="text-[10px] text-zinc-600">+{oneriler.length - 8} daha</div>}
+            </div>
+          </div>
+        )
+      })()}
+
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {cuttingPlans.length ? (
           <table className="w-full text-xs">
