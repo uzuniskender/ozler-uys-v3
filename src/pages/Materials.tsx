@@ -1,29 +1,37 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
-import { Search, Download } from 'lucide-react'
-import { today } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
+import { uid, today } from '@/lib/utils'
+import { toast } from 'sonner'
+import { Search, Download, Plus, Pencil, Trash2 } from 'lucide-react'
+import type { Material } from '@/types'
 
 export function Materials() {
-  const { materials } = useStore()
+  const { materials, operations, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editItem, setEditItem] = useState<Material | null>(null)
 
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
       if (tipFilter && m.tip !== tipFilter) return false
-      if (search) {
-        const q = search.toLowerCase()
-        return (m.kod + m.ad).toLowerCase().includes(q)
-      }
+      if (search) return (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
   }, [materials, search, tipFilter])
 
+  async function deleteMat(id: string) {
+    if (!confirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
+    await supabase.from('uys_malzemeler').delete().eq('id', id)
+    loadAll(); toast.success('Malzeme silindi')
+  }
+
   function exportExcel() {
     import('xlsx').then(XLSX => {
-      const rows = filtered.map(m => ({ Kod: m.kod, Ad: m.ad, Tip: m.tip, Birim: m.birim, Boy: m.boy, En: m.en }))
+      const rows = filtered.map(m => ({ Kod: m.kod, Ad: m.ad, Tip: m.tip, Birim: m.birim, Boy: m.boy, En: m.en, Kalınlık: m.kalinlik, 'Min Stok': m.minStok }))
       const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Malzemeler')
@@ -35,7 +43,10 @@ export function Materials() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Malzeme Listesi</h1><p className="text-xs text-zinc-500">{materials.length} malzeme</p></div>
-        <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+        <div className="flex gap-2">
+          <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+          <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>
+        </div>
       </div>
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1 max-w-xs">
@@ -53,28 +64,115 @@ export function Materials() {
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-bg-2">
               <tr className="border-b border-border text-zinc-500">
-                <th className="text-left px-4 py-2.5">Kod</th>
-                <th className="text-left px-4 py-2.5">Malzeme Adı</th>
-                <th className="text-left px-4 py-2.5">Tip</th>
-                <th className="text-left px-4 py-2.5">Birim</th>
-                <th className="text-right px-4 py-2.5">Boy</th>
-                <th className="text-right px-4 py-2.5">En</th>
+                <th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme Adı</th>
+                <th className="text-left px-4 py-2.5">Tip</th><th className="text-left px-4 py-2.5">Birim</th>
+                <th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">En</th>
+                <th className="text-left px-4 py-2.5">Operasyon</th><th className="px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 200).map(m => (
-                <tr key={m.id} className="border-b border-border/50 hover:bg-bg-3/50">
-                  <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{m.kod}</td>
-                  <td className="px-4 py-1.5 text-zinc-300">{m.ad}</td>
-                  <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}</span></td>
-                  <td className="px-4 py-1.5 text-zinc-500">{m.birim}</td>
-                  <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.boy || '—'}</td>
-                  <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>
-                </tr>
-              ))}
+              {filtered.slice(0, 200).map(m => {
+                const op = operations.find(o => o.id === m.opId)
+                return (
+                  <tr key={m.id} className="border-b border-border/30 hover:bg-bg-3/30">
+                    <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{m.kod}</td>
+                    <td className="px-4 py-1.5 text-zinc-300">{m.ad}</td>
+                    <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}</span></td>
+                    <td className="px-4 py-1.5 text-zinc-500">{m.birim}</td>
+                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.boy || '—'}</td>
+                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>
+                    <td className="px-4 py-1.5 text-zinc-500 text-[11px]">{op?.ad || '—'}</td>
+                    <td className="px-4 py-1.5 text-right">
+                      <button onClick={() => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
+                      <button onClick={() => deleteMat(m.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
-          {filtered.length > 200 && <div className="p-2 text-center text-zinc-600 text-xs">+{filtered.length - 200} daha (arama ile daraltın)</div>}
+          {filtered.length > 200 && <div className="p-2 text-center text-zinc-600 text-xs">+{filtered.length - 200} daha</div>}
+        </div>
+      </div>
+      {showForm && <MatFormModal initial={editItem} operations={operations} tipler={tipler} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAll(); toast.success(editItem ? 'Güncellendi' : 'Eklendi') }} />}
+    </div>
+  )
+}
+
+function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
+  initial: Material | null; operations: { id: string; kod: string; ad: string }[]
+  tipler: string[]; onClose: () => void; onSaved: () => void
+}) {
+  const [kod, setKod] = useState(initial?.kod || '')
+  const [ad, setAd] = useState(initial?.ad || '')
+  const [tip, setTip] = useState(initial?.tip || 'Hammadde')
+  const [birim, setBirim] = useState(initial?.birim || 'Adet')
+  const [boy, setBoy] = useState(String(initial?.boy || ''))
+  const [en, setEn] = useState(String(initial?.en || ''))
+  const [kalinlik, setKalinlik] = useState(String(initial?.kalinlik || ''))
+  const [minStok, setMinStok] = useState(String(initial?.minStok || ''))
+  const [opId, setOpId] = useState(initial?.opId || '')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!kod.trim() || !ad.trim()) { toast.error('Kod ve Ad zorunlu'); return }
+    setSaving(true)
+    const op = operations.find(o => o.id === opId)
+    const row = {
+      kod: kod.trim(), ad: ad.trim(), tip, birim, boy: parseFloat(boy) || 0,
+      en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0,
+      min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
+    }
+    if (initial?.id) {
+      await supabase.from('uys_malzemeler').update(row).eq('id', initial.id)
+    } else {
+      await supabase.from('uys_malzemeler').insert({ id: uid(), ...row })
+    }
+    setSaving(false); onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">{initial ? 'Malzeme Düzenle' : 'Yeni Malzeme'}</h2>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label>
+            <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Tip</label>
+            <select value={tip} onChange={e => setTip(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="Hammadde">Hammadde</option><option value="YarıMamul">Yarı Mamul</option>
+              <option value="Mamul">Mamul</option><option value="Sarf">Sarf</option>
+              {tipler.filter(t => !['Hammadde','YarıMamul','Mamul','Sarf'].includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
+            </select></div>
+          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
+          <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div className="grid grid-cols-4 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Birim</label>
+            <select value={birim} onChange={e => setBirim(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option><option>Litre</option><option>Takım</option>
+            </select></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Boy (mm)</label>
+            <input type="number" value={boy} onChange={e => setBoy(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">En (mm)</label>
+            <input type="number" value={en} onChange={e => setEn(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Kalınlık</label>
+            <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Min Stok</label>
+            <input type="number" value={minStok} onChange={e => setMinStok(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
+            <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="">— Seçin —</option>
+              {operations.map(o => <option key={o.id} value={o.id}>{o.kod} — {o.ad}</option>)}
+            </select></div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
+          <button onClick={save} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">{saving ? 'Kaydediliyor...' : 'Kaydet'}</button>
         </div>
       </div>
     </div>

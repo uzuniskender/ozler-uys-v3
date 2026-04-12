@@ -1,14 +1,28 @@
 import { useState } from 'react'
 import { useStore } from '@/store'
-import type { Recipe } from '@/types'
+import { supabase } from '@/lib/supabase'
+import { uid } from '@/lib/utils'
+import { toast } from 'sonner'
+import type { Recipe, RecipeRow } from '@/types'
+import { Plus, Trash2, Pencil } from 'lucide-react'
 
 export function Recipes() {
-  const { recipes } = useStore()
+  const { recipes, operations, loadAll } = useStore()
   const [selected, setSelected] = useState<Recipe | null>(null)
+  const [showNew, setShowNew] = useState(false)
+
+  async function deleteRecipe(id: string) {
+    if (!confirm('Bu reçeteyi silmek istediğinize emin misiniz?')) return
+    await supabase.from('uys_recipes').delete().eq('id', id)
+    loadAll(); toast.success('Reçete silindi')
+  }
 
   return (
     <div>
-      <div className="mb-4"><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete</p></div>
+      <div className="flex items-center justify-between mb-4">
+        <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete</p></div>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Reçete</button>
+      </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {recipes.length ? (
           <table className="w-full text-xs">
@@ -20,43 +34,172 @@ export function Recipes() {
                   <td className="px-4 py-2 text-zinc-300">{r.ad}</td>
                   <td className="px-4 py-2 font-mono text-zinc-500">{r.mamulKod}</td>
                   <td className="px-4 py-2 text-right font-mono">{r.satirlar?.length || 0}</td>
-                  <td className="px-4 py-2 text-right"><button onClick={() => setSelected(r)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Görüntüle</button></td>
+                  <td className="px-4 py-2 text-right">
+                    <button onClick={() => setSelected(r)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>
+                    <button onClick={() => deleteRecipe(r.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz reçete yok</div>}
       </div>
+      {selected && <RecipeEditor recipe={selected} operations={operations} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Reçete güncellendi') }} />}
+      {showNew && <NewRecipeModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Reçete oluşturuldu') }} />}
+    </div>
+  )
+}
 
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setSelected(null)}>
-          <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between mb-4">
-              <div><h2 className="text-lg font-semibold">{selected.ad}</h2><p className="text-xs text-zinc-500">{selected.mamulKod} · {selected.satirlar?.length || 0} bileşen</p></div>
-              <button onClick={() => setSelected(null)} className="text-zinc-500 hover:text-white text-lg">✕</button>
-            </div>
-            <table className="w-full text-xs">
-              <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Kırılım</th><th className="text-left px-3 py-2">Malzeme</th><th className="text-left px-3 py-2">Tip</th><th className="text-right px-3 py-2">Miktar</th><th className="text-left px-3 py-2">Birim</th></tr></thead>
-              <tbody>
-                {(selected.satirlar || []).map((s, i) => {
-                  const depth = (s.kirno || '').split('.').length - 1
-                  return (
-                    <tr key={i} className="border-b border-border/30">
-                      <td className="px-3 py-1.5 font-mono text-zinc-500">{s.kirno}</td>
-                      <td className="px-3 py-1.5" style={{ paddingLeft: `${12 + depth * 16}px` }}>
-                        <span className={s.tip === 'Hammadde' ? 'text-amber' : s.tip === 'Mamul' ? 'text-green' : 'text-zinc-300'}>{s.malad}</span>
-                      </td>
-                      <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px]">{s.tip}</span></td>
-                      <td className="px-3 py-1.5 text-right font-mono">{s.miktar}</td>
-                      <td className="px-3 py-1.5 text-zinc-500">{s.birim}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+function NewRecipeModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [rcKod, setRcKod] = useState('')
+  const [ad, setAd] = useState('')
+  const [mamulKod, setMamulKod] = useState('')
+  const [mamulAd, setMamulAd] = useState('')
+
+  async function save() {
+    if (!ad.trim()) { toast.error('Reçete adı zorunlu'); return }
+    await supabase.from('uys_recipes').insert({
+      id: uid(), rc_kod: rcKod.trim(), ad: ad.trim(), mamul_kod: mamulKod.trim(), mamul_ad: mamulAd.trim(),
+      satirlar: [{ id: uid(), kirno: '1', malkod: mamulKod.trim(), malad: mamulAd.trim() || ad.trim(), tip: 'Mamul', miktar: 1, birim: 'Adet', opId: null, istId: null, hazirlikSure: 0, islemSure: 0 }],
+    })
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">Yeni Reçete</h2>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Reçete Kodu</label><input value={rcKod} onChange={e => setRcKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Mamul Kodu</label><input value={mamulKod} onChange={e => setMamulKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Reçete Adı *</label><input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Mamul Adı</label><input value={mamulAd} onChange={e => setMamulAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Oluştur</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RecipeEditor({ recipe, operations, onClose, onSaved }: {
+  recipe: Recipe; operations: { id: string; kod: string; ad: string }[]
+  
+  onClose: () => void; onSaved: () => void
+}) {
+  const [rows, setRows] = useState<RecipeRow[]>(recipe.satirlar || [])
+
+  function updateRow(idx: number, field: keyof RecipeRow, value: string | number) {
+    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
+  }
+
+  function addRow(parentKirno: string) {
+    const children = rows.filter(r => r.kirno.startsWith(parentKirno + '.') && r.kirno.split('.').length === parentKirno.split('.').length + 1)
+    const nextNum = children.length + 1
+    const newKirno = parentKirno + '.' + nextNum
+    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: 'Yeni Bileşen', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0 }])
+  }
+
+  function deleteRow(idx: number) {
+    const kirno = rows[idx].kirno
+    // Alt kırılımları da sil
+    setRows(prev => prev.filter((r, i) => i !== idx && !r.kirno.startsWith(kirno + '.')))
+  }
+
+  async function save() {
+    await supabase.from('uys_recipes').update({ satirlar: rows }).eq('id', recipe.id)
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-5xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between mb-4">
+          <div><h2 className="text-lg font-semibold">{recipe.ad}</h2><p className="text-xs text-zinc-500">{recipe.mamulKod} · {rows.length} satır</p></div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-zinc-500">
+                <th className="text-left px-2 py-2 w-20">Kırılım</th>
+                <th className="text-left px-2 py-2">Malzeme Kodu</th>
+                <th className="text-left px-2 py-2">Malzeme Adı</th>
+                <th className="text-left px-2 py-2 w-24">Tip</th>
+                <th className="text-right px-2 py-2 w-16">Miktar</th>
+                <th className="text-left px-2 py-2 w-16">Birim</th>
+                <th className="text-left px-2 py-2">Operasyon</th>
+                <th className="text-right px-2 py-2 w-14">İşlem dk</th>
+                <th className="px-2 py-2 w-20"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const depth = (r.kirno || '').split('.').length - 1
+                return (
+                  <tr key={r.id || i} className="border-b border-border/20 hover:bg-bg-3/20">
+                    <td className="px-2 py-1"><span className="font-mono text-zinc-500">{r.kirno}</span></td>
+                    <td className="px-2 py-1">
+                      <input value={r.malkod || ''} onChange={e => updateRow(i, 'malkod', e.target.value)}
+                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
+                    </td>
+                    <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
+                      <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
+                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
+                    </td>
+                    <td className="px-2 py-1">
+                      <select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
+                        <option value="Mamul">Mamul</option><option value="YarıMamul">Yarı Mamul</option>
+                        <option value="Hammadde">Hammadde</option><option value="Sarf">Sarf</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-1">
+                      <input type="number" value={r.miktar} onChange={e => updateRow(i, 'miktar', parseFloat(e.target.value) || 0)}
+                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" />
+                    </td>
+                    <td className="px-2 py-1">
+                      <select value={r.birim} onChange={e => updateRow(i, 'birim', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
+                        <option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-1">
+                      {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
+                        <select value={r.opId || ''} onChange={e => updateRow(i, 'opId', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
+                          <option value="">—</option>
+                          {operations.map(o => <option key={o.id} value={o.id}>{o.ad}</option>)}
+                        </select>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
+                        <input type="number" value={r.islemSure || 0} onChange={e => updateRow(i, 'islemSure', parseFloat(e.target.value) || 0)}
+                          className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" />
+                      )}
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      <button onClick={() => addRow(r.kirno)} className="p-0.5 text-zinc-500 hover:text-accent" title="Alt bileşen ekle"><Plus size={11} /></button>
+                      {r.kirno !== '1' && <button onClick={() => deleteRow(i)} className="p-0.5 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={11} /></button>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex justify-between mt-4">
+          <button onClick={() => addRow('1')} className="flex items-center gap-1 px-3 py-1.5 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"><Plus size={12} /> Kök Bileşen Ekle</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+            <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

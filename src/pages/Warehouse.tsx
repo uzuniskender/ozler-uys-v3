@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
-import { Search, Download } from 'lucide-react'
-import { today } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
+import { uid, today } from '@/lib/utils'
+import { toast } from 'sonner'
+import { Search, Download, Plus } from 'lucide-react'
 
 export function Warehouse() {
-  const { stokHareketler } = useStore()
+  const { stokHareketler, materials, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'>('stok')
+  const [showGiris, setShowGiris] = useState(false)
 
-  // Stok hesapla
   const stokMap = useMemo(() => {
     const map: Record<string, { malkod: string; malad: string; miktar: number }> = {}
     stokHareketler.forEach(h => {
@@ -45,7 +47,10 @@ export function Warehouse() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Depolar</h1><p className="text-xs text-zinc-500">{stokHareketler.length} hareket · {stokMap.length} malzeme</p></div>
-        <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+        <div className="flex gap-2">
+          <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+          <button onClick={() => setShowGiris(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Manuel Giriş/Çıkış</button>
+        </div>
       </div>
 
       <div className="flex gap-1 mb-4">
@@ -89,6 +94,71 @@ export function Warehouse() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {showGiris && <StokGirisModal materials={materials} onClose={() => setShowGiris(false)} onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }} />}
+    </div>
+  )
+}
+
+function StokGirisModal({ materials, onClose, onSaved }: {
+  materials: { id: string; kod: string; ad: string }[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const [malkod, setMalkod] = useState('')
+  const [miktar, setMiktar] = useState('')
+  const [tip, setTip] = useState<'giris' | 'cikis'>('giris')
+  const [aciklama, setAciklama] = useState('')
+  const [search, setSearch] = useState('')
+
+  const filteredMats = materials.filter(m => !search || (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())).slice(0, 20)
+  const selectedMat = materials.find(m => m.kod === malkod)
+
+  async function save() {
+    if (!malkod || !miktar) { toast.error('Malzeme ve miktar zorunlu'); return }
+    await supabase.from('uys_stok_hareketler').insert({
+      id: uid(), tarih: today(), malkod, malad: selectedMat?.ad || malkod,
+      miktar: parseFloat(miktar), tip, aciklama: aciklama || (tip === 'giris' ? 'Manuel giriş' : 'Manuel çıkış'),
+    })
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">Manuel Stok Giriş/Çıkış</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Malzeme *</label>
+            <input value={search} onChange={e => { setSearch(e.target.value); setMalkod('') }} placeholder="Malzeme ara..."
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+            {search && !malkod && (
+              <div className="mt-1 max-h-32 overflow-y-auto bg-bg-2 border border-border rounded-lg">
+                {filteredMats.map(m => (
+                  <button key={m.id} onClick={() => { setMalkod(m.kod); setSearch(m.kod + ' — ' + m.ad) }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-bg-3 truncate">
+                    <span className="font-mono text-accent">{m.kod}</span> — {m.ad}
+                  </button>
+                ))}
+              </div>
+            )}
+            {malkod && <div className="mt-1 text-[11px] text-green">✓ {selectedMat?.ad}</div>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Tip</label>
+            <select value={tip} onChange={e => setTip(e.target.value as 'giris' | 'cikis')} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+              <option value="giris">Giriş</option><option value="cikis">Çıkış</option>
+            </select></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Miktar *</label>
+            <input type="number" min={0.01} value={miktar} onChange={e => setMiktar(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Açıklama</label>
+          <input value={aciklama} onChange={e => setAciklama(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" placeholder="Opsiyonel..." /></div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+        </div>
       </div>
     </div>
   )
