@@ -94,95 +94,63 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   function wProd(woId: string) { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
 
   return (
-    <div className="max-w-lg mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 bg-bg-2 border border-border rounded-lg p-3">
-        <div>
-          <div className="text-sm font-semibold">{opr.ad}</div>
-          <div className="text-[11px] text-zinc-500">{opr.bolum} · {today()}</div>
-        </div>
-        <button onClick={onLogout} className="px-3 py-1.5 bg-red/10 border border-red/25 text-red text-xs rounded-lg hover:bg-red/20">Çıkış</button>
-      </div>
-
-      {/* Aktif İş Banner */}
-      {myActive && (() => {
-        const w = workOrders.find(x => x.id === myActive.woId)
-        const now = new Date()
-        const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-        const basDk = myActive.baslangic ? (parseInt(saat.split(':')[0]) * 60 + parseInt(saat.split(':')[1])) - (parseInt(myActive.baslangic.split(':')[0]) * 60 + parseInt(myActive.baslangic.split(':')[1])) : 0
-        return (
-          <div className="mb-4 p-4 bg-green/5 border-2 border-green/30 rounded-lg">
-            <div className="text-[10px] text-green font-bold uppercase tracking-wider mb-1">🔧 Aktif Çalışma</div>
-            <div className="text-sm font-semibold text-white mb-0.5">{myActive.woAd}</div>
-            <div className="text-xs text-zinc-400 font-mono mb-3">Başlangıç: {myActive.baslangic} → ({basDk > 0 ? basDk + 'dk' : 'şimdi'})</div>
-            <div className="flex gap-2">
-              <button onClick={() => setEntryWO(myActive.woId)}
-                className="flex-1 py-3 bg-green text-black font-bold rounded-lg text-sm hover:bg-green/80">
-                ✅ Üretim Kaydet
-              </button>
-              <button onClick={stopWork}
-                className="px-4 py-3 bg-red/20 border border-red/30 text-red rounded-lg text-sm font-semibold hover:bg-red/30">
-                ⏹ Durdur
-              </button>
-            </div>
+    <div className="min-h-screen bg-bg-0 px-4 py-3">
+      <div className="max-w-lg mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4 bg-gradient-to-r from-accent/20 to-bg-2 border border-accent/30 rounded-xl p-4">
+          <div>
+            <div className="text-lg font-bold text-white">{opr.ad}</div>
+            <div className="text-xs text-zinc-400">{opr.bolum} · {today()}</div>
           </div>
-        )
-      })()}
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4">
-        <button onClick={() => setTab('isler')} className={`flex-1 py-2 text-xs font-semibold rounded-lg ${tab === 'isler' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
-          📋 İşlerim ({acikWOs.length})
-        </button>
-        <button onClick={() => setTab('mesaj')} className={`flex-1 py-2 text-xs font-semibold rounded-lg ${tab === 'mesaj' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
-          💬 Mesajlar
-        </button>
-      </div>
-
-      {tab === 'isler' && (
-        <div className="space-y-2">
-          {acikWOs.map(w => {
-            const prod = wProd(w.id)
-            const pct = Math.min(100, Math.round(prod / w.hedef * 100))
-            const kalan = Math.max(0, w.hedef - prod)
-            const isActive = myActive?.woId === w.id
-            return (
-              <div key={w.id} className={`bg-bg-2 border rounded-lg p-3 ${isActive ? 'border-green/40 bg-green/5' : 'border-border'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-mono text-accent text-xs">{w.ieNo}</span>
-                  <span className={`font-mono text-xs font-bold ${pctColor(pct)}`}>{pct}%</span>
-                </div>
-                <div className="text-sm font-medium mb-1">{w.malad}</div>
-                <div className="flex items-center gap-3 text-[11px] text-zinc-500 mb-2">
-                  <span>Hedef: {w.hedef}</span>
-                  <span className="text-green">Yapılan: {prod}</span>
-                  <span className="text-amber">Kalan: {kalan}</span>
-                </div>
-                <div className="w-full h-1.5 bg-bg-3 rounded-full overflow-hidden mb-2">
-                  <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} />
-                </div>
-                {!myActive ? (
-                  <button onClick={() => startWork(w.id)} className="w-full py-2.5 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent-hover">
-                    ▶ Başlat
-                  </button>
-                ) : isActive ? (
-                  <button onClick={() => setEntryWO(w.id)} className="w-full py-2.5 bg-green text-black rounded-lg text-sm font-semibold hover:bg-green/80">
-                    ✅ Üretim Kaydet
-                  </button>
-                ) : null}
-              </div>
-            )
-          })}
-          {!acikWOs.length && <div className="p-8 text-center text-zinc-600 text-sm">Açık iş emri yok</div>}
+          <button onClick={onLogout} className="px-4 py-2 bg-red/20 border border-red/30 text-red text-xs rounded-lg hover:bg-red/30 font-semibold">Çıkış</button>
         </div>
-      )}
 
-      {tab === 'mesaj' && <MesajForm oprId={oprId} oprAd={opr.ad} onSent={() => toast.success('Mesaj gönderildi')} />}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setTab('isler')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'isler' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+            📋 İşlerim ({acikWOs.length})
+          </button>
+          <button onClick={() => setTab('mesaj')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'mesaj' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+            💬 Mesajlar
+          </button>
+        </div>
 
-      {/* Üretim Kayıt Modal */}
-      {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} durusKodlari={durusKodlari}
-        onClose={() => setEntryWO(null)}
-        onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }} />}
+        {tab === 'isler' && (
+          <div className="space-y-3">
+            {acikWOs.map(w => {
+              const prod = wProd(w.id)
+              const pct = Math.min(100, Math.round(prod / w.hedef * 100))
+              const kalan = Math.max(0, w.hedef - prod)
+              return (
+                <div key={w.id} onClick={() => setEntryWO(w.id)}
+                  className="bg-bg-1 border border-border rounded-xl p-4 cursor-pointer hover:border-accent/50 active:scale-[0.99] transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-accent text-xs font-bold">{w.ieNo}</span>
+                    <span className={`text-sm font-bold ${pct >= 100 ? 'text-green' : pct > 0 ? 'text-amber' : 'text-red'}`}>{pct}%</span>
+                  </div>
+                  <div className="text-[15px] font-semibold text-white mb-2">{w.malad}</div>
+                  <div className="flex items-center gap-4 text-xs mb-3">
+                    <span className="text-zinc-400">Hedef: <b className="text-white">{w.hedef}</b></span>
+                    <span className="text-green">Yapılan: <b>{prod}</b></span>
+                    <span className="text-amber">Kalan: <b>{kalan}</b></span>
+                  </div>
+                  <div className="w-full h-2 bg-bg-3 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-accent'}`} style={{ width: `${Math.max(2, pct)}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+            {!acikWOs.length && <div className="p-12 text-center text-zinc-600">Açık iş emri yok</div>}
+          </div>
+        )}
+
+        {tab === 'mesaj' && <MesajForm oprId={oprId} oprAd={opr.ad} onSent={() => toast.success('Mesaj gönderildi')} />}
+
+        {/* Üretim Kayıt Modal */}
+        {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} durusKodlari={durusKodlari}
+          onClose={() => setEntryWO(null)}
+          onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }} />}
+      </div>
     </div>
   )
 }
