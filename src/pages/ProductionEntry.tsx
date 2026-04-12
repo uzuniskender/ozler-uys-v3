@@ -84,9 +84,9 @@ export function ProductionEntry() {
               const bWOs = workOrders.filter(w => w.opAd === b && w.hedef > 0 && wProd(w.id) < w.hedef)
               return (
                 <button key={b} onClick={() => { setBolumFilter(b); setSelectedOpr(null) }}
-                  className="px-4 py-3 bg-bg-3 border border-border rounded-lg text-sm hover:border-accent hover:text-accent transition-colors">
+                  className={`px-4 py-3 border rounded-lg text-sm transition-colors ${bWOs.length > 0 ? 'bg-green/10 border-green/30 text-green hover:bg-green/20' : 'bg-red/10 border-red/30 text-red/70 hover:bg-red/20'}`}>
                   <div className="font-medium">{b}</div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">{bWOs.length} açık İE</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{bWOs.length} açık İE</div>
                 </button>
               )
             })}
