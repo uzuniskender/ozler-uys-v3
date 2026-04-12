@@ -64,21 +64,32 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   const [entryWO, setEntryWO] = useState<string | null>(null)
 
   const acikWOs = useMemo(() => {
-    const bolumUpper = (opr.bolum || '').toUpperCase()
-    // Operasyonları bölüm eşleştir: tam eşleşme VEYA operasyon adı bölümü içeriyor
+    const bolumUpper = (opr.bolum || '').toUpperCase().trim()
+    if (!bolumUpper) {
+      // Bölüm yoksa tüm açık İE'leri göster
+      return workOrders.filter(w => {
+        if (w.hedef <= 0) return false
+        const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+        return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
+      })
+    }
+    // Bölüm eşleştir: operasyon tablosundan + İE opAd'dan
     const bolumOpIds = new Set(operations.filter(o => {
-      const opBolum = (o.bolum || '').toUpperCase()
-      const opAd = (o.ad || '').toUpperCase()
+      const opBolum = (o.bolum || '').toUpperCase().trim()
+      const opAd = (o.ad || '').toUpperCase().trim()
       return opBolum === bolumUpper || opAd === bolumUpper || opAd.includes(bolumUpper) || bolumUpper.includes(opAd)
     }).map(o => o.id))
-    return workOrders.filter(w => {
+
+    const filtered = workOrders.filter(w => {
       if (w.hedef <= 0) return false
-      const opAdUpper = (w.opAd || '').toUpperCase()
-      // Eşleşme: opId bölüm operasyonlarında VEYA opAd bölümü içeriyor
-      if (!bolumOpIds.has(w.opId) && opAdUpper !== bolumUpper && !opAdUpper.includes(bolumUpper) && !bolumUpper.includes(opAdUpper)) return false
+      const opAdUpper = (w.opAd || '').toUpperCase().trim()
+      const opKodUpper = (w.opKod || '').toUpperCase().trim()
+      const match = bolumOpIds.has(w.opId) || opAdUpper === bolumUpper || opAdUpper.includes(bolumUpper) || bolumUpper.includes(opAdUpper) || opKodUpper === bolumUpper
+      if (!match) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
       return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
     })
+    return filtered
   }, [workOrders, logs, operations, opr.bolum])
 
   const myActive = activeWork.find(a => a.opId === oprId)
@@ -153,7 +164,27 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                 </div>
               )
             })}
-            {!acikWOs.length && <div className="p-12 text-center text-zinc-600">Açık iş emri yok</div>}
+            {!acikWOs.length && (
+              <div className="p-6 text-center">
+                <div className="text-zinc-500 mb-3">"{opr.bolum}" bölümünde açık iş emri yok</div>
+                <div className="text-[10px] text-zinc-600 mb-3">Operatör bölümü İE operasyon adıyla eşleşmiyor olabilir.</div>
+                <button onClick={() => {
+                  // Tüm açık İE'leri görmek için bölümü temizle (geçici)
+                  const allOpen = workOrders.filter(w => {
+                    if (w.hedef <= 0) return false
+                    const pr = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+                    return pr < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi'
+                  })
+                  if (allOpen.length) {
+                    toast.info(`Toplam ${allOpen.length} açık İE var. Operasyonlar: ${[...new Set(allOpen.map(w => w.opAd))].join(', ')}`)
+                  } else {
+                    toast.info('Hiç açık İE yok')
+                  }
+                }} className="px-4 py-2 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">
+                  🔍 Tüm açık İE operasyonlarını göster
+                </button>
+              </div>
+            )}
           </div>
         )}
 
