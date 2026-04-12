@@ -57,9 +57,9 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj') => void; onLogout: () => void
 }) {
-  const { workOrders, logs, activeWork, operations, loadAll } = useStore()
+  const { workOrders, logs, activeWork, operations, durusKodlari, loadAll } = useStore()
+  const [entryWO, setEntryWO] = useState<string | null>(null)
 
-  // Bölüme göre açık iş emirleri — sadece operatörün bölümündeki operasyonlar
   const acikWOs = useMemo(() => {
     const bolumUpper = (opr.bolum || '').toUpperCase()
     const bolumOpIds = new Set(operations.filter(o => (o.bolum || '').toUpperCase() === bolumUpper).map(o => o.id))
@@ -73,7 +73,6 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
   const myActive = activeWork.find(a => a.opId === oprId)
 
-  // İş başlat
   async function startWork(woId: string) {
     const w = workOrders.find(x => x.id === woId)
     if (!w) return
@@ -86,13 +85,13 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
     loadAll(); toast.success('İş başlatıldı: ' + w.ieNo)
   }
 
-  // İş bitir + üretim girişi
-  async function finishWork() {
+  async function stopWork() {
     if (!myActive) return
     await supabase.from('uys_active_work').delete().eq('id', myActive.id)
-    loadAll()
-    toast.success('İş durduruldu')
+    loadAll(); toast.success('İş durduruldu')
   }
+
+  function wProd(woId: string) { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
 
   return (
     <div className="max-w-lg mx-auto">
@@ -102,42 +101,56 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
           <div className="text-sm font-semibold">{opr.ad}</div>
           <div className="text-[11px] text-zinc-500">{opr.bolum} · {today()}</div>
         </div>
-        <button onClick={onLogout} className="p-2 text-zinc-500 hover:text-red"><LogOut size={16} /></button>
+        <button onClick={onLogout} className="px-3 py-1.5 bg-red/10 border border-red/25 text-red text-xs rounded-lg hover:bg-red/20">Çıkış</button>
       </div>
 
-      {/* Aktif İş */}
-      {myActive && (
-        <div className="mb-4 p-4 bg-green/5 border border-green/20 rounded-lg">
-          <div className="text-[10px] text-green font-semibold mb-1">🔧 AKTİF ÇALIŞMA</div>
-          <div className="text-sm font-medium">{myActive.woAd}</div>
-          <div className="text-xs text-zinc-500 font-mono">Başlangıç: {myActive.baslangic}</div>
-          <div className="flex gap-2 mt-3">
-            <QuickEntry woId={myActive.woId} oprId={oprId} oprAd={opr.ad} onDone={() => { loadAll(); toast.success('Üretim kaydedildi') }} />
-            <button onClick={finishWork} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red/10 border border-red/25 text-red rounded-lg text-xs font-semibold"><Square size={13} /> Durdur</button>
+      {/* Aktif İş Banner */}
+      {myActive && (() => {
+        const w = workOrders.find(x => x.id === myActive.woId)
+        const now = new Date()
+        const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+        const basDk = myActive.baslangic ? (parseInt(saat.split(':')[0]) * 60 + parseInt(saat.split(':')[1])) - (parseInt(myActive.baslangic.split(':')[0]) * 60 + parseInt(myActive.baslangic.split(':')[1])) : 0
+        return (
+          <div className="mb-4 p-4 bg-green/5 border-2 border-green/30 rounded-lg">
+            <div className="text-[10px] text-green font-bold uppercase tracking-wider mb-1">🔧 Aktif Çalışma</div>
+            <div className="text-sm font-semibold text-white mb-0.5">{myActive.woAd}</div>
+            <div className="text-xs text-zinc-400 font-mono mb-3">Başlangıç: {myActive.baslangic} → ({basDk > 0 ? basDk + 'dk' : 'şimdi'})</div>
+            <div className="flex gap-2">
+              <button onClick={() => setEntryWO(myActive.woId)}
+                className="flex-1 py-3 bg-green text-black font-bold rounded-lg text-sm hover:bg-green/80">
+                ✅ Üretim Kaydet
+              </button>
+              <button onClick={stopWork}
+                className="px-4 py-3 bg-red/20 border border-red/30 text-red rounded-lg text-sm font-semibold hover:bg-red/30">
+                ⏹ Durdur
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4">
-        <select value={tab} onChange={e => setTab(e.target.value as 'isler'|'mesaj')} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="isler">İşlerim</option>
-          <option value="mesaj">Mesajlar</option>
-        </select>
+        <button onClick={() => setTab('isler')} className={`flex-1 py-2 text-xs font-semibold rounded-lg ${tab === 'isler' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
+          📋 İşlerim ({acikWOs.length})
+        </button>
+        <button onClick={() => setTab('mesaj')} className={`flex-1 py-2 text-xs font-semibold rounded-lg ${tab === 'mesaj' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
+          💬 Mesajlar
+        </button>
       </div>
 
       {tab === 'isler' && (
         <div className="space-y-2">
           {acikWOs.map(w => {
-            const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+            const prod = wProd(w.id)
             const pct = Math.min(100, Math.round(prod / w.hedef * 100))
             const kalan = Math.max(0, w.hedef - prod)
             const isActive = myActive?.woId === w.id
             return (
-              <div key={w.id} className={`bg-bg-2 border rounded-lg p-3 ${isActive ? 'border-green/40' : 'border-border'}`}>
+              <div key={w.id} className={`bg-bg-2 border rounded-lg p-3 ${isActive ? 'border-green/40 bg-green/5' : 'border-border'}`}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-mono text-accent text-xs">{w.ieNo}</span>
-                  <span className={`font-mono text-xs ${pctColor(pct)}`}>{pct}%</span>
+                  <span className={`font-mono text-xs font-bold ${pctColor(pct)}`}>{pct}%</span>
                 </div>
                 <div className="text-sm font-medium mb-1">{w.malad}</div>
                 <div className="flex items-center gap-3 text-[11px] text-zinc-500 mb-2">
@@ -148,11 +161,15 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                 <div className="w-full h-1.5 bg-bg-3 rounded-full overflow-hidden mb-2">
                   <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} />
                 </div>
-                {!myActive && (
-                  <button onClick={() => startWork(w.id)} className="w-full flex items-center justify-center gap-1.5 py-2 bg-accent/10 text-accent rounded-lg text-xs font-medium hover:bg-accent/20">
-                    <Play size={13} /> Başlat
+                {!myActive ? (
+                  <button onClick={() => startWork(w.id)} className="w-full py-2.5 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent-hover">
+                    ▶ Başlat
                   </button>
-                )}
+                ) : isActive ? (
+                  <button onClick={() => setEntryWO(w.id)} className="w-full py-2.5 bg-green text-black rounded-lg text-sm font-semibold hover:bg-green/80">
+                    ✅ Üretim Kaydet
+                  </button>
+                ) : null}
               </div>
             )
           })}
@@ -161,14 +178,42 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
       )}
 
       {tab === 'mesaj' && <MesajForm oprId={oprId} oprAd={opr.ad} onSent={() => toast.success('Mesaj gönderildi')} />}
+
+      {/* Üretim Kayıt Modal */}
+      {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} durusKodlari={durusKodlari}
+        onClose={() => setEntryWO(null)}
+        onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }} />}
     </div>
   )
 }
 
-function QuickEntry({ woId, oprId, oprAd, onDone }: { woId: string; oprId: string; oprAd: string; onDone: () => void }) {
+/* Operatör Üretim Kayıt Modal */
+function OprEntryModal({ woId, oprId, oprAd, durusKodlari, onClose, onSaved }: {
+  woId: string; oprId: string; oprAd: string
+  durusKodlari: { id: string; kod: string; ad: string }[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const { workOrders, logs } = useStore()
+  const w = workOrders.find(x => x.id === woId)
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
+  const [aciklama, setAciklama] = useState('')
   const [saving, setSaving] = useState(false)
+  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
+
+  if (!w) return null
+  const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+  const kalan = Math.max(0, w.hedef - prod)
+
+  function addDurus() { setDuruslar(p => [...p, { kodId: '', kodAd: '', sure: 0 }]) }
+  function updateDurus(i: number, field: string, val: string) {
+    setDuruslar(p => p.map((d, idx) => {
+      if (idx !== i) return d
+      if (field === 'kodId') { const dk = durusKodlari.find(k => k.id === val); return { ...d, kodId: val, kodAd: dk?.ad || '' } }
+      if (field === 'sure') return { ...d, sure: parseInt(val) || 0 }
+      return d
+    }))
+  }
 
   async function save() {
     const q = parseInt(qty) || 0
@@ -182,23 +227,88 @@ function QuickEntry({ woId, oprId, oprAd, onDone }: { woId: string; oprId: strin
     await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih: today(), qty: q, fire: f,
       operatorlar: [{ id: oprId, ad: oprAd, bas: saat, bit: saat }],
-      duruslar: [], operator_id: oprId,
+      not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0),
     })
-
+    // Mamul stok girişi
+    await supabase.from('uys_stok_hareketler').insert({
+      id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
+      tip: 'giris', kaynak: 'uretim', aciklama: `${w.ieNo} - ${oprAd}`,
+      tarih: today(), log_id: logId, wo_id: woId,
+    })
+    // Fire log
     if (f > 0) {
       await supabase.from('uys_fire_logs').insert({
-        id: uid(), log_id: logId, wo_id: woId, tarih: today(),
-        qty: f, operatorlar: [{ id: oprId, ad: oprAd }],
+        id: uid(), wo_id: woId, tarih: today(), miktar: f, opertor: oprAd, neden: aciklama || 'Operatör girişi',
       })
     }
-    setSaving(false); setQty(''); setFire(''); onDone()
+    // Aktif işi temizle
+    await supabase.from('uys_active_work').delete().eq('id', oprId)
+    setSaving(false)
+    onSaved()
   }
 
   return (
-    <div className="flex-[2] flex gap-1.5">
-      <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="Adet" className="flex-1 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-center focus:outline-none focus:border-accent" />
-      <input type="number" value={fire} onChange={e => setFire(e.target.value)} placeholder="Fire" className="w-14 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-center focus:outline-none" />
-      <button onClick={save} disabled={saving} className="px-3 py-2 bg-green hover:bg-green/80 text-white rounded-lg text-xs font-semibold"><CheckCircle size={14} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-bold mb-1">Üretim Kaydet</h2>
+        <div className="text-xs text-zinc-500 mb-4">{w.ieNo} — {w.malad}</div>
+
+        <div className="bg-bg-2 border border-border rounded-lg p-3 mb-4">
+          <div className="flex justify-between text-xs">
+            <span>Hedef: <b>{w.hedef}</b></span>
+            <span className="text-green">Yapılan: <b>{prod}</b></span>
+            <span className="text-amber">Kalan: <b>{kalan}</b></span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Adet *</label>
+              <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder={String(kalan)}
+                className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-lg text-center font-bold text-zinc-200 focus:outline-none focus:border-accent" autoFocus />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Fire</label>
+              <input type="number" value={fire} onChange={e => setFire(e.target.value)} placeholder="0"
+                className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-lg text-center font-bold text-red focus:outline-none focus:border-red" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Açıklama</label>
+            <input value={aciklama} onChange={e => setAciklama(e.target.value)} placeholder="Opsiyonel..."
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+
+          {/* Duruş Kayıtları */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[11px] text-zinc-500 font-semibold">Duruş Kayıtları</label>
+              <button onClick={addDurus} className="text-[10px] text-accent hover:underline">+ Duruş Ekle</button>
+            </div>
+            {duruslar.map((d, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)}
+                  className="flex-1 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200">
+                  <option value="">— Duruş kodu —</option>
+                  {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} - {k.ad}</option>)}
+                </select>
+                <input type="number" value={d.sure || ''} onChange={e => updateDurus(i, 'sure', e.target.value)} placeholder="dk"
+                  className="w-16 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-center text-zinc-200" />
+                <button onClick={() => setDuruslar(p => p.filter((_, idx) => idx !== i))} className="text-red text-xs px-1">✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm">İptal</button>
+          <button onClick={save} disabled={saving} className="flex-1 py-3 bg-green hover:bg-green/80 text-black font-bold rounded-lg text-sm disabled:opacity-40">
+            {saving ? 'Kaydediliyor...' : '✅ Kaydet'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
