@@ -5,6 +5,7 @@ import { uid, today, pctColor } from '@/lib/utils'
 import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { requirePassword } from '@/lib/prompt'
 
@@ -12,10 +13,6 @@ export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
-
-  function toggleStatus(s: string) {
-    setStatusFilter(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
-  }
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -207,21 +204,14 @@ export function WorkOrders() {
       <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no, malzeme veya operasyon ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
-        <div className="flex gap-3 items-center flex-wrap">
-          {[
-            { id: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
-            { id: 'uretimde', label: 'Üretimde', color: 'text-accent' },
-            { id: 'kismi', label: 'Kısmi', color: 'text-amber' },
-            { id: 'beklemede', label: 'Beklemede', color: 'text-purple-400' },
-            { id: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
-            { id: 'iptal', label: 'İptal', color: 'text-red' },
-          ].map(s => (
-            <label key={s.id} className={`flex items-center gap-1 text-xs cursor-pointer ${s.color}`}>
-              <input type="checkbox" checked={statusFilter.has(s.id)} onChange={() => toggleStatus(s.id)} className="accent-accent" />
-              {s.label}
-            </label>
-          ))}
-        </div>
+        <MultiCheckDropdown label="Durum" options={[
+          { value: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
+          { value: 'uretimde', label: 'Üretimde', color: 'text-accent' },
+          { value: 'kismi', label: 'Kısmi', color: 'text-amber' },
+          { value: 'beklemede', label: 'Beklemede', color: 'text-purple-400' },
+          { value: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
+          { value: 'iptal', label: 'İptal', color: 'text-red' },
+        ]} selected={statusFilter} onChange={setStatusFilter} />
         <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option><option value="urun">Ürüne Göre</option>
         </select>
