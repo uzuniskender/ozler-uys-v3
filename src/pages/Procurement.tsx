@@ -66,9 +66,18 @@ export function Procurement() {
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Malzeme veya sipariş ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
-        <select value={durumFilter} onChange={e => setDurumFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tümü</option><option value="bekliyor">Bekleyen</option><option value="geldi">Teslim Alınan</option>
-        </select>
+        <div className="flex gap-3 items-center">
+          {[
+            { id: 'all', label: 'Tümü', color: 'text-zinc-400' },
+            { id: 'bekliyor', label: 'Bekleyen', color: 'text-amber' },
+            { id: 'geldi', label: 'Teslim Alınan', color: 'text-green' },
+          ].map(s => (
+            <label key={s.id} className={`flex items-center gap-1 text-xs cursor-pointer ${durumFilter === s.id ? s.color : 'text-zinc-600'}`}>
+              <input type="radio" name="durumFilter" checked={durumFilter === s.id} onChange={() => setDurumFilter(s.id)} className="accent-accent" />
+              {s.label}
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">

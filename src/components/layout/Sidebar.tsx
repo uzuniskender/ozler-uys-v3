@@ -45,8 +45,23 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
   function getBadge(key?: string): string {
     if (!key) return ''
+    if (key === 'orders') {
+      const open = store.orders.filter(o => o.durum !== 'kapalı').length
+      return open > 0 ? String(open) : ''
+    }
+    if (key === 'workOrders') {
+      const active = store.workOrders.filter(w => {
+        const prod = store.logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+        return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi'
+      }).length
+      return active > 0 ? String(active) : ''
+    }
+    if (key === 'dash') {
+      const okunmamis = store.operatorNotes.filter(n => !n.okundu).length
+      return okunmamis > 0 ? String(okunmamis) : ''
+    }
     const arr = (store as unknown as Record<string, unknown>)[key]
-    if (Array.isArray(arr)) return String(arr.length)
+    if (Array.isArray(arr) && arr.length > 0) return String(arr.length)
     return ''
   }
 
@@ -87,7 +102,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                     <item.icon size={15} />
                     <span className="flex-1 text-left">{item.label}</span>
                     {badge && (
-                      <span className="text-[10px] font-mono bg-bg-3 text-zinc-400 px-1.5 py-0.5 rounded">
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${item.badge === 'dash' && parseInt(badge) > 0 ? 'bg-red/20 text-red' : 'bg-bg-3 text-zinc-400'}`}>
                         {badge}
                       </span>
                     )}
