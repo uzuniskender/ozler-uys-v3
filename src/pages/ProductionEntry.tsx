@@ -198,6 +198,11 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
     const q = parseInt(qty) || 0
     const f = parseInt(fire) || 0
     if (q <= 0) { toast.error('Miktar girmelisiniz'); return }
+    // #2: Fazla üretim kontrolü
+    if (q + prod > w.hedef) {
+      const fazla = (q + prod) - w.hedef
+      if (!confirm(`Hedef: ${w.hedef}, mevcut: ${prod}, girilecek: ${q}\n${fazla} adet FAZLA üretim olacak. Devam?`)) return
+    }
     setSaving(true)
 
     const logId = uid()

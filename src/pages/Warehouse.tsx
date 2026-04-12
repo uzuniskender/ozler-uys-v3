@@ -106,6 +106,19 @@ export function Warehouse() {
                   <td className="px-4 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${h.tip === 'giris' ? 'bg-green/10 text-green' : 'bg-red/10 text-red'}`}>{h.tip === 'giris' ? '↑ Giriş' : '↓ Çıkış'}</span></td>
                   <td className="px-4 py-1.5 text-right font-mono">{h.miktar}</td>
                   <td className="px-4 py-1.5 text-zinc-500 max-w-[200px] truncate">{h.aciklama || '—'}</td>
+                  <td className="px-4 py-1.5 text-right">
+                    {!h.logId && <><button onClick={async () => {
+                      const newMiktar = prompt('Yeni miktar:', String(h.miktar))
+                      if (!newMiktar) return
+                      await supabase.from('uys_stok_hareketler').update({ miktar: parseFloat(newMiktar) || h.miktar }).eq('id', h.id)
+                      loadAll(); toast.success('Stok hareketi güncellendi')
+                    }} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düzenle</button>
+                    <button onClick={async () => {
+                      if (!confirm('Bu stok hareketini silmek istediğinize emin misiniz?')) return
+                      await supabase.from('uys_stok_hareketler').delete().eq('id', h.id)
+                      loadAll(); toast.success('Stok hareketi silindi')
+                    }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></>}
+                  </td>
                 </tr>
               ))}
             </tbody>

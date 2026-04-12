@@ -69,6 +69,13 @@ export function WorkOrders() {
   }, [filtered, groupBy, orders])
 
   async function setDurum(id: string, durum: string) {
+    // #3: İE iptal onayı
+    if (durum === 'iptal') {
+      const wo = workOrders.find(w => w.id === id)
+      const prod = wo ? logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0) : 0
+      if (prod > 0 && !confirm(`Bu İE'de ${prod} adet üretim var. İptal etmek istediğinize emin misiniz?\n\nÜretim logları silinmeyecek, sadece İE durumu "iptal" olacak.`)) return
+      if (prod === 0 && !confirm('Bu İE iptal edilecek. Devam?')) return
+    }
     await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     loadAll(); toast.success('Durum güncellendi: ' + durum)
   }

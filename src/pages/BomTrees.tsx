@@ -7,7 +7,7 @@ import type { BomTree } from '@/types'
 import { Plus, Trash2, Pencil } from 'lucide-react'
 
 export function BomTrees() {
-  const { bomTrees, loadAll } = useStore()
+  const { bomTrees, recipes, loadAll } = useStore()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
 
@@ -15,6 +15,25 @@ export function BomTrees() {
     if (!confirm('Bu ürün ağacını silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_bom_trees').delete().eq('id', id)
     loadAll(); toast.success('Ürün ağacı silindi')
+  }
+
+  async function createRecipeFromBom(bt: BomTree) {
+    const existing = recipes.find(r => r.mamulKod === bt.mamulKod)
+    if (existing && !confirm(`"${bt.mamulKod}" için reçete zaten var. Üzerine yazılsın mı?`)) return
+    const satirlar = (bt.rows || []).map(row => ({
+      id: uid(), kirno: row.kirno || '1', malkod: row.malkod, malad: row.malad,
+      tip: row.tip || 'Hammadde', miktar: row.miktar || 1, birim: row.birim || 'Adet',
+      opId: '', istId: '', hazirlikSure: 0, islemSure: 0,
+    }))
+    if (existing) {
+      await supabase.from('uys_recipes').update({ satirlar, bom_id: bt.id }).eq('id', existing.id)
+    } else {
+      await supabase.from('uys_recipes').insert({
+        id: uid(), rc_kod: 'RC-' + bt.mamulKod, ad: bt.ad || bt.mamulAd,
+        bom_id: bt.id, mamul_kod: bt.mamulKod, mamul_ad: bt.mamulAd || bt.ad, satirlar,
+      })
+    }
+    loadAll(); toast.success(`"${bt.mamulKod}" reçetesi ${existing ? 'güncellendi' : 'oluşturuldu'} — ${satirlar.length} satır`)
   }
 
   return (
@@ -33,6 +52,7 @@ export function BomTrees() {
                 <td className="px-4 py-2 text-zinc-300">{bt.ad || bt.mamulAd}</td>
                 <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
                 <td className="px-4 py-2 text-right">
+                  <button onClick={() => createRecipeFromBom(bt)} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20 mr-1">📋 Reçete Oluştur</button>
                   <button onClick={() => setSelected(bt)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>
                   <button onClick={() => deleteBom(bt.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
                 </td>

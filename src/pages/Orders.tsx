@@ -301,7 +301,7 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
   )
 }
 
-function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
+function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; malkod: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
   const { recipes, stokHareketler, tedarikler, loadAll } = useStore()
   const [tab, setTab] = useState<'ie'|'mrp'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
@@ -349,7 +349,18 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
             const { recipes: fullRecipes } = useStore.getState()
             const count = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, fullRecipes)
             loadAll(); toast.success(count + ' İE yeniden oluşturuldu')
-          }} className="px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">⛓ Zincirleme Yeniden Çalıştır</button>}
+          }} className="px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">⛓ Yeniden Çalıştır</button>}
+          {order.receteId && <button onClick={async () => {
+            const { recipes: fullRecipes } = useStore.getState()
+            const rc = fullRecipes.find(r => r.id === order.receteId)
+            if (!rc) { toast.error('Reçete bulunamadı'); return }
+            // Mevcut İE'lerin malkod listesi
+            const mevcutKodlar = new Set(workOrders.map(w => w.malkod))
+            const eksikSatirlar = (rc.satirlar || []).filter(s => !mevcutKodlar.has(s.malkod))
+            if (!eksikSatirlar.length) { toast.info('Eksik İE yok — tüm bileşenler mevcut'); return }
+            const count = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, fullRecipes)
+            loadAll(); toast.success(count + ' eksik İE oluşturuldu')
+          }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">+ Eksik İE Tamamla</button>}
         </div>
 
         {tab === 'ie' && (

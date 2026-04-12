@@ -1,6 +1,7 @@
+import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
-import { today, pctColor } from '@/lib/utils'
+import { uid, today, pctColor } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench } from 'lucide-react'
 
 function StatCard({ value, label, color, icon: Icon }: { value: number | string; label: string; color: string; icon: React.ElementType }) {
@@ -96,8 +97,24 @@ export function Dashboard() {
       {/* Min Stok Uyarı */}
       {minStokUyari.length > 0 && (
         <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg">
-          <div className="text-sm font-semibold text-amber mb-2">
-            ⚠ {minStokUyari.length} malzeme minimum stok altında
+          <div className="text-sm font-semibold text-amber mb-2 flex items-center justify-between">
+            <span>⚠ {minStokUyari.length} malzeme minimum stok altında</span>
+            <button onClick={async () => {
+              if (!confirm(`${minStokUyari.length} malzeme için tedarik önerisi oluşturulsun mu?`)) return
+              let count = 0
+              for (const m of minStokUyari) {
+                const stok = stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+                const eksik = Math.max(0, m.minStok - stok)
+                if (eksik <= 0) continue
+                await supabase.from('uys_tedarikler').insert({
+                  id: uid(), malkod: m.kod, malad: m.ad, miktar: Math.ceil(eksik),
+                  birim: m.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false,
+                  not_: 'Min stok önerisi', siparis_no: '',
+                })
+                count++
+              }
+              loadAll(); toast.success(count + ' tedarik önerisi oluşturuldu')
+            }} className="px-2 py-1 bg-amber/20 text-amber rounded text-[10px] hover:bg-amber/30">Tedarik Oluştur</button>
           </div>
           <div className="space-y-1">
             {minStokUyari.slice(0, 5).map(m => (

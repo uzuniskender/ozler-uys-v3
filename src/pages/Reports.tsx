@@ -18,6 +18,9 @@ export function Reports() {
     { id: 'durus', label: 'Duruş Analizi' },
     { id: 'gecikme', label: 'Gecikme' },
     { id: 'operator', label: 'Operatör Performans' },
+    { id: 'maltuket', label: 'Malzeme Tüketim' },
+    { id: 'trend', label: 'Trend' },
+    { id: 'istperf', label: 'İstasyon Perf.' },
   ]
 
   const todayStr = today()
@@ -268,6 +271,81 @@ export function Reports() {
               </ResponsiveContainer>
               <table className="w-full text-xs mt-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operatör</th><th className="text-right px-4 py-2">Üretim</th><th className="text-right px-4 py-2">Fire</th><th className="text-right px-4 py-2">Gün</th><th className="text-right px-4 py-2">Günlük Ort.</th><th className="text-right px-4 py-2">Fire %</th></tr></thead>
               <tbody>{oprData.map(o => (<tr key={o.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{o.ad}</td><td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td><td className="px-4 py-1.5 text-right font-mono text-red">{o.fire}</td><td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td><td className="px-4 py-1.5 text-right font-mono text-accent">{o.gunlukOrt}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{o.uretim > 0 ? Math.round(o.fire / o.uretim * 100) : 0}%</td></tr>))}</tbody></table>
+              </>
+            ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+          </div>
+        )
+      })()}
+
+      {/* Malzeme Tüketim */}
+      {tab === 'maltuket' && (() => {
+        const tuketimMap: Record<string, { malkod: string; malad: string; toplam: number }> = {}
+        logs.forEach(l => {
+          if (!l.malkod) return
+          if (!tuketimMap[l.malkod]) tuketimMap[l.malkod] = { malkod: l.malkod, malad: '', toplam: 0 }
+          tuketimMap[l.malkod].toplam += l.qty
+        })
+        // HM tüketim from stok hareketleri
+        const { stokHareketler } = useStore.getState()
+        stokHareketler.filter(h => h.tip === 'cikis' && h.logId).forEach(h => {
+          if (!tuketimMap[h.malkod]) tuketimMap[h.malkod] = { malkod: h.malkod, malad: h.malad, toplam: 0 }
+          tuketimMap[h.malkod].malad = h.malad
+          tuketimMap[h.malkod].toplam += h.miktar
+        })
+        const data = Object.values(tuketimMap).sort((a, b) => b.toplam - a.toplam)
+        return (
+          <div className="bg-bg-2 border border-border rounded-lg p-4">
+            <h3 className="text-sm font-semibold mb-3">Malzeme Tüketim ({data.length} malzeme)</h3>
+            {data.length ? (
+              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Malzeme Kodu</th><th className="text-left px-4 py-2">Malzeme Adı</th><th className="text-right px-4 py-2">Toplam Tüketim</th></tr></thead>
+              <tbody>{data.slice(0, 30).map(d => (<tr key={d.malkod} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-accent">{d.malkod}</td><td className="px-4 py-1.5 text-zinc-300">{d.malad}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{Math.round(d.toplam)}</td></tr>))}</tbody></table>
+            ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+          </div>
+        )
+      })()}
+
+      {/* Trend */}
+      {tab === 'trend' && (() => {
+        const gunMap: Record<string, { gun: string; uretim: number; fire: number }> = {}
+        logs.forEach(l => {
+          if (!l.tarih) return
+          if (!gunMap[l.tarih]) gunMap[l.tarih] = { gun: l.tarih, uretim: 0, fire: 0 }
+          gunMap[l.tarih].uretim += l.qty
+          gunMap[l.tarih].fire += l.fire || 0
+        })
+        const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-30)
+        return (
+          <div className="bg-bg-2 border border-border rounded-lg p-4">
+            <h3 className="text-sm font-semibold mb-3">Üretim Trend (son 30 gün)</h3>
+            {data.length > 1 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis dataKey="gun" tick={{ fontSize: 9, fill: '#888' }} /><YAxis tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Line type="monotone" dataKey="uretim" stroke="#06b6d4" strokeWidth={2} name="Üretim" /><Line type="monotone" dataKey="fire" stroke="#ef4444" strokeWidth={1} name="Fire" /></LineChart>
+              </ResponsiveContainer>
+            ) : <div className="p-8 text-center text-zinc-600">Yeterli veri yok</div>}
+          </div>
+        )
+      })()}
+
+      {/* İstasyon Performans */}
+      {tab === 'istperf' && (() => {
+        const istMap: Record<string, { ad: string; uretim: number; woCount: number }> = {}
+        workOrders.forEach(w => {
+          const key = w.istAd || w.opAd || 'Tanımsız'
+          if (!istMap[key]) istMap[key] = { ad: key, uretim: 0, woCount: 0 }
+          istMap[key].uretim += logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+          istMap[key].woCount++
+        })
+        const data = Object.values(istMap).sort((a, b) => b.uretim - a.uretim)
+        return (
+          <div className="bg-bg-2 border border-border rounded-lg p-4">
+            <h3 className="text-sm font-semibold mb-3">İstasyon/Operasyon Performansı ({data.length})</h3>
+            {data.length ? (
+              <>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={data.slice(0, 15)}><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis dataKey="ad" tick={{ fontSize: 9, fill: '#888' }} /><YAxis tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Bar dataKey="uretim" fill="#22c55e" name="Üretim" radius={[3, 3, 0, 0]} /></BarChart>
+              </ResponsiveContainer>
+              <table className="w-full text-xs mt-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">İstasyon</th><th className="text-right px-4 py-2">İE Sayısı</th><th className="text-right px-4 py-2">Toplam Üretim</th></tr></thead>
+              <tbody>{data.map(d => (<tr key={d.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{d.ad}</td><td className="px-4 py-1.5 text-right font-mono">{d.woCount}</td><td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td></tr>))}</tbody></table>
               </>
             ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
           </div>
