@@ -5,24 +5,25 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download } from 'lucide-react'
-import { hesaplaMRP } from '@/features/production/mrp'
+import { hesaplaMRP, type MRPRow } from '@/features/production/mrp'
 
 export function MRP() {
-  const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, loadAll } = useStore()
+  const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, loadAll } = useStore()
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
-  const [sonuc, setSonuc] = useState<ReturnType<typeof hesaplaMRP>>([])
+  const [sonuc, setSonuc] = useState<MRPRow[]>([])
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
-  // Aktif siparişler
   const aktifOrders = useMemo(() =>
     orders.filter(o => o.durum !== 'Tamamlandı' && o.durum !== 'İptal').sort((a, b) => (a.termin || '').localeCompare(b.termin || '')),
     [orders])
 
-  function toggleOrder(id: string) {
-    setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  }
+  // Bağımsız YM İE'leri
+  const ymIEs = useMemo(() =>
+    workOrders.filter(w => w.bagimsiz && w.durum !== 'iptal' && logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef),
+    [workOrders, logs])
 
+  function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))) }
   function selectNone() { setSelectedOrders(new Set()) }
 
@@ -34,11 +35,11 @@ export function MRP() {
     return total > 0 ? Math.min(100, Math.round(done / total * 100)) : 0
   }
 
-  // Kesim planı kontrolü
+  // Kesim planı eksik uyarısı
   const kesimEksik = useMemo(() => {
     if (!selectedOrders.size) return 0
     const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
-    const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap(s => (s.kesimler || []).map((k: { woId?: string }) => k.woId))))
+    const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
     return workOrders.filter(w => {
       if (!selectedOrders.has(w.orderId)) return false
       if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
@@ -49,22 +50,15 @@ export function MRP() {
 
   function hesapla() {
     if (!selectedOrders.size) { toast.error('Sipariş seçin'); return }
-    const allRows: ReturnType<typeof hesaplaMRP> = []
-    for (const orderId of selectedOrders) {
-      const ord = orders.find(o => o.id === orderId)
-      if (!ord?.receteId) continue
-      const rc = recipes.find(r => r.id === ord.receteId)
-      if (!rc) continue
-      const rows = hesaplaMRP(orderId, ord.adet, rc, stokHareketler, tedarikler, [])
-      rows.forEach(r => {
-        const existing = allRows.find(x => x.malkod === r.malkod)
-        if (existing) { existing.brut += r.brut; existing.net += r.net }
-        else allRows.push({ ...r })
-      })
-    }
-    setSonuc(allRows.sort((a, b) => b.net - a.net))
+    const ordIds = [...selectedOrders]
+    const cpMapped = cuttingPlans.map((p: any) => ({
+      hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+      gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+    }))
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
+    setSonuc(result)
     setHesaplandi(true)
-    toast.success(allRows.length + ' kalem hesaplandı')
+    toast.success(result.length + ' kalem hesaplandı · ' + result.filter(r => r.durum === 'eksik').length + ' eksik')
   }
 
   const eksikler = sonuc.filter(s => s.net > 0)
@@ -76,10 +70,12 @@ export function MRP() {
     if (!await showConfirm(`${secili.length} malzeme için tedarik oluşturulacak. Devam?`)) return
     let count = 0
     for (const s of secili) {
+      // Aynı malkod için zaten açık tedarik var mı?
+      const mevcut = tedarikler.find(t => t.malkod === s.malkod && !t.geldi)
+      if (mevcut) { toast.info(s.malkod + ' için zaten açık tedarik var — atlandı'); continue }
       await supabase.from('uys_tedarikler').insert({
         id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
-        birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false,
-        not_: 'MRP önerisi',
+        birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, not_: 'MRP önerisi',
       })
       count++
     }
@@ -93,9 +89,9 @@ export function MRP() {
       const rows = sonuc.map(s => ({
         'Malzeme Kodu': s.malkod, 'Malzeme Adı': s.malad, 'Tip': s.tip || '',
         'Brüt İhtiyaç': Math.round(s.brut * 100) / 100, 'Stok': Math.round(s.stok * 100) / 100,
-        'Açık Tedarik': Math.round((s.acikTedarik || 0) * 100) / 100,
+        'Açık Tedarik': Math.round(s.acikTedarik * 100) / 100,
         'Net İhtiyaç': Math.round(s.net * 100) / 100,
-        'Durum': s.net <= 0 ? 'Yeterli' : s.stok > 0 ? 'Eksik' : 'Yok', 'Birim': s.birim || 'Adet',
+        'Durum': s.durum, 'Birim': s.birim || 'Adet',
       }))
       const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'MRP'); XLSX.writeFile(wb, `mrp_raporu_${today()}.xlsx`)
@@ -107,14 +103,14 @@ export function MRP() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">📊 MRP — Malzeme İhtiyaç Planlaması</h1>
-          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş</p></div>
+          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş · {ymIEs.length} YM İE</p></div>
         {hesaplandi && <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>}
       </div>
 
       {/* Sipariş Seçimi */}
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-semibold text-zinc-500 uppercase">Siparişler — tıklayarak seç/kaldır</div>
+          <div className="text-xs font-semibold text-zinc-500 uppercase">Siparişler</div>
           <div className="flex gap-2">
             <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
             <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
@@ -122,8 +118,7 @@ export function MRP() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[250px] overflow-y-auto">
           {aktifOrders.map(o => {
-            const sel = selectedOrders.has(o.id)
-            const pct = orderPct(o.id)
+            const sel = selectedOrders.has(o.id); const pct = orderPct(o.id)
             return (
               <button key={o.id} onClick={() => toggleOrder(o.id)}
                 className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : 'bg-bg-3 border border-border'}`}>
@@ -132,11 +127,19 @@ export function MRP() {
                   <span className="font-mono font-medium">{o.siparisNo}</span>
                   <span className="text-zinc-500 ml-auto">{pct}%</span>
                 </div>
-                <div className="text-zinc-500 truncate mt-0.5">{o.musteri}</div>
+                <div className="text-zinc-500 truncate mt-0.5">{o.musteri} · {o.mamulAd || ''}</div>
               </button>
             )
           })}
         </div>
+
+        {/* YM İE bilgisi */}
+        {ymIEs.length > 0 && (
+          <div className="mt-2 text-[10px] text-amber px-2 py-1 bg-amber/5 border border-amber/15 rounded">
+            + {ymIEs.length} bağımsız YM İE dahil edilecek ({ymIEs.map(w => w.ieNo).slice(0, 5).join(', ')}{ymIEs.length > 5 ? '...' : ''})
+          </div>
+        )}
+
         <div className="flex items-center gap-3 mt-3">
           <button onClick={hesapla} disabled={!selectedOrders.size}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
@@ -149,7 +152,7 @@ export function MRP() {
       {/* Kesim Uyarısı */}
       {kesimEksik > 0 && (
         <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg text-xs text-red">
-          🚫 <strong>{kesimEksik} kesim İE'si</strong> için kesim planı oluşturulmamış. MRP sonuçları eksik olabilir.
+          🚫 <strong>{kesimEksik} kesim İE'si</strong> için kesim planı oluşturulmamış. MRP sonuçları eksik olabilir — önce Kesim Planları sayfasından plan oluşturun.
         </div>
       )}
 
@@ -165,45 +168,34 @@ export function MRP() {
                 + Toplu Tedarik ({selectedRows.size})
               </button>
             )}
-            <button onClick={() => {
-              setSelectedRows(new Set(eksikler.map(s => s.malkod)))
-            }} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">☑ Eksikleri Seç</button>
+            <button onClick={() => setSelectedRows(new Set(eksikler.map(s => s.malkod)))} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">☑ Eksikleri Seç</button>
           </div>
           <div className="max-h-[400px] overflow-y-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-bg-2">
-                <tr className="border-b border-border text-zinc-500">
-                  <th className="px-2 py-2 w-6"><input type="checkbox" onChange={e => setSelectedRows(e.target.checked ? new Set(eksikler.map(s => s.malkod)) : new Set())} className="accent-accent" /></th>
-                  <th className="text-left px-3 py-2">Malzeme Kodu</th>
-                  <th className="text-left px-3 py-2">Malzeme Adı</th>
-                  <th className="text-left px-3 py-2">Tip</th>
-                  <th className="text-right px-3 py-2">Brüt</th>
-                  <th className="text-right px-3 py-2">Stok</th>
-                  <th className="text-right px-3 py-2">Açık Ted.</th>
-                  <th className="text-right px-3 py-2">Net</th>
-                  <th className="text-left px-3 py-2">Durum</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
+              <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500">
+                <th className="px-2 py-2 w-6"><input type="checkbox" onChange={e => setSelectedRows(e.target.checked ? new Set(eksikler.map(s => s.malkod)) : new Set())} className="accent-accent" /></th>
+                <th className="text-left px-3 py-2">Malzeme Kodu</th><th className="text-left px-3 py-2">Malzeme Adı</th><th className="text-left px-3 py-2">Tip</th>
+                <th className="text-right px-3 py-2">Brüt</th><th className="text-right px-3 py-2">Stok</th><th className="text-right px-3 py-2">Açık Ted.</th>
+                <th className="text-right px-3 py-2">Net</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th>
+              </tr></thead>
               <tbody>
                 {sonuc.map(s => {
-                  const durum = s.net <= 0 ? 'yeterli' : s.stok > 0 ? 'eksik' : 'yok'
-                  const color = durum === 'yeterli' ? 'text-green' : durum === 'eksik' ? 'text-amber' : 'text-red'
+                  const color = s.durum === 'yeterli' ? 'text-green' : s.durum === 'eksik' ? 'text-amber' : 'text-red'
                   return (
                     <tr key={s.malkod} className="border-b border-border/30 hover:bg-bg-3/30">
-                      <td className="px-2 py-1.5">{durum !== 'yeterli' && <input type="checkbox" checked={selectedRows.has(s.malkod)} onChange={() => {
-                        setSelectedRows(prev => { const n = new Set(prev); n.has(s.malkod) ? n.delete(s.malkod) : n.add(s.malkod); return n })
-                      }} className="accent-accent" />}</td>
+                      <td className="px-2 py-1.5">{s.durum !== 'yeterli' && <input type="checkbox" checked={selectedRows.has(s.malkod)} onChange={() => setSelectedRows(prev => { const n = new Set(prev); n.has(s.malkod) ? n.delete(s.malkod) : n.add(s.malkod); return n })} className="accent-accent" />}</td>
                       <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
                       <td className="px-3 py-1.5 text-zinc-300">{s.malad}</td>
                       <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{s.tip || '—'}</span></td>
-                      <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut * 100) / 100}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok * 100) / 100}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{(s.acikTedarik || 0) > 0 ? Math.round(s.acikTedarik! * 100) / 100 : '—'}</td>
-                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net * 100) / 100}</td>
-                      <td className={`px-3 py-1.5 font-semibold ${color}`}>{durum === 'yeterli' ? '✓ Yeterli' : durum === 'eksik' ? '⚠ Eksik' : '✗ Yok'}</td>
-                      <td className="px-3 py-1.5">{durum !== 'yeterli' && (
+                      <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{s.acikTedarik > 0 ? Math.round(s.acikTedarik) : '—'}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td>
+                      <td className={`px-3 py-1.5 font-semibold ${color}`}>{s.durum === 'yeterli' ? '✓ Yeterli' : '⚠ Eksik'}</td>
+                      <td className="px-3 py-1.5">{s.durum !== 'yeterli' && (
                         <button onClick={async () => {
+                          const mevcut = tedarikler.find(t => t.malkod === s.malkod && !t.geldi)
+                          if (mevcut) { toast.info('Zaten açık tedarik var'); return }
                           await supabase.from('uys_tedarikler').insert({
                             id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
                             birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, not_: 'MRP',
