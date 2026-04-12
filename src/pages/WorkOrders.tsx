@@ -8,7 +8,7 @@ import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, loadAll } = useStore()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi']))
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
 
   function toggleStatus(s: string) {
     setStatusFilter(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
@@ -34,6 +34,12 @@ export function WorkOrders() {
 
   async function topluSil() {
     if (!selected.size) return
+    // Üretim girişi olanları kontrol et
+    const uretimli = [...selected].filter(id => logs.some(l => l.woId === id))
+    if (uretimli.length > 0) {
+      toast.error(uretimli.length + ' İE\'de üretim var — silemezsiniz, önce İptal Et kullanın')
+      return
+    }
     if (!confirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
     for (const id of selected) {
       await supabase.from('uys_work_orders').delete().eq('id', id)
@@ -84,16 +90,66 @@ export function WorkOrders() {
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0], 'tr'))
   }, [filtered, groupBy, orders])
 
+  // İE Durum Değiştirme — v2 kuralları
   async function setDurum(id: string, durum: string) {
-    // #3: İE iptal onayı
+    const wo = workOrders.find(w => w.id === id)
+    if (!wo) return
+    const prod = logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0)
+    const tarih = today()
+
     if (durum === 'iptal') {
-      const wo = workOrders.find(w => w.id === id)
-      const prod = wo ? logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0) : 0
-      if (prod > 0 && !confirm(`Bu İE'de ${prod} adet üretim var. İptal etmek istediğinize emin misiniz?\n\nÜretim logları silinmeyecek, sadece İE durumu "iptal" olacak.`)) return
-      if (prod === 0 && !confirm('Bu İE iptal edilecek. Devam?')) return
+      // İptal nedeni zorunlu
+      const neden = prompt('İptal nedeni (zorunlu):')
+      if (!neden?.trim()) { toast.error('İptal nedeni zorunlu'); return }
+
+      if (prod > 0) {
+        if (!confirm(`${wo.ieNo}: ${prod} adet üretim var.\n\nİptal edilirse:\n• Üretilen ${prod} adet stoktan ÇIKARILIR\n• Tüketilen hammaddeler stoka GERİ EKLENİR\n\nDevam?`)) return
+
+        // Ters stok hareketi — üretilen mamul stoktan çıkar
+        await supabase.from('uys_stok_hareketler').insert({
+          id: uid(), tarih, malkod: wo.malkod, malad: wo.malad,
+          miktar: prod, tip: 'cikis',
+          aciklama: 'İPTAL ters kayıt — ' + wo.ieNo + ' (' + neden + ')', wo_id: id,
+        })
+
+        // Tüketilen HM'leri geri ekle
+        const hmCikislar = stokHareketler.filter(h => h.woId === id && h.tip === 'cikis' && h.logId)
+        for (const h of hmCikislar) {
+          await supabase.from('uys_stok_hareketler').insert({
+            id: uid(), tarih, malkod: h.malkod, malad: h.malad,
+            miktar: h.miktar, tip: 'giris',
+            aciklama: 'İPTAL HM iadesi — ' + wo.ieNo, wo_id: id,
+          })
+        }
+        toast.info('Ters stok hareketi yazıldı')
+      }
+
+      await supabase.from('uys_work_orders').update({
+        durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden,
+      }).eq('id', id)
+      loadAll(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
-    await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
-    loadAll(); toast.success('Durum güncellendi: ' + durum)
+
+    if (durum === 'tamamlandi') {
+      await supabase.from('uys_work_orders').update({ durum, tamamlanma_tarih: tarih }).eq('id', id)
+    } else {
+      await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
+    }
+    loadAll(); toast.success(wo.ieNo + ' → ' + durum)
+  }
+
+  // İE Silme — sadece üretim yoksa
+  async function deleteWO(id: string) {
+    const wo = workOrders.find(w => w.id === id)
+    if (!wo) return
+    const prod = logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0)
+    if (prod > 0) {
+      toast.error('Üretim girişi var (' + prod + ' adet) — silemezsiniz, İptal Et kullanın')
+      return
+    }
+    if (!confirm(wo.ieNo + ' silinecek. Bu işlem geri alınamaz.')) return
+    await supabase.from('uys_work_orders').delete().eq('id', id)
+    loadAll(); toast.success(wo.ieNo + ' silindi')
   }
 
   async function updateHedef(id: string) {
@@ -136,6 +192,7 @@ export function WorkOrders() {
             { id: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
             { id: 'uretimde', label: 'Üretimde', color: 'text-accent' },
             { id: 'kismi', label: 'Kısmi', color: 'text-amber' },
+            { id: 'beklemede', label: 'Beklemede', color: 'text-purple-400' },
             { id: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
             { id: 'iptal', label: 'İptal', color: 'text-red' },
           ].map(s => (
@@ -191,7 +248,7 @@ export function WorkOrders() {
                     <td className="px-3 py-1.5">
                       <select value={w.durum || 'bekliyor'} onChange={e => setDurum(w.id, e.target.value)}
                         className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${w.durum === 'tamamlandi' ? 'text-green' : w.durum === 'iptal' ? 'text-red' : 'text-accent'}`}>
-                        <option value="bekliyor">Bekliyor</option><option value="uretimde">Üretimde</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
+                        <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                       </select>
                     </td>
                     <td className="px-3 py-1.5 text-right"><button onClick={() => setDetailWO(w.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={12} /></button></td>
@@ -239,6 +296,25 @@ export function WorkOrders() {
                 <option value="">— Atanmadı —</option>
                 {operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr')).map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
               </select>
+            </div>
+            {/* İE Durum Butonları — v2 kuralları */}
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {(detailW.durum === 'beklemede' || detailW.durum === 'tamamlandi') && (
+                <button onClick={() => { setDurum(detailW.id, 'uretimde'); setDetailWO(null) }} className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">
+                  ▶ {detailW.durum === 'tamamlandi' ? 'Devam Ettir' : 'Devam Et'}
+                </button>
+              )}
+              {detailW.durum !== 'beklemede' && detailW.durum !== 'tamamlandi' && detailW.durum !== 'iptal' && (
+                <button onClick={() => { setDurum(detailW.id, 'beklemede'); setDetailWO(null) }} className="px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs hover:bg-purple-500/20">⏸ Beklet</button>
+              )}
+              {detailW.durum !== 'tamamlandi' && detailW.durum !== 'iptal' && wProd(detailW.id) > 0 && (
+                <button onClick={() => { setDurum(detailW.id, 'tamamlandi'); setDetailWO(null) }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">✓ Tamamla</button>
+              )}
+              {detailW.durum !== 'iptal' && detailW.durum !== 'tamamlandi' && (
+                wProd(detailW.id) === 0
+                  ? <button onClick={() => { deleteWO(detailW.id); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button>
+                  : <button onClick={() => { setDurum(detailW.id, 'iptal'); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>
+              )}
             </div>
             {detailW.hm?.length > 0 && (
               <><h3 className="text-sm font-semibold mb-2">Hammadde Bileşenleri</h3>
