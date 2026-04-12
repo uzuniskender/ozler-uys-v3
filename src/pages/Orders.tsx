@@ -112,6 +112,31 @@ export function Orders() {
     input.click()
   }
 
+  // Toplu MRP — seçili veya tüm açık siparişler
+  async function topluMRP() {
+    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos } = useStore.getState()
+    const hedefOrders = selIds.size > 0
+      ? orders.filter(o => selIds.has(o.id))
+      : orders.filter(o => orderPct(o.id) < 100 && o.receteId)
+
+    if (!hedefOrders.length) { toast.error('MRP çalıştırılacak sipariş yok'); return }
+    if (!confirm(`${hedefOrders.length} sipariş için MRP çalıştırılacak. Devam?`)) return
+
+    let toplamTedarik = 0
+    for (const o of hedefOrders) {
+      const rc = fullRecipes.find(r => r.id === o.receteId)
+      if (!rc) continue
+      const mrpRows = hesaplaMRP(o.id, o.adet, rc, stokHareketler, tedarikler, wos)
+      const count = await mrpTedarikOlustur(o.id, o.siparisNo, mrpRows)
+      toplamTedarik += count
+
+      // MRP durumunu güncelle
+      await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', o.id)
+    }
+    loadAll()
+    toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${toplamTedarik} tedarik oluşturuldu`)
+  }
+
   function downloadTemplate() {
     import('xlsx').then(XLSX => {
       const ws = XLSX.utils.json_to_sheet([{ 'Sipariş No': 'SIP-001', 'Müşteri': 'ABC Ltd', 'Termin': '2026-05-01', 'Adet': 100, 'Mamul Kod': '', 'Mamul Ad': '' }])
@@ -143,6 +168,7 @@ export function Orders() {
         <div className="flex gap-2">
           <button onClick={downloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white" title="Şablon indir"><Download size={13} /> Şablon</button>
           <button onClick={topluSiparisYukle} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
+          <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>
         </div>
