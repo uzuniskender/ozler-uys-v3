@@ -304,3 +304,20 @@ export interface FireLog {
   operatorlar: LogOperator[]
   not: string
 }
+
+export interface ChecklistItem {
+  id: string
+  tip: 'gorev' | 'istek'
+  baslik: string
+  aciklama: string
+  atanan: string
+  oncelik: 'dusuk' | 'normal' | 'yuksek' | 'acil'
+  durum: 'bekliyor' | 'devam' | 'tamamlandi' | 'iptal'
+  tarih: string
+  termin: string
+  kategori: string
+  resimler: { url: string; ad: string; tarih: string }[]
+  tamamlanma: string
+  olusturan: string
+  notlar: string
+}

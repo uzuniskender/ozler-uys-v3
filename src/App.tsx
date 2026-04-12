@@ -25,6 +25,7 @@ import { Reports } from '@/pages/Reports'
 import { DataManagement } from '@/pages/DataManagement'
 import { Procurement } from '@/pages/Procurement'
 import { OperatorPanel } from '@/pages/OperatorPanel'
+import { Checklist } from '@/pages/Checklist'
 
 function AppContent() {
   const { signOut } = useAuth()
@@ -67,6 +68,7 @@ function AppContent() {
           <Route path="/data" element={<DataManagement />} />
           <Route path="/procurement" element={<Procurement />} />
           <Route path="/operator" element={<OperatorPanel />} />
+          <Route path="/checklist" element={<Checklist />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
