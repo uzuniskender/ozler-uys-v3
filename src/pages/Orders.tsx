@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
 import { buildWorkOrders } from '@/features/production/autoChain'
+import { hesaplaMRP, mrpTedarikOlustur } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Plus, Search, Download, Trash2, Eye, Pencil } from 'lucide-react'
+import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator } from 'lucide-react'
 import type { Order } from '@/types'
 
 export function Orders() {
@@ -167,9 +168,28 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
 }
 
 function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
+  const { recipes, stokHareketler, tedarikler, loadAll } = useStore()
+  const [tab, setTab] = useState<'ie'|'mrp'>('ie')
+  const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
+  const [mrpDone, setMrpDone] = useState(false)
+
+  function runMRP() {
+    const rc = recipes.find(r => r.id === order.receteId)
+    if (!rc) { toast.error('Reçete bulunamadı'); return }
+    const rows = hesaplaMRP(order.id, order.adet, rc, stokHareketler, tedarikler, [])
+    setMrpRows(rows); setMrpDone(true); setTab('mrp')
+    toast.success(rows.length + ' malzeme hesaplandı')
+  }
+
+  async function createTedarik() {
+    const count = await mrpTedarikOlustur(order.id, order.siparisNo, mrpRows)
+    if (count > 0) { loadAll(); toast.success(count + ' tedarik kaydı oluşturuldu') }
+    else toast.info('Tüm ihtiyaçlar karşılanmış')
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div><h2 className="text-lg font-semibold">{order.siparisNo}</h2><p className="text-xs text-zinc-500">{order.musteri} · {order.tarih}</p></div>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
@@ -180,34 +200,77 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
           <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Termin</div><div className={`text-sm font-mono ${order.termin && order.termin < today() ? 'text-red' : ''}`}>{order.termin}</div></div>
           <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Not</div><div className="text-sm truncate">{order.not || '—'}</div></div>
         </div>
-        <h3 className="text-sm font-semibold mb-2">İş Emirleri ({workOrders.length})</h3>
-        {workOrders.length ? (
-          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Ürün</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th><th className="text-right px-3 py-2">Üretilen</th><th className="text-right px-3 py-2">%</th></tr></thead>
-          <tbody>
-            {workOrders.map(w => {
-              const woLogs = logs.filter(l => l.woId === w.id)
-              const prod = woLogs.reduce((a, l) => a + l.qty, 0)
-              const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
-              return (<>
-                <tr key={w.id} className="border-b border-border/50">
-                  <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
-                  <td className="px-3 py-1.5 text-zinc-300">{w.malad}</td>
-                  <td className="px-3 py-1.5 text-zinc-500">{w.opAd}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{w.hedef}</td>
-                  <td className="px-3 py-1.5 text-right font-mono text-green">{prod}</td>
-                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${pctColor(pct)}`}>{pct}%</td>
-                </tr>
-                {woLogs.length > 0 && woLogs.map((l, li) => (
-                  <tr key={w.id + '-' + li} className="bg-bg-3/20">
-                    <td className="px-3 py-1 text-zinc-600" colSpan={2}><span className="font-mono text-[10px]">{l.tarih}</span> {l.operatorlar?.map(o => o.ad).join(', ') || '—'}</td>
-                    <td className="px-3 py-1 text-right font-mono text-[10px] text-green" colSpan={2}>+{l.qty}</td>
-                    <td className="px-3 py-1 text-right font-mono text-[10px] text-red" colSpan={2}>{l.fire > 0 ? '-' + l.fire + ' fire' : ''}</td>
+
+        <div className="flex gap-1 mb-3">
+          <button onClick={() => setTab('ie')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'ie' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>İş Emirleri ({workOrders.length})</button>
+          <button onClick={() => { if (!mrpDone) runMRP(); setTab('mrp') }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'mrp' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
+            <Calculator size={12} /> MRP {mrpDone && `(${mrpRows.length})`}
+          </button>
+        </div>
+
+        {tab === 'ie' && (
+          <>
+          {workOrders.length ? (
+            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Ürün</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th><th className="text-right px-3 py-2">Üretilen</th><th className="text-right px-3 py-2">%</th></tr></thead>
+            <tbody>
+              {workOrders.map(w => {
+                const woLogs = logs.filter(l => l.woId === w.id)
+                const prod = woLogs.reduce((a, l) => a + l.qty, 0)
+                const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
+                return (
+                  <tr key={w.id} className="border-b border-border/50">
+                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
+                    <td className="px-3 py-1.5 text-zinc-300">{w.malad}</td>
+                    <td className="px-3 py-1.5 text-zinc-500">{w.opAd}</td>
+                    <td className="px-3 py-1.5 text-right font-mono">{w.hedef}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-green">{prod}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono font-semibold ${pctColor(pct)}`}>{pct}%</td>
                   </tr>
-                ))}
-              </>)
-            })}
-          </tbody></table>
-        ) : <div className="p-4 text-center text-zinc-600 text-xs">İş emri yok</div>}
+                )
+              })}
+            </tbody></table>
+          ) : <div className="p-4 text-center text-zinc-600 text-xs">İş emri yok — reçete atanmış mı?</div>}
+          </>
+        )}
+
+        {tab === 'mrp' && (
+          <>
+          {mrpRows.length ? (
+            <>
+            <table className="w-full text-xs mb-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Malzeme Kodu</th><th className="text-left px-3 py-2">Malzeme Adı</th><th className="text-left px-3 py-2">Tip</th><th className="text-right px-3 py-2">Brüt</th><th className="text-right px-3 py-2">Stok</th><th className="text-right px-3 py-2">Açık Ted.</th><th className="text-right px-3 py-2 font-semibold">Net İhtiyaç</th></tr></thead>
+            <tbody>
+              {mrpRows.map(r => (
+                <tr key={r.malkod} className={`border-b border-border/30 ${r.net > 0 ? 'bg-red/5' : ''}`}>
+                  <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{r.malkod}</td>
+                  <td className="px-3 py-1.5 text-zinc-300">{r.malad}</td>
+                  <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px]">{r.tip}</span></td>
+                  <td className="px-3 py-1.5 text-right font-mono">{r.brut}</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-green">{r.stok}</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-zinc-500">{r.acikTedarik}</td>
+                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net}</td>
+                </tr>
+              ))}
+            </tbody></table>
+            {mrpRows.some(r => r.net > 0) && (
+              <button onClick={createTedarik} className="px-4 py-2 bg-amber hover:bg-amber/80 text-black rounded-lg text-xs font-semibold">
+                📦 Eksik Malzemeler İçin Tedarik Oluştur ({mrpRows.filter(r => r.net > 0).length} kalem)
+              </button>
+            )}
+            {!mrpRows.some(r => r.net > 0) && (
+              <div className="p-3 bg-green/5 border border-green/20 rounded-lg text-xs text-green">✅ Tüm malzeme ihtiyaçları karşılanmış</div>
+            )}
+            </>
+          ) : (
+            <div className="p-4 text-center">
+              {order.receteId ? (
+                <button onClick={runMRP} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Calculator size={13} className="inline mr-1" /> MRP Hesapla</button>
+              ) : (
+                <div className="text-zinc-600 text-xs">Bu siparişe reçete atanmamış — MRP hesaplanamaz</div>
+              )}
+            </div>
+          )}
+          </>
+        )}
       </div>
     </div>
   )
