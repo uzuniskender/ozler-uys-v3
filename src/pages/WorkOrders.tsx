@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, operators, stokHareketler, loadAll } = useStore()
+  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
 
@@ -316,6 +316,79 @@ export function WorkOrders() {
                   : <button onClick={() => { setDurum(detailW.id, 'iptal'); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>
               )}
             </div>
+
+            {/* Reçete Zinciri — önceki/sonraki adım */}
+            {(() => {
+              const rc = detailW.rcId ? recipes.find(r => r.id === detailW.rcId) : recipes.find(r => r.mamulKod === detailW.mamulKod)
+              if (!rc?.satirlar?.length) return null
+              const kirno = detailW.kirno || '1'
+              const depth = kirno.split('.').length
+              const parentKirno = depth > 1 ? kirno.split('.').slice(0, -1).join('.') : ''
+
+              // Önceki adım — alt bileşenler
+              const prevSteps = rc.satirlar.filter(s => s.opId && s.kirno.startsWith(kirno + '.') && s.kirno.split('.').length === depth + 1)
+              // Sonraki adım — üst montaj
+              const nextStep = parentKirno ? rc.satirlar.find(s => s.kirno === parentKirno && s.opId) : null
+              // Direkt HM girdiler
+              const directHM = rc.satirlar.filter(s => s.tip === 'Hammadde' && s.kirno.startsWith(kirno + '.') && s.kirno.split('.').length === depth + 1)
+              const ord = orders.find(o => o.id === detailW.orderId)
+              const sipAdet = ord?.adet || detailW.hedef || 1
+
+              return (<>
+                {prevSteps.length > 0 && (
+                  <div className="mb-3 p-3 bg-purple-500/5 border border-purple-500/15 rounded-lg">
+                    <div className="text-[10px] font-semibold text-purple-400 mb-1.5">Önceki Adım — Bu yarı mamulün girdileri</div>
+                    {prevSteps.map((s, i) => (
+                      <div key={i} className="flex justify-between text-xs py-1 border-b border-border/20">
+                        <span><span className="font-mono text-zinc-600 text-[9px]">{s.kirno} </span>{s.malad}</span>
+                        <span className="font-mono text-zinc-500">{Math.round(sipAdet * s.miktar)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {directHM.length > 0 && (
+                  <div className="mb-3 p-3 bg-cyan-500/5 border border-cyan-500/15 rounded-lg">
+                    <div className="text-[10px] font-semibold text-cyan-400 mb-1.5">Hammadde (Direkt Girdi)</div>
+                    {directHM.map((h, i) => (
+                      <div key={i} className="flex justify-between text-xs py-1 border-b border-border/20">
+                        <span>{h.malad}</span>
+                        <span className="font-mono text-cyan-400">{Math.round(sipAdet * h.miktar)} adet</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {nextStep && (
+                  <div className="mb-3 p-3 bg-green/5 border border-green/15 rounded-lg">
+                    <div className="text-[10px] font-semibold text-green mb-1.5">Sonraki Adım — Montaj</div>
+                    <div className="flex justify-between text-xs">
+                      <span><span className="font-mono text-zinc-600 text-[9px]">{nextStep.kirno} </span>{nextStep.malad}</span>
+                      <span className="font-mono text-zinc-500">{Math.round(sipAdet * nextStep.miktar)}</span>
+                    </div>
+                  </div>
+                )}
+              </>)
+            })()}
+
+            {/* Kesim Planı Bilgisi */}
+            {(() => {
+              const isKesim = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH'].some(k => (detailW.opAd || '').toUpperCase().includes(k))
+              if (!isKesim) return null
+              const ilgiliPlanlar = cuttingPlans.filter(p => p.satirlar?.some(s => s.kesimler?.some((k: { woId?: string }) => k.woId === detailW.id)))
+              if (!ilgiliPlanlar.length) return null
+              return (
+                <div className="mb-3 p-3 bg-green/5 border border-green/15 rounded-lg">
+                  <div className="text-[10px] font-semibold text-green mb-1.5">✂ Kesim Planı</div>
+                  {ilgiliPlanlar.map(p => (
+                    <div key={p.id} className="text-xs flex justify-between py-1">
+                      <span className="font-mono text-accent">{p.hamMalkod}</span>
+                      <span className="text-zinc-400">{p.hamMalad}</span>
+                      <span className="font-mono text-zinc-500">{p.hamBoy}mm × {p.gerekliAdet}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+
             {detailW.hm?.length > 0 && (
               <><h3 className="text-sm font-semibold mb-2">Hammadde Bileşenleri</h3>
               <div className="bg-bg-2 border border-border rounded-lg overflow-hidden mb-4">

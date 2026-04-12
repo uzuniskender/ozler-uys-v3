@@ -64,7 +64,7 @@ export function ProductionEntry() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{acikWOs.length} açık iş emri</p></div>
+        <div><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{bolumFilter ? bolumFilter + ' — ' + acikWOs.length + ' İE' : 'Bölüm seçin'}</p></div>
         <div className="flex gap-2">
           <button onClick={() => setBarkodAktif(!barkodAktif)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${barkodAktif ? 'bg-green/20 text-green border border-green/30' : 'bg-bg-2 border border-border text-zinc-400'}`}>
             <ScanBarcode size={13} /> {barkodAktif ? 'Barkod Açık' : 'Barkod'}
@@ -73,16 +73,34 @@ export function ProductionEntry() {
         </div>
       </div>
 
+      {/* ADIM 1: Bölüm Seç */}
+      {!bolumFilter ? (
+        <div className="bg-bg-2 border border-border rounded-lg p-6">
+          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">1. Bölüm Seçin</div>
+          <div className="flex flex-wrap gap-2">
+            {bolumler.map(b => {
+              const bWOs = workOrders.filter(w => w.opAd === b && w.hedef > 0 && wProd(w.id) < w.hedef)
+              return (
+                <button key={b} onClick={() => setBolumFilter(b)}
+                  className="px-4 py-3 bg-bg-3 border border-border rounded-lg text-sm hover:border-accent hover:text-accent transition-colors">
+                  <div className="font-medium">{b}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">{bWOs.length} açık İE</div>
+                </button>
+              )
+            })}
+            {bolumler.length === 0 && <div className="text-zinc-600 text-sm">Operasyona bağlı İE bulunamadı</div>}
+          </div>
+        </div>
+      ) : (<>
+
+      {/* ADIM 2: İE Listesi (bölüm seçili) */}
       <div className="flex gap-2 mb-4 flex-wrap">
+        <button onClick={() => setBolumFilter('')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">← Bölüm Değiştir</button>
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no veya malzeme ara..."
             className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
-        <select value={bolumFilter} onChange={e => setBolumFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="">Tüm Bölümler</option>
-          {bolumler.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
       </div>
 
       <div className="space-y-2">
@@ -120,8 +138,9 @@ export function ProductionEntry() {
             </div>
           )
         })}
-        {!acikWOs.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">Açık iş emri yok</div>}
+        {!acikWOs.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">Bu bölümde açık iş emri yok</div>}
       </div>
+      </>)}
 
       {entryWO && (
         <EntryModal
