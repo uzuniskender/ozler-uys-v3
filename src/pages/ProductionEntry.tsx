@@ -12,6 +12,7 @@ export function ProductionEntry() {
   const { workOrders, logs, operators, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState('')
+  const [selectedOpr, setSelectedOpr] = useState<string | null>(null)
   const [entryWO, setEntryWO] = useState<string | null>(null)
   const [showToplu, setShowToplu] = useState(false)
   const [barkodAktif, setBarkodAktif] = useState(false)
@@ -65,7 +66,7 @@ export function ProductionEntry() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{bolumFilter ? bolumFilter + ' — ' + acikWOs.length + ' İE' : 'Bölüm seçin'}</p></div>
+        <div><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{!bolumFilter ? 'Bölüm seçin' : !selectedOpr ? 'Operatör seçin' : bolumFilter + ' — ' + acikWOs.length + ' İE'}</p></div>
         <div className="flex gap-2">
           <button onClick={() => setBarkodAktif(!barkodAktif)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${barkodAktif ? 'bg-green/20 text-green border border-green/30' : 'bg-bg-2 border border-border text-zinc-400'}`}>
             <ScanBarcode size={13} /> {barkodAktif ? 'Barkod Açık' : 'Barkod'}
@@ -82,7 +83,7 @@ export function ProductionEntry() {
             {bolumler.map(b => {
               const bWOs = workOrders.filter(w => w.opAd === b && w.hedef > 0 && wProd(w.id) < w.hedef)
               return (
-                <button key={b} onClick={() => setBolumFilter(b)}
+                <button key={b} onClick={() => { setBolumFilter(b); setSelectedOpr(null) }}
                   className="px-4 py-3 bg-bg-3 border border-border rounded-lg text-sm hover:border-accent hover:text-accent transition-colors">
                   <div className="font-medium">{b}</div>
                   <div className="text-[10px] text-zinc-500 mt-0.5">{bWOs.length} açık İE</div>
@@ -92,11 +93,37 @@ export function ProductionEntry() {
             {bolumler.length === 0 && <div className="text-zinc-600 text-sm">Operasyona bağlı İE bulunamadı</div>}
           </div>
         </div>
+
+      ) : !selectedOpr ? (
+        /* ADIM 2: Operatör Seç */
+        <div className="bg-bg-2 border border-border rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">2. Operatör — <span className="text-accent">{bolumFilter}</span></div>
+            <button onClick={() => setBolumFilter('')} className="text-xs text-zinc-500 hover:text-white">← Bölüm Değiştir</button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {operators.filter(o => o.aktif !== false && o.bolum === bolumFilter).sort((a, b) => a.ad.localeCompare(b.ad, 'tr')).map(o => (
+              <button key={o.id} onClick={() => setSelectedOpr(o.id)}
+                className="px-4 py-3 bg-bg-3 border border-border rounded-lg text-sm hover:border-accent hover:text-accent transition-colors">
+                <div className="font-medium">{o.ad}</div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">{o.kod || o.bolum}</div>
+              </button>
+            ))}
+            {operators.filter(o => o.aktif !== false && o.bolum === bolumFilter).length === 0 && (
+              <div className="text-zinc-600 text-sm">Bu bölümde aktif operatör yok</div>
+            )}
+          </div>
+        </div>
+
       ) : (<>
 
-      {/* ADIM 2: İE Listesi (bölüm seçili) */}
+      {/* ADIM 3: İE Listesi (bölüm + operatör seçili) */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        <button onClick={() => setBolumFilter('')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">← Bölüm Değiştir</button>
+        <button onClick={() => { setBolumFilter(''); setSelectedOpr(null) }} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">← Bölüm</button>
+        <button onClick={() => setSelectedOpr(null)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">← Operatör Değiştir</button>
+        <span className="px-3 py-2 bg-accent/10 text-accent rounded-lg text-xs font-medium">
+          {operators.find(o => o.id === selectedOpr)?.ad} · {bolumFilter}
+        </span>
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no veya malzeme ara..."
@@ -147,7 +174,7 @@ export function ProductionEntry() {
         <EntryModal
           woId={entryWO}
           operators={operators}
-          
+          defaultOprId={selectedOpr || undefined}
           onClose={() => setEntryWO(null)}
           onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }}
         />
@@ -165,9 +192,9 @@ export function ProductionEntry() {
   )
 }
 
-function EntryModal({ woId, operators, onClose, onSaved }: {
+function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   woId: string; operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
-  
+  defaultOprId?: string
   onClose: () => void; onSaved: () => void
 }) {
   const { workOrders, logs, durusKodlari } = useStore()
@@ -178,12 +205,14 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
 
-  // Çoklu operatör
-  const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>([])
-  const [selOprId, setSelOprId] = useState('')
-
+  // Çoklu operatör — varsayılan operatör otomatik ekle
+  const defaultOpr = defaultOprId ? operators.find(o => o.id === defaultOprId) : null
   const now = new Date()
   const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+  const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>(
+    defaultOpr ? [{ id: defaultOpr.id, ad: defaultOpr.ad, bas: nowHHMM, bit: nowHHMM }] : []
+  )
+  const [selOprId, setSelOprId] = useState('')
 
   function addOpr() {
     if (!selOprId) { toast.error('Operatör seçin'); return }
