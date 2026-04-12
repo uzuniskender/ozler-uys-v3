@@ -4,9 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
+import { stokKontrolWO } from '@/features/production/stokKontrol'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, loadAll } = useStore()
+  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
 
@@ -50,20 +51,20 @@ export function WorkOrders() {
   function wProd(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
   function wPct(w: { id: string; hedef: number }): number { return w.hedef > 0 ? Math.min(100, Math.round(wProd(w.id) / w.hedef * 100)) : 0 }
 
-  // Stok kontrol badge
-  function stokBadge(w: { id: string; hm?: { malkod: string; miktarTotal: number }[]; hedef: number }): 'ok' | 'eksik' | 'yok' | null {
-    if (!w.hm?.length) return null
+  // Stok kontrol — v2 detaylı
+  function getStokDurum(w: any) {
     const kalan = Math.max(0, w.hedef - wProd(w.id))
     if (kalan <= 0) return null
-    const stokMap: Record<string, number> = {}
-    stokHareketler.forEach(h => { stokMap[h.malkod] = (stokMap[h.malkod] || 0) + (h.tip === 'giris' ? h.miktar : -h.miktar) })
-    let ok = true, yok = false
-    w.hm.forEach(h => {
-      const stok = stokMap[h.malkod] || 0
-      if (stok < h.miktarTotal) ok = false
-      if (stok <= 0) yok = true
-    })
-    return ok ? 'ok' : yok ? 'yok' : 'eksik'
+    // tedarikler from store
+    return stokKontrolWO(w, kalan, stokHareketler, tedarikler)
+  }
+
+  function stokBadgeEl(w: any) {
+    const sk = getStokDurum(w)
+    if (!sk) return null
+    if (sk.durum === 'OK') return <span className="text-green text-[9px]" title="Stok yeterli">●</span>
+    if (sk.durum === 'KISMI') return <span className="text-amber text-[9px]" title={`Stok eksik — max ${sk.maxYapilabilir} adet`}>● {sk.maxYapilabilir > 0 ? sk.maxYapilabilir : ''}</span>
+    return <span className="text-red text-[9px]" title="Stok yok">●</span>
   }
 
   const filtered = useMemo(() => {
@@ -234,7 +235,7 @@ export function WorkOrders() {
                 return (
                   <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
                     <td className="px-2 py-1.5"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggleSelect(w.id)} className="accent-accent" /></td>
-                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo} {(() => { const sb = stokBadge(w); return sb === 'ok' ? <span className="text-green text-[9px]" title="Stok yeterli">●</span> : sb === 'eksik' ? <span className="text-amber text-[9px]" title="Stok eksik">●</span> : sb === 'yok' ? <span className="text-red text-[9px]" title="Stok yok">●</span> : null })()}</td>
+                    <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo} {stokBadgeEl(w)}</td>
                     <td className="px-3 py-1.5 text-zinc-300 max-w-[180px] truncate">{w.malad}</td>
                     <td className="px-3 py-1.5 text-zinc-500">{w.opAd || '—'}</td>
                     <td className="px-3 py-1.5 text-right font-mono cursor-pointer hover:text-accent" onClick={() => updateHedef(w.id)} title="Tıkla: hedef güncelle">{w.hedef}</td>
@@ -397,6 +398,34 @@ export function WorkOrders() {
                 </table>
               </div></>
             )}
+
+            {/* Stok Kontrol Detay */}
+            {(() => {
+              const sk = getStokDurum(detailW)
+              if (!sk || sk.durum === 'OK') return null
+              return (
+                <div className={`mb-4 p-3 rounded-lg border ${sk.durum === 'YOK' ? 'bg-red/5 border-red/20' : 'bg-amber/5 border-amber/20'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`text-xs font-semibold ${sk.durum === 'YOK' ? 'text-red' : 'text-amber'}`}>
+                      {sk.durum === 'YOK' ? '🚫 Stok Yok' : '⚠ Stok Eksik'} — Max yapılabilir: {sk.maxYapilabilir} adet
+                    </div>
+                  </div>
+                  <table className="w-full text-[11px]">
+                    <thead><tr className="text-zinc-500"><th className="text-left pb-1">Malzeme</th><th className="text-right pb-1">Gerekli</th><th className="text-right pb-1">Mevcut</th><th className="text-right pb-1">Açık Ted.</th><th className="text-right pb-1">Durum</th></tr></thead>
+                    <tbody>{sk.satirlar.map((s, i) => (
+                      <tr key={i}>
+                        <td className="py-0.5"><span className="font-mono text-accent text-[9px]">{s.malkod}</span> {s.malad}</td>
+                        <td className="py-0.5 text-right font-mono">{s.gerekli}</td>
+                        <td className="py-0.5 text-right font-mono text-green">{s.mevcut}</td>
+                        <td className="py-0.5 text-right font-mono text-zinc-500">{s.acikTed > 0 ? s.acikTed : '—'}</td>
+                        <td className={`py-0.5 text-right font-mono text-[10px] ${s.durum === 'YOK' ? 'text-red' : s.durum === 'BEKLIYOR' ? 'text-purple-400' : 'text-amber'}`}>{s.durum}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )
+            })()}
+
             <h3 className="text-sm font-semibold mb-2">Üretim Logları</h3>
             {(() => { const woLogs = logs.filter(l => l.woId === detailW.id).sort((a, b) => (b.tarih || '').localeCompare(a.tarih || '')); return woLogs.length ? (
               <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-left px-3 py-2">Operatör</th><th className="text-right px-3 py-2">Adet</th><th className="text-right px-3 py-2">Fire</th></tr></thead>
