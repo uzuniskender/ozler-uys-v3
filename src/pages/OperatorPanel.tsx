@@ -214,7 +214,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
         })()}
 
         {/* Üretim Kayıt Modal */}
-        {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} durusKodlari={durusKodlari}
+        {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} allOperators={operators} durusKodlari={durusKodlari}
           onClose={() => setEntryWO(null)}
           onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }} />}
       </div>
@@ -223,38 +223,36 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 }
 
 /* Operatör Üretim Kayıt Modal */
-function OprEntryModal({ woId, oprId, oprAd, durusKodlari, onClose, onSaved }: {
+/* Operatör Üretim Kayıt Modal */
+function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose, onSaved }: {
   woId: string; oprId: string; oprAd: string
+  allOperators: { id: string; ad: string; kod: string; bolum: string; aktif?: boolean }[]
   durusKodlari: { id: string; kod: string; ad: string }[]
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, recipes, stokHareketler, materials } = useStore()
+  const { workOrders, logs, recipes, stokHareketler } = useStore()
   const w = workOrders.find(x => x.id === woId)
   const now = new Date()
   const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
   const [aciklama, setAciklama] = useState('')
-  const [basla, setBasla] = useState(nowHHMM)
-  const [bitir, setBitir] = useState(nowHHMM)
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
+  const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>([
+    { id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM }
+  ])
+  const [addOprId, setAddOprId] = useState('')
 
   if (!w) return null
   const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
   const kalan = Math.max(0, w.hedef - prod)
-
-  // Reçete → hammadde bilgisi
   const rc = recipes.find(r => r.id === w.receteId)
   const hmSatirlar = (rc?.satirlar || []).filter((s: any) => s.tip === 'Hammadde' || s.tip === 'hammadde')
 
-  // Stok hesapla
   function stokNet(malkod: string) {
     return stokHareketler.filter(h => h.malkod === malkod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
   }
-
-  // Max yapılabilir (stok bazlı)
   function maxYapilabilir() {
     if (!hmSatirlar.length) return kalan
     let maxAdet = kalan
@@ -262,24 +260,27 @@ function OprEntryModal({ woId, oprId, oprAd, durusKodlari, onClose, onSaved }: {
       const birAdetIcin = (hm.miktar || 0) * (w.mpm || 1)
       if (birAdetIcin <= 0) continue
       const mevcut = stokNet(hm.malkod || hm.kod)
-      const yapilabilir = Math.floor(mevcut / birAdetIcin)
-      if (yapilabilir < maxAdet) maxAdet = yapilabilir
+      if (Math.floor(mevcut / birAdetIcin) < maxAdet) maxAdet = Math.floor(mevcut / birAdetIcin)
     }
     return Math.max(0, maxAdet)
   }
-
   const maxUretim = maxYapilabilir()
 
-  // Çalışma süresi (dakika)
-  function calismaSuresi() {
-    if (!basla || !bitir) return 0
-    const [bH, bM] = basla.split(':').map(Number)
-    const [eH, eM] = bitir.split(':').map(Number)
-    return (eH * 60 + eM) - (bH * 60 + bM)
+  function addOpr() {
+    if (!addOprId) { toast.error('Operatör seçin'); return }
+    if (oprList.some(o => o.id === addOprId)) { toast.error('Bu operatör zaten ekli'); return }
+    const op = allOperators.find(o => o.id === addOprId)
+    if (!op) return
+    setOprList(p => [...p, { id: op.id, ad: op.ad, bas: nowHHMM, bit: nowHHMM }])
+    setAddOprId('')
   }
-
-  const toplamDurus = duruslar.reduce((a, d) => a + (d.sure || 0), 0)
-
+  function updateOpr(i: number, field: 'bas' | 'bit', val: string) {
+    setOprList(p => p.map((o, idx) => idx === i ? { ...o, [field]: val } : o))
+  }
+  function removeOpr(i: number) {
+    if (oprList.length <= 1) { toast.error('En az bir operatör olmalı'); return }
+    setOprList(p => p.filter((_, idx) => idx !== i))
+  }
   function addDurus() { setDuruslar(p => [...p, { kodId: '', kodAd: '', sure: 0 }]) }
   function updateDurus(i: number, field: string, val: string) {
     setDuruslar(p => p.map((d, idx) => {
@@ -291,152 +292,149 @@ function OprEntryModal({ woId, oprId, oprAd, durusKodlari, onClose, onSaved }: {
   }
 
   async function save() {
-    const q = parseInt(qty) || 0
-    const f = parseInt(fire) || 0
-    // Validasyonlar
+    const q = parseInt(qty) || 0; const f = parseInt(fire) || 0
     if (q <= 0) { toast.error('Adet girin'); return }
-    if (q > kalan) { toast.error(`Hedeften fazla üretilemez! Kalan: ${kalan}`); return }
+    if (q > kalan) { toast.error('Hedeften fazla üretilemez! Kalan: ' + kalan); return }
     if (maxUretim <= 0 && hmSatirlar.length > 0) { toast.error('Stok yetersiz — üretim yapılamaz'); return }
-    if (q > maxUretim && hmSatirlar.length > 0) { toast.error(`Stok yetersiz! En fazla ${maxUretim} adet üretilebilir`); return }
-    if (!basla || !bitir) { toast.error('Başlama ve bitiş saati girin'); return }
-    if (bitir < basla) { toast.error('Bitiş saati başlamadan önce olamaz'); return }
-    const calisma = calismaSuresi()
-    if (calisma <= 0) { toast.error('Çalışma süresi 0 olamaz'); return }
-    if (toplamDurus > calisma) { toast.error(`Duruş süresi (${toplamDurus}dk) çalışma süresini (${calisma}dk) aşamaz`); return }
+    if (q > maxUretim && hmSatirlar.length > 0) { toast.error('Stok yetersiz! En fazla ' + maxUretim + ' adet'); return }
+    if (!oprList.length) { toast.error('En az bir operatör eklenmeli'); return }
+    for (const o of oprList) {
+      if (o.bas && o.bit && o.bit < o.bas) { toast.error(o.ad + ': Bitiş başlamadan önce olamaz'); return }
+    }
+    const toplamDurusDk = duruslar.reduce((a, d) => a + (d.sure || 0), 0)
+    const toplamCalisma = oprList.reduce((a, o) => {
+      if (!o.bas || !o.bit) return a
+      return a + Math.max(0, (parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1])) - (parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1])))
+    }, 0)
+    if (toplamCalisma > 0 && toplamDurusDk > toplamCalisma) { toast.error('Duruş (' + toplamDurusDk + 'dk) çalışmayı (' + toplamCalisma + 'dk) aşamaz'); return }
 
     setSaving(true)
     const logId = uid()
-
     await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih: today(), qty: q, fire: f,
-      operatorlar: [{ id: oprId, ad: oprAd, bas: basla, bit: bitir }],
+      operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
       not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0),
     })
-    // Mamul stok girişi
     await supabase.from('uys_stok_hareketler').insert({
       id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-      tip: 'giris', kaynak: 'uretim', aciklama: `${w.ieNo} - ${oprAd}`,
+      tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
       tarih: today(), log_id: logId, wo_id: woId,
     })
-    // HM stok çıkışı (reçeteden)
     for (const hm of hmSatirlar) {
       const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
       if (hmMiktar > 0) {
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-          tip: 'cikis', kaynak: 'uretim-hm', aciklama: `${w.ieNo} HM tüketim`,
+          tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
           tarih: today(), log_id: logId, wo_id: woId,
         })
       }
     }
-    // Fire log
     if (f > 0) {
       await supabase.from('uys_fire_logs').insert({
-        id: uid(), wo_id: woId, tarih: today(), miktar: f, opertor: oprAd, neden: aciklama || 'Operatör girişi',
+        id: uid(), wo_id: woId, tarih: today(), miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
       })
     }
-    setSaving(false)
-    onSaved()
+    setSaving(false); onSaved()
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
       <div className="bg-bg-1 border border-border rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="bg-accent/10 border-b border-accent/20 p-4 rounded-t-xl">
           <div className="font-mono text-accent text-xs font-bold">{w.ieNo}</div>
           <div className="text-sm font-semibold text-white mt-0.5">{w.malad}</div>
+          <div className="text-[11px] text-zinc-400 mt-1">Operasyon: <b>{w.opAd}</b> · Kalan: <b className="text-amber">{kalan}</b></div>
         </div>
-
         <div className="p-4 space-y-4">
-          {/* Hedef/Yapılan/Kalan */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-bg-2 rounded-lg p-2"><div className="text-[10px] text-zinc-500">Hedef</div><div className="text-sm font-bold">{w.hedef}</div></div>
             <div className="bg-bg-2 rounded-lg p-2"><div className="text-[10px] text-green">Yapılan</div><div className="text-sm font-bold text-green">{prod}</div></div>
             <div className="bg-bg-2 rounded-lg p-2"><div className="text-[10px] text-amber">Kalan</div><div className="text-sm font-bold text-amber">{kalan}</div></div>
           </div>
 
-          {/* Stok durumu */}
           {hmSatirlar.length > 0 && (
-            <div className="bg-bg-2 border border-border rounded-lg p-3">
-              <div className="text-[10px] text-zinc-500 font-semibold mb-2">HAMMADDE STOK</div>
-              {hmSatirlar.map((hm: any, i: number) => {
-                const mevcut = Math.round(stokNet(hm.malkod || hm.kod))
-                const renk = mevcut <= 0 ? 'text-red' : mevcut < (hm.miktar || 0) * kalan ? 'text-amber' : 'text-green'
-                return (
-                  <div key={i} className="flex justify-between text-xs mb-1">
-                    <span className="text-zinc-400">{hm.malad || hm.ad}</span>
-                    <span className={`font-mono font-bold ${renk}`}>{mevcut}</span>
-                  </div>
-                )
-              })}
-              {maxUretim < kalan && <div className="text-[10px] text-amber mt-2 font-semibold">⚠ Stok ile en fazla {maxUretim} adet üretilebilir</div>}
-              {maxUretim <= 0 && <div className="text-[10px] text-red mt-2 font-bold">⛔ Stok yetersiz — üretim yapılamaz</div>}
+            <div className={`border rounded-lg p-3 ${maxUretim <= 0 ? 'bg-red/5 border-red/30' : maxUretim < kalan ? 'bg-amber/5 border-amber/30' : 'bg-green/5 border-green/30'}`}>
+              <div className="text-[10px] font-bold mb-2 uppercase tracking-wider">{maxUretim <= 0 ? '⛔ STOK YOK' : maxUretim < kalan ? '⚠ STOK KISMI' : '✓ STOK YETERLİ'}</div>
+              <table className="w-full text-[10px]">
+                <thead><tr className="text-zinc-500"><td className="py-1 pr-2">Kod</td><td className="py-1 pr-2">Malzeme</td><td className="py-1 text-right pr-2">Mevcut</td><td className="py-1 text-right pr-2">Gereken</td><td className="py-1">Durum</td></tr></thead>
+                <tbody>{hmSatirlar.map((hm: any, i: number) => {
+                  const mevcut = Math.round(stokNet(hm.malkod || hm.kod))
+                  const gereken = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * kalan)
+                  const durum = mevcut <= 0 ? 'YOK' : mevcut < gereken ? 'KISMI' : 'YETERLİ'
+                  const renk = durum === 'YOK' ? 'text-red' : durum === 'KISMI' ? 'text-amber' : 'text-green'
+                  return (<tr key={i} className="border-t border-border/20">
+                    <td className="py-1 pr-2 font-mono text-accent">{hm.malkod || hm.kod}</td>
+                    <td className="py-1 pr-2 text-zinc-300">{(hm.malad || hm.ad || '').slice(0, 25)}</td>
+                    <td className={`py-1 text-right pr-2 font-bold ${renk}`}>{mevcut}</td>
+                    <td className="py-1 text-right pr-2">{gereken}</td>
+                    <td className={`py-1 font-bold ${renk}`}>{durum}</td>
+                  </tr>)
+                })}</tbody>
+              </table>
+              {maxUretim > 0 && maxUretim < kalan && <div className="text-[10px] text-amber mt-2 font-semibold">En fazla {maxUretim} adet üretilebilir</div>}
             </div>
           )}
 
-          {/* Başlama / Bitiş Saati */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] text-zinc-500 mb-1 block">Başlama Saati</label>
-              <input type="time" value={basla} onChange={e => setBasla(e.target.value)}
-                className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-            </div>
-            <div>
-              <label className="text-[10px] text-zinc-500 mb-1 block">Bitiş Saati</label>
-              <input type="time" value={bitir} onChange={e => setBitir(e.target.value)}
-                className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          <div>
+            <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">OPERATÖRLER</div>
+            {oprList.map((o, i) => (
+              <div key={i} className="flex items-center gap-2 bg-bg-2 rounded-lg p-2 mb-1.5">
+                <span className="flex-1 text-xs font-semibold">{o.ad}</span>
+                <input type="time" value={o.bas} onChange={e => updateOpr(i, 'bas', e.target.value)} className="w-[85px] px-1.5 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200" />
+                <span className="text-[10px] text-zinc-600">—</span>
+                <input type="time" value={o.bit} onChange={e => updateOpr(i, 'bit', e.target.value)} className="w-[85px] px-1.5 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200" />
+                <button onClick={() => removeOpr(i)} className="text-red text-sm px-1 opacity-60 hover:opacity-100">✕</button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 p-2 border border-dashed border-border/50 rounded-lg opacity-70 hover:opacity-100">
+              <select value={addOprId} onChange={e => setAddOprId(e.target.value)} className="flex-1 px-2 py-1.5 bg-bg-2 border border-border rounded text-[11px] text-zinc-300">
+                <option value="">— Operatör ekle —</option>
+                {allOperators.filter(o => o.aktif !== false && !oprList.some(x => x.id === o.id)).sort((a, b) => a.ad.localeCompare(b.ad, 'tr')).map(o => (
+                  <option key={o.id} value={o.id}>{o.ad} ({o.kod})</option>
+                ))}
+              </select>
+              <button onClick={addOpr} className="px-3 py-1.5 bg-accent/20 text-accent rounded text-[11px] font-semibold hover:bg-accent/30">+ Ekle</button>
             </div>
           </div>
-          {calismaSuresi() > 0 && <div className="text-[10px] text-zinc-500 text-center -mt-2">Çalışma: {calismaSuresi()} dk {toplamDurus > 0 ? `· Duruş: ${toplamDurus} dk · Net: ${calismaSuresi() - toplamDurus} dk` : ''}</div>}
 
-          {/* Adet / Fire */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] text-zinc-500 mb-1 block">Üretim Adedi *</label>
               <input type="number" value={qty} onChange={e => {
                 const v = parseInt(e.target.value) || 0
-                if (v > kalan) { setQty(String(kalan)); toast.error('Hedefe ulaşıldı: max ' + kalan) }
-                else setQty(e.target.value)
-              }} placeholder={String(Math.min(kalan, maxUretim))} max={kalan}
-                className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-white focus:outline-none focus:border-green" autoFocus />
+                const mx = hmSatirlar.length > 0 ? Math.min(kalan, maxUretim) : kalan
+                if (v > mx) { setQty(String(mx)); toast.error('Max: ' + mx) } else setQty(e.target.value)
+              }} placeholder={String(Math.min(kalan, maxUretim))} className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-white focus:outline-none focus:border-green" autoFocus />
             </div>
             <div>
               <label className="text-[10px] text-zinc-500 mb-1 block">Fire</label>
-              <input type="number" value={fire} onChange={e => setFire(e.target.value)} placeholder="0"
-                className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-red focus:outline-none focus:border-red" />
+              <input type="number" value={fire} onChange={e => setFire(e.target.value)} placeholder="0" className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-red focus:outline-none focus:border-red" />
             </div>
           </div>
 
-          {/* Açıklama */}
           <div>
             <label className="text-[10px] text-zinc-500 mb-1 block">Açıklama</label>
-            <input value={aciklama} onChange={e => setAciklama(e.target.value)} placeholder="Opsiyonel..."
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none" />
+            <input value={aciklama} onChange={e => setAciklama(e.target.value)} placeholder="Opsiyonel..." className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none" />
           </div>
 
-          {/* Duruş Kayıtları */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-[10px] text-zinc-500 font-semibold">DURUŞ KAYITLARI</label>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">DURUŞLAR</span>
               <button onClick={addDurus} className="text-[10px] text-accent hover:underline font-semibold">+ Duruş Ekle</button>
             </div>
             {duruslar.map((d, i) => (
               <div key={i} className="flex gap-2 mb-2">
-                <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)}
-                  className="flex-1 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200">
+                <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)} className="flex-1 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200">
                   <option value="">— Duruş kodu —</option>
                   {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} - {k.ad}</option>)}
                 </select>
-                <input type="number" value={d.sure || ''} onChange={e => updateDurus(i, 'sure', e.target.value)} placeholder="dk"
-                  className="w-16 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-center text-zinc-200" />
+                <input type="number" value={d.sure || ''} onChange={e => updateDurus(i, 'sure', e.target.value)} placeholder="dk" className="w-16 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-center text-zinc-200" />
                 <button onClick={() => setDuruslar(p => p.filter((_, idx) => idx !== i))} className="text-red text-sm px-1">✕</button>
               </div>
             ))}
           </div>
         </div>
-
-        {/* Footer Buttons */}
         <div className="flex gap-2 p-4 border-t border-border">
           <button onClick={onClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm font-semibold">İptal</button>
           <button onClick={save} disabled={saving || (maxUretim <= 0 && hmSatirlar.length > 0)}
