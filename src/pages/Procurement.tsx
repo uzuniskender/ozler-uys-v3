@@ -4,6 +4,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download } from 'lucide-react'
 
 export function Procurement() {
@@ -31,7 +32,7 @@ export function Procurement() {
   }
 
   async function del(id: string) {
-    if (!confirm('Silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_tedarikler').delete().eq('id', id)
     loadAll(); toast.success('Tedarik silindi')
   }
@@ -58,7 +59,7 @@ export function Procurement() {
         <div><h1 className="text-xl font-semibold">Tedarik Yönetimi</h1><p className="text-xs text-zinc-500">{tedarikler.length} kayıt · {toplamBekleyen} bekleyen</p></div>
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarik</button>
+          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarik</button>
         </div>
       </div>
 
@@ -90,7 +91,7 @@ export function Procurement() {
                   <td className="px-4 py-2 text-right">
                     <div className="flex gap-1 justify-end">
                       {!t.geldi && <button onClick={() => markGeldi(t.id)} className="p-1 text-zinc-500 hover:text-green" title="Geldi işaretle"><Check size={12} /></button>}
-                      <button onClick={() => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
+                      <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
                       <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
                     </div>
                   </td>
@@ -152,7 +153,7 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-          <button onClick={() => {
+          <button onClick={async () => {
             if (!malkod || !miktar) { toast.error('Malzeme kodu ve miktar zorunlu'); return }
             onSave({ malkod, malad, miktar: parseFloat(miktar), birim, tedarikci_id: tedarikcId, tedarikci_ad: ted?.ad || '', order_id: orderId, siparis_no: ord?.siparisNo || '', teslim_tarihi: teslim, durum: 'bekliyor', geldi: false, tarih: today(), not_: not_ }, (initial as Record<string, unknown>)?.id as string)
           }} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>

@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
 
 export function Suppliers() {
@@ -18,7 +19,7 @@ export function Suppliers() {
   }, [tedarikciler, search])
 
   async function del(id: string) {
-    if (!confirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_tedarikciler').delete().eq('id', id)
     loadAll(); toast.success('Tedarikçi silindi')
   }
@@ -34,7 +35,7 @@ export function Suppliers() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Tedarikçiler</h1><p className="text-xs text-zinc-500">{tedarikciler.length} tedarikçi</p></div>
-        <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarikçi</button>
+        <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarikçi</button>
       </div>
       <div className="relative max-w-xs mb-4"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
@@ -51,7 +52,7 @@ export function Suppliers() {
                   <td className="px-4 py-2 text-zinc-500">{t.email || '—'}</td>
                   <td className="px-4 py-2 text-zinc-600 max-w-[150px] truncate">{t.not || '—'}</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
+                    <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
                     <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
                   </td>
                 </tr>
@@ -92,7 +93,7 @@ function SupplierFormModal({ initial, onClose, onSave }: {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-          <button onClick={() => { if (!ad.trim()) { return }; onSave({ kod, ad, adres, tel, email, not: not_ }, initial?.id) }} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+          <button onClick={async () => { if (!ad.trim()) { return }; onSave({ kod, ad, adres, tel, email, not: not_ }, initial?.id) }} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
         </div>
       </div>
     </div>

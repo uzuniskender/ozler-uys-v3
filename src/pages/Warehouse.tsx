@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import { showPrompt } from '@/lib/prompt'
+import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
 
@@ -38,7 +38,7 @@ export function Warehouse() {
   async function stokOnar() {
     const negatifler = stokMap.filter(s => s.miktar < -0.01)
     if (!negatifler.length) { toast.info('Negatif stok yok — her şey düzgün'); return }
-    if (!confirm(`${negatifler.length} malzemede negatif stok var. Düzeltme girişleri oluşturulsun mu?`)) return
+    if (!await showConfirm(`${negatifler.length} malzemede negatif stok var. Düzeltme girişleri oluşturulsun mu?`)) return
     for (const s of negatifler) {
       await supabase.from('uys_stok_hareketler').insert({
         id: uid(), tarih: today(), malkod: s.malkod, malad: s.malad,
@@ -165,7 +165,7 @@ export function Warehouse() {
                       loadAll(); toast.success('Stok hareketi güncellendi')
                     }} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düzenle</button>
                     <button onClick={async () => {
-                      if (!confirm('Bu stok hareketini silmek istediğinize emin misiniz?')) return
+                      if (!await showConfirm('Bu stok hareketini silmek istediğinize emin misiniz?')) return
                       await supabase.from('uys_stok_hareketler').delete().eq('id', h.id)
                       loadAll(); toast.success('Stok hareketi silindi')
                     }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></>}
@@ -190,7 +190,7 @@ export function Warehouse() {
                 </div>
               ))}
             </div>
-            <button onClick={() => {
+            <button onClick={async () => {
               const inputs = document.querySelectorAll('[data-malkod]') as NodeListOf<HTMLInputElement>
               let farklar = 0
               inputs.forEach(inp => {
@@ -257,7 +257,7 @@ function StokGirisModal({ materials, onClose, onSaved }: {
             {search && !malkod && (
               <div className="mt-1 max-h-32 overflow-y-auto bg-bg-2 border border-border rounded-lg">
                 {filteredMats.map(m => (
-                  <button key={m.id} onClick={() => { setMalkod(m.kod); setSearch(m.kod + ' — ' + m.ad) }}
+                  <button key={m.id} onClick={async () => { setMalkod(m.kod); setSearch(m.kod + ' — ' + m.ad) }}
                     className="w-full text-left px-3 py-1.5 text-xs hover:bg-bg-3 truncate">
                     <span className="font-mono text-accent">{m.kod}</span> — {m.ad}
                   </button>

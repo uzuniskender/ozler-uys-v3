@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import type { BomTree } from '@/types'
 import { Plus, Trash2, Pencil } from 'lucide-react'
 
@@ -12,14 +13,14 @@ export function BomTrees() {
   const [showNew, setShowNew] = useState(false)
 
   async function deleteBom(id: string) {
-    if (!confirm('Bu ürün ağacını silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu ürün ağacını silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_bom_trees').delete().eq('id', id)
     loadAll(); toast.success('Ürün ağacı silindi')
   }
 
   async function createRecipeFromBom(bt: BomTree) {
     const existing = recipes.find(r => r.mamulKod === bt.mamulKod)
-    if (existing && !confirm(`"${bt.mamulKod}" için reçete zaten var. Üzerine yazılsın mı?`)) return
+    if (existing && !await showConfirm(`"${bt.mamulKod}" için reçete zaten var. Üzerine yazılsın mı?`)) return
     const satirlar = (bt.rows || []).map(row => ({
       id: uid(), kirno: row.kirno || '1', malkod: row.malkod, malad: row.malad,
       tip: row.tip || 'Hammadde', miktar: row.miktar || 1, birim: row.birim || 'Adet',

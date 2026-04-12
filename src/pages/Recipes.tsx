@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
 import { Plus, Trash2, Pencil, Download } from 'lucide-react'
 
@@ -22,7 +23,7 @@ export function Recipes() {
   }
 
   async function deleteRecipe(id: string) {
-    if (!confirm('Bu reçeteyi silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu reçeteyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_recipes').delete().eq('id', id)
     loadAll(); toast.success('Reçete silindi')
   }

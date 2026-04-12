@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
-import { showPrompt, showMultiPrompt } from '@/lib/prompt'
+import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
@@ -27,7 +27,7 @@ export function WorkOrders() {
   // #13: Toplu İE Güncelleme
   async function topluDurumGuncelle(durum: string) {
     if (!selected.size) return
-    if (!confirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
+    if (!await showConfirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
     for (const id of selected) {
       await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     }
@@ -42,7 +42,7 @@ export function WorkOrders() {
       toast.error(uretimli.length + ' İE\'de üretim var — silemezsiniz, önce İptal Et kullanın')
       return
     }
-    if (!confirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
+    if (!await showConfirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
     for (const id of selected) {
       await supabase.from('uys_work_orders').delete().eq('id', id)
     }
@@ -105,7 +105,7 @@ export function WorkOrders() {
       if (!neden?.trim()) { toast.error('İptal nedeni zorunlu'); return }
 
       if (prod > 0) {
-        if (!confirm(`${wo.ieNo}: ${prod} adet üretim var.\n\nİptal edilirse:\n• Üretilen ${prod} adet stoktan ÇIKARILIR\n• Tüketilen hammaddeler stoka GERİ EKLENİR\n\nDevam?`)) return
+        if (!await showConfirm(`${wo.ieNo}: ${prod} adet üretim var.\n\nİptal edilirse:\n• Üretilen ${prod} adet stoktan ÇIKARILIR\n• Tüketilen hammaddeler stoka GERİ EKLENİR\n\nDevam?`)) return
 
         // Ters stok hareketi — üretilen mamul stoktan çıkar
         await supabase.from('uys_stok_hareketler').insert({
@@ -149,7 +149,7 @@ export function WorkOrders() {
       toast.error('Üretim girişi var (' + prod + ' adet) — silemezsiniz, İptal Et kullanın')
       return
     }
-    if (!confirm(wo.ieNo + ' silinecek. Bu işlem geri alınamaz.')) return
+    if (!await showConfirm(wo.ieNo + ' silinecek. Bu işlem geri alınamaz.')) return
     await supabase.from('uys_work_orders').delete().eq('id', id)
     loadAll(); toast.success(wo.ieNo + ' silindi')
   }
@@ -303,20 +303,20 @@ export function WorkOrders() {
             {/* İE Durum Butonları — v2 kuralları */}
             <div className="flex gap-2 mb-4 flex-wrap">
               {(detailW.durum === 'beklemede' || detailW.durum === 'tamamlandi') && (
-                <button onClick={() => { setDurum(detailW.id, 'uretimde'); setDetailWO(null) }} className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">
+                <button onClick={async () => { setDurum(detailW.id, 'uretimde'); setDetailWO(null) }} className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">
                   ▶ {detailW.durum === 'tamamlandi' ? 'Devam Ettir' : 'Devam Et'}
                 </button>
               )}
               {detailW.durum !== 'beklemede' && detailW.durum !== 'tamamlandi' && detailW.durum !== 'iptal' && (
-                <button onClick={() => { setDurum(detailW.id, 'beklemede'); setDetailWO(null) }} className="px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs hover:bg-purple-500/20">⏸ Beklet</button>
+                <button onClick={async () => { setDurum(detailW.id, 'beklemede'); setDetailWO(null) }} className="px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs hover:bg-purple-500/20">⏸ Beklet</button>
               )}
               {detailW.durum !== 'tamamlandi' && detailW.durum !== 'iptal' && wProd(detailW.id) > 0 && (
-                <button onClick={() => { setDurum(detailW.id, 'tamamlandi'); setDetailWO(null) }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">✓ Tamamla</button>
+                <button onClick={async () => { setDurum(detailW.id, 'tamamlandi'); setDetailWO(null) }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">✓ Tamamla</button>
               )}
               {detailW.durum !== 'iptal' && detailW.durum !== 'tamamlandi' && (
                 wProd(detailW.id) === 0
-                  ? <button onClick={() => { deleteWO(detailW.id); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button>
-                  : <button onClick={() => { setDurum(detailW.id, 'iptal'); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>
+                  ? <button onClick={async () => { deleteWO(detailW.id); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button>
+                  : <button onClick={async () => { setDurum(detailW.id, 'iptal'); setDetailWO(null) }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>
               )}
             </div>
 
@@ -442,7 +442,7 @@ export function WorkOrders() {
                 const { data: sh } = await supabase.from('uys_stok_hareketler').select('id').eq('log_id', l.id).eq('tip', 'giris').limit(1)
                 if (sh?.[0]) await supabase.from('uys_stok_hareketler').update({ miktar: q }).eq('id', sh[0].id)
                 loadAll(); toast.success('Log güncellendi')
-              }} className="text-zinc-600 hover:text-amber text-[10px]">Düzenle</button><button onClick={async () => { if (!confirm('Bu üretim logunu silmek istediğinize emin misiniz?')) return; await supabase.from('uys_logs').delete().eq('id', l.id); await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id); loadAll(); toast.success('Log silindi') }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></td></tr>))}</tbody></table>
+              }} className="text-zinc-600 hover:text-amber text-[10px]">Düzenle</button><button onClick={async () => { if (!await showConfirm('Bu üretim logunu silmek istediğinize emin misiniz?')) return; await supabase.from('uys_logs').delete().eq('id', l.id); await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id); loadAll(); toast.success('Log silindi') }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></td></tr>))}</tbody></table>
             ) : <div className="text-zinc-600 text-xs p-3">Henüz üretim logu yok</div> })()}
           </div>
         </div>

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm, showAlert } from '@/lib/prompt'
 
 export function DataManagement() {
   const store = useStore()
@@ -41,8 +42,8 @@ export function DataManagement() {
   }
 
   // #17: JSON Import
-  function importJSON() {
-    if (!confirm('JSON yedeğini yüklemek mevcut verilerin ÜZERİNE YAZACAKTIR. Devam etmek istiyor musunuz?')) return
+  async function importJSON() {
+    if (!await showConfirm('JSON yedeğini yüklemek mevcut verilerin ÜZERİNE YAZACAKTIR. Devam etmek istiyor musunuz?')) return
     const input = document.createElement('input')
     input.type = 'file'; input.accept = '.json'
     input.onchange = async (e) => {
@@ -131,7 +132,7 @@ export function DataManagement() {
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="text-xs text-zinc-400">İşlem Geçmişi (son 50)</div>
-          <button onClick={() => { clearActivityLog(); toast.success('Log temizlendi') }} className="text-[10px] text-zinc-600 hover:text-red">Temizle</button>
+          <button onClick={async () => { clearActivityLog(); toast.success('Log temizlendi') }} className="text-[10px] text-zinc-600 hover:text-red">Temizle</button>
         </div>
         <div className="max-h-48 overflow-y-auto space-y-0.5">
           {getActivityLog().slice(0, 50).map((log, i) => (
@@ -157,7 +158,7 @@ export function DataManagement() {
       {/* #24: Sistem Testi */}
       <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
         <div className="text-sm font-semibold mb-2">🔍 Sistem Testi</div>
-        <button onClick={() => {
+        <button onClick={async () => {
           const sorunlar: string[] = []
           // Orphan İE kontrolü
           const orphanWO = store.workOrders.filter(w => w.orderId && !store.orders.find(o => o.id === w.orderId))
@@ -179,7 +180,7 @@ export function DataManagement() {
 
           if (sorunlar.length) {
             toast.warning(`${sorunlar.length} sorun bulundu`)
-            alert('Sistem Testi Sonuçları:\n\n' + sorunlar.map((s, i) => `${i + 1}. ${s}`).join('\n'))
+            await showAlert(sorunlar.length ? sorunlar.map((s, i) => `${i + 1}. ${s}`).join('\n') : 'Sorun bulunamadı ✓', 'Sistem Testi Sonuçları')
           } else {
             toast.success('Sistem testi başarılı — sorun bulunamadı')
           }
@@ -192,7 +193,7 @@ export function DataManagement() {
       <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
         <div className="text-sm font-semibold text-red mb-2">⚠ Tehlikeli İşlemler</div>
         <button onClick={async () => {
-          if (!confirm('TÜM VERİLER SİLİNECEK! Bu işlem geri alınamaz. Devam etmek istiyor musunuz?')) return
+          if (!await showConfirm('TÜM VERİLER SİLİNECEK! Bu işlem geri alınamaz. Devam etmek istiyor musunuz?')) return
           if (prompt('Onaylamak için "SIFIRLA" yazın:') !== 'SIFIRLA') return
           for (const t of tables) {
             await supabase.from(t.table).delete().neq('id', '___impossible___')

@@ -1,4 +1,6 @@
 import { toast } from 'sonner'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { showConfirm } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -100,7 +102,7 @@ export function Dashboard() {
           <div className="text-sm font-semibold text-amber mb-2 flex items-center justify-between">
             <span>⚠ {minStokUyari.length} malzeme minimum stok altında</span>
             <button onClick={async () => {
-              if (!confirm(`${minStokUyari.length} malzeme için tedarik önerisi oluşturulsun mu?`)) return
+              if (!await showConfirm(`${minStokUyari.length} malzeme için tedarik önerisi oluşturulsun mu?`)) return
               let count = 0
               for (const m of minStokUyari) {
                 const stok = stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
@@ -128,6 +130,33 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Günlük Üretim Grafiği */}
+      {(() => {
+        const gunMap: Record<string, { gun: string; uretim: number; fire: number }> = {}
+        logs.forEach(l => {
+          if (!l.tarih) return
+          if (!gunMap[l.tarih]) gunMap[l.tarih] = { gun: l.tarih.slice(5), uretim: 0, fire: 0 }
+          gunMap[l.tarih].uretim += l.qty
+          gunMap[l.tarih].fire += l.fire || 0
+        })
+        const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-7)
+        if (data.length < 2) return null
+        return (
+          <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
+            <div className="text-xs font-semibold text-zinc-400 mb-3">Son 7 Gün Üretim</div>
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={data}>
+                <XAxis dataKey="gun" tick={{ fontSize: 10, fill: '#666' }} />
+                <YAxis tick={{ fontSize: 10, fill: '#666' }} width={35} />
+                <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 11 }} />
+                <Bar dataKey="uretim" fill="#22c55e" radius={[3, 3, 0, 0]} name="Üretim" />
+                <Bar dataKey="fire" fill="#ef4444" radius={[3, 3, 0, 0]} name="Fire" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      })()}
 
       {/* Aktif Çalışmalar */}
       {activeWork.length > 0 && (
@@ -185,7 +214,7 @@ export function Dashboard() {
                   <button onClick={async () => { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id); loadAll() }}
                     className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20 whitespace-nowrap">✓ Okundu</button>
                 ) : <span className="text-[10px] text-zinc-600">okundu</span>}
-                <button onClick={async () => { if (!confirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
+                <button onClick={async () => { if (!await showConfirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
               </div>
             ))}
           </div>

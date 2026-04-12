@@ -5,6 +5,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Search, Play, CheckCircle, ScanBarcode } from 'lucide-react'
 
 export function ProductionEntry() {
@@ -220,7 +221,7 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
     // #2: Fazla üretim kontrolü
     if (q + prod > w.hedef) {
       const fazla = (q + prod) - w.hedef
-      if (!confirm(`Hedef: ${w.hedef}, mevcut: ${prod}, girilecek: ${q}\n${fazla} adet FAZLA üretim olacak. Devam?`)) return
+      if (!await showConfirm(`Hedef: ${w.hedef}, mevcut: ${prod}, girilecek: ${q}\n${fazla} adet FAZLA üretim olacak. Devam?`)) return
     }
     setSaving(true)
 
@@ -264,7 +265,7 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
 
     // Fire → sipariş dışı İE teklifi (#6)
     if (f > 0 && f >= 5) {
-      const createFireIE = confirm(`${f} adet fire oluştu. Telafi için yeni İE oluşturulsun mu?`)
+      const createFireIE = await showConfirm(`${f} adet fire oluştu. Telafi için yeni İE oluşturulsun mu?`)
       if (createFireIE) {
         const ieNo = await fireIEOlustur(woId, f, workOrders)
         if (ieNo) toast.info('Fire İE oluşturuldu: ' + ieNo)

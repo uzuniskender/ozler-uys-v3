@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import { showPrompt } from '@/lib/prompt'
+import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet } from '@/features/production/cutting'
 import { Trash2, Plus, Scissors } from 'lucide-react'
@@ -15,7 +15,7 @@ export function CuttingPlans() {
   const bekleyen = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
 
   async function deletePlan(id: string) {
-    if (!confirm('Silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_kesim_planlari').delete().eq('id', id)
     loadAll(); toast.success('Kesim planı silindi')
   }

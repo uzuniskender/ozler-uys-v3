@@ -1,3 +1,4 @@
+import { showConfirm } from '@/lib/prompt'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -15,7 +16,7 @@ export function DowntimeCodes() {
   }, [durusKodlari])
 
   async function del(id: string) {
-    if (!confirm('Silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_durus_kodlari').delete().eq('id', id); loadAll()
   }
 
@@ -54,7 +55,7 @@ export function DowntimeCodes() {
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-              <button onClick={() => { const k=(document.getElementById('dk-kod') as HTMLInputElement).value; const a=(document.getElementById('dk-ad') as HTMLInputElement).value; const c=(document.getElementById('dk-kat') as HTMLInputElement).value; if(k&&a)add(k,a,c) }} className="px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold">Kaydet</button>
+              <button onClick={async () => { const k=(document.getElementById('dk-kod') as HTMLInputElement).value; const a=(document.getElementById('dk-ad') as HTMLInputElement).value; const c=(document.getElementById('dk-kat') as HTMLInputElement).value; if(k&&a)add(k,a,c) }} className="px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold">Kaydet</button>
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import { showMultiPrompt } from '@/lib/prompt'
+import { showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Plus, UserCheck, UserX, Calendar } from 'lucide-react'
 
@@ -39,7 +39,7 @@ export function Operators() {
   }
 
   async function deleteOpr(id: string) {
-    if (!confirm('Bu operatörü silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu operatörü silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_operators').delete().eq('id', id)
     loadAll()
   }
@@ -59,7 +59,7 @@ export function Operators() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Operatörler</h1><p className="text-xs text-zinc-500">{operators.length} operatör · {operators.filter(o => o.aktif).length} aktif</p></div>
-        <button onClick={() => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>
+        <button onClick={async () => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>
       </div>
 
       <div className="flex gap-1 mb-4">
@@ -93,7 +93,7 @@ export function Operators() {
                 <span className="font-mono text-[11px] text-accent w-20">{o.kod}</span>
                 <span className="flex-1 text-xs font-medium">{o.ad}</span>
                 <div className="flex gap-1">
-                  <button onClick={() => { setEditOpr(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Düzenle</button>
+                  <button onClick={async () => { setEditOpr(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Düzenle</button>
                   <button onClick={() => toggleAktif(o.id, !o.aktif)} className="p-1 text-zinc-500 hover:text-amber" title={o.aktif ? 'Pasife al' : 'Aktifleştir'}>
                     {o.aktif ? <UserX size={12} /> : <UserCheck size={12} />}
                   </button>
@@ -140,7 +140,7 @@ export function Operators() {
                       <td className="px-3 py-1.5 font-mono text-zinc-500">{iz.bitis}</td>
                       <td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${iz.tip === 'mesai' ? 'bg-green/10 text-green' : 'bg-amber/10 text-amber'}`}>{iz.tip}</span></td>
                       <td className="px-3 py-1.5 text-right font-mono">{gun}</td>
-                      <td className="px-3 py-1.5 text-right"><button onClick={() => {
+                      <td className="px-3 py-1.5 text-right"><button onClick={async () => {
                         const updated = izinler.filter(i => i.id !== iz.id)
                         setIzinler(updated); localStorage.setItem('uys_izinler', JSON.stringify(updated))
                         toast.success('İzin silindi')

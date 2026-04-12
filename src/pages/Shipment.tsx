@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Plus, Truck } from 'lucide-react'
 
 export function Shipment() {
@@ -12,7 +13,7 @@ export function Shipment() {
   const sorted = useMemo(() => [...sevkler].sort((a, b) => (b.tarih || '').localeCompare(a.tarih || '')), [sevkler])
 
   async function deleteSevk(id: string) {
-    if (!confirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_sevkler').delete().eq('id', id)
     loadAll(); toast.success('Sevkiyat silindi')
   }

@@ -83,3 +83,65 @@ export function showMultiPrompt(title: string, fields: { label: string; key: str
     overlay.onclick = (e) => { if (e.target === overlay) close(false) }
   })
 }
+
+/**
+ * Browser confirm() yerine uygulama içi onay modal
+ */
+export function showConfirm(message: string, title?: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div')
+    overlay.className = 'fixed inset-0 z-[999] flex items-center justify-center'
+    overlay.style.background = 'rgba(0,0,0,0.6)'
+    overlay.innerHTML = `
+      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:380px;font-family:system-ui">
+        ${title ? `<div style="font-size:14px;font-weight:600;color:#e4e4e7;margin-bottom:8px">${title}</div>` : ''}
+        <div style="font-size:13px;color:#a1a1aa;margin-bottom:20px;white-space:pre-line;line-height:1.5">${message}</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="_confirm_no" style="padding:8px 20px;background:#1a1a2e;border:1px solid #2a2a3e;border-radius:8px;color:#a1a1aa;font-size:12px;cursor:pointer">İptal</button>
+          <button id="_confirm_yes" style="padding:8px 20px;background:#ef4444;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Evet</button>
+        </div>
+      </div>`
+    document.body.appendChild(overlay)
+
+    function close(val: boolean) {
+      document.body.removeChild(overlay)
+      resolve(val)
+    }
+
+    document.getElementById('_confirm_no')!.onclick = () => close(false)
+    document.getElementById('_confirm_yes')!.onclick = () => close(true)
+    overlay.onclick = (e) => { if (e.target === overlay) close(false) }
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') { close(false); document.removeEventListener('keydown', handler) }
+      if (e.key === 'Enter') { close(true); document.removeEventListener('keydown', handler) }
+    })
+  })
+}
+
+/**
+ * Browser alert() yerine uygulama içi bilgi modal
+ */
+export function showAlert(message: string, title?: string): Promise<void> {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div')
+    overlay.className = 'fixed inset-0 z-[999] flex items-center justify-center'
+    overlay.style.background = 'rgba(0,0,0,0.6)'
+    overlay.innerHTML = `
+      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:420px;max-height:70vh;font-family:system-ui;display:flex;flex-direction:column">
+        ${title ? `<div style="font-size:14px;font-weight:600;color:#e4e4e7;margin-bottom:8px">${title}</div>` : ''}
+        <div style="font-size:12px;color:#a1a1aa;margin-bottom:20px;white-space:pre-line;line-height:1.6;overflow-y:auto;flex:1">${message}</div>
+        <div style="display:flex;justify-content:flex-end">
+          <button id="_alert_ok" style="padding:8px 24px;background:#06b6d4;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Tamam</button>
+        </div>
+      </div>`
+    document.body.appendChild(overlay)
+
+    function close() { document.body.removeChild(overlay); resolve() }
+
+    document.getElementById('_alert_ok')!.onclick = close
+    overlay.onclick = (e) => { if (e.target === overlay) close() }
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Enter' || e.key === 'Escape') { close(); document.removeEventListener('keydown', handler) }
+    })
+  })
+}

@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil } from 'lucide-react'
 
 export function Stations() {
@@ -18,7 +19,7 @@ export function Stations() {
   }, [stations, search])
 
   async function del(id: string) {
-    if (!confirm('Silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_stations').delete().eq('id', id); loadAll(); toast.success('İstasyon silindi')
   }
 
@@ -32,7 +33,7 @@ export function Stations() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">İstasyonlar</h1><p className="text-xs text-zinc-500">{stations.length} istasyon</p></div>
-        <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+        <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
       </div>
       <div className="relative max-w-xs mb-4"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
@@ -48,7 +49,7 @@ export function Stations() {
                   {(s.opIds || []).map(id => operations.find(o => o.id === id)?.ad).filter(Boolean).join(', ') || '—'}
                 </td>
                 <td className="px-4 py-1.5 text-right">
-                  <button onClick={() => { setEditItem(s); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
+                  <button onClick={async () => { setEditItem(s); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
                   <button onClick={() => del(s.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red ml-1">Sil</button>
                 </td>
               </tr>

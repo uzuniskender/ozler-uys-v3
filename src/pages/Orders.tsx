@@ -6,6 +6,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, ArrowUp, ArrowDown } from 'lucide-react'
 import type { Order } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
@@ -23,7 +24,7 @@ export function Orders() {
 
   async function selDeleteAll() {
     if (!selIds.size) return
-    if (!confirm(`${selIds.size} sipariş SİLİNECEK. Devam?`)) return
+    if (!await showConfirm(`${selIds.size} sipariş SİLİNECEK. Devam?`)) return
     for (const id of selIds) {
       await supabase.from('uys_work_orders').delete().eq('order_id', id)
       await supabase.from('uys_orders').delete().eq('id', id)
@@ -61,7 +62,7 @@ export function Orders() {
     if (!error) { loadAll(); toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA') }
   }
   async function deleteOrder(id: string) {
-    if (!confirm('Bu siparişi ve ilişkili iş emirlerini silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu siparişi ve ilişkili iş emirlerini silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_work_orders').delete().eq('order_id', id)
     await supabase.from('uys_orders').delete().eq('id', id)
     logAction('Sipariş silindi', id)
@@ -120,7 +121,7 @@ export function Orders() {
       : orders.filter(o => orderPct(o.id) < 100 && o.receteId)
 
     if (!hedefOrders.length) { toast.error('MRP çalıştırılacak sipariş yok'); return }
-    if (!confirm(`${hedefOrders.length} sipariş için MRP çalıştırılacak. Devam?`)) return
+    if (!await showConfirm(`${hedefOrders.length} sipariş için MRP çalıştırılacak. Devam?`)) return
 
     let toplamTedarik = 0
     for (const o of hedefOrders) {
@@ -170,7 +171,7 @@ export function Orders() {
           <button onClick={topluSiparisYukle} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={() => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>
+          <button onClick={async () => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -213,7 +214,7 @@ export function Orders() {
                     <button onClick={() => oncelikDegistir(o.id, 1)} className="p-1 text-zinc-500 hover:text-amber" title="Öncelik artır"><ArrowUp size={11} /></button>
                     <button onClick={() => oncelikDegistir(o.id, -1)} className="p-1 text-zinc-500 hover:text-zinc-300" title="Öncelik azalt"><ArrowDown size={11} /></button>
                     <button onClick={() => copyOrder(o)} className="p-1 text-zinc-500 hover:text-green" title="Kopyala"><Copy size={13} /></button>
-                    <button onClick={() => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>
+                    <button onClick={async () => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>
                     <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>
                   </div></td>
                 </tr>
@@ -337,12 +338,12 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
 
         <div className="flex gap-1 mb-3">
           <button onClick={() => setTab('ie')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'ie' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>İş Emirleri ({workOrders.length})</button>
-          <button onClick={() => { if (!mrpDone) runMRP(); setTab('mrp') }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'mrp' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
+          <button onClick={async () => { if (!mrpDone) runMRP(); setTab('mrp') }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${tab === 'mrp' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>
             <Calculator size={12} /> MRP {mrpDone && `(${mrpRows.length})`}
           </button>
           <span className="flex-1" />
           {order.receteId && <button onClick={async () => {
-            if (!confirm('Mevcut İE\'ler silinip reçeteden yeniden oluşturulacak. Devam?')) return
+            if (!await showConfirm('Mevcut İE\'ler silinip reçeteden yeniden oluşturulacak. Devam?')) return
             // Mevcut İE'leri sil
             for (const w of workOrders) { await supabase.from('uys_work_orders').delete().eq('id', w.id) }
             // Yeniden oluştur

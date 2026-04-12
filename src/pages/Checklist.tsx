@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Plus, Search, Pencil, Trash2, Camera, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
 import type { ChecklistItem } from '@/types'
 
@@ -33,7 +34,7 @@ export function Checklist() {
   }, [checklist, search, tipFilter, durumFilter])
 
   async function deleteCL(id: string) {
-    if (!confirm('Silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_checklist').delete().eq('id', id)
     loadAll(); toast.success('Silindi')
   }
@@ -51,7 +52,7 @@ export function Checklist() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Checklist / İstekler</h1><p className="text-xs text-zinc-500">{gorevCount} görev · {istekCount} istek açık</p></div>
-        <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ekle</button>
+        <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ekle</button>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -91,7 +92,7 @@ export function Checklist() {
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => setDetailItem(c)} className="p-1 text-zinc-500 hover:text-accent"><Camera size={13} /></button>
-                  <button onClick={() => { setEditItem(c); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber"><Pencil size={13} /></button>
+                  <button onClick={async () => { setEditItem(c); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber"><Pencil size={13} /></button>
                   <button onClick={() => deleteCL(c.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={13} /></button>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
 import { Search, Download, Plus, Pencil, Trash2, Upload } from 'lucide-react'
 import type { Material } from '@/types'
 
@@ -24,7 +25,7 @@ export function Materials() {
   }, [materials, search, tipFilter])
 
   async function deleteMat(id: string) {
-    if (!confirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
+    if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_malzemeler').delete().eq('id', id)
     loadAll(); toast.success('Malzeme silindi')
   }
@@ -84,7 +85,7 @@ export function Materials() {
         <div className="flex gap-2">
           <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={() => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>
+          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -122,7 +123,7 @@ export function Materials() {
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>
                     <td className="px-4 py-1.5 text-zinc-500 text-[11px]">{op?.ad || '—'}</td>
                     <td className="px-4 py-1.5 text-right">
-                      <button onClick={() => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
+                      <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
                       <button onClick={() => deleteMat(m.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
                     </td>
                   </tr>
