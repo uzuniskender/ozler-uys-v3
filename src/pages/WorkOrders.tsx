@@ -299,6 +299,18 @@ export function WorkOrders() {
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Hedef</div><input type="number" defaultValue={detailW.hedef} onBlur={async e => { const v = parseInt(e.target.value) || 0; if (v !== detailW.hedef && v > 0) { await supabase.from('uys_work_orders').update({ hedef: v }).eq('id', detailW.id); loadAll(); toast.success('Hedef güncellendi: ' + v) } }} className="text-sm font-mono bg-transparent border-b border-border/50 w-16 focus:outline-none focus:border-accent" /></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Üretilen</div><div className="text-sm font-mono text-green">{wProd(detailW.id)}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Kalan</div><div className="text-sm font-mono text-amber">{Math.max(0, detailW.hedef - wProd(detailW.id))}</div></div>
+              <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Tahmini Bitiş</div><div className="text-sm font-mono text-zinc-300">{(() => {
+                const kalan = Math.max(0, detailW.hedef - wProd(detailW.id))
+                if (kalan <= 0) return '✓ Bitti'
+                const woLogs = logs.filter(l => l.woId === detailW.id)
+                if (!woLogs.length) return '—'
+                const gunler = new Set(woLogs.map(l => l.tarih))
+                const gunlukOrt = woLogs.reduce((a, l) => a + l.qty, 0) / gunler.size
+                if (gunlukOrt <= 0) return '—'
+                const kalanGun = Math.ceil(kalan / gunlukOrt)
+                const d = new Date(); d.setDate(d.getDate() + kalanGun)
+                return d.toISOString().slice(0, 10) + ` (${kalanGun}g)`
+              })()}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">İlerleme</div><div className={`text-sm font-mono font-semibold ${pctColor(wPct(detailW))}`}>{wPct(detailW)}%</div></div>
               {(() => {
                 const woLogs = logs.filter(l => l.woId === detailW.id)

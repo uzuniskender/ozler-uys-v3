@@ -45,9 +45,11 @@ export function Orders() {
   const filtered = useMemo(() => {
     return orders.filter(o => {
       if (search) { const q = search.toLowerCase(); if (!(o.siparisNo + o.musteri + o.mamulAd).toLowerCase().includes(q)) return false }
-      if (statusFilter === 'active') return orderPct(o.id) < 100
+      if (statusFilter === 'active') return o.durum !== 'kapalı' && orderPct(o.id) < 100
       if (statusFilter === 'done') return orderPct(o.id) >= 100
-      if (statusFilter === 'late') return o.termin && o.termin < today() && orderPct(o.id) < 100
+      if (statusFilter === 'late') return o.durum !== 'kapalı' && o.termin && o.termin < today() && orderPct(o.id) < 100
+      if (statusFilter === 'closed') return o.durum === 'kapalı'
+      return o.durum !== 'kapalı' // 'all' — kapalıları gizle
       return true
     })
   }, [orders, search, statusFilter, workOrders, logs])
@@ -178,7 +180,7 @@ export function Orders() {
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Sipariş no veya müşteri ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tümü</option><option value="active">Üretimde</option><option value="done">Tamamlandı</option><option value="late">Gecikmeli</option>
+          <option value="all">Tümü</option><option value="active">Üretimde</option><option value="done">Tamamlandı</option><option value="late">Gecikmeli</option><option value="closed">Kapalı</option>
         </select>
       </div>
 
@@ -215,6 +217,13 @@ export function Orders() {
                     <button onClick={() => oncelikDegistir(o.id, -1)} className="p-1 text-zinc-500 hover:text-zinc-300" title="Öncelik azalt"><ArrowDown size={11} /></button>
                     <button onClick={() => copyOrder(o)} className="p-1 text-zinc-500 hover:text-green" title="Kopyala"><Copy size={13} /></button>
                     <button onClick={async () => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>
+                    <button onClick={async () => {
+                      const yeniDurum = o.durum === 'kapalı' ? '' : 'kapalı'
+                      await supabase.from('uys_orders').update({ durum: yeniDurum }).eq('id', o.id)
+                      loadAll(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))
+                    }} className={`p-1 ${o.durum === 'kapalı' ? 'text-green hover:text-green' : 'text-zinc-500 hover:text-amber'}`} title={o.durum === 'kapalı' ? 'Aç' : 'Kapat'}>
+                      {o.durum === 'kapalı' ? '🔓' : '🔒'}
+                    </button>
                     <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>
                   </div></td>
                 </tr>
