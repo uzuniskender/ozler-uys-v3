@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Download, Eye } from 'lucide-react'
+import { Search, Download, Eye, CheckSquare } from 'lucide-react'
 
 export function WorkOrders() {
   const { workOrders, logs, orders, loadAll } = useStore()
@@ -11,6 +11,30 @@ export function WorkOrders() {
   const [statusFilter, setStatusFilter] = useState('active')
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  function toggleSelect(id: string) { setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
+  function selectAll() { setSelected(new Set(filtered.map(w => w.id))) }
+  function selectNone() { setSelected(new Set()) }
+
+  // #13: Toplu İE Güncelleme
+  async function topluDurumGuncelle(durum: string) {
+    if (!selected.size) return
+    if (!confirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
+    for (const id of selected) {
+      await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
+    }
+    setSelected(new Set()); loadAll(); toast.success(`${selected.size} İE güncellendi`)
+  }
+
+  async function topluSil() {
+    if (!selected.size) return
+    if (!confirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
+    for (const id of selected) {
+      await supabase.from('uys_work_orders').delete().eq('id', id)
+    }
+    setSelected(new Set()); loadAll(); toast.success(`${selected.size} İE silindi`)
+  }
 
   function wProd(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
   function wPct(w: { id: string; hedef: number }): number { return w.hedef > 0 ? Math.min(100, Math.round(wProd(w.id) / w.hedef * 100)) : 0 }
@@ -82,18 +106,33 @@ export function WorkOrders() {
         </select>
       </div>
 
+      {/* Toplu İşlem Toolbar */}
+      {selected.size > 0 && (
+        <div className="mb-3 p-2 bg-accent/5 border border-accent/20 rounded-lg flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-accent"><CheckSquare size={13} className="inline" /> {selected.size} seçili</span>
+          <button onClick={() => topluDurumGuncelle('uretimde')} className="px-2 py-1 bg-accent/20 text-accent rounded text-[10px] hover:bg-accent/30">→ Üretimde</button>
+          <button onClick={() => topluDurumGuncelle('tamamlandi')} className="px-2 py-1 bg-green/20 text-green rounded text-[10px] hover:bg-green/30">→ Tamamlandı</button>
+          <button onClick={() => topluDurumGuncelle('iptal')} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">→ İptal</button>
+          <button onClick={topluSil} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">Sil</button>
+          <span className="flex-1" />
+          <button onClick={selectAll} className="text-[10px] text-zinc-500 hover:text-white">Tümünü Seç</button>
+          <button onClick={selectNone} className="text-[10px] text-zinc-500 hover:text-white">Seçimi Kaldır</button>
+        </div>
+      )}
+
       {grouped.map(([group, wos]) => (
         <div key={group} className="mb-4">
           <div className="px-3 py-1.5 bg-bg-3/50 border border-border rounded-t-lg text-[11px] font-semibold text-accent font-mono flex justify-between">
             <span>{group}</span><span className="text-zinc-500 font-normal">{wos.length} iş emri</span>
           </div>
           <div className="bg-bg-2 border border-border border-t-0 rounded-b-lg overflow-hidden">
-            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th><th className="text-right px-3 py-2">Üretilen</th><th className="text-right px-3 py-2">%</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th></tr></thead>
+            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="px-2 py-2 w-6"><input type="checkbox" onChange={e => e.target.checked ? selectAll() : selectNone()} className="accent-accent" /></th><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th><th className="text-right px-3 py-2">Üretilen</th><th className="text-right px-3 py-2">%</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th></tr></thead>
             <tbody>
               {wos.map(w => {
                 const prod = wProd(w.id); const pct = wPct(w)
                 return (
                   <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
+                    <td className="px-2 py-1.5"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggleSelect(w.id)} className="accent-accent" /></td>
                     <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
                     <td className="px-3 py-1.5 text-zinc-300 max-w-[180px] truncate">{w.malad}</td>
                     <td className="px-3 py-1.5 text-zinc-500">{w.opAd || '—'}</td>

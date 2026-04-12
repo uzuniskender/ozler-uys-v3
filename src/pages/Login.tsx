@@ -2,9 +2,10 @@ import { useState } from 'react'
 
 interface LoginProps {
   onLogin: (email: string, password: string) => Promise<{ error: unknown }>
+  onGuest?: () => void
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({ onLogin, onGuest }: LoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -34,33 +35,26 @@ export function Login({ onLogin }: LoginProps) {
         )}
 
         <div className="mb-3">
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="Email"
-            className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
-            autoFocus
-          />
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
+            className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" autoFocus />
         </div>
 
         <div className="mb-5">
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="Şifre"
-            className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
-          />
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Şifre"
+            className="w-full px-3 py-2.5 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || !email || !password}
-          className="w-full py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white font-semibold rounded-lg text-sm transition-colors"
-        >
+        <button type="submit" disabled={loading || !email || !password}
+          className="w-full py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white font-semibold rounded-lg text-sm transition-colors">
           {loading ? 'Giriş yapılıyor...' : 'GİRİŞ YAP'}
         </button>
+
+        {onGuest && (
+          <button type="button" onClick={onGuest}
+            className="w-full mt-3 py-2 bg-bg-2 border border-border text-zinc-400 rounded-lg text-xs hover:text-white hover:border-border-2 transition-colors">
+            👁 Misafir Olarak Giriş (Salt Okunur)
+          </button>
+        )}
       </form>
     </div>
   )

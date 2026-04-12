@@ -17,7 +17,7 @@ function StatCard({ value, label, color, icon: Icon }: { value: number | string;
 }
 
 export function Dashboard() {
-  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs } = useStore()
+  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler } = useStore()
   const todayStr = today()
 
   // Calculations
@@ -47,6 +47,13 @@ export function Dashboard() {
     logs.filter(l => l.tarih === todayStr).flatMap(l => l.operatorlar.map(o => o.id))
   )
   const girmeyenler = operators.filter(o => o.aktif && !bugunLogOprIds.has(o.id))
+
+  // Min stok uyarıları
+  const minStokUyari = materials.filter(m => {
+    if (!m.minStok || m.minStok <= 0) return false
+    const stok = stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    return stok < m.minStok
+  })
 
   return (
     <div>
@@ -81,6 +88,25 @@ export function Dashboard() {
                 <span className="font-mono text-red ml-auto">{o.termin}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Min Stok Uyarı */}
+      {minStokUyari.length > 0 && (
+        <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg">
+          <div className="text-sm font-semibold text-amber mb-2">
+            ⚠ {minStokUyari.length} malzeme minimum stok altında
+          </div>
+          <div className="space-y-1">
+            {minStokUyari.slice(0, 5).map(m => (
+              <div key={m.id} className="flex items-center gap-3 text-xs">
+                <span className="font-mono text-accent">{m.kod}</span>
+                <span className="text-zinc-400">{m.ad}</span>
+                <span className="font-mono text-red ml-auto">Min: {m.minStok}</span>
+              </div>
+            ))}
+            {minStokUyari.length > 5 && <div className="text-[11px] text-zinc-600">+{minStokUyari.length - 5} daha</div>}
           </div>
         </div>
       )}

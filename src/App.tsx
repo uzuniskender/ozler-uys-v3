@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
@@ -76,18 +76,24 @@ function AppContent() {
 
 export default function App() {
   const { session, loading: authLoading, signIn } = useAuth()
+  const [guestMode, setGuestMode] = useState(false)
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
   }
 
-  if (!session) {
-    return <Login onLogin={signIn} />
+  if (!session && !guestMode) {
+    return <Login onLogin={signIn} onGuest={() => setGuestMode(true)} />
   }
 
   return (
     <>
       <Toaster theme="dark" position="bottom-right" richColors closeButton />
+      {guestMode && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber/90 text-black text-center text-xs py-1 font-semibold">
+          👁 MİSAFİR MODU — Salt okunur · <button onClick={() => setGuestMode(false)} className="underline">Çıkış</button>
+        </div>
+      )}
       <AppContent />
     </>
   )

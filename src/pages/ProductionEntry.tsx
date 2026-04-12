@@ -11,6 +11,7 @@ export function ProductionEntry() {
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState('')
   const [entryWO, setEntryWO] = useState<string | null>(null)
+  const [showToplu, setShowToplu] = useState(false)
 
   const bolumler = useMemo(() =>
     [...new Set(workOrders.map(w => w.opAd).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
@@ -35,7 +36,10 @@ export function ProductionEntry() {
 
   return (
     <div>
-      <div className="mb-4"><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{acikWOs.length} açık iş emri</p></div>
+      <div className="flex items-center justify-between mb-4">
+        <div><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{acikWOs.length} açık iş emri</p></div>
+        <button onClick={() => setShowToplu(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><CheckCircle size={13} /> Toplu Giriş</button>
+      </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs">
@@ -94,6 +98,15 @@ export function ProductionEntry() {
           
           onClose={() => setEntryWO(null)}
           onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }}
+        />
+      )}
+
+      {showToplu && (
+        <TopluUretimModal
+          acikWOs={acikWOs}
+          operators={operators}
+          onClose={() => setShowToplu(false)}
+          onSaved={() => { setShowToplu(false); loadAll(); toast.success('Toplu üretim kaydedildi') }}
         />
       )}
     </div>
@@ -237,6 +250,120 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
           <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             <CheckCircle size={13} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// #12: Toplu Üretim Girişi Modal
+function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
+  acikWOs: { id: string; ieNo: string; malad: string; opAd: string; hedef: number; malkod: string }[]
+  operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const { workOrders } = useStore()
+  const [rows, setRows] = useState<{ woId: string; qty: string; fire: string }[]>(
+    acikWOs.slice(0, 20).map(w => ({ woId: w.id, qty: '', fire: '' }))
+  )
+  const [oprId, setOprId] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function updateRow(i: number, field: string, value: string) {
+    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  }
+
+  async function save() {
+    const validRows = rows.filter(r => parseInt(r.qty) > 0)
+    if (!validRows.length) { toast.error('En az bir satıra miktar girin'); return }
+    setSaving(true)
+
+    const opr = operators.find(o => o.id === oprId)
+    const tarih = today()
+    const now = new Date()
+    const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+
+    for (const r of validRows) {
+      const q = parseInt(r.qty) || 0
+      const f = parseInt(r.fire) || 0
+      const wo = acikWOs.find(w => w.id === r.woId)
+      if (!wo || q <= 0) continue
+
+      const logId = uid()
+      await supabase.from('uys_logs').insert({
+        id: logId, wo_id: r.woId, tarih, qty: q, fire: f,
+        operatorlar: opr ? [{ id: opr.id, ad: opr.ad, bas: saat, bit: saat }] : [],
+        duruslar: [], malkod: wo.malkod, ie_no: wo.ieNo, operator_id: oprId || null,
+      })
+
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), tarih, malkod: wo.malkod, malad: wo.malad,
+        miktar: q, tip: 'giris', log_id: logId, wo_id: r.woId,
+        aciklama: 'Toplu üretim — ' + wo.ieNo,
+      })
+
+      // HM tüketim
+      await stokTuketimIsle(r.woId, q, logId, workOrders)
+
+      if (f > 0) {
+        await supabase.from('uys_fire_logs').insert({
+          id: uid(), log_id: logId, wo_id: r.woId, tarih,
+          malkod: wo.malkod, malad: wo.malad, qty: f,
+          ie_no: wo.ieNo, op_ad: wo.opAd,
+          operatorlar: opr ? [{ id: opr.id, ad: opr.ad }] : [],
+        })
+      }
+    }
+    setSaving(false); onSaved()
+  }
+
+  const aktifOprs = operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between mb-4">
+          <h2 className="text-lg font-semibold">Toplu Üretim Girişi</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div className="mb-4">
+          <label className="text-[11px] text-zinc-500 mb-1 block">Operatör (tümü için)</label>
+          <select value={oprId} onChange={e => setOprId(e.target.value)} className="w-full max-w-xs px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+            <option value="">— Seçin —</option>
+            {aktifOprs.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
+          </select>
+        </div>
+
+        <table className="w-full text-xs">
+          <thead><tr className="border-b border-border text-zinc-500">
+            <th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme</th>
+            <th className="text-left px-3 py-2">Operasyon</th><th className="text-right px-3 py-2">Hedef</th>
+            <th className="text-right px-3 py-2 w-20">Adet</th><th className="text-right px-3 py-2 w-16">Fire</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const wo = acikWOs.find(w => w.id === r.woId)
+              if (!wo) return null
+              return (
+                <tr key={r.woId} className="border-b border-border/30">
+                  <td className="px-3 py-1.5 font-mono text-accent">{wo.ieNo}</td>
+                  <td className="px-3 py-1.5 text-zinc-300 max-w-[180px] truncate">{wo.malad}</td>
+                  <td className="px-3 py-1.5 text-zinc-500">{wo.opAd}</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{wo.hedef}</td>
+                  <td className="px-3 py-1.5"><input type="number" min={0} value={r.qty} onChange={e => updateRow(i, 'qty', e.target.value)} placeholder="0" className="w-full px-2 py-1 bg-bg-2 border border-border rounded text-right text-xs focus:outline-none focus:border-accent" /></td>
+                  <td className="px-3 py-1.5"><input type="number" min={0} value={r.fire} onChange={e => updateRow(i, 'fire', e.target.value)} placeholder="0" className="w-full px-2 py-1 bg-bg-2 border border-border rounded text-right text-xs focus:outline-none" /></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={save} disabled={saving} className="px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+            {saving ? 'Kaydediliyor...' : 'Toplu Kaydet'}
           </button>
         </div>
       </div>

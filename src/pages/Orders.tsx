@@ -5,7 +5,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy } from 'lucide-react'
+import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, ArrowUp, ArrowDown } from 'lucide-react'
 import type { Order } from '@/types'
 
 export function Orders() {
@@ -52,6 +52,66 @@ export function Orders() {
     loadAll(); toast.success('Sipariş silindi')
   }
 
+  // #11: Toplu Sipariş Excel Import
+  async function topluSiparisYukle() {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.xlsx,.xls'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      const XLSX = await import('xlsx')
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
+      if (!rows.length) { toast.error('Excel boş'); return }
+
+      const { recipes: fullRecipes } = useStore.getState()
+      let created = 0, woTotal = 0
+      for (const row of rows) {
+        const sipNo = String(row['Sipariş No'] || row['SiparisNo'] || row['siparis_no'] || '').trim()
+        if (!sipNo) continue
+        const must = String(row['Müşteri'] || row['musteri'] || '').trim()
+        const term = String(row['Termin'] || row['termin'] || '').trim()
+        const adet = parseInt(String(row['Adet'] || row['adet'] || '1')) || 1
+        const mamulKod = String(row['Mamul Kod'] || row['mamulKod'] || row['mamul_kod'] || '').trim()
+        const mamulAd = String(row['Mamul Ad'] || row['mamulAd'] || row['mamul_ad'] || '').trim()
+
+        // Reçete eşleme
+        const rc = fullRecipes.find(r => r.mamulKod === mamulKod || r.ad === mamulAd)
+
+        const newId = uid()
+        await supabase.from('uys_orders').insert({
+          id: newId, siparis_no: sipNo, musteri: must, tarih: today(), termin: term,
+          mamul_kod: mamulKod || rc?.mamulKod || '', mamul_ad: mamulAd || rc?.mamulAd || '',
+          adet, recete_id: rc?.id || '', mrp_durum: 'bekliyor', olusturma: today(),
+          urunler: rc ? [{ rcId: rc.id, mamulKod: rc.mamulKod, mamulAd: rc.mamulAd, adet }] : [],
+        })
+        created++
+        if (rc) { woTotal += await buildWorkOrders(newId, sipNo, rc.id, adet, fullRecipes) }
+      }
+      loadAll()
+      toast.success(`${created} sipariş oluşturuldu, ${woTotal} İE üretildi`)
+    }
+    input.click()
+  }
+
+  function downloadTemplate() {
+    import('xlsx').then(XLSX => {
+      const ws = XLSX.utils.json_to_sheet([{ 'Sipariş No': 'SIP-001', 'Müşteri': 'ABC Ltd', 'Termin': '2026-05-01', 'Adet': 100, 'Mamul Kod': '', 'Mamul Ad': '' }])
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Siparişler')
+      XLSX.writeFile(wb, 'siparis_sablonu.xlsx')
+    })
+  }
+
+  // #19: Sipariş Önceliklendirme
+  async function oncelikDegistir(orderId: string, delta: number) {
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+    await supabase.from('uys_orders').update({ oncelik: (order.oncelik || 0) + delta }).eq('id', orderId)
+    loadAll()
+  }
+
   function exportExcel() {
     import('xlsx').then(XLSX => {
       const rows = filtered.map(o => ({ 'Sipariş No': o.siparisNo, 'Müşteri': o.musteri, 'Tarih': o.tarih, 'Termin': o.termin, 'Ürün': o.mamulAd || o.mamulKod, 'Adet': o.adet, 'İlerleme': orderPct(o.id) + '%' }))
@@ -65,6 +125,8 @@ export function Orders() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Siparişler</h1><p className="text-xs text-zinc-500">{orders.length} sipariş</p></div>
         <div className="flex gap-2">
+          <button onClick={downloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white" title="Şablon indir"><Download size={13} /> Şablon</button>
+          <button onClick={topluSiparisYukle} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>
         </div>
@@ -94,6 +156,8 @@ export function Orders() {
                   <td className="px-4 py-2.5 text-right font-mono text-zinc-500">{woCount}</td>
                   <td className="px-4 py-2.5 text-right"><div className="flex gap-1 justify-end">
                     <button onClick={() => setSelectedOrder(o)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={13} /></button>
+                    <button onClick={() => oncelikDegistir(o.id, 1)} className="p-1 text-zinc-500 hover:text-amber" title="Öncelik artır"><ArrowUp size={11} /></button>
+                    <button onClick={() => oncelikDegistir(o.id, -1)} className="p-1 text-zinc-500 hover:text-zinc-300" title="Öncelik azalt"><ArrowDown size={11} /></button>
                     <button onClick={() => copyOrder(o)} className="p-1 text-zinc-500 hover:text-green" title="Kopyala"><Copy size={13} /></button>
                     <button onClick={() => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>
                     <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>
