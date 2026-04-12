@@ -33,6 +33,21 @@ export function Warehouse() {
     return sorted.filter(h => (h.malkod + h.malad + h.aciklama).toLowerCase().includes(q)).slice(0, 200)
   }, [stokHareketler, search])
 
+  // #30: Stok Onarım — negatif stokları sıfırla
+  async function stokOnar() {
+    const negatifler = stokMap.filter(s => s.miktar < -0.01)
+    if (!negatifler.length) { toast.info('Negatif stok yok — her şey düzgün'); return }
+    if (!confirm(`${negatifler.length} malzemede negatif stok var. Düzeltme girişleri oluşturulsun mu?`)) return
+    for (const s of negatifler) {
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), tarih: today(), malkod: s.malkod, malad: s.malad,
+        miktar: Math.abs(s.miktar), tip: 'giris',
+        aciklama: 'Stok onarım — negatif düzeltme',
+      })
+    }
+    loadAll(); toast.success(negatifler.length + ' malzeme düzeltildi')
+  }
+
   function exportExcel() {
     import('xlsx').then(XLSX => {
       const rows = filteredStok.map(s => ({ Kod: s.malkod, Malzeme: s.malad, Stok: Math.round(s.miktar * 100) / 100 }))
@@ -49,6 +64,7 @@ export function Warehouse() {
         <div><h1 className="text-xl font-semibold">Depolar</h1><p className="text-xs text-zinc-500">{stokHareketler.length} hareket · {stokMap.length} malzeme</p></div>
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+          <button onClick={() => stokOnar()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-amber" title="Negatif stokları sıfırla">🔧 Onar</button>
           <button onClick={() => setShowGiris(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Manuel Giriş/Çıkış</button>
         </div>
       </div>

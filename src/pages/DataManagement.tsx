@@ -1,3 +1,4 @@
+import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
 
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -124,6 +125,25 @@ export function DataManagement() {
             </div>
           )
         })}
+      </div>
+
+      {/* #28: Kullanıcı Log */}
+      <div className="bg-bg-2 border border-border rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-xs text-zinc-400">İşlem Geçmişi (son 50)</div>
+          <button onClick={() => { clearActivityLog(); toast.success('Log temizlendi') }} className="text-[10px] text-zinc-600 hover:text-red">Temizle</button>
+        </div>
+        <div className="max-h-48 overflow-y-auto space-y-0.5">
+          {getActivityLog().slice(0, 50).map((log, i) => (
+            <div key={i} className="flex gap-2 text-[10px]">
+              <span className="text-zinc-600 font-mono w-32 shrink-0">{log.ts}</span>
+              <span className="text-zinc-500 w-16 shrink-0">{log.user}</span>
+              <span className="text-accent">{log.action}</span>
+              <span className="text-zinc-600 truncate">{log.detail}</span>
+            </div>
+          ))}
+          {getActivityLog().length === 0 && <div className="text-zinc-600 text-xs">Henüz log yok</div>}
+        </div>
       </div>
 
       <div className="bg-bg-2 border border-border rounded-lg p-4">

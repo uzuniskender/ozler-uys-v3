@@ -1,17 +1,18 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
-import { today, pctColor } from '@/lib/utils'
+import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Download, Eye, CheckSquare } from 'lucide-react'
+import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, loadAll } = useStore()
+  const { workOrders, logs, orders, operations, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [showNewIE, setShowNewIE] = useState(false)
 
   function toggleSelect(id: string) { setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
   function selectAll() { setSelected(new Set(filtered.map(w => w.id))) }
@@ -92,7 +93,10 @@ export function WorkOrders() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">İş Emirleri</h1><p className="text-xs text-zinc-500">{workOrders.length} toplam</p></div>
-        <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+        <div className="flex gap-2">
+          <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
+          <button onClick={() => setShowNewIE(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -167,11 +171,21 @@ export function WorkOrders() {
               <div><h2 className="text-lg font-semibold">{detailW.ieNo}</h2><p className="text-xs text-zinc-500">{detailW.malad} · {detailW.opAd}</p></div>
               <button onClick={() => setDetailWO(null)} className="text-zinc-500 hover:text-white text-lg">✕</button>
             </div>
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-5 gap-3 mb-4">
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Hedef</div><div className="text-sm font-mono">{detailW.hedef}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Üretilen</div><div className="text-sm font-mono text-green">{wProd(detailW.id)}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Kalan</div><div className="text-sm font-mono text-amber">{Math.max(0, detailW.hedef - wProd(detailW.id))}</div></div>
               <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">İlerleme</div><div className={`text-sm font-mono font-semibold ${pctColor(wPct(detailW))}`}>{wPct(detailW)}%</div></div>
+              {(() => {
+                const woLogs = logs.filter(l => l.woId === detailW.id)
+                const gunler = new Set(woLogs.map(l => l.tarih))
+                const gunlukOrt = gunler.size > 0 ? Math.round(wProd(detailW.id) / gunler.size) : 0
+                const kalan = Math.max(0, detailW.hedef - wProd(detailW.id))
+                const tahminiGun = gunlukOrt > 0 ? Math.ceil(kalan / gunlukOrt) : 0
+                return (
+                  <div className="bg-bg-2 border border-border rounded-lg p-3"><div className="text-[10px] text-zinc-500">Tahmini Bitiş</div><div className="text-sm font-mono text-accent">{kalan <= 0 ? '✅' : tahminiGun > 0 ? tahminiGun + ' gün' : '—'}</div></div>
+                )
+              })()}
             </div>
             {detailW.hm?.length > 0 && (
               <><h3 className="text-sm font-semibold mb-2">Hammadde Bileşenleri</h3>
@@ -189,6 +203,76 @@ export function WorkOrders() {
           </div>
         </div>
       )}
+
+      {showNewIE && <NewIEModal operations={operations} orders={orders} onClose={() => setShowNewIE(false)} onSaved={() => { setShowNewIE(false); loadAll(); toast.success('İş emri oluşturuldu') }} />}
+    </div>
+  )
+}
+
+// #33: Yeni İE (YM/bağımsız) oluşturma
+function NewIEModal({ operations, orders, onClose, onSaved }: {
+  operations: { id: string; kod: string; ad: string }[]
+  orders: { id: string; siparisNo: string }[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const [malkod, setMalkod] = useState('')
+  const [malad, setMalad] = useState('')
+  const [hedef, setHedef] = useState('')
+  const [opId, setOpId] = useState('')
+  const [orderId, setOrderId] = useState('')
+  const [not_, setNot] = useState('')
+
+  async function save() {
+    if (!malad.trim() || !hedef) { toast.error('Malzeme adı ve hedef zorunlu'); return }
+    const op = operations.find(o => o.id === opId)
+    
+    const ieNo = `IE-MANUAL-${Date.now().toString(36).toUpperCase()}`
+
+    await supabase.from('uys_work_orders').insert({
+      id: uid(), order_id: orderId || null, sira: 1, kirno: '1',
+      op_id: opId || null, op_kod: op?.kod || '', op_ad: op?.ad || '',
+      malkod: malkod.trim(), malad: malad.trim(), hedef: parseInt(hedef) || 0,
+      mpm: 1, hm: [], ie_no: ieNo, durum: 'bekliyor',
+      bagimsiz: !orderId, siparis_disi: !orderId,
+      mamul_kod: malkod.trim(), mamul_ad: malad.trim(),
+      not_: not_, olusturma: today(),
+    })
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">Yeni İş Emri</h2>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu</label>
+            <input value={malkod} onChange={e => setMalkod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hedef Adet *</label>
+            <input type="number" min={1} value={hedef} onChange={e => setHedef(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
+          <input value={malad} onChange={e => setMalad(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
+            <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+              <option value="">— Seçin —</option>
+              {operations.map(o => <option key={o.id} value={o.id}>{o.kod} — {o.ad}</option>)}
+            </select></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş (opsiyonel)</label>
+            <select value={orderId} onChange={e => setOrderId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+              <option value="">— Bağımsız —</option>
+              {orders.map(o => <option key={o.id} value={o.id}>{o.siparisNo}</option>)}
+            </select></div>
+          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
+          <input value={not_} onChange={e => setNot(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Oluştur</button>
+        </div>
+      </div>
     </div>
   )
 }

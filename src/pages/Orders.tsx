@@ -1,3 +1,4 @@
+import { logAction } from '@/lib/activityLog'
 import { useState, useMemo } from 'react'
 import { buildWorkOrders } from '@/features/production/autoChain'
 import { hesaplaMRP, mrpTedarikOlustur } from '@/features/production/mrp'
@@ -49,6 +50,7 @@ export function Orders() {
     if (!confirm('Bu siparişi ve ilişkili iş emirlerini silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_work_orders').delete().eq('order_id', id)
     await supabase.from('uys_orders').delete().eq('id', id)
+    logAction('Sipariş silindi', id)
     loadAll(); toast.success('Sipariş silindi')
   }
 
@@ -205,6 +207,7 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
         toast.info(woCount + ' iş emri oluşturuldu')
       }
     }
+    logAction(initial ? 'Sipariş güncellendi' : 'Sipariş oluşturuldu', siparisNo.trim())
     setSaving(false); onSaved()
   }
 

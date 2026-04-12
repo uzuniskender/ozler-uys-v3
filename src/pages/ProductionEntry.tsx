@@ -1,3 +1,4 @@
+import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle, fireIEOlustur } from '@/features/production/stokTuketim'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
@@ -199,6 +200,7 @@ function EntryModal({ woId, operators, onClose, onSaved }: {
       }
     }
 
+    logAction('Üretim girişi', w.ieNo + ' — ' + (parseInt(qty) || 0) + ' adet')
     onSaved()
   }
 
