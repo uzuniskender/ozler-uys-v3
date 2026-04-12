@@ -145,3 +145,21 @@ export function showAlert(message: string, title?: string): Promise<void> {
     })
   })
 }
+
+/**
+ * Şifre korumalı işlem — admin şifresi ayarlanmışsa şifre sor
+ * localStorage'da 'uys_admin_pass' varsa kontrol eder
+ */
+export async function requirePassword(action: string): Promise<boolean> {
+  const storedPass = localStorage.getItem('uys_admin_pass')
+  if (!storedPass) return true // Şifre ayarlanmamışsa geç
+
+  const entered = await showPrompt(`"${action}" için admin şifresi girin`, 'Şifre')
+  if (!entered) return false
+  if (entered !== storedPass) {
+    const { toast } = await import('sonner')
+    toast.error('Şifre hatalı')
+    return false
+  }
+  return true
+}

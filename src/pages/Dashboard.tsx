@@ -97,6 +97,23 @@ export function Dashboard() {
       )}
 
       {/* Min Stok Uyarı */}
+      {/* Yedek Uyarısı */}
+      {(() => {
+        const lastBackup = localStorage.getItem('uys_last_backup')
+        if (!lastBackup) return (
+          <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg text-xs text-amber">
+            ⚠ Henüz yedek alınmamış — <button onClick={() => window.location.hash = '#/data'} className="underline hover:text-white">Veri Yönetimi</button> sayfasından JSON yedek alın.
+          </div>
+        )
+        const days = Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000)
+        if (days >= 7) return (
+          <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg text-xs text-amber">
+            ⚠ Son yedek {days} gün önce ({lastBackup}) — <button onClick={() => window.location.hash = '#/data'} className="underline hover:text-white">yedek alın</button>
+          </div>
+        )
+        return null
+      })()}
+
       {minStokUyari.length > 0 && (
         <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg">
           <div className="text-sm font-semibold text-amber mb-2 flex items-center justify-between">

@@ -6,6 +6,7 @@ import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
+import { requirePassword } from '@/lib/prompt'
 
 export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, loadAll } = useStore()
@@ -101,6 +102,7 @@ export function WorkOrders() {
 
     if (durum === 'iptal') {
       // İptal nedeni zorunlu
+      if (!await requirePassword('İE İptal')) return
       const neden = await showPrompt('İptal nedeni (zorunlu)')
       if (!neden?.trim()) { toast.error('İptal nedeni zorunlu'); return }
 
@@ -150,6 +152,7 @@ export function WorkOrders() {
       return
     }
     if (!await showConfirm(wo.ieNo + ' silinecek. Bu işlem geri alınamaz.')) return
+    if (!await requirePassword("İE Silme")) return
     await supabase.from('uys_work_orders').delete().eq('id', id)
     loadAll(); toast.success(wo.ieNo + ' silindi')
   }

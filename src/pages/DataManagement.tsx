@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { showConfirm, showAlert } from '@/lib/prompt'
+import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 
 export function DataManagement() {
   const store = useStore()
@@ -38,6 +38,7 @@ export function DataManagement() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = `uys_backup_${today()}.json`; a.click()
+    localStorage.setItem('uys_last_backup', today())
     URL.revokeObjectURL(url)
   }
 
@@ -189,12 +190,27 @@ export function DataManagement() {
         </button>
       </div>
 
+      {/* Admin Şifre */}
+      <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+        <div className="text-sm font-semibold text-zinc-300 mb-2">🔐 Admin Şifre (Silme Koruması)</div>
+        <p className="text-xs text-zinc-500 mb-3">Ayarlanırsa İE silme/iptal işlemlerinde şifre sorulur.</p>
+        <div className="flex gap-2">
+          <input id="admin-pass-input" type="password" placeholder={localStorage.getItem('uys_admin_pass') ? '••••• (ayarlı)' : 'Şifre belirleyin'}
+            className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+          <button onClick={() => {
+            const inp = (document.getElementById('admin-pass-input') as HTMLInputElement)?.value
+            if (inp) { localStorage.setItem('uys_admin_pass', inp); toast.success('Admin şifre ayarlandı') }
+            else { localStorage.removeItem('uys_admin_pass'); toast.success('Admin şifre kaldırıldı') }
+          }} className="px-3 py-2 bg-accent text-white rounded-lg text-xs">Kaydet</button>
+        </div>
+      </div>
+
       {/* #35: Fabrika Sıfırlama */}
       <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
         <div className="text-sm font-semibold text-red mb-2">⚠ Tehlikeli İşlemler</div>
         <button onClick={async () => {
           if (!await showConfirm('TÜM VERİLER SİLİNECEK! Bu işlem geri alınamaz. Devam etmek istiyor musunuz?')) return
-          if (prompt('Onaylamak için "SIFIRLA" yazın:') !== 'SIFIRLA') return
+          const onay = await showPrompt('Onaylamak için "SIFIRLA" yazın'); if (onay !== 'SIFIRLA') return
           for (const t of tables) {
             await supabase.from(t.table).delete().neq('id', '___impossible___')
           }

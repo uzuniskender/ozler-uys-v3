@@ -1,4 +1,5 @@
 import { showConfirm } from '@/lib/prompt'
+import { toast } from 'sonner'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -28,7 +29,35 @@ export function DowntimeCodes() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Duruş Kodları</h1><p className="text-xs text-zinc-500">{durusKodlari.length} kod</p></div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+        <div className="flex gap-2">
+          <button onClick={() => {
+            import('xlsx').then(XLSX => {
+              const rows = durusKodlari.map(d => ({ Kod: d.kod, Ad: d.ad, Kategori: d.kategori || '' }))
+              const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+              XLSX.utils.book_append_sheet(wb, ws, 'Duruş Kodları'); XLSX.writeFile(wb, 'durus_kodlari.xlsx')
+            })
+          }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
+          <button onClick={async () => {
+            const input = document.createElement('input'); input.type = 'file'; input.accept = '.xlsx,.xls'
+            input.onchange = async (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return
+              const XLSX = await import('xlsx')
+              const data = await file.arrayBuffer(); const wb = XLSX.read(data)
+              const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]])
+              let count = 0
+              for (const row of rows) {
+                const kod = String(row['Kod'] || row['kod'] || '').trim()
+                const ad = String(row['Ad'] || row['ad'] || '').trim()
+                if (!kod || !ad) continue
+                await supabase.from('uys_durus_kodlari').insert({ id: uid(), kod, ad, kategori: String(row['Kategori'] || '') })
+                count++
+              }
+              loadAll(); toast.success(count + ' duruş kodu yüklendi')
+            }
+            input.click()
+          }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📤 Yükle</button>
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+        </div>
       </div>
       {grouped.map(([kat, codes]) => (
         <div key={kat} className="mb-4">

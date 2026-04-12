@@ -112,6 +112,7 @@ export interface Operation {
   id: string
   kod: string
   ad: string
+  bolum: string
 }
 
 export interface Station {

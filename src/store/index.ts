@@ -50,6 +50,7 @@ const M = {
   }),
   operation: (r: Record<string, unknown>): Operation => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
+    bolum: (r.bolum || '') as string,
   }),
   station: (r: Record<string, unknown>): Station => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,

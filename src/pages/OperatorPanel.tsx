@@ -45,16 +45,19 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj') => void; onLogout: () => void
 }) {
-  const { workOrders, logs, activeWork, loadAll } = useStore()
+  const { workOrders, logs, activeWork, operations, loadAll } = useStore()
 
-  // Bölüme göre açık iş emirleri
+  // Bölüme göre açık iş emirleri — sadece operatörün bölümündeki operasyonlar
   const acikWOs = useMemo(() => {
+    const bolumUpper = (opr.bolum || '').toUpperCase()
+    const bolumOpIds = new Set(operations.filter(o => (o.bolum || '').toUpperCase() === bolumUpper).map(o => o.id))
     return workOrders.filter(w => {
       if (w.hedef <= 0) return false
+      if (!bolumOpIds.has(w.opId) && (w.opAd || '').toUpperCase() !== bolumUpper) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-      return prod < w.hedef
+      return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
     })
-  }, [workOrders, logs])
+  }, [workOrders, logs, operations, opr.bolum])
 
   const myActive = activeWork.find(a => a.opId === oprId)
 
