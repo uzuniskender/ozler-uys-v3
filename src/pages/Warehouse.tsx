@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+import { showPrompt } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
 
@@ -97,23 +98,23 @@ export function Warehouse() {
           <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => stokOnar()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-amber" title="Negatif stokları sıfırla">🔧 Onar</button>
-          <button onClick={() => {
-            const lines = prompt('Toplu stok girişi — her satır: malzeme_kodu,miktar\nÖrnek:\nH-001,100\nH-002,50')
+          <button onClick={async () => {
+            const lines = await showPrompt('Toplu stok girişi (her satır: malzeme_kodu,miktar)', 'H-001,100')
             if (!lines) return
             const rows = lines.split('\n').filter(l => l.includes(','))
             let count = 0
-            rows.forEach(async line => {
+            for (const line of rows) {
               const [malkod, miktarStr] = line.split(',').map(s => s.trim())
               const miktar = parseFloat(miktarStr) || 0
-              if (!malkod || miktar <= 0) return
+              if (!malkod || miktar <= 0) continue
               const mat = materials.find(m => m.kod === malkod)
               await supabase.from('uys_stok_hareketler').insert({
                 id: uid(), tarih: today(), malkod, malad: mat?.ad || malkod,
                 miktar, tip: 'giris', aciklama: 'Toplu giriş',
               })
               count++
-            })
-            setTimeout(() => { loadAll(); toast.success(count + ' stok girişi yapıldı') }, 1000)
+            }
+            loadAll(); toast.success(count + ' stok girişi yapıldı')
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📦 Toplu Giriş</button>
           <button onClick={() => setShowGiris(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Manuel Giriş/Çıkış</button>
         </div>
@@ -158,7 +159,7 @@ export function Warehouse() {
                   <td className="px-4 py-1.5 text-zinc-500 max-w-[200px] truncate">{h.aciklama || '—'}</td>
                   <td className="px-4 py-1.5 text-right">
                     {!h.logId && <><button onClick={async () => {
-                      const newMiktar = prompt('Yeni miktar:', String(h.miktar))
+                      const newMiktar = await showPrompt('Yeni miktar', 'Miktar', String(h.miktar))
                       if (!newMiktar) return
                       await supabase.from('uys_stok_hareketler').update({ miktar: parseFloat(newMiktar) || h.miktar }).eq('id', h.id)
                       loadAll(); toast.success('Stok hareketi güncellendi')

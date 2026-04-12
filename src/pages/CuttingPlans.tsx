@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+import { showPrompt } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet } from '@/features/production/cutting'
 import { Trash2, Plus, Scissors } from 'lucide-react'
@@ -27,7 +28,7 @@ export function CuttingPlans() {
   // #10: Kesim artığını stoka gir
   async function artikStokaGir(_planId: string, hamMalkod: string, hamMalad: string, artikBoy: number) {
     if (artikBoy <= 0) return
-    const kod = prompt('Artık malzeme kodu:', hamMalkod + '-ARTIK')
+    const kod = await showPrompt('Artık malzeme kodu', '', hamMalkod + '-ARTIK')
     if (!kod) return
     await supabase.from('uys_stok_hareketler').insert({
       id: uid(), tarih: today(), malkod: kod, malad: hamMalad + ' (kesim artığı)',

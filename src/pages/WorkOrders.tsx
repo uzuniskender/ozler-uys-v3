@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
+import { showPrompt, showMultiPrompt } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus } from 'lucide-react'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
@@ -100,7 +101,7 @@ export function WorkOrders() {
 
     if (durum === 'iptal') {
       // İptal nedeni zorunlu
-      const neden = prompt('İptal nedeni (zorunlu):')
+      const neden = await showPrompt('İptal nedeni (zorunlu)')
       if (!neden?.trim()) { toast.error('İptal nedeni zorunlu'); return }
 
       if (prod > 0) {
@@ -154,7 +155,8 @@ export function WorkOrders() {
   }
 
   async function updateHedef(id: string) {
-    const val = prompt('Yeni hedef adet:')
+    const wo = workOrders.find(w => w.id === id)
+    const val = await showPrompt('Yeni hedef adet', 'Hedef', String(wo?.hedef || 0))
     if (!val) return
     const hedef = parseInt(val)
     if (isNaN(hedef) || hedef < 0) return
@@ -430,10 +432,10 @@ export function WorkOrders() {
             {(() => { const woLogs = logs.filter(l => l.woId === detailW.id).sort((a, b) => (b.tarih || '').localeCompare(a.tarih || '')); return woLogs.length ? (
               <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-left px-3 py-2">Operatör</th><th className="text-right px-3 py-2">Adet</th><th className="text-right px-3 py-2">Fire</th></tr></thead>
               <tbody>{woLogs.map((l, i) => (<tr key={i} className="border-b border-border/30"><td className="px-3 py-1.5 font-mono text-zinc-500">{l.tarih}</td><td className="px-3 py-1.5 text-zinc-300">{l.operatorlar?.map(o => o.ad).join(', ') || '—'}</td><td className="px-3 py-1.5 text-right font-mono text-green">+{l.qty}</td><td className="px-3 py-1.5 text-right font-mono text-red">{l.fire > 0 ? l.fire : ''}</td><td className="px-3 py-1.5 text-right flex gap-1 justify-end"><button onClick={async () => {
-                const newQty = prompt('Yeni adet:', String(l.qty))
-                if (newQty === null) return
-                const newFire = prompt('Yeni fire:', String(l.fire || 0))
-                const q = parseInt(newQty) || 0; const f = parseInt(newFire || '0') || 0
+                const result = await showMultiPrompt('Üretim Logu Düzenle', [{label:'Adet',key:'qty',defaultValue:String(l.qty),type:'number'},{label:'Fire',key:'fire',defaultValue:String(l.fire||0),type:'number'}])
+                if (!result) return
+                
+                const q = parseInt(result.qty) || 0; const f = parseInt(result.fire) || 0
                 if (q <= 0) { toast.error('Geçersiz adet'); return }
                 await supabase.from('uys_logs').update({ qty: q, fire: f }).eq('id', l.id)
                 // Stok hareketini de güncelle

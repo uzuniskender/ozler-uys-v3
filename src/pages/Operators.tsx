@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+import { showMultiPrompt } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Plus, UserCheck, UserX, Calendar } from 'lucide-react'
 
@@ -109,16 +110,18 @@ export function Operators() {
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold">İzin / Mesai Kayıtları ({izinler.length})</h3>
-            <button onClick={() => {
-              const oprId = prompt('Operatör seçin (sicil no):')
-              if (!oprId) return
-              const opr = operators.find(o => o.kod === oprId || o.ad.toLowerCase().includes((oprId || '').toLowerCase()))
+            <button onClick={async () => {
+              const result = await showMultiPrompt('İzin / Mesai Ekle', [
+                { label: 'Operatör (sicil no veya isim)', key: 'oprId' },
+                { label: 'Başlangıç (YYYY-MM-DD)', key: 'baslangic', defaultValue: today() },
+                { label: 'Bitiş (YYYY-MM-DD)', key: 'bitis' },
+                { label: 'Tip (yıllık/mazeret/rapor/mesai)', key: 'tip', defaultValue: 'yıllık' },
+              ])
+              if (!result) return
+              const opr = operators.find(o => o.kod === result.oprId || o.ad.toLowerCase().includes((result.oprId || '').toLowerCase()))
               if (!opr) { toast.error('Operatör bulunamadı'); return }
-              const baslangic = prompt('Başlangıç tarihi (YYYY-MM-DD):', today())
-              const bitis = prompt('Bitiş tarihi (YYYY-MM-DD):')
-              const tip = prompt('Tip (yıllık/mazeret/rapor/mesai):', 'yıllık')
-              if (!baslangic || !bitis) return
-              const yeni = { id: uid(), oprId: opr.id, oprAd: opr.ad, baslangic, bitis: bitis || baslangic, tip: tip || 'yıllık', not: '' }
+              if (!result.baslangic || !result.bitis) { toast.error('Tarih girilmeli'); return }
+              const yeni = { id: uid(), oprId: opr.id, oprAd: opr.ad, baslangic: result.baslangic, bitis: result.bitis || result.baslangic, tip: result.tip || 'yıllık', not: '' }
               const updated = [...izinler, yeni]
               setIzinler(updated); localStorage.setItem('uys_izinler', JSON.stringify(updated))
               toast.success(opr.ad + ' için izin eklendi')
