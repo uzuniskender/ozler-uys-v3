@@ -1,6 +1,6 @@
 import { logAction } from '@/lib/activityLog'
 import { useState, useMemo } from 'react'
-import { buildWorkOrders } from '@/features/production/autoChain'
+import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
 import { hesaplaMRP, mrpTedarikOlustur } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -369,6 +369,21 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
             const count = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, fullRecipes)
             loadAll(); toast.success(count + ' eksik İE oluşturuldu')
           }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">+ Eksik İE Tamamla</button>}
+          {order.receteId && <button onClick={async () => {
+            if (!await showConfirm('Tam Zincir: İE → Kesim Planı → MRP → Tedarik çalıştırılacak. Devam?')) return
+            const s = useStore.getState()
+            const woCount = workOrders.length || (await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes))
+            const cpMapped = s.cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
+            const result = await autoZincir(
+              order.id, woCount,
+              s.orders as any, s.workOrders, s.recipes, s.operations as any,
+              s.materials, s.stokHareketler, s.tedarikler,
+              s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
+              cpMapped
+            )
+            loadAll()
+            toast.success(`Zincir tamamlandı: ${result.woCount} İE · ${result.kesimCount} kesim · ${result.mrpCount} MRP · ${result.tedCount} tedarik`)
+          }} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs hover:bg-cyan-500/20">⚙ Tam Zincir</button>}
         </div>
 
         {tab === 'ie' && (
