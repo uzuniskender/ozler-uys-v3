@@ -1,37 +1,232 @@
+import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
+import { supabase } from '@/lib/supabase'
+import { uid, today, pctColor } from '@/lib/utils'
+import { toast } from 'sonner'
+import { Search, Play, CheckCircle } from 'lucide-react'
 
 export function ProductionEntry() {
-  const { workOrders, logs } = useStore()
-  const acikWOs = workOrders.filter(w => {
-    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-    return w.hedef > 0 && prod < w.hedef
-  })
+  const { workOrders, logs, operators, loadAll } = useStore()
+  const [search, setSearch] = useState('')
+  const [bolumFilter, setBolumFilter] = useState('')
+  const [entryWO, setEntryWO] = useState<string | null>(null)
+
+  const bolumler = useMemo(() =>
+    [...new Set(workOrders.map(w => w.opAd).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
+  [workOrders])
+
+  function wProd(woId: string): number {
+    return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+  }
+
+  const acikWOs = useMemo(() => {
+    return workOrders.filter(w => {
+      if (w.hedef <= 0) return false
+      if (wProd(w.id) >= w.hedef) return false
+      if (bolumFilter && w.opAd !== bolumFilter) return false
+      if (search) {
+        const q = search.toLowerCase()
+        if (!(w.ieNo + w.malad + w.opAd).toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+  }, [workOrders, logs, search, bolumFilter])
 
   return (
     <div>
       <div className="mb-4"><h1 className="text-xl font-semibold">Üretim Girişi</h1><p className="text-xs text-zinc-500">{acikWOs.length} açık iş emri</p></div>
-      <div className="bg-amber/5 border border-amber/20 rounded-lg p-4 mb-4 text-xs text-amber">
-        ⚠ Üretim girişi Faz 2'de tam fonksiyonel olacaktır. Şu an eski sistemden (v2) giriş yapabilirsiniz.
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no veya malzeme ara..."
+            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+        </div>
+        <select value={bolumFilter} onChange={e => setBolumFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          <option value="">Tüm Bölümler</option>
+          {bolumler.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
       </div>
-      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        <table className="w-full text-xs">
-          <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">İE No</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Operasyon</th><th className="text-right px-4 py-2.5">Hedef</th><th className="text-right px-4 py-2.5">Üretilen</th><th className="text-right px-4 py-2.5">Kalan</th></tr></thead>
-          <tbody>
-            {acikWOs.slice(0, 30).map(w => {
-              const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-              return (
-                <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
-                  <td className="px-4 py-2 font-mono text-accent">{w.ieNo}</td>
-                  <td className="px-4 py-2 text-zinc-300">{w.malad}</td>
-                  <td className="px-4 py-2 text-zinc-500">{w.opAd}</td>
-                  <td className="px-4 py-2 text-right font-mono">{w.hedef}</td>
-                  <td className="px-4 py-2 text-right font-mono text-green">{prod}</td>
-                  <td className="px-4 py-2 text-right font-mono text-amber">{Math.max(0, w.hedef - prod)}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+
+      <div className="space-y-2">
+        {acikWOs.map(w => {
+          const prod = wProd(w.id)
+          const kalan = Math.max(0, w.hedef - prod)
+          const pct = Math.min(100, Math.round(prod / w.hedef * 100))
+          return (
+            <div key={w.id} className="bg-bg-2 border border-border rounded-lg p-3 hover:border-border-2 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-accent text-xs">{w.ieNo}</span>
+                    <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{w.opAd}</span>
+                  </div>
+                  <div className="text-sm font-medium truncate">{w.malad}</div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[11px] text-zinc-500">Hedef: <span className="font-mono">{w.hedef}</span></span>
+                    <span className="text-[11px] text-green">Üretilen: <span className="font-mono">{prod}</span></span>
+                    <span className="text-[11px] text-amber">Kalan: <span className="font-mono">{kalan}</span></span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <div className={`text-lg font-mono font-light ${pctColor(pct)}`}>{pct}%</div>
+                    <div className="w-16 h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <button onClick={() => setEntryWO(w.id)} className="p-2 bg-accent/10 text-accent rounded-lg hover:bg-accent/20" title="Üretim Gir">
+                    <Play size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {!acikWOs.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">Açık iş emri yok</div>}
+      </div>
+
+      {entryWO && (
+        <EntryModal
+          woId={entryWO}
+          operators={operators}
+          
+          onClose={() => setEntryWO(null)}
+          onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }}
+        />
+      )}
+    </div>
+  )
+}
+
+function EntryModal({ woId, operators, onClose, onSaved }: {
+  woId: string; operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
+  
+  onClose: () => void; onSaved: () => void
+}) {
+  const { workOrders, logs } = useStore()
+  const w = workOrders.find(x => x.id === woId)!
+  const [qty, setQty] = useState('')
+  const [fire, setFire] = useState('')
+  const [oprId, setOprId] = useState('')
+  const [not, setNot] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+  const kalan = w ? Math.max(0, w.hedef - prod) : 0
+
+  async function save() {
+    const q = parseInt(qty) || 0
+    const f = parseInt(fire) || 0
+    if (q <= 0) { toast.error('Miktar girmelisiniz'); return }
+    setSaving(true)
+
+    const logId = uid()
+    const opr = operators.find(o => o.id === oprId)
+    const tarih = today()
+    const now = new Date()
+    const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+
+    // Üretim logu
+    await supabase.from('uys_logs').insert({
+      id: logId, wo_id: woId, tarih, qty: q, fire: f,
+      operatorlar: opr ? [{ id: opr.id, ad: opr.ad, bas: saat, bit: saat }] : [],
+      duruslar: [], not_: not, malkod: w.malkod, ie_no: w.ieNo,
+      operator_id: oprId || null, vardiya: '',
+    })
+
+    // Stok girişi (üretilen mamul)
+    await supabase.from('uys_stok_hareketler').insert({
+      id: uid(), tarih, malkod: w.malkod, malad: w.malad,
+      miktar: q, tip: 'giris', log_id: logId, wo_id: woId,
+      aciklama: 'Üretim — ' + w.ieNo,
+    })
+
+    // Fire logu
+    if (f > 0) {
+      await supabase.from('uys_fire_logs').insert({
+        id: uid(), log_id: logId, wo_id: woId, tarih,
+        malkod: w.malkod, malad: w.malad, qty: f,
+        ie_no: w.ieNo, op_ad: w.opAd,
+        operatorlar: opr ? [{ id: opr.id, ad: opr.ad }] : [],
+        not_: not,
+      })
+      // Fire stok çıkışı
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), tarih, malkod: w.malkod, malad: w.malad,
+        miktar: f, tip: 'cikis', log_id: logId, wo_id: woId,
+        aciklama: 'Fire — ' + w.ieNo,
+      })
+    }
+
+    onSaved()
+  }
+
+  // Bölüm operatörleri
+  const bolumOprs = operators.filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Üretim Girişi</h2>
+            <p className="text-xs text-zinc-500">{w.ieNo} · {w.malad}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="bg-bg-2 border border-border rounded-lg p-2 text-center">
+            <div className="text-[10px] text-zinc-500">Hedef</div>
+            <div className="font-mono text-sm">{w.hedef}</div>
+          </div>
+          <div className="bg-bg-2 border border-border rounded-lg p-2 text-center">
+            <div className="text-[10px] text-zinc-500">Üretilen</div>
+            <div className="font-mono text-sm text-green">{prod}</div>
+          </div>
+          <div className="bg-bg-2 border border-border rounded-lg p-2 text-center">
+            <div className="text-[10px] text-zinc-500">Kalan</div>
+            <div className="font-mono text-sm text-amber">{kalan}</div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Üretim Adedi *</label>
+              <input type="number" min={1} max={kalan} value={qty} onChange={e => setQty(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus placeholder={String(kalan)} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Fire / Iskarta</label>
+              <input type="number" min={0} value={fire} onChange={e => setFire(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" placeholder="0" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Operatör</label>
+            <select value={oprId} onChange={e => setOprId(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="">— Seçin —</option>
+              {bolumOprs.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
+            <input value={not} onChange={e => setNot(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" placeholder="Opsiyonel..." />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
+          <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+            <CheckCircle size={13} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
+          </button>
+        </div>
       </div>
     </div>
   )
