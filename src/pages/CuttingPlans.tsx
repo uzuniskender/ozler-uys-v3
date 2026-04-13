@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cutting'
+import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy } from '@/features/production/cutting'
+import type { WorkOrder } from '@/types'
 import { Trash2, Plus, Scissors, Zap } from 'lucide-react'
 
 export function CuttingPlans() {
@@ -183,101 +184,196 @@ export function CuttingPlans() {
   )
 }
 
-// #9: Kesim Planı Oluşturma UI
+// Manuel Kesim Planı — HM seç → İE seç → önizle → kaydet
 function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
-  materials: { id: string; kod: string; ad: string; tip: string; boy: number }[]
-  workOrders: { id: string; ieNo: string; malkod: string; malad: string; hm: { malkod: string; malad: string; miktarTotal: number }[] }[]
+  materials: import('@/types').Material[]
+  workOrders: WorkOrder[]
   onClose: () => void; onSaved: () => void
 }) {
-  const [satirlar, setSatirlar] = useState<{ malkod: string; malad: string; boy: number; adet: number }[]>([])
-  const [malkod, setMalkod] = useState('')
-  const [malad, setMalad] = useState('')
-  const [boy, setBoy] = useState('')
-  const [adet, setAdet] = useState('1')
+  const { operations, recipes, logs, cuttingPlans } = useStore()
+  const [hamMalkod, setHamMalkod] = useState('')
+  const [seciliIEler, setSeciliIEler] = useState<Record<string, number>>({}) // woId → adet
 
-  // HM ihtiyaçlarından otomatik doldur
-  function otoDoldur() {
-    const hmItems: Record<string, { malkod: string; malad: string; boy: number; adet: number }> = {}
-    workOrders.forEach(wo => {
-      wo.hm?.forEach(h => {
-        const mat = materials.find(m => m.kod === h.malkod)
-        if (mat && mat.boy > 0) {
-          const key = h.malkod
-          if (!hmItems[key]) hmItems[key] = { malkod: h.malkod, malad: h.malad, boy: mat.boy, adet: 0 }
-          hmItems[key].adet += h.miktarTotal
-        }
+  // HM listesi — sadece Hammadde (boy veya uzunluk > 0)
+  const hmListesi = materials.filter(m => m.tip === 'Hammadde' && (getHamBoy(m) > 0))
+  const seciliHM = materials.find(m => m.kod === hamMalkod)
+  const hamBoy = seciliHM ? getHamBoy(seciliHM) : 0
+
+  // Bu HM'yi kullanan açık İE'ler
+  const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
+  const uygunIEler = workOrders.filter(w => {
+    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    if (prod >= w.hedef) return false
+    const wOp = operations.find(o => o.id === w.opId)
+    const opAd = (wOp?.ad || w.opAd || '').toUpperCase()
+    if (!kesimOps.some(k => opAd.includes(k))) return false
+    // HM eşleşmesi
+    if (w.hm?.some(h => h.malkod === hamMalkod)) return true
+    const rc = recipes.find(r => r.id === w.rcId) || recipes.find(r => r.mamulKod === w.malkod)
+    if (rc?.satirlar?.some(s => s.malkod === hamMalkod)) return true
+    return false
+  }).map(w => {
+    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    const kalan = Math.max(0, w.hedef - prod)
+    const pb = getParcaBoy(w.malkod, materials)
+    return { ...w, kalan, parcaBoy: pb }
+  }).filter(w => w.parcaBoy > 0 && w.parcaBoy <= hamBoy)
+
+  // Ön izleme hesapla
+  const barlar: { kesimler: { ieNo: string; malad: string; parcaBoy: number; adet: number }[]; fire: number }[] = []
+  if (hamBoy > 0) {
+    const ihtiyaclar = Object.entries(seciliIEler)
+      .filter(([, a]) => a > 0)
+      .map(([woId, adet]) => {
+        const ie = uygunIEler.find(w => w.id === woId)
+        return ie ? { ieNo: ie.ieNo, malad: ie.malad, parcaBoy: ie.parcaBoy, adet } : null
       })
-    })
-    const items = Object.values(hmItems).filter(i => i.adet > 0)
-    if (items.length) { setSatirlar(items); toast.success(items.length + ' malzeme HM ihtiyaçlarından dolduruldu') }
-    else toast.info('HM ihtiyacı bulunamadı — manuel ekleyin')
-  }
+      .filter(Boolean)
+      .sort((a, b) => (b!.parcaBoy || 0) - (a!.parcaBoy || 0)) as { ieNo: string; malad: string; parcaBoy: number; adet: number }[]
 
-  function ekle() {
-    if (!malkod && !malad) return
-    setSatirlar([...satirlar, { malkod, malad, boy: parseFloat(boy) || 0, adet: parseInt(adet) || 1 }])
-    setMalkod(''); setMalad(''); setBoy(''); setAdet('1')
-  }
-
-  function sil(i: number) { setSatirlar(prev => prev.filter((_, idx) => idx !== i)) }
-
-  async function olustur() {
-    if (!satirlar.length) { toast.error('En az bir satır ekleyin'); return }
-    const hmMalz = materials.filter(m => m.tip === 'Hammadde' && m.boy > 0) as unknown as import('@/types').Material[]
-    const sonuclar = optimizeKesim(satirlar, hmMalz)
-    if (sonuclar.length) {
-      await kesimPlaniKaydet(sonuclar)
-      onSaved()
-    } else {
-      toast.error('Uygun ham malzeme bulunamadı — malzeme boyları kontrol edin')
+    // Best-fit yerleştirme
+    const _barlar: { kalan: number; kesimler: typeof ihtiyaclar }[] = []
+    for (const iht of ihtiyaclar) {
+      let kalanAdet = iht.adet
+      while (kalanAdet > 0) {
+        let placed = false
+        for (const bar of _barlar) {
+          const fit = Math.min(Math.floor(bar.kalan / iht.parcaBoy), kalanAdet)
+          if (fit > 0) {
+            const mev = bar.kesimler.find(k => k.ieNo === iht.ieNo)
+            if (mev) mev.adet += fit; else bar.kesimler.push({ ...iht, adet: fit })
+            bar.kalan -= fit * iht.parcaBoy; kalanAdet -= fit; placed = true; break
+          }
+        }
+        if (!placed) {
+          const fit = Math.min(Math.floor(hamBoy / iht.parcaBoy), kalanAdet)
+          _barlar.push({ kalan: hamBoy - fit * iht.parcaBoy, kesimler: [{ ...iht, adet: fit }] })
+          kalanAdet -= fit
+        }
+      }
     }
+    _barlar.forEach(b => barlar.push({ kesimler: b.kesimler, fire: b.kalan }))
   }
+
+  const toplamBar = barlar.length
+  const toplamFire = barlar.reduce((a, b) => a + b.fire, 0)
+
+  function toggleIE(woId: string, kalan: number) {
+    setSeciliIEler(prev => {
+      const yeni = { ...prev }
+      if (yeni[woId]) delete yeni[woId]
+      else yeni[woId] = kalan
+      return yeni
+    })
+  }
+
+  async function kaydet() {
+    if (!barlar.length) { toast.error('Kesim satırı yok'); return }
+    const satirlar = barlar.map(b => ({
+      id: uid(), hamAdet: 1, fireMm: b.fire, durum: 'bekliyor',
+      kesimler: b.kesimler.map(k => {
+        const ie = uygunIEler.find(w => w.ieNo === k.ieNo)
+        return { woId: ie?.id || '', ieNo: k.ieNo, malkod: ie?.malkod || '', malad: k.malad, parcaBoy: k.parcaBoy, adet: k.adet, tamamlandi: 0 }
+      })
+    }))
+    await supabase.from('uys_kesim_planlari').insert({
+      id: uid(), ham_malkod: hamMalkod, ham_malad: seciliHM?.ad || hamMalkod,
+      ham_boy: hamBoy, ham_en: 0, kesim_tip: 'boy',
+      durum: 'bekliyor', satirlar, gerekli_adet: toplamBar, tarih: today(),
+    })
+    onSaved()
+  }
+
+  const COLORS = ['#4f9cf9', '#f97b4f', '#6fcf97', '#bb6bd9', '#f2c94c', '#56ccf2']
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
-          <h2 className="text-lg font-semibold">Kesim Planı Oluştur</h2>
+          <h2 className="text-lg font-semibold">Manuel Kesim Planı</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
         </div>
 
-        <button onClick={otoDoldur} className="mb-4 px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">
-          🔄 HM İhtiyaçlarından Otomatik Doldur
-        </button>
-
-        {/* Manuel ekleme */}
-        <div className="flex gap-2 mb-3">
-          <input value={malkod} onChange={e => setMalkod(e.target.value)} placeholder="Malzeme kodu" className="flex-1 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
-          <input value={malad} onChange={e => setMalad(e.target.value)} placeholder="Malzeme adı" className="flex-[2] px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
-          <input type="number" value={boy} onChange={e => setBoy(e.target.value)} placeholder="Boy (mm)" className="w-20 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 text-right focus:outline-none" />
-          <input type="number" value={adet} onChange={e => setAdet(e.target.value)} placeholder="Adet" className="w-16 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 text-right focus:outline-none" />
-          <button onClick={ekle} className="px-3 py-1.5 bg-accent text-white rounded text-xs"><Plus size={12} /></button>
+        {/* 1: HM Seç */}
+        <div className="mb-4">
+          <label className="text-[11px] text-zinc-500 mb-1 block">1. Hammadde Seç</label>
+          <select value={hamMalkod} onChange={e => { setHamMalkod(e.target.value); setSeciliIEler({}) }}
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <option value="">— Hammadde seçin —</option>
+            {hmListesi.map(m => <option key={m.kod} value={m.kod}>{m.kod} — {m.ad} ({getHamBoy(m)}mm)</option>)}
+          </select>
         </div>
 
-        {/* Satır listesi */}
-        {satirlar.length > 0 && (
-          <div className="bg-bg-2 border border-border rounded-lg overflow-hidden mb-4">
-            <table className="w-full text-xs">
-              <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Kod</th><th className="text-left px-3 py-2">Malzeme</th><th className="text-right px-3 py-2">Boy</th><th className="text-right px-3 py-2">Adet</th><th className="px-3 py-2"></th></tr></thead>
-              <tbody>
-                {satirlar.map((s, i) => (
-                  <tr key={i} className="border-b border-border/30">
-                    <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
-                    <td className="px-3 py-1.5 text-zinc-300">{s.malad}</td>
-                    <td className="px-3 py-1.5 text-right font-mono">{s.boy} mm</td>
-                    <td className="px-3 py-1.5 text-right font-mono">{s.adet}</td>
-                    <td className="px-3 py-1.5 text-right"><button onClick={() => sil(i)} className="text-zinc-500 hover:text-red"><Trash2 size={11} /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* 2: İE Seç */}
+        {hamMalkod && (
+          <div className="mb-4">
+            <label className="text-[11px] text-zinc-500 mb-1 block">2. İş Emirlerini Seç ({uygunIEler.length} uygun İE)</label>
+            {uygunIEler.length ? (
+              <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="border-b border-border text-zinc-500"><th className="px-3 py-2 w-8"></th><th className="text-left px-3 py-2">İE</th><th className="text-left px-3 py-2">Ürün</th><th className="text-right px-3 py-2">Parça</th><th className="text-right px-3 py-2">Kalan</th><th className="text-right px-3 py-2 w-20">Adet</th></tr></thead>
+                  <tbody>
+                    {uygunIEler.map(w => (
+                      <tr key={w.id} className={`border-b border-border/30 cursor-pointer ${seciliIEler[w.id] ? 'bg-accent/10' : 'hover:bg-bg-3/30'}`}>
+                        <td className="px-3 py-1.5"><input type="checkbox" checked={!!seciliIEler[w.id]} onChange={() => toggleIE(w.id, w.kalan)} className="accent-accent" /></td>
+                        <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{w.ieNo}</td>
+                        <td className="px-3 py-1.5 text-zinc-300 truncate max-w-[180px]">{w.malad}</td>
+                        <td className="px-3 py-1.5 text-right font-mono text-zinc-500">{w.parcaBoy}mm</td>
+                        <td className="px-3 py-1.5 text-right font-mono">{w.kalan}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          {seciliIEler[w.id] !== undefined && (
+                            <input type="number" value={seciliIEler[w.id]} min={1} max={w.kalan}
+                              onChange={e => setSeciliIEler(prev => ({ ...prev, [w.id]: Math.min(parseInt(e.target.value) || 1, w.kalan) }))}
+                              onClick={e => e.stopPropagation()}
+                              className="w-16 px-1.5 py-0.5 bg-bg-3 border border-accent/30 rounded text-[11px] text-zinc-200 text-right focus:outline-none" />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="text-xs text-zinc-600 p-3 bg-bg-2 rounded-lg">Bu hammaddeyi kullanan açık kesim İE'si bulunamadı</div>}
+          </div>
+        )}
+
+        {/* 3: Ön İzleme */}
+        {barlar.length > 0 && (
+          <div className="mb-4">
+            <label className="text-[11px] text-zinc-500 mb-2 block">3. Kesim Ön İzleme — {toplamBar} bar · Fire: {toplamFire}mm</label>
+            <div className="space-y-2">
+              {barlar.map((bar, bi) => (
+                <div key={bi} className="bg-bg-2 border border-border rounded-lg p-2">
+                  <div className="text-[10px] text-zinc-500 mb-1">Bar #{bi + 1} · Fire: {bar.fire}mm ({hamBoy > 0 ? Math.round(bar.fire / hamBoy * 100) : 0}%)</div>
+                  <svg width="100%" height="32" viewBox={`0 0 ${hamBoy} 30`} className="bg-zinc-900 rounded overflow-hidden mb-1">
+                    {(() => {
+                      let x = 0; const rects: JSX.Element[] = []
+                      bar.kesimler.forEach((k, ki) => {
+                        for (let ai = 0; ai < k.adet; ai++) {
+                          rects.push(<rect key={`${ki}-${ai}`} x={x} y={1} width={Math.max(1, k.parcaBoy - 1)} height={28} rx={1} fill={COLORS[ki % COLORS.length]} opacity={0.75}><title>{k.ieNo} {k.parcaBoy}mm</title></rect>)
+                          x += k.parcaBoy
+                        }
+                      })
+                      if (x < hamBoy) rects.push(<rect key="f" x={x} y={1} width={hamBoy - x - 1} height={28} rx={1} fill="#ef4444" opacity={0.15}><title>Fire {hamBoy - x}mm</title></rect>)
+                      return rects
+                    })()}
+                  </svg>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {bar.kesimler.map((k, ki) => (
+                      <span key={ki} className="text-[10px]"><span style={{ color: COLORS[ki % COLORS.length] }}>■</span> {k.ieNo} {k.parcaBoy}mm ×{k.adet}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-          <button onClick={olustur} disabled={!satirlar.length} className="px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
-            <Scissors size={13} className="inline mr-1" /> Optimize Et & Kaydet
+          <button onClick={kaydet} disabled={!barlar.length} className="px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+            <Scissors size={13} className="inline mr-1" /> Kaydet ({toplamBar} bar)
           </button>
         </div>
       </div>

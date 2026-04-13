@@ -21,7 +21,7 @@ interface KesimPlanSonuc {
 }
 
 // Parça boyunu malzeme bilgisinden al
-function getParcaBoy(malkod: string, materials: Material[]): number {
+export function getParcaBoy(malkod: string, materials: Material[]): number {
   const m = materials.find(x => x.kod === malkod)
   if (!m) return 0
   if (m.uzunluk > 0) return m.uzunluk // profil/boru parça uzunluğu
@@ -39,7 +39,7 @@ function getParcaEn(malkod: string, materials: Material[]): number {
 }
 
 // HM bar boyu: uzunluk > 0 ise uzunluk, yoksa max(boy,en)
-function getHamBoy(m: Material): number {
+export function getHamBoy(m: Material): number {
   if (m.uzunluk > 0) return m.uzunluk
   return Math.max(m.boy || 0, m.en || 0)
 }
