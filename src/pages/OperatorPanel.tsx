@@ -8,15 +8,17 @@ import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
 
 export function OperatorPanel() {
-  const { operators, loadAll, loading } = useStore()
+  const { operators, operations, loadAll, loading } = useStore()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+  const [step, setStep] = useState<'bolum'|'operator'|'sifre'>('bolum')
+  const [bolum, setBolum] = useState('')
   const [oprId, setOprId] = useState('')
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
   const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'>('isler')
 
-  // Veri yükle (Layout dışında olduğu için)
+  // Veri yükle
   useEffect(() => { loadAll() }, [])
 
   // Auth'dan gelen operatör otomatik girişi
@@ -27,33 +29,102 @@ export function OperatorPanel() {
     }
   }, [user])
 
+  const isAdmin = user?.role === 'admin' || user?.email
+
+  // Bölüm listesi — operasyonlardan ve operatörlerden
+  const bolumler = [...new Set([
+    ...operations.map(o => o.bolum).filter(Boolean),
+    ...operators.map(o => o.bolum).filter(Boolean),
+  ])].sort((a, b) => a.localeCompare(b, 'tr'))
+
+  // Seçili bölümdeki operatörler
+  const bolumOperatorleri = operators.filter(o => {
+    if (!bolum) return true
+    return (o.bolum || '').toUpperCase() === bolum.toUpperCase() || !o.bolum
+  }).filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
+
   const opr = operators.find(o => o.id === oprId)
 
+  function selectBolum(b: string) { setBolum(b); setStep('operator') }
+  function selectOperator(id: string) {
+    setOprId(id)
+    // Admin ise şifreyi otomatik doldur ve giriş yap
+    if (isAdmin) {
+      const op = operators.find(o => o.id === id)
+      if (op) { setSifre(op.sifre || ''); setStep('sifre') }
+    } else {
+      setStep('sifre')
+    }
+  }
   function login() {
-    const found = operators.find(o => o.kod === oprId || o.id === oprId || o.ad.toLowerCase() === oprId.toLowerCase())
+    const found = operators.find(o => o.id === oprId)
     if (found && found.sifre === sifre) {
-      setOprId(found.id); setLoggedIn(true); toast.success('Hoş geldin ' + found.ad)
-    } else { toast.error('Hatalı sicil no veya şifre') }
+      setLoggedIn(true); toast.success('Hoş geldin ' + found.ad)
+    } else { toast.error('Hatalı şifre') }
   }
 
   if (!loggedIn) {
     return (
       <div className="max-w-sm mx-auto mt-12 p-6 bg-bg-1 border border-border rounded-xl">
         <h1 className="text-xl font-bold text-accent text-center mb-1">OPERATÖR GİRİŞİ</h1>
-        <p className="text-xs text-zinc-500 text-center mb-6">Sicil no ve şifre ile giriş yapın</p>
-        <div className="space-y-3">
-          <input value={oprId} onChange={e => setOprId(e.target.value)} placeholder="Sicil No / İsim"
-            className="w-full px-4 py-3 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent text-center" autoFocus />
-          <input type="password" value={sifre} onChange={e => setSifre(e.target.value)} placeholder="Şifre"
-            className="w-full px-4 py-3 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent text-center"
-            onKeyDown={e => e.key === 'Enter' && login()} />
-          <button onClick={login} className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-lg text-sm">GİRİŞ</button>
+        <div className="flex gap-1 justify-center mb-6">
+          {['bolum', 'operator', 'sifre'].map((s, i) => (
+            <div key={s} className={`flex items-center gap-1 text-[10px] ${step === s ? 'text-accent font-bold' : i < ['bolum','operator','sifre'].indexOf(step) ? 'text-green' : 'text-zinc-600'}`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] border ${step === s ? 'border-accent bg-accent/20' : i < ['bolum','operator','sifre'].indexOf(step) ? 'border-green bg-green/20' : 'border-border'}`}>{i + 1}</span>
+              {s === 'bolum' ? 'Bölüm' : s === 'operator' ? 'Operatör' : 'Şifre'}
+              {i < 2 && <span className="text-zinc-700 mx-1">→</span>}
+            </div>
+          ))}
         </div>
+
+        {step === 'bolum' && (
+          <div className="space-y-2">
+            <p className="text-xs text-zinc-500 text-center mb-3">Bölümünüzü seçin</p>
+            {bolumler.map(b => (
+              <button key={b} onClick={() => selectBolum(b)}
+                className="w-full py-3 px-4 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 hover:border-accent/50 hover:bg-accent/5 text-left transition-colors">
+                {b}
+              </button>
+            ))}
+            <button onClick={() => selectBolum('')} className="w-full py-2 text-xs text-zinc-500 hover:text-accent">Tüm bölümler</button>
+          </div>
+        )}
+
+        {step === 'operator' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-3">
+              <button onClick={() => setStep('bolum')} className="text-xs text-zinc-500 hover:text-accent">← Geri</button>
+              <span className="text-xs text-zinc-500">{bolum || 'Tüm bölümler'}</span>
+            </div>
+            {bolumOperatorleri.map(o => (
+              <button key={o.id} onClick={() => selectOperator(o.id)}
+                className="w-full py-3 px-4 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 hover:border-accent/50 hover:bg-accent/5 text-left transition-colors flex justify-between">
+                <span className="font-semibold">{o.ad}</span>
+                <span className="text-zinc-500 text-xs">{o.kod}</span>
+              </button>
+            ))}
+            {!bolumOperatorleri.length && <div className="text-xs text-zinc-600 text-center py-4">Bu bölümde operatör yok</div>}
+          </div>
+        )}
+
+        {step === 'sifre' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between mb-3">
+              <button onClick={() => setStep('operator')} className="text-xs text-zinc-500 hover:text-accent">← Geri</button>
+              <span className="text-xs text-zinc-400 font-semibold">{opr?.ad}</span>
+            </div>
+            <input type="password" value={sifre} onChange={e => setSifre(e.target.value)} placeholder="Şifre"
+              className="w-full px-4 py-3 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent text-center"
+              onKeyDown={e => e.key === 'Enter' && login()} autoFocus />
+            {isAdmin && <div className="text-[10px] text-green text-center">Admin girişi — şifre otomatik dolduruldu</div>}
+            <button onClick={login} className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-lg text-sm">GİRİŞ</button>
+          </div>
+        )}
       </div>
     )
   }
 
-  // Veri henüz yüklenmediyse (operators boş → opr undefined) loading göster
+  // Veri henüz yüklenmediyse
   if (!opr) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-0">
@@ -115,23 +186,26 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
     })
   }, [workOrders, logs, operations, opr.bolum])
 
-  const myActive = activeWork.find(a => a.opId === oprId)
+  const myActiveList = activeWork.filter(a => a.opId === oprId)
 
   async function startWork(woId: string) {
     const w = workOrders.find(x => x.id === woId)
     if (!w) return
+    // Aynı İE'de zaten aktif mi?
+    if (myActiveList.some(a => a.woId === woId)) { toast.error('Bu işte zaten çalışıyorsun'); return }
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-    await supabase.from('uys_active_work').upsert({
-      id: oprId, op_id: oprId, op_ad: opr.ad, wo_id: woId,
+    await supabase.from('uys_active_work').insert({
+      id: uid(), op_id: oprId, op_ad: opr.ad, wo_id: woId,
       wo_ad: w.malad, baslangic: saat, tarih: today(),
-    }, { onConflict: 'id' })
+    })
     loadAll(); toast.success('İş başlatıldı: ' + w.ieNo)
   }
 
-  async function stopWork() {
-    if (!myActive) return
-    await supabase.from('uys_active_work').delete().eq('id', myActive.id)
+  async function stopWork(activeId?: string) {
+    const target = activeId ? myActiveList.find(a => a.id === activeId) : myActiveList[0]
+    if (!target) return
+    await supabase.from('uys_active_work').delete().eq('id', target.id)
     loadAll(); toast.success('İş durduruldu')
   }
 
@@ -164,16 +238,46 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
         {tab === 'isler' && (
           <div className="space-y-3">
+            {/* Aktif İşler */}
+            {myActiveList.length > 0 && (
+              <div className="bg-green/5 border border-green/20 rounded-xl p-3 mb-2">
+                <div className="text-[10px] text-green font-bold uppercase tracking-wider mb-2">▶ AKTİF İŞLER ({myActiveList.length})</div>
+                {myActiveList.map(a => {
+                  const aw = workOrders.find(x => x.id === a.woId)
+                  return (
+                    <div key={a.id} className="flex items-center justify-between bg-bg-1 rounded-lg p-2.5 mb-1.5 border border-green/20">
+                      <div>
+                        <span className="font-mono text-accent text-xs font-bold">{aw?.ieNo || '—'}</span>
+                        <div className="text-xs text-zinc-300">{a.woAd?.slice(0, 35)}</div>
+                        <div className="text-[10px] text-zinc-500">Başlangıç: {a.baslangic}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => aw && setEntryWO(aw.id)} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
+                          <CheckCircle size={12} className="inline mr-1" />Kayıt
+                        </button>
+                        <button onClick={() => stopWork(a.id)} className="px-3 py-1.5 bg-red/20 text-red rounded-lg text-[11px] font-semibold hover:bg-red/30">
+                          <Square size={12} className="inline mr-1" />Dur
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {acikWOs.map(w => {
               const prod = wProd(w.id)
               const pct = Math.min(100, Math.round(prod / w.hedef * 100))
               const kalan = Math.max(0, w.hedef - prod)
+              const isActive = myActiveList.some(a => a.woId === w.id)
               return (
-                <div key={w.id} onClick={() => setEntryWO(w.id)}
-                  className="bg-bg-1 border border-border rounded-xl p-4 cursor-pointer hover:border-accent/50 active:scale-[0.99] transition-all">
+                <div key={w.id} className={`bg-bg-1 border rounded-xl p-4 transition-all ${isActive ? 'border-green/40 shadow-lg shadow-green/10' : 'border-border hover:border-accent/50'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-mono text-accent text-xs font-bold">{w.ieNo}</span>
-                    <span className={`text-sm font-bold ${pct >= 100 ? 'text-green' : pct > 0 ? 'text-amber' : 'text-red'}`}>{pct}%</span>
+                    <div className="flex items-center gap-2">
+                      {isActive && <span className="text-[10px] text-green font-bold bg-green/10 px-2 py-0.5 rounded">▶ AKTİF</span>}
+                      <span className={`text-sm font-bold ${pct >= 100 ? 'text-green' : pct > 0 ? 'text-amber' : 'text-red'}`}>{pct}%</span>
+                    </div>
                   </div>
                   <div className="text-[15px] font-semibold text-white mb-2">{w.malad}</div>
                   <div className="flex items-center gap-4 text-xs mb-3">
@@ -181,8 +285,18 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                     <span className="text-green">Yapılan: <b>{prod}</b></span>
                     <span className="text-amber">Kalan: <b>{kalan}</b></span>
                   </div>
-                  <div className="w-full h-2 bg-bg-3 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-bg-3 rounded-full overflow-hidden mb-3">
                     <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-accent'}`} style={{ width: `${Math.max(2, pct)}%` }} />
+                  </div>
+                  <div className="flex gap-2">
+                    {!isActive && (
+                      <button onClick={() => startWork(w.id)} className="flex-1 py-2 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-bold hover:bg-green/20">
+                        <Play size={12} className="inline mr-1" />İşe Başla
+                      </button>
+                    )}
+                    <button onClick={() => setEntryWO(w.id)} className="flex-1 py-2 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs font-bold hover:bg-accent/20">
+                      <CheckCircle size={12} className="inline mr-1" />Üretim Kaydı
+                    </button>
                   </div>
                 </div>
               )
@@ -285,7 +399,7 @@ function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose
   const [fire, setFire] = useState('')
   const [aciklama, setAciklama] = useState('')
   const [saving, setSaving] = useState(false)
-  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
+  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
   const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>([
     { id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM }
   ])
@@ -328,12 +442,29 @@ function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose
     if (oprList.length <= 1) { toast.error('En az bir operatör olmalı'); return }
     setOprList(p => p.filter((_, idx) => idx !== i))
   }
-  function addDurus() { setDuruslar(p => [...p, { kodId: '', kodAd: '', sure: 0 }]) }
+  function addDurus() { setDuruslar(p => [...p, { kodId: '', kodAd: '', sure: 0, bas: nowHHMM, bit: nowHHMM }]) }
   function updateDurus(i: number, field: string, val: string) {
     setDuruslar(p => p.map((d, idx) => {
       if (idx !== i) return d
       if (field === 'kodId') { const dk = durusKodlari.find(k => k.id === val); return { ...d, kodId: val, kodAd: dk?.ad || '' } }
       if (field === 'sure') return { ...d, sure: parseInt(val) || 0 }
+      if (field === 'bas') {
+        const yeni = { ...d, bas: val }
+        // Bitiş varsa süreyi otomatik hesapla
+        if (yeni.bit && val) {
+          const [bH, bM] = val.split(':').map(Number); const [eH, eM] = yeni.bit.split(':').map(Number)
+          const dk = (eH * 60 + eM) - (bH * 60 + bM); if (dk > 0) yeni.sure = dk
+        }
+        return yeni
+      }
+      if (field === 'bit') {
+        const yeni = { ...d, bit: val }
+        if (yeni.bas && val) {
+          const [bH, bM] = yeni.bas.split(':').map(Number); const [eH, eM] = val.split(':').map(Number)
+          const dk = (eH * 60 + eM) - (bH * 60 + bM); if (dk > 0) yeni.sure = dk
+        }
+        return yeni
+      }
       return d
     }))
   }
@@ -471,13 +602,22 @@ function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose
               <button onClick={addDurus} className="text-[10px] text-accent hover:underline font-semibold">+ Duruş Ekle</button>
             </div>
             {duruslar.map((d, i) => (
-              <div key={i} className="flex gap-2 mb-2">
-                <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)} className="flex-1 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200">
-                  <option value="">— Duruş kodu —</option>
-                  {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} - {k.ad}</option>)}
-                </select>
-                <input type="number" value={d.sure || ''} onChange={e => updateDurus(i, 'sure', e.target.value)} placeholder="dk" className="w-16 px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-center text-zinc-200" />
-                <button onClick={() => setDuruslar(p => p.filter((_, idx) => idx !== i))} className="text-red text-sm px-1">✕</button>
+              <div key={i} className="bg-bg-2 rounded-lg p-2 mb-2">
+                <div className="flex gap-2 mb-1.5">
+                  <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)} className="flex-1 px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200">
+                    <option value="">— Duruş kodu —</option>
+                    {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} - {k.ad}</option>)}
+                  </select>
+                  <button onClick={() => setDuruslar(p => p.filter((_, idx) => idx !== i))} className="text-red text-sm px-1">✕</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="time" value={d.bas} onChange={e => updateDurus(i, 'bas', e.target.value)} className="w-[85px] px-1.5 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200" />
+                  <span className="text-[10px] text-zinc-600">→</span>
+                  <input type="time" value={d.bit} onChange={e => updateDurus(i, 'bit', e.target.value)} className="w-[85px] px-1.5 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200" />
+                  <span className="text-[10px] text-zinc-500">=</span>
+                  <input type="number" value={d.sure || ''} onChange={e => updateDurus(i, 'sure', e.target.value)} placeholder="dk" className="w-14 px-2 py-1 bg-bg-3 border border-border rounded text-[11px] text-center text-zinc-200" />
+                  <span className="text-[10px] text-zinc-600">dk</span>
+                </div>
               </div>
             ))}
           </div>
