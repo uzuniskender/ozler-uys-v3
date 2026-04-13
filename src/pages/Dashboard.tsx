@@ -8,15 +8,13 @@ import { uid, today, pctColor } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight } from 'lucide-react'
 
 function StatCard({ value, label, color, icon: Icon }: { value: number | string; label: string; color: string; icon: React.ElementType }) {
+  const isZero = value === 0 || value === '—'
   return (
-    <div className="bg-bg-2 border border-border rounded-lg p-4 flex items-center gap-3">
-      <div className={`p-2 rounded-lg bg-${color}/10`}>
-        <Icon size={18} className={`text-${color}`} />
-      </div>
-      <div>
-        <div className={`text-xl font-light font-mono text-${color}`}>{value}</div>
-        <div className="text-[11px] text-zinc-500">{label}</div>
-      </div>
+    <div className={`relative overflow-hidden bg-bg-2 border border-border rounded-xl p-4 hover:border-${color}/30 transition-all group`}>
+      <div className={`absolute top-0 right-0 w-16 h-16 bg-${color}/5 rounded-bl-[40px] group-hover:bg-${color}/10 transition-colors`} />
+      <Icon size={16} className={`text-${color}/60 mb-2`} />
+      <div className={`text-2xl font-light font-mono ${isZero ? 'text-zinc-600' : `text-${color}`}`}>{value}</div>
+      <div className="text-[10px] text-zinc-500 mt-0.5">{label}</div>
     </div>
   )
 }
@@ -65,8 +63,12 @@ export function Dashboard() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold">Genel Durum</h1>
-          <p className="text-xs text-zinc-500 font-mono">{todayStr}</p>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">Genel Durum</h1>
+          <p className="text-xs text-zinc-500 font-mono mt-0.5">{todayStr} · {aktifOrders.length} aktif sipariş · {acikWOs.length} açık İE</p>
+        </div>
+        <div className="flex gap-2">
+          {terminGecen.length > 0 && <div className="px-3 py-1.5 bg-red/10 border border-red/20 rounded-lg text-[11px] text-red font-semibold animate-pulse">⚠ {terminGecen.length} termin geçmiş</div>}
+          {okunmamis.length > 0 && <div className="px-3 py-1.5 bg-amber/10 border border-amber/20 rounded-lg text-[11px] text-amber font-semibold">💬 {okunmamis.length} yeni mesaj</div>}
         </div>
       </div>
 
@@ -212,19 +214,19 @@ export function Dashboard() {
         })
         const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-7)
         return (
-          <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
-            <div className="text-xs font-semibold text-zinc-400 mb-3">📊 Son 7 Gün Üretim</div>
+          <div className="bg-bg-2 border border-border rounded-xl overflow-hidden p-4">
+            <div className="text-xs font-semibold text-zinc-400 mb-3 flex items-center gap-2">📊 Son 7 Gün Üretim</div>
             {data.length > 0 ? (
-              <ResponsiveContainer width="100%" height={160}>
+              <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={data}>
-                  <XAxis dataKey="gun" tick={{ fontSize: 10, fill: '#666' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#666' }} width={35} />
-                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 11 }} />
-                  <Bar dataKey="uretim" fill="#22c55e" radius={[3, 3, 0, 0]} name="Üretim" />
-                  <Bar dataKey="fire" fill="#ef4444" radius={[3, 3, 0, 0]} name="Fire" />
+                  <XAxis dataKey="gun" tick={{ fontSize: 10, fill: '#666' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#555' }} width={35} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 11 }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                  <Bar dataKey="uretim" fill="#22c55e" radius={[4, 4, 0, 0]} name="Üretim" />
+                  <Bar dataKey="fire" fill="#ef4444" radius={[4, 4, 0, 0]} name="Fire" />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <div className="text-xs text-zinc-600 text-center py-6">Henüz üretim kaydı yok — operatör panelinden kayıt girildiğinde grafik burada görünecek</div>}
+            ) : <div className="text-xs text-zinc-600 text-center py-8 bg-bg-3/30 rounded-lg">Henüz üretim kaydı yok — operatör panelinden kayıt girildiğinde grafik burada görünecek</div>}
           </div>
         )
       })()}
