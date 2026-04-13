@@ -6,6 +6,7 @@ const RT_TABLES = [
   'uys_logs', 'uys_work_orders', 'uys_orders',
   'uys_operator_notes', 'uys_active_work',
   'uys_stok_hareketler', 'uys_fire_logs',
+  'uys_tedarikler', 'uys_kesim_planlari',
 ]
 
 export function useRealtime() {

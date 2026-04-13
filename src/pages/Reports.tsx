@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { today } from '@/lib/utils'
+import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts'
 
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
@@ -64,6 +65,29 @@ export function Reports() {
         <select value={tab} onChange={e => setTab(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           {tabs.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
+        <span className="flex-1" />
+        <button onClick={() => {
+          import('xlsx').then(XLSX => {
+            const wb = XLSX.utils.book_new()
+            // Günlük üretim
+            if (gunlukData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gunlukData), 'Günlük Üretim')
+            // Operasyon bazlı
+            if (opData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opData), 'Operasyon Bazlı')
+            // OEE
+            const oeeRows = opData.map(d => {
+              const fire = fireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0)
+              const perf = d.hedef > 0 ? Math.round(d.uretim / d.hedef * 100) : 0
+              const qual = d.uretim > 0 ? Math.round((d.uretim - fire) / d.uretim * 100) : 100
+              return { Operasyon: d.op, Hedef: d.hedef, Üretim: d.uretim, Fire: fire, 'Performans %': perf, 'Kalite %': qual, 'OEE %': Math.round(perf * qual / 100) }
+            })
+            if (oeeRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(oeeRows), 'OEE')
+            // Geciken siparişler
+            const gecikenRows = orders.filter(o => o.termin && o.termin < todayStr).map(o => ({ Sipariş: o.siparisNo, Müşteri: o.musteri, Termin: o.termin, Ürün: o.mamulAd }))
+            if (gecikenRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gecikenRows), 'Gecikenler')
+            XLSX.writeFile(wb, `rapor_${today()}.xlsx`)
+            toast.success('Rapor Excel indirildi')
+          })
+        }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
       </div>
 
       {tab === 'ozet' && (
