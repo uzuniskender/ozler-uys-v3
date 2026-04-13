@@ -78,9 +78,11 @@ export function Operations() {
 }
 
 function SimpleFormModal({ title, initial, onClose, onSave }: { title: string; initial: { id: string; kod: string; ad: string; bolum?: string } | null; onClose: () => void; onSave: (kod: string, ad: string, bolum: string, id?: string) => void }) {
+  const { operations } = useStore()
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')
   const [bolum, setBolum] = useState(initial?.bolum || '')
+  const bolumler = [...new Set(operations.map(o => o.bolum).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'))
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
@@ -88,7 +90,14 @@ function SimpleFormModal({ title, initial, onClose, onSave }: { title: string; i
         <div className="space-y-3">
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Kod</label><input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Ad</label><input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Bölüm</label><input value={bolum} onChange={e => setBolum(e.target.value)} placeholder="Kaynak, Kesme, Montaj..." className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Bölüm</label>
+            <select value={bolum} onChange={e => setBolum(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent">
+              <option value="">— Seçin veya yazın —</option>
+              {bolumler.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <input value={bolum} onChange={e => setBolum(e.target.value)} placeholder="veya yeni bölüm yazın..." className="w-full px-3 py-1.5 bg-bg-3 border border-border/50 rounded-lg text-xs text-zinc-400 mt-1 focus:outline-none focus:border-accent" />
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>

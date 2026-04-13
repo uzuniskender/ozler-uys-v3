@@ -315,12 +315,14 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
   const [mrpDone, setMrpDone] = useState(false)
 
-  function runMRP() {
+  async function runMRP() {
     const rc = recipes.find(r => r.id === order.receteId)
     if (!rc) { toast.error('Reçete bulunamadı'); return }
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
     const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats)
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
+    await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', order.id)
+    loadAll()
     toast.success(rows.length + ' malzeme hesaplandı')
   }
 

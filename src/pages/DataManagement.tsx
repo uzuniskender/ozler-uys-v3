@@ -270,7 +270,7 @@ function SifirlamaSecimli() {
   const [secili, setSecili] = useState<Set<string>>(new Set())
   const [siliniyor, setSiliniyor] = useState(false)
 
-  const kalemler = [
+  const uretimVerileri = [
     { key: 'siparisler', ad: '📋 Siparişler', tablo: 'uys_orders', sayi: store.orders.length },
     { key: 'isEmirleri', ad: '🔧 İş Emirleri', tablo: 'uys_work_orders', sayi: store.workOrders.length },
     { key: 'uretimLog', ad: '📝 Üretim Logları', tablo: 'uys_logs', sayi: store.logs.length },
@@ -281,6 +281,9 @@ function SifirlamaSecimli() {
     { key: 'sevk', ad: '🚛 Sevkiyatlar', tablo: 'uys_sevkler', sayi: store.sevkler.length },
     { key: 'mesaj', ad: '💬 Operatör Mesajları', tablo: 'uys_operator_notes', sayi: store.operatorNotes.length },
     { key: 'aktifIs', ad: '▶ Aktif Çalışmalar', tablo: 'uys_active_work', sayi: store.activeWork.length },
+  ]
+
+  const anaVeriler = [
     { key: 'recete', ad: '📋 Reçeteler', tablo: 'uys_recipes', sayi: (store as any).recipes?.length || 0 },
     { key: 'bom', ad: '🌳 Ürün Ağaçları', tablo: 'uys_bom_trees', sayi: (store as any).bomTrees?.length || 0 },
     { key: 'malzeme', ad: '🧱 Malzemeler', tablo: 'uys_malzemeler', sayi: store.materials.length },
@@ -288,41 +291,65 @@ function SifirlamaSecimli() {
     { key: 'operasyon', ad: '⚙ Operasyonlar', tablo: 'uys_operations', sayi: store.operations.length },
   ]
 
+  const tumKalemler = [...uretimVerileri, ...anaVeriler]
   function toggle(key: string) { setSecili(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }) }
-  function tumunuSec() { secili.size === kalemler.length ? setSecili(new Set()) : setSecili(new Set(kalemler.map(k => k.key))) }
-
-  // Hızlı seçimler
-  function secUretimVerileri() { setSecili(new Set(['siparisler', 'isEmirleri', 'uretimLog', 'fireLog', 'stokHareket', 'tedarik', 'kesimPlan', 'sevk', 'mesaj', 'aktifIs'])) }
+  function secUretim() { setSecili(new Set(uretimVerileri.map(k => k.key))) }
 
   async function sil() {
     if (!secili.size) { toast.error('Silinecek kalem seçin'); return }
-    const seciliKalemler = kalemler.filter(k => secili.has(k.key))
-    if (!await showConfirm(`${seciliKalemler.length} kategori silinecek:\n${seciliKalemler.map(k => k.ad).join(', ')}\n\nDevam?`)) return
+    const seciliKalemler = tumKalemler.filter(k => secili.has(k.key))
+    const anaSecili = anaVeriler.filter(k => secili.has(k.key))
+
+    // Ana veriler seçildiyse şifre iste
+    if (anaSecili.length > 0) {
+      const sifre = await showPrompt('⚠ Tehlikeli İşlem!\n\n' + anaSecili.map(k => k.ad).join(', ') + ' silinecek.\n\nŞifre girin:', '')
+      if (sifre !== 'SIFIRLA') { toast.error('Şifre hatalı — "SIFIRLA" yazmalısınız'); return }
+    } else {
+      if (!await showConfirm(`${seciliKalemler.length} kategori silinecek:\n${seciliKalemler.map(k => k.ad).join(', ')}\n\nDevam?`)) return
+    }
+
     setSiliniyor(true)
+    const count = seciliKalemler.length
     for (const k of seciliKalemler) {
       await supabase.from(k.tablo).delete().neq('id', '___impossible___')
     }
     setSecili(new Set()); setSiliniyor(false); loadAll()
-    toast.success(seciliKalemler.length + ' kategori sıfırlandı')
+    toast.success(count + ' kategori sıfırlandı')
   }
 
   return (
     <div>
-      <div className="flex gap-2 mb-3">
-        <button onClick={tumunuSec} className="text-[10px] text-zinc-500 hover:text-white px-2 py-1 bg-bg-3 rounded">{secili.size === kalemler.length ? '☐ Hiçbiri' : '☑ Tümü'}</button>
-        <button onClick={secUretimVerileri} className="text-[10px] text-amber hover:text-white px-2 py-1 bg-bg-3 rounded">Üretim Verileri</button>
+      {/* Üretim Verileri — güvenli alan */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-amber">Üretim Verileri</span>
+          <button onClick={secUretim} className="text-[10px] text-amber hover:text-white px-2 py-0.5 bg-amber/10 rounded">Tümünü Seç</button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {uretimVerileri.map(k => (
+            <label key={k.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${secili.has(k.key) ? 'bg-amber/10 border-amber/30' : 'bg-bg-2 border-border/50 hover:border-border'}`}>
+              <input type="checkbox" checked={secili.has(k.key)} onChange={() => toggle(k.key)} className="accent-amber" />
+              <div><div className="text-xs">{k.ad}</div><div className="text-[10px] text-zinc-600 font-mono">{k.sayi} kayıt</div></div>
+            </label>
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
-        {kalemler.map(k => (
-          <label key={k.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${secili.has(k.key) ? 'bg-red/10 border-red/30' : 'bg-bg-2 border-border/50 hover:border-border'}`}>
-            <input type="checkbox" checked={secili.has(k.key)} onChange={() => toggle(k.key)} className="accent-red" />
-            <div>
-              <div className="text-xs">{k.ad}</div>
-              <div className="text-[10px] text-zinc-600 font-mono">{k.sayi} kayıt</div>
-            </div>
-          </label>
-        ))}
+
+      {/* Ana Veriler — tehlikeli, şifre gerekir */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-semibold text-red">🔒 Ana Veriler (şifre gerekir)</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {anaVeriler.map(k => (
+            <label key={k.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${secili.has(k.key) ? 'bg-red/10 border-red/30' : 'bg-bg-2 border-border/50 hover:border-border'}`}>
+              <input type="checkbox" checked={secili.has(k.key)} onChange={() => toggle(k.key)} className="accent-red" />
+              <div><div className="text-xs">{k.ad}</div><div className="text-[10px] text-zinc-600 font-mono">{k.sayi} kayıt</div></div>
+            </label>
+          ))}
+        </div>
       </div>
+
       <button onClick={sil} disabled={!secili.size || siliniyor} className="w-full px-4 py-2.5 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold disabled:opacity-30">
         {siliniyor ? 'Siliniyor...' : `🗑 Seçili ${secili.size} Kategoriyi Sıfırla`}
       </button>
