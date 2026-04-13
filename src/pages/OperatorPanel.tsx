@@ -143,7 +143,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet') => void; onLogout: () => void
 }) {
-  const { workOrders, logs, activeWork, operations, durusKodlari, loadAll } = useStore()
+  const { workOrders, logs, activeWork, operations, operators, durusKodlari, loadAll } = useStore()
   const [entryWO, setEntryWO] = useState<string | null>(null)
 
   const acikWOs = useMemo(() => {
@@ -252,7 +252,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                         <div className="text-[10px] text-zinc-500">Başlangıç: {a.baslangic}</div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => aw && setEntryWO(aw.id)} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
+                        <button onClick={() => aw && setEntryWO(aw.woId)} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
                           <CheckCircle size={12} className="inline mr-1" />Kayıt
                         </button>
                         <button onClick={() => stopWork(a.id)} className="px-3 py-1.5 bg-red/20 text-red rounded-lg text-[11px] font-semibold hover:bg-red/30">
