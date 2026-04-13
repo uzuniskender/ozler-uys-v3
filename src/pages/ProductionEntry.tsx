@@ -203,7 +203,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   const [fire, setFire] = useState('')
   const [not, setNot] = useState('')
   const [saving, setSaving] = useState(false)
-  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number }[]>([])
+  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
 
   // Çoklu operatör — varsayılan operatör otomatik ekle
   const defaultOpr = defaultOprId ? operators.find(o => o.id === defaultOprId) : null
@@ -227,7 +227,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     setOprList(prev => prev.map((o, idx) => idx === i ? { ...o, [field]: value } : o))
   }
 
-  function addDurus() { setDuruslar([...duruslar, { kodId: '', kodAd: '', sure: 0 }]) }
+  function addDurus() { setDuruslar([...duruslar, { kodId: '', kodAd: '', sure: 0, bas: nowHHMM, bit: nowHHMM }]) }
   function removeDurus(i: number) { setDuruslar(prev => prev.filter((_, idx) => idx !== i)) }
   function updateDurus(i: number, field: string, value: string | number) {
     setDuruslar(prev => prev.map((d, idx) => {
@@ -235,6 +235,22 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       if (field === 'kodId') {
         const dk = durusKodlari.find(k => k.id === value)
         return { ...d, kodId: value as string, kodAd: dk?.ad || '' }
+      }
+      if (field === 'bas') {
+        const yeni = { ...d, bas: value as string }
+        if (yeni.bit && value) {
+          const [bH, bM] = (value as string).split(':').map(Number); const [eH, eM] = yeni.bit.split(':').map(Number)
+          const dk = (eH * 60 + eM) - (bH * 60 + bM); if (dk > 0) yeni.sure = dk
+        }
+        return yeni
+      }
+      if (field === 'bit') {
+        const yeni = { ...d, bit: value as string }
+        if (yeni.bas && value) {
+          const [bH, bM] = yeni.bas.split(':').map(Number); const [eH, eM] = (value as string).split(':').map(Number)
+          const dk = (eH * 60 + eM) - (bH * 60 + bM); if (dk > 0) yeni.sure = dk
+        }
+        return yeni
       }
       return { ...d, [field]: value }
     }))
@@ -246,9 +262,10 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   async function save() {
     const q = parseInt(qty) || 0
     const f = parseInt(fire) || 0
-    if (q <= 0) { toast.error('Miktar girmelisiniz'); return }
+    const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
+    if (q <= 0 && !hasDurus) { toast.error('Miktar veya duruş girmelisiniz'); return }
     // #2: Fazla üretim kontrolü
-    if (q + prod > w.hedef) {
+    if (q > 0 && q + prod > w.hedef) {
       const fazla = (q + prod) - w.hedef
       if (!await showConfirm(`Hedef: ${w.hedef}, mevcut: ${prod}, girilecek: ${q}\n${fazla} adet FAZLA üretim olacak. Devam?`)) return
     }
@@ -261,7 +278,8 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih, qty: q, fire: f,
       operatorlar: oprList.length > 0 ? oprList : [],
-      duruslar: duruslar.filter(d => d.kodId && d.sure > 0), not_: not, malkod: w.malkod, ie_no: w.ieNo,
+      duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
+      not_: not, malkod: w.malkod, ie_no: w.ieNo,
       operator_id: oprList[0]?.id || null, vardiya: '',
     })
 
@@ -386,15 +404,24 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
               <button type="button" onClick={addDurus} className="text-[11px] text-accent hover:underline">+ Duruş Ekle</button>
             </div>
             {duruslar.map((d, i) => (
-              <div key={i} className="flex gap-2 mb-1.5">
-                <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)}
-                  className="flex-1 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none">
-                  <option value="">— Duruş kodu —</option>
-                  {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} — {k.ad}</option>)}
-                </select>
-                <input type="number" min={1} value={d.sure || ''} onChange={e => updateDurus(i, 'sure', parseInt(e.target.value) || 0)}
-                  placeholder="dk" className="w-16 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 text-right focus:outline-none" />
-                <button type="button" onClick={() => removeDurus(i)} className="text-zinc-500 hover:text-red text-xs">✕</button>
+              <div key={i} className="bg-bg-2 rounded-lg p-2 mb-2">
+                <div className="flex gap-2 mb-1.5">
+                  <select value={d.kodId} onChange={e => updateDurus(i, 'kodId', e.target.value)}
+                    className="flex-1 px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none">
+                    <option value="">— Duruş kodu —</option>
+                    {durusKodlari.map(k => <option key={k.id} value={k.id}>{k.kod} — {k.ad}</option>)}
+                  </select>
+                  <button type="button" onClick={() => removeDurus(i)} className="text-zinc-500 hover:text-red text-xs">✕</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="time" value={d.bas} onChange={e => updateDurus(i, 'bas', e.target.value)} className="w-[85px] px-1.5 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200" />
+                  <span className="text-[10px] text-zinc-600">→</span>
+                  <input type="time" value={d.bit} onChange={e => updateDurus(i, 'bit', e.target.value)} className="w-[85px] px-1.5 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200" />
+                  <span className="text-[10px] text-zinc-500">=</span>
+                  <input type="number" min={1} value={d.sure || ''} onChange={e => updateDurus(i, 'sure', parseInt(e.target.value) || 0)}
+                    placeholder="dk" className="w-14 px-2 py-1 bg-bg-3 border border-border rounded text-[11px] text-center text-zinc-200" />
+                  <span className="text-[10px] text-zinc-600">dk</span>
+                </div>
               </div>
             ))}
           </div>
