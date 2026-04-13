@@ -8,7 +8,7 @@ import type { Recipe, RecipeRow } from '@/types'
 import { Plus, Trash2, Pencil, Download } from 'lucide-react'
 
 export function Recipes() {
-  const { recipes, operations, loadAll } = useStore()
+  const { recipes, operations, bomTrees, loadAll } = useStore()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
 
@@ -28,11 +28,37 @@ export function Recipes() {
     loadAll(); toast.success('Reçete silindi')
   }
 
+  // BOM'dan Reçete Oluştur — tüm ürün ağaçlarını reçeteye dönüştür
+  async function bomDanReceteOlustur() {
+    if (!bomTrees.length) { toast.error('Ürün ağacı bulunamadı'); return }
+    const mevcutMamulKodlar = new Set(recipes.map(r => r.mamulKod))
+    const yeniler = bomTrees.filter(b => !mevcutMamulKodlar.has(b.mamulKod))
+    if (!yeniler.length) { toast.info('Tüm ürün ağaçları zaten reçete olarak mevcut'); return }
+    if (!await showConfirm(`${yeniler.length} ürün ağacından reçete oluşturulacak. Devam?`)) return
+
+    let count = 0
+    for (const bom of yeniler) {
+      const satirlar = (bom.rows || []).map(r => ({
+        id: r.id || uid(), kirno: r.kirno, malkod: r.malkod, malad: r.malad,
+        tip: r.tip, miktar: r.miktar, birim: r.birim,
+        opId: '', istId: '', hazirlikSure: 0, islemSure: 0,
+      }))
+      await supabase.from('uys_recipes').insert({
+        id: uid(), rc_kod: 'RC-' + bom.mamulKod, ad: bom.ad || bom.mamulAd || bom.mamulKod,
+        bom_id: bom.id, mamul_kod: bom.mamulKod, mamul_ad: bom.mamulAd || bom.ad,
+        satirlar,
+      })
+      count++
+    }
+    loadAll(); toast.success(`${count} reçete oluşturuldu (Ürün Ağaçlarından)`)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete</p></div>
         <div className="flex gap-2">
+          {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan Reçete ({bomTrees.length})</button>}
           <button onClick={exportRecipes} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Reçete</button>
         </div>
@@ -56,7 +82,10 @@ export function Recipes() {
               ))}
             </tbody>
           </table>
-        ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz reçete yok</div>}
+        ) : <div className="p-8 text-center">
+          <div className="text-zinc-600 text-sm mb-3">Henüz reçete yok</div>
+          {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="px-4 py-2 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 {bomTrees.length} Ürün Ağacından Reçete Oluştur</button>}
+        </div>}
       </div>
       {selected && <RecipeEditor recipe={selected} operations={operations} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Reçete güncellendi') }} />}
       {showNew && <NewRecipeModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Reçete oluşturuldu') }} />}
