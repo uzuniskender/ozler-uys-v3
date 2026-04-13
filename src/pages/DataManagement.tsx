@@ -255,72 +255,77 @@ export function DataManagement() {
         </div>
       </div>
 
-      {/* #35: Sıfırlama İşlemleri */}
+      {/* #35: Sıfırlama İşlemleri — seçimli */}
       <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
-        <div className="text-sm font-semibold text-red mb-3">⚠ Sıfırlama İşlemleri</div>
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <button onClick={async () => {
-            if (!await showConfirm('Tüm siparişler, iş emirleri, üretim logları ve sevkiyatlar silinecek. Devam?')) return
-            for (const t of ['uys_sevkler','uys_fire_logs','uys_logs','uys_work_orders','uys_orders']) {
-              await supabase.from(t).delete().neq('id', '___impossible___')
-            }
-            store.loadAll(); toast.success('Siparişler sıfırlandı')
-          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
-            📋 Siparişleri Sıfırla
-            <div className="text-[10px] text-red/60 mt-0.5">Siparişler, İE'ler, loglar, sevkiyatlar</div>
-          </button>
-
-          <button onClick={async () => {
-            if (!await showConfirm('Tüm iş emirleri ve üretim logları silinecek. Siparişler kalacak. Devam?')) return
-            for (const t of ['uys_fire_logs','uys_logs','uys_work_orders']) {
-              await supabase.from(t).delete().neq('id', '___impossible___')
-            }
-            store.loadAll(); toast.success('İş emirleri sıfırlandı')
-          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
-            🔧 İş Emirlerini Sıfırla
-            <div className="text-[10px] text-red/60 mt-0.5">İE'ler, üretim logları, fire logları</div>
-          </button>
-
-          <button onClick={async () => {
-            if (!await showConfirm('Tüm stok hareketleri silinecek. Devam?')) return
-            await supabase.from('uys_stok_hareketler').delete().neq('id', '___impossible___')
-            store.loadAll(); toast.success('Depo sıfırlandı')
-          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
-            📦 Depoyu Sıfırla
-            <div className="text-[10px] text-red/60 mt-0.5">Tüm stok hareketleri</div>
-          </button>
-
-          <button onClick={async () => {
-            if (!await showConfirm('Tüm tedarik kayıtları silinecek. Devam?')) return
-            await supabase.from('uys_tedarikler').delete().neq('id', '___impossible___')
-            store.loadAll(); toast.success('Tedarikler sıfırlandı')
-          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
-            🚚 Tedarikleri Sıfırla
-            <div className="text-[10px] text-red/60 mt-0.5">Tüm tedarik kayıtları</div>
-          </button>
-
-          <button onClick={async () => {
-            if (!await showConfirm('Tüm kesim planları silinecek. Devam?')) return
-            await supabase.from('uys_kesim_planlari').delete().neq('id', '___impossible___')
-            store.loadAll(); toast.success('Kesim planları sıfırlandı')
-          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
-            ✂ Kesim Planlarını Sıfırla
-            <div className="text-[10px] text-red/60 mt-0.5">Tüm kesim planları</div>
-          </button>
-        </div>
-
-        <button onClick={async () => {
-          if (!await showConfirm('TÜM VERİLER SİLİNECEK! Bu işlem geri alınamaz. Devam etmek istiyor musunuz?')) return
-          const onay = await showPrompt('Onaylamak için "SIFIRLA" yazın'); if (onay !== 'SIFIRLA') return
-          for (const t of tables) {
-            await supabase.from(t.table).delete().neq('id', '___impossible___')
-          }
-          store.loadAll()
-          toast.success('Tüm veriler sıfırlandı')
-        }} className="w-full px-4 py-2 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold">
-          💀 Fabrika Sıfırlama (Tüm Verileri Sil)
-        </button>
+        <div className="text-sm font-semibold text-red mb-3">⚠ Sıfırlama İşlemleri — Silinecek kalemleri seçin</div>
+        <SifirlamaSecimli />
       </div>
+    </div>
+  )
+}
+
+function SifirlamaSecimli() {
+  const store = useStore()
+  const { loadAll } = store
+  const [secili, setSecili] = useState<Set<string>>(new Set())
+  const [siliniyor, setSiliniyor] = useState(false)
+
+  const kalemler = [
+    { key: 'siparisler', ad: '📋 Siparişler', tablo: 'uys_orders', sayi: store.orders.length },
+    { key: 'isEmirleri', ad: '🔧 İş Emirleri', tablo: 'uys_work_orders', sayi: store.workOrders.length },
+    { key: 'uretimLog', ad: '📝 Üretim Logları', tablo: 'uys_logs', sayi: store.logs.length },
+    { key: 'fireLog', ad: '🔥 Fire Logları', tablo: 'uys_fire_logs', sayi: store.fireLogs.length },
+    { key: 'stokHareket', ad: '📦 Stok Hareketleri', tablo: 'uys_stok_hareketler', sayi: store.stokHareketler.length },
+    { key: 'tedarik', ad: '🚚 Tedarikler', tablo: 'uys_tedarikler', sayi: store.tedarikler.length },
+    { key: 'kesimPlan', ad: '✂ Kesim Planları', tablo: 'uys_kesim_planlari', sayi: store.cuttingPlans.length },
+    { key: 'sevk', ad: '🚛 Sevkiyatlar', tablo: 'uys_sevkler', sayi: store.sevkler.length },
+    { key: 'mesaj', ad: '💬 Operatör Mesajları', tablo: 'uys_operator_notes', sayi: store.operatorNotes.length },
+    { key: 'aktifIs', ad: '▶ Aktif Çalışmalar', tablo: 'uys_active_work', sayi: store.activeWork.length },
+    { key: 'recete', ad: '📋 Reçeteler', tablo: 'uys_recipes', sayi: (store as any).recipes?.length || 0 },
+    { key: 'bom', ad: '🌳 Ürün Ağaçları', tablo: 'uys_bom_trees', sayi: (store as any).bomTrees?.length || 0 },
+    { key: 'malzeme', ad: '🧱 Malzemeler', tablo: 'uys_malzemeler', sayi: store.materials.length },
+    { key: 'operator', ad: '👷 Operatörler', tablo: 'uys_operators', sayi: store.operators.length },
+    { key: 'operasyon', ad: '⚙ Operasyonlar', tablo: 'uys_operations', sayi: store.operations.length },
+  ]
+
+  function toggle(key: string) { setSecili(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }) }
+  function tumunuSec() { secili.size === kalemler.length ? setSecili(new Set()) : setSecili(new Set(kalemler.map(k => k.key))) }
+
+  // Hızlı seçimler
+  function secUretimVerileri() { setSecili(new Set(['siparisler', 'isEmirleri', 'uretimLog', 'fireLog', 'stokHareket', 'tedarik', 'kesimPlan', 'sevk', 'mesaj', 'aktifIs'])) }
+
+  async function sil() {
+    if (!secili.size) { toast.error('Silinecek kalem seçin'); return }
+    const seciliKalemler = kalemler.filter(k => secili.has(k.key))
+    if (!await showConfirm(`${seciliKalemler.length} kategori silinecek:\n${seciliKalemler.map(k => k.ad).join(', ')}\n\nDevam?`)) return
+    setSiliniyor(true)
+    for (const k of seciliKalemler) {
+      await supabase.from(k.tablo).delete().neq('id', '___impossible___')
+    }
+    setSecili(new Set()); setSiliniyor(false); loadAll()
+    toast.success(seciliKalemler.length + ' kategori sıfırlandı')
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-3">
+        <button onClick={tumunuSec} className="text-[10px] text-zinc-500 hover:text-white px-2 py-1 bg-bg-3 rounded">{secili.size === kalemler.length ? '☐ Hiçbiri' : '☑ Tümü'}</button>
+        <button onClick={secUretimVerileri} className="text-[10px] text-amber hover:text-white px-2 py-1 bg-bg-3 rounded">Üretim Verileri</button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+        {kalemler.map(k => (
+          <label key={k.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${secili.has(k.key) ? 'bg-red/10 border-red/30' : 'bg-bg-2 border-border/50 hover:border-border'}`}>
+            <input type="checkbox" checked={secili.has(k.key)} onChange={() => toggle(k.key)} className="accent-red" />
+            <div>
+              <div className="text-xs">{k.ad}</div>
+              <div className="text-[10px] text-zinc-600 font-mono">{k.sayi} kayıt</div>
+            </div>
+          </label>
+        ))}
+      </div>
+      <button onClick={sil} disabled={!secili.size || siliniyor} className="w-full px-4 py-2.5 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold disabled:opacity-30">
+        {siliniyor ? 'Siliniyor...' : `🗑 Seçili ${secili.size} Kategoriyi Sıfırla`}
+      </button>
     </div>
   )
 }

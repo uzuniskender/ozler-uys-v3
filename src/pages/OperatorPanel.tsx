@@ -309,12 +309,45 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                 </div>
                 <div className="text-[10px] text-zinc-700 bg-bg-2 rounded-lg p-3 text-left font-mono">
                   Operatör bölüm: "{opr.bolum}"<br/>
-                  Eşleşen operasyonlar: {operations.filter(o => (o.bolum || '').trim().toUpperCase() === (opr.bolum || '').trim().toUpperCase()).map(o => o.ad).join(', ') || 'YOK'}<br/>
+                  Eşleşen operasyonlar: {operations.filter(o => (o.bolum || '').trim().toUpperCase() === (opr.bolum || '').trim().toUpperCase() || (o.ad || '').toUpperCase().includes((opr.bolum || '').toUpperCase())).map(o => o.ad).join(', ') || 'YOK'}<br/>
                   Toplam açık İE: {workOrders.filter(w => w.hedef > 0 && logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi').length}<br/>
                   İE operasyonları: {[...new Set(workOrders.filter(w => w.hedef > 0).map(w => w.opAd))].join(', ')}
                 </div>
               </div>
             )}
+
+            {/* Son Kayıtlarım — düzenlenebilir */}
+            {(() => {
+              const sonKayitlar = logs.filter(l => l.tarih === today() && (Array.isArray(l.operatorlar) ? l.operatorlar : []).some((o: any) => o.id === oprId)).slice(0, 5)
+              if (!sonKayitlar.length) return null
+              return (
+                <div className="mt-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 border-b border-border text-[11px] font-semibold text-zinc-400">📝 Bugünkü Kayıtlarım</div>
+                  {sonKayitlar.map(l => {
+                    const wo = workOrders.find(w => w.id === l.woId)
+                    const duruslar = (l.duruslar || []) as any[]
+                    return (
+                      <div key={l.id} className="px-3 py-2 border-b border-border/30 last:border-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <span className="font-mono text-accent text-[10px]">{wo?.ieNo || '—'}</span>
+                            <span className="text-zinc-400 text-[10px] ml-2">{wo?.malad?.slice(0, 25)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-green text-xs font-bold">+{l.qty}</span>
+                            {l.fire > 0 && <span className="text-red text-[10px]">🔥{l.fire}</span>}
+                            <button onClick={() => wo && setEntryWO(wo.id)} className="text-[10px] text-accent hover:text-white px-1.5 py-0.5 bg-accent/10 rounded">Düzenle</button>
+                          </div>
+                        </div>
+                        {duruslar.length > 0 && (
+                          <div className="flex flex-wrap gap-1">{duruslar.map((d: any, i: number) => <span key={i} className="text-[9px] px-1.5 py-0.5 bg-red/10 text-red rounded">⏸ {d.kodAd} {d.sure}dk</span>)}</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         )}
 

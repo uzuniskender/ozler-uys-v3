@@ -82,7 +82,7 @@ export function Dashboard() {
       {(() => {
         const bekleyenTed = tedarikler.filter(t => !t.geldi).length
         const bekleyenKP = cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
-        const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor')).length
+        const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && aktifOrders.some(a => a.id === o.id)).length
         const kesimEksik = (() => {
           const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
           const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
@@ -209,19 +209,20 @@ export function Dashboard() {
           gunMap[l.tarih].fire += l.fire || 0
         })
         const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-7)
-        if (data.length < 1) return null
         return (
           <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
-            <div className="text-xs font-semibold text-zinc-400 mb-3">Son 7 Gün Üretim</div>
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={data}>
-                <XAxis dataKey="gun" tick={{ fontSize: 10, fill: '#666' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#666' }} width={35} />
-                <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 11 }} />
-                <Bar dataKey="uretim" fill="#22c55e" radius={[3, 3, 0, 0]} name="Üretim" />
-                <Bar dataKey="fire" fill="#ef4444" radius={[3, 3, 0, 0]} name="Fire" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="text-xs font-semibold text-zinc-400 mb-3">📊 Son 7 Gün Üretim</div>
+            {data.length > 0 ? (
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={data}>
+                  <XAxis dataKey="gun" tick={{ fontSize: 10, fill: '#666' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#666' }} width={35} />
+                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 11 }} />
+                  <Bar dataKey="uretim" fill="#22c55e" radius={[3, 3, 0, 0]} name="Üretim" />
+                  <Bar dataKey="fire" fill="#ef4444" radius={[3, 3, 0, 0]} name="Fire" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <div className="text-xs text-zinc-600 text-center py-6">Henüz üretim kaydı yok — operatör panelinden kayıt girildiğinde grafik burada görünecek</div>}
           </div>
         )
       })()}
@@ -421,7 +422,7 @@ export function Dashboard() {
         if (recetesiz.length) adimlar.push({ icon: '📋', mesaj: `${recetesiz.length} siparişin reçetesi bağlı değil`, link: '#/orders' })
         const ieSiz = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id))
         if (ieSiz.length) adimlar.push({ icon: '⚙', mesaj: `${ieSiz.length} sipariş için İE oluşturulmamış`, link: '#/orders' })
-        const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor')).length
+        const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && aktifOrders.some(a => a.id === o.id)).length
         if (mrpYok) adimlar.push({ icon: '📊', mesaj: `${mrpYok} siparişin malzeme ihtiyacı (MRP) henüz hesaplanmadı`, link: '#/mrp' })
         const _kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
         const _planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
