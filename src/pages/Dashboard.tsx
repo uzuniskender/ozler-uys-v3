@@ -48,9 +48,9 @@ export function Dashboard() {
 
   // Bugün giriş yapmayan operatörler
   const bugunLogOprIds = new Set(
-    logs.filter(l => l.tarih === todayStr).flatMap(l => l.operatorlar.map(o => o.id))
+    logs.filter(l => l.tarih === todayStr).flatMap(l => (Array.isArray(l.operatorlar) ? l.operatorlar : []).map((o: any) => o.id))
   )
-  const girmeyenler = operators.filter(o => o.aktif && !bugunLogOprIds.has(o.id))
+  const girmeyenler = operators.filter(o => o.aktif !== false && !bugunLogOprIds.has(o.id))
 
   // Min stok uyarıları
   const minStokUyari = materials.filter(m => {
@@ -287,9 +287,15 @@ export function Dashboard() {
                     const cevap = await showPrompt('Cevap yaz — ' + n.opAd, 'Cevabınız...')
                     if (!cevap) return
                     const now = new Date()
-                    const cevapTarih = today() + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
-                    await supabase.from('uys_operator_notes').update({ cevap, cevaplayan: 'Yönetim', cevap_tarih: cevapTarih, okundu: true }).eq('id', n.id)
-                    loadAll(); toast.success('Cevap gönderildi')
+                    const saat = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+                    // Yeni mesaj olarak ekle (operatörün göreceği şekilde)
+                    await supabase.from('uys_operator_notes').insert({
+                      id: uid(), op_id: n.opId, op_ad: '📋 Yönetim', tarih: today(), saat,
+                      mesaj: cevap.trim(), okundu: true,
+                    })
+                    // Orijinal mesajı okundu yap
+                    if (!n.okundu) await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)
+                    loadAll(); toast.success('Cevap gönderildi — operatör görecek')
                   }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">💬 Cevapla</button>
                   <button onClick={async () => { if (!await showConfirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
                 </div>

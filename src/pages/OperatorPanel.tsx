@@ -162,8 +162,8 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
     operations.forEach(o => {
       const oBolum = (o.bolum || '').trim().toUpperCase()
       const oAd = (o.ad || '').trim().toUpperCase()
-      // Bölüm eşleşmesi VEYA operasyon adı tam eşleşme
-      if ((oBolum && oBolum === bolumUpper) || oAd === bolumUpper) {
+      // Bölüm eşleşmesi VEYA operasyon adı içeriyor VEYA bölüm adı operasyonda geçiyor
+      if ((oBolum && oBolum === bolumUpper) || oAd === bolumUpper || oAd.includes(bolumUpper) || bolumUpper.includes(oAd)) {
         if (!myOpIds.includes(o.id)) myOpIds.push(o.id)
       }
     })
@@ -652,7 +652,10 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
   const [editId, setEditId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
 
-  const myNotes = operatorNotes.filter(n => n.opId === oprId).sort((a, b) => (b.tarih + b.saat).localeCompare(a.tarih + a.saat))
+  // Bu operatöre ait TÜM mesajlar (operatör + admin)
+  const myNotes = operatorNotes.filter(n => n.opId === oprId).sort((a, b) => (a.tarih + a.saat).localeCompare(b.tarih + b.saat))
+
+  const isAdmin = (n: typeof myNotes[0]) => (n.opAd || '').includes('Yönetim')
 
   async function send() {
     if (!mesaj.trim()) return
@@ -681,19 +684,16 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
     <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
       <div className="px-4 py-2 border-b border-border text-sm font-semibold">💬 Mesajlar</div>
 
-      <div className="max-h-[400px] overflow-y-auto p-3 space-y-3">
+      <div className="max-h-[400px] overflow-y-auto p-3 space-y-2">
         {myNotes.length === 0 && <div className="text-xs text-zinc-600 text-center py-4">Henüz mesaj yok</div>}
-        {myNotes.map(n => (
-          <div key={n.id} className="space-y-1.5">
-            {/* Operatör mesajı */}
-            <div className="flex items-start gap-2">
-              <div className="flex-1 bg-accent/10 border border-accent/10 rounded-lg rounded-bl-none px-3 py-2">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[10px] text-zinc-500">{n.tarih} {n.saat}</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => { setEditId(n.id); setEditText(n.mesaj) }} className="text-[10px] text-zinc-600 hover:text-accent">✏</button>
-                    <button onClick={() => deleteMsg(n.id)} className="text-[10px] text-zinc-600 hover:text-red">✕</button>
-                  </div>
+        {myNotes.map(n => {
+          const fromAdmin = isAdmin(n)
+          return (
+            <div key={n.id} className={`flex ${fromAdmin ? 'justify-start' : 'justify-end'}`}>
+              <div className={`max-w-[85%] rounded-lg px-3 py-2 ${fromAdmin ? 'bg-green/10 border border-green/15 rounded-tl-none' : 'bg-accent/10 border border-accent/10 rounded-tr-none'}`}>
+                <div className="flex items-center justify-between gap-3 mb-0.5">
+                  <span className={`text-[10px] font-semibold ${fromAdmin ? 'text-green' : 'text-accent'}`}>{fromAdmin ? '📋 Yönetim' : oprAd}</span>
+                  <span className="text-[10px] text-zinc-600">{n.tarih} {n.saat}</span>
                 </div>
                 {editId === n.id ? (
                   <div className="flex gap-1.5 mt-1">
@@ -705,24 +705,16 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
                 ) : (
                   <div className="text-xs text-zinc-200">{n.mesaj}</div>
                 )}
+                {!fromAdmin && editId !== n.id && (
+                  <div className="flex gap-1 mt-1 justify-end">
+                    <button onClick={() => { setEditId(n.id); setEditText(n.mesaj) }} className="text-[9px] text-zinc-600 hover:text-accent">✏</button>
+                    <button onClick={() => deleteMsg(n.id)} className="text-[9px] text-zinc-600 hover:text-red">✕</button>
+                  </div>
+                )}
               </div>
             </div>
-            {/* Yönetim cevabı — her zaman görünür */}
-            {n.cevap && (
-              <div className="ml-6 bg-green/10 border border-green/15 rounded-lg rounded-br-none px-3 py-2">
-                <div className="text-[10px] text-green font-semibold mb-0.5">↩ {n.cevaplayan || 'Yönetim'} · {n.cevapTarih || ''}</div>
-                <div className="text-xs text-zinc-200">{n.cevap}</div>
-              </div>
-            )}
-            {/* Cevap bekleniyor göstergesi */}
-            {!n.cevap && !n.okundu && (
-              <div className="ml-6 text-[10px] text-zinc-600 italic">⏳ Cevap bekleniyor...</div>
-            )}
-            {!n.cevap && n.okundu && (
-              <div className="ml-6 text-[10px] text-zinc-600">✓ Okundu</div>
-            )}
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="p-3 border-t border-border flex gap-2">
