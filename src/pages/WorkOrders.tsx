@@ -8,6 +8,7 @@ import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lu
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { requirePassword } from '@/lib/prompt'
+import { OprEntryModal } from '@/pages/OperatorPanel'
 
 export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, loadAll } = useStore()
@@ -323,6 +324,8 @@ export function WorkOrders() {
 }
 
 function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, loadAll }: any) {
+  const { durusKodlari } = useStore()
+  const [adminEntryWO, setAdminEntryWO] = useState<string | null>(null)
   const prod = wProd(wo.id); const pct = wPct(wo); const kalan = Math.max(0, wo.hedef - prod)
   const ord = orders.find((o: any) => o.id === wo.orderId)
   const woLogs = logs.filter((l: any) => l.woId === wo.id).sort((a: any, b: any) => (b.tarih || '').localeCompare(a.tarih || ''))
@@ -399,7 +402,10 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
           return <div className={`mb-4 p-3 rounded-lg border ${sk.durum === 'YOK' ? 'bg-red/5 border-red/20' : 'bg-amber/5 border-amber/20'}`}><div className={`text-xs font-semibold mb-2 ${sk.durum === 'YOK' ? 'text-red' : 'text-amber'}`}>{sk.durum === 'YOK' ? '🚫 Stok Yok' : '⚠ Stok Eksik'} — Max: {sk.maxYapilabilir}</div><table className="w-full text-[11px]"><thead><tr className="text-zinc-500"><th className="text-left pb-1">Malzeme</th><th className="text-right pb-1">Gerekli</th><th className="text-right pb-1">Mevcut</th><th className="text-right pb-1">Açık Ted.</th><th className="text-right pb-1">Durum</th></tr></thead><tbody>{sk.satirlar.map((s: any, i: number) => <tr key={i}><td className="py-0.5"><span className="font-mono text-accent text-[9px]">{s.malkod}</span> {s.malad}</td><td className="py-0.5 text-right font-mono">{s.gerekli}</td><td className="py-0.5 text-right font-mono text-green">{s.mevcut}</td><td className="py-0.5 text-right font-mono text-zinc-500">{s.acikTed > 0 ? s.acikTed : '—'}</td><td className={`py-0.5 text-right font-mono text-[10px] ${s.durum === 'YOK' ? 'text-red' : s.durum === 'BEKLIYOR' ? 'text-purple-400' : 'text-amber'}`}>{s.durum}</td></tr>)}</tbody></table></div>
         })()}
 
-        <h3 className="text-sm font-semibold mb-2">Hareket Geçmişi ({woLogs.length} kayıt)</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold">Hareket Geçmişi ({woLogs.length} kayıt)</h3>
+          <button onClick={() => setAdminEntryWO(wo.id)} className="px-3 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-semibold hover:bg-green/20">+ Kayıt Ekle</button>
+        </div>
         {woLogs.length > 0 ? (
           <div className="overflow-x-auto mb-4"><table className="w-full text-xs min-w-[500px]"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-right px-3 py-2">Adet</th><th className="text-left px-3 py-2">Operatör / Duruş</th><th className="text-left px-3 py-2">Not</th><th className="px-3 py-2"></th></tr></thead><tbody>
             {woLogs.map((l: any) => {
@@ -415,6 +421,8 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
           </tbody></table></div>
         ) : <div className="text-zinc-600 text-xs p-3 mb-4">Kayıt yok</div>}
         <div className="flex justify-end"><button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">Kapat</button></div>
+        {adminEntryWO && <OprEntryModal woId={adminEntryWO} oprId="admin" oprAd="Admin" allOperators={operators} durusKodlari={durusKodlari}
+          onClose={() => setAdminEntryWO(null)} onSaved={() => { setAdminEntryWO(null); loadAll(); toast.success('Üretim kaydı eklendi') }} />}
       </div>
     </div>
   )

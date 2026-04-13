@@ -383,9 +383,9 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   )
 }
 
-/* Operatör Üretim Kayıt Modal */
-/* Operatör Üretim Kayıt Modal */
-function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose, onSaved }: {
+/* Operatör Üretim Kayıt Modal — admin'den de kullanılır */
+/* Operatör Üretim Kayıt Modal — admin'den de kullanılır */
+export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose, onSaved }: {
   woId: string; oprId: string; oprAd: string
   allOperators: { id: string; ad: string; kod: string; bolum: string; aktif?: boolean }[]
   durusKodlari: { id: string; kod: string; ad: string }[]
@@ -637,8 +637,9 @@ function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose
 function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onSent: () => void }) {
   const { operatorNotes, loadAll } = useStore()
   const [mesaj, setMesaj] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
 
-  // Bu operatörün mesajları
   const myNotes = operatorNotes.filter(n => n.opId === oprId).sort((a, b) => (b.tarih + b.saat).localeCompare(a.tarih + a.saat))
 
   async function send() {
@@ -652,36 +653,65 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
     setMesaj(''); loadAll(); onSent()
   }
 
+  async function saveEdit(id: string) {
+    if (!editText.trim()) return
+    await supabase.from('uys_operator_notes').update({ mesaj: editText.trim() }).eq('id', id)
+    setEditId(null); setEditText(''); loadAll(); toast.success('Mesaj güncellendi')
+  }
+
+  async function deleteMsg(id: string) {
+    await supabase.from('uys_operator_notes').delete().eq('id', id)
+    loadAll(); toast.success('Mesaj silindi')
+  }
+
   return (
     <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
       <div className="px-4 py-2 border-b border-border text-sm font-semibold">💬 Mesajlar</div>
 
-      {/* Mesaj geçmişi */}
-      <div className="max-h-[300px] overflow-y-auto p-3 space-y-3">
+      <div className="max-h-[400px] overflow-y-auto p-3 space-y-3">
         {myNotes.length === 0 && <div className="text-xs text-zinc-600 text-center py-4">Henüz mesaj yok</div>}
         {myNotes.map(n => (
-          <div key={n.id}>
+          <div key={n.id} className="space-y-1.5">
             {/* Operatör mesajı */}
-            <div className="flex items-end gap-2">
-              <div className="flex-1 bg-accent/10 rounded-lg rounded-bl-none px-3 py-2 text-xs text-zinc-200">
-                <div className="text-[10px] text-zinc-500 mb-0.5">{n.tarih} {n.saat}</div>
-                {n.mesaj}
+            <div className="flex items-start gap-2">
+              <div className="flex-1 bg-accent/10 border border-accent/10 rounded-lg rounded-bl-none px-3 py-2">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] text-zinc-500">{n.tarih} {n.saat}</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => { setEditId(n.id); setEditText(n.mesaj) }} className="text-[10px] text-zinc-600 hover:text-accent">✏</button>
+                    <button onClick={() => deleteMsg(n.id)} className="text-[10px] text-zinc-600 hover:text-red">✕</button>
+                  </div>
+                </div>
+                {editId === n.id ? (
+                  <div className="flex gap-1.5 mt-1">
+                    <input value={editText} onChange={e => setEditText(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveEdit(n.id)}
+                      className="flex-1 px-2 py-1 bg-bg-3 border border-accent/30 rounded text-xs text-zinc-200 focus:outline-none" autoFocus />
+                    <button onClick={() => saveEdit(n.id)} className="px-2 py-1 bg-accent text-white rounded text-[10px]">✓</button>
+                    <button onClick={() => setEditId(null)} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px]">✕</button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-zinc-200">{n.mesaj}</div>
+                )}
               </div>
             </div>
-            {/* Yönetim cevabı */}
+            {/* Yönetim cevabı — her zaman görünür */}
             {n.cevap && (
-              <div className="flex items-end gap-2 mt-1.5 pl-6">
-                <div className="flex-1 bg-green/10 rounded-lg rounded-br-none px-3 py-2 text-xs text-zinc-200">
-                  <div className="text-[10px] text-green mb-0.5">{n.cevaplayan || 'Yönetim'} · {n.cevapTarih}</div>
-                  {n.cevap}
-                </div>
+              <div className="ml-6 bg-green/10 border border-green/15 rounded-lg rounded-br-none px-3 py-2">
+                <div className="text-[10px] text-green font-semibold mb-0.5">↩ {n.cevaplayan || 'Yönetim'} · {n.cevapTarih || ''}</div>
+                <div className="text-xs text-zinc-200">{n.cevap}</div>
               </div>
+            )}
+            {/* Cevap bekleniyor göstergesi */}
+            {!n.cevap && !n.okundu && (
+              <div className="ml-6 text-[10px] text-zinc-600 italic">⏳ Cevap bekleniyor...</div>
+            )}
+            {!n.cevap && n.okundu && (
+              <div className="ml-6 text-[10px] text-zinc-600">✓ Okundu</div>
             )}
           </div>
         ))}
       </div>
 
-      {/* Yeni mesaj */}
       <div className="p-3 border-t border-border flex gap-2">
         <input value={mesaj} onChange={e => setMesaj(e.target.value)} placeholder="Mesaj yazın..."
           onKeyDown={e => e.key === 'Enter' && send()}
