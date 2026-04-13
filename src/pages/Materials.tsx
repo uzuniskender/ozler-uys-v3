@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +11,7 @@ import type { Material } from '@/types'
 
 export function Materials() {
   const { materials, operations, loadAll } = useStore()
+  const { isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)

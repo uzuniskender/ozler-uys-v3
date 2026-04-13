@@ -1,48 +1,56 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
+import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
   Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu
 } from 'lucide-react'
 
+// guest: sadece görüntüleme izni olan sayfalar
+const GUEST_PATHS = new Set(['/', '/orders', '/work-orders', '/cutting', '/mrp', '/warehouse'])
+
 const NAV = [
   { label: 'GENEL', items: [
-    { path: '/', label: 'Genel Bakış', icon: LayoutDashboard, badge: 'dash' },
+    { path: '/', label: 'Genel Bakış', icon: LayoutDashboard, badge: 'dash', guest: true },
   ]},
   { label: 'ÜRETİM', items: [
-    { path: '/orders', label: 'Siparişler', icon: ClipboardList, badge: 'orders' },
-    { path: '/work-orders', label: 'İş Emirleri', icon: Clock, badge: 'workOrders' },
-    { path: '/production', label: 'Üretim Girişi', icon: PlusCircle },
-    { path: '/cutting', label: 'Kesim Planları', icon: Scissors, badge: 'cuttingPlans' },
-    { path: '/mrp', label: 'MRP', icon: Calculator },
-    { path: '/procurement', label: 'Tedarik', icon: ShoppingCart, badge: 'tedarikler' },
-    { path: '/warehouse', label: 'Depolar', icon: Warehouse, badge: 'stokHareketler' },
-    { path: '/shipment', label: 'Sevkiyat', icon: Truck, badge: 'sevkler' },
+    { path: '/orders', label: 'Siparişler', icon: ClipboardList, badge: 'orders', guest: true },
+    { path: '/work-orders', label: 'İş Emirleri', icon: Clock, badge: 'workOrders', guest: true },
+    { path: '/production', label: 'Üretim Girişi', icon: PlusCircle, guest: false },
+    { path: '/cutting', label: 'Kesim Planları', icon: Scissors, badge: 'cuttingPlans', guest: true },
+    { path: '/mrp', label: 'MRP', icon: Calculator, guest: true },
+    { path: '/procurement', label: 'Tedarik', icon: ShoppingCart, badge: 'tedarikler', guest: false },
+    { path: '/warehouse', label: 'Depolar', icon: Warehouse, badge: 'stokHareketler', guest: true },
+    { path: '/shipment', label: 'Sevkiyat', icon: Truck, badge: 'sevkler', guest: false },
   ]},
   { label: 'TANIMLAR', items: [
-    { path: '/bom', label: 'Ürün Ağaçları', icon: TreePine, badge: 'bomTrees' },
-    { path: '/recipes', label: 'Reçeteler', icon: BookOpen, badge: 'recipes' },
-    { path: '/materials', label: 'Malzeme Listesi', icon: Package, badge: 'materials' },
-    { path: '/operations', label: 'Operasyonlar', icon: Settings2, badge: 'operations' },
-    { path: '/stations', label: 'İstasyonlar', icon: Cpu, badge: 'stations' },
-    { path: '/operators', label: 'Operatörler', icon: Users, badge: 'operators' },
-    { path: '/suppliers', label: 'Tedarikçiler', icon: Building2, badge: 'tedarikciler' },
-    { path: '/downtime-codes', label: 'Duruş Kodları', icon: AlertCircle, badge: 'durusKodlari' },
+    { path: '/bom', label: 'Ürün Ağaçları', icon: TreePine, badge: 'bomTrees', guest: false },
+    { path: '/recipes', label: 'Reçeteler', icon: BookOpen, badge: 'recipes', guest: false },
+    { path: '/materials', label: 'Malzeme Listesi', icon: Package, badge: 'materials', guest: true },
+    { path: '/operations', label: 'Operasyonlar', icon: Settings2, badge: 'operations', guest: false },
+    { path: '/stations', label: 'İstasyonlar', icon: Cpu, badge: 'stations', guest: false },
+    { path: '/operators', label: 'Operatörler', icon: Users, badge: 'operators', guest: false },
+    { path: '/suppliers', label: 'Tedarikçiler', icon: Building2, badge: 'tedarikciler', guest: false },
+    { path: '/downtime-codes', label: 'Duruş Kodları', icon: AlertCircle, badge: 'durusKodlari', guest: false },
   ]},
   { label: 'SİSTEM', items: [
-    { path: '/reports', label: 'Raporlar', icon: BarChart3 },
-    { path: '/data', label: 'Veri Yönetimi', icon: Database },
-    { path: '/operator', label: 'Operatör Paneli', icon: HardHat },
-    { path: '/checklist', label: 'Checklist', icon: ClipboardCheck, badge: 'checklist' },
+    { path: '/reports', label: 'Raporlar', icon: BarChart3, guest: true },
+    { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
+    { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
+    { path: '/checklist', label: 'Checklist', icon: ClipboardCheck, badge: 'checklist', guest: false },
   ]},
 ]
+
+export { GUEST_PATHS }
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
   const store = useStore()
+  const { user } = useAuth()
+  const isGuest = user?.role === 'guest'
 
   function getBadge(key?: string): string {
     if (!key) return ''
@@ -85,16 +93,22 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       )}>
         <div className="px-4 py-4 border-b border-border">
           <div className="text-sm font-bold text-accent tracking-wide">ÜRETİM YÖNETİM</div>
-          <div className="text-[10px] text-zinc-500 font-mono">v3</div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 font-mono">v3</span>
+            {isGuest && <span className="text-[9px] px-1.5 py-0.5 bg-amber/20 text-amber rounded font-semibold">MİSAFİR</span>}
+          </div>
         </div>
 
         <nav className="py-2">
-          {NAV.map(group => (
+          {NAV.map(group => {
+            const visibleItems = isGuest ? group.items.filter(i => i.guest) : group.items
+            if (!visibleItems.length) return null
+            return (
             <div key={group.label}>
               <div className="px-4 pt-4 pb-1 text-[10px] font-semibold text-zinc-500 tracking-widest">
                 {group.label}
               </div>
-              {group.items.map(item => {
+              {visibleItems.map(item => {
                 const active = location.pathname === item.path
                 const badge = getBadge(item.badge)
                 return (
@@ -125,7 +139,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 )
               })}
             </div>
-          ))}
+          )})}
         </nav>
       </aside>
     </>

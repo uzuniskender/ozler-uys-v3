@@ -28,8 +28,17 @@ import { Procurement } from '@/pages/Procurement'
 import { OperatorPanel } from '@/pages/OperatorPanel'
 import { Checklist } from '@/pages/Checklist'
 
+import { GUEST_PATHS } from '@/components/layout/Sidebar'
+
+// Misafir erişim engeli — izinsiz sayfalarda Dashboard'a yönlendir
+function GuestGuard({ children }: { children: React.ReactNode }) {
+  const { isGuest } = useAuth()
+  if (isGuest) return <div className="p-8 text-center"><div className="text-xl text-red mb-2">🔒 Erişim Engeli</div><div className="text-sm text-zinc-400">Misafir hesabıyla bu sayfaya erişilemez.</div></div>
+  return <>{children}</>
+}
+
 function AppContent() {
-  const { signOut } = useAuth()
+  const { signOut, isGuest } = useAuth()
   const { loadAll } = useStore()
   useRealtime()
 
@@ -43,23 +52,23 @@ function AppContent() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/work-orders" element={<WorkOrders />} />
-          <Route path="/production" element={<ProductionEntry />} />
+          <Route path="/production" element={<GuestGuard><ProductionEntry /></GuestGuard>} />
           <Route path="/cutting" element={<CuttingPlans />} />
           <Route path="/mrp" element={<MRP />} />
           <Route path="/warehouse" element={<Warehouse />} />
-          <Route path="/shipment" element={<Shipment />} />
-          <Route path="/bom" element={<BomTrees />} />
-          <Route path="/recipes" element={<Recipes />} />
+          <Route path="/shipment" element={<GuestGuard><Shipment /></GuestGuard>} />
+          <Route path="/bom" element={<GuestGuard><BomTrees /></GuestGuard>} />
+          <Route path="/recipes" element={<GuestGuard><Recipes /></GuestGuard>} />
           <Route path="/materials" element={<Materials />} />
-          <Route path="/operations" element={<Operations />} />
-          <Route path="/stations" element={<Stations />} />
-          <Route path="/operators" element={<Operators />} />
-          <Route path="/suppliers" element={<Suppliers />} />
-          <Route path="/downtime-codes" element={<DowntimeCodes />} />
+          <Route path="/operations" element={<GuestGuard><Operations /></GuestGuard>} />
+          <Route path="/stations" element={<GuestGuard><Stations /></GuestGuard>} />
+          <Route path="/operators" element={<GuestGuard><Operators /></GuestGuard>} />
+          <Route path="/suppliers" element={<GuestGuard><Suppliers /></GuestGuard>} />
+          <Route path="/downtime-codes" element={<GuestGuard><DowntimeCodes /></GuestGuard>} />
           <Route path="/reports" element={<Reports />} />
-          <Route path="/data" element={<DataManagement />} />
-          <Route path="/procurement" element={<Procurement />} />
-          <Route path="/checklist" element={<Checklist />} />
+          <Route path="/data" element={<GuestGuard><DataManagement /></GuestGuard>} />
+          <Route path="/procurement" element={<GuestGuard><Procurement /></GuestGuard>} />
+          <Route path="/checklist" element={<GuestGuard><Checklist /></GuestGuard>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

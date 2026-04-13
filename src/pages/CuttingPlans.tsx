@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import React, { useState } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +11,7 @@ import { Trash2, Plus, Scissors, Zap } from 'lucide-react'
 
 export function CuttingPlans() {
   const { cuttingPlans, materials, workOrders, operations, recipes, logs, loadAll } = useStore()
+  const { isGuest } = useAuth()
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [artikInfo, setArtikInfo] = useState<{ planId: string; hamMalkod: string; hamMalad: string; fireMm: number; barIdx: number } | null>(null)
@@ -50,6 +52,7 @@ export function CuttingPlans() {
           <button onClick={() => setShowTamamlanan(!showTamamlanan)} className={`px-3 py-1.5 rounded-lg text-xs border ${showTamamlanan ? 'bg-green/10 border-green/25 text-green' : 'bg-bg-2 border-border text-zinc-500'}`}>
             {showTamamlanan ? '✓ Tamamlananlar Görünür' : '○ Tamamlananları Göster'}
           </button>
+          {!isGuest && <>
           <button onClick={async () => {
             const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
             const cpMapped = cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
@@ -59,6 +62,7 @@ export function CuttingPlans() {
             loadAll(); toast.success(count + ' kesim planı oluşturuldu/güncellendi')
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs font-semibold hover:bg-green/20"><Zap size={13} /> Otomatik Plan</button>
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Scissors size={13} /> Manuel Plan</button>
+          </>}
         </div>
       </div>
 

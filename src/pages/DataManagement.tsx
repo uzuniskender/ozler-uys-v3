@@ -267,91 +267,114 @@ export function DataManagement() {
 function SifirlamaSecimli() {
   const store = useStore()
   const { loadAll } = store
-  const [secili, setSecili] = useState<Set<string>>(new Set())
   const [siliniyor, setSiliniyor] = useState(false)
+  const [acik, setAcik] = useState<string | null>(null)
+  // Her tablo için seçili ID'ler
+  const [seciliIds, setSeciliIds] = useState<Record<string, Set<string>>>({})
 
-  const uretimVerileri = [
-    { key: 'siparisler', ad: '📋 Siparişler', tablo: 'uys_orders', sayi: store.orders.length },
-    { key: 'isEmirleri', ad: '🔧 İş Emirleri', tablo: 'uys_work_orders', sayi: store.workOrders.length },
-    { key: 'uretimLog', ad: '📝 Üretim Logları', tablo: 'uys_logs', sayi: store.logs.length },
-    { key: 'fireLog', ad: '🔥 Fire Logları', tablo: 'uys_fire_logs', sayi: store.fireLogs.length },
-    { key: 'stokHareket', ad: '📦 Stok Hareketleri', tablo: 'uys_stok_hareketler', sayi: store.stokHareketler.length },
-    { key: 'tedarik', ad: '🚚 Tedarikler', tablo: 'uys_tedarikler', sayi: store.tedarikler.length },
-    { key: 'kesimPlan', ad: '✂ Kesim Planları', tablo: 'uys_kesim_planlari', sayi: store.cuttingPlans.length },
-    { key: 'sevk', ad: '🚛 Sevkiyatlar', tablo: 'uys_sevkler', sayi: store.sevkler.length },
-    { key: 'mesaj', ad: '💬 Operatör Mesajları', tablo: 'uys_operator_notes', sayi: store.operatorNotes.length },
-    { key: 'aktifIs', ad: '▶ Aktif Çalışmalar', tablo: 'uys_active_work', sayi: store.activeWork.length },
+  function getItems(key: string): { id: string; label: string }[] {
+    switch (key) {
+      case 'orders': return store.orders.map(o => ({ id: o.id, label: `${o.siparisNo} — ${o.musteri || ''} (${o.adet} adet)` }))
+      case 'workOrders': return store.workOrders.map(w => ({ id: w.id, label: `${w.ieNo} — ${w.malad?.slice(0, 40)}` }))
+      case 'logs': return store.logs.map(l => ({ id: l.id, label: `${l.tarih} · +${l.qty} · ${(store.workOrders.find(w => w.id === l.woId)?.ieNo || l.woId).slice(0, 20)}` }))
+      case 'fireLogs': return store.fireLogs.map(f => ({ id: f.id, label: `${f.tarih} · ${f.qty} fire` }))
+      case 'stokHareketler': return store.stokHareketler.slice(0, 200).map(h => ({ id: h.id, label: `${h.tarih} · ${h.tip} · ${h.malkod?.slice(0, 20)} · ${h.miktar}` }))
+      case 'tedarikler': return store.tedarikler.map(t => ({ id: t.id, label: `${t.malkod?.slice(0, 20)} — ${t.miktar} ${t.geldi ? '✓' : '⏳'}` }))
+      case 'cuttingPlans': return store.cuttingPlans.map(p => ({ id: p.id, label: `${p.hamMalkod} · ${p.hamBoy}mm · ${p.durum}` }))
+      case 'sevkler': return store.sevkler.map(s => ({ id: s.id, label: `${(s as any).tarih || ''} · ${(s as any).musteri || ''}` }))
+      case 'operatorNotes': return store.operatorNotes.map(n => ({ id: n.id, label: `${n.opAd} · ${n.tarih} · ${n.mesaj?.slice(0, 30)}` }))
+      case 'activeWork': return store.activeWork.map(a => ({ id: a.id, label: `${a.opAd} · ${a.woAd?.slice(0, 30)}` }))
+      default: return []
+    }
+  }
+
+  function toggleId(tablo: string, id: string) {
+    setSeciliIds(prev => {
+      const n = { ...prev }; if (!n[tablo]) n[tablo] = new Set()
+      const s = new Set(n[tablo]); s.has(id) ? s.delete(id) : s.add(id); n[tablo] = s; return n
+    })
+  }
+  function selectAll(tablo: string) {
+    const items = getItems(tablo)
+    setSeciliIds(prev => ({ ...prev, [tablo]: new Set(items.map(i => i.id)) }))
+  }
+  function selectNone(tablo: string) {
+    setSeciliIds(prev => ({ ...prev, [tablo]: new Set() }))
+  }
+
+  const toplamSecili = Object.values(seciliIds).reduce((a, s) => a + s.size, 0)
+
+  const kategoriler = [
+    { key: 'orders', ad: '📋 Siparişler', tablo: 'uys_orders', sayi: store.orders.length, tehlikeli: false },
+    { key: 'workOrders', ad: '🔧 İş Emirleri', tablo: 'uys_work_orders', sayi: store.workOrders.length, tehlikeli: false },
+    { key: 'logs', ad: '📝 Üretim Logları', tablo: 'uys_logs', sayi: store.logs.length, tehlikeli: false },
+    { key: 'fireLogs', ad: '🔥 Fire Logları', tablo: 'uys_fire_logs', sayi: store.fireLogs.length, tehlikeli: false },
+    { key: 'stokHareketler', ad: '📦 Stok Hareketleri', tablo: 'uys_stok_hareketler', sayi: store.stokHareketler.length, tehlikeli: false },
+    { key: 'tedarikler', ad: '🚚 Tedarikler', tablo: 'uys_tedarikler', sayi: store.tedarikler.length, tehlikeli: false },
+    { key: 'cuttingPlans', ad: '✂ Kesim Planları', tablo: 'uys_kesim_planlari', sayi: store.cuttingPlans.length, tehlikeli: false },
+    { key: 'sevkler', ad: '🚛 Sevkiyatlar', tablo: 'uys_sevkler', sayi: store.sevkler.length, tehlikeli: false },
+    { key: 'operatorNotes', ad: '💬 Mesajlar', tablo: 'uys_operator_notes', sayi: store.operatorNotes.length, tehlikeli: false },
+    { key: 'activeWork', ad: '▶ Aktif Çalışmalar', tablo: 'uys_active_work', sayi: store.activeWork.length, tehlikeli: false },
   ]
-
-  const anaVeriler = [
-    { key: 'recete', ad: '📋 Reçeteler', tablo: 'uys_recipes', sayi: (store as any).recipes?.length || 0 },
-    { key: 'bom', ad: '🌳 Ürün Ağaçları', tablo: 'uys_bom_trees', sayi: (store as any).bomTrees?.length || 0 },
-    { key: 'malzeme', ad: '🧱 Malzemeler', tablo: 'uys_malzemeler', sayi: store.materials.length },
-    { key: 'operator', ad: '👷 Operatörler', tablo: 'uys_operators', sayi: store.operators.length },
-    { key: 'operasyon', ad: '⚙ Operasyonlar', tablo: 'uys_operations', sayi: store.operations.length },
-  ]
-
-  const tumKalemler = [...uretimVerileri, ...anaVeriler]
-  function toggle(key: string) { setSecili(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }) }
-  function secUretim() { setSecili(new Set(uretimVerileri.map(k => k.key))) }
 
   async function sil() {
-    if (!secili.size) { toast.error('Silinecek kalem seçin'); return }
-    const seciliKalemler = tumKalemler.filter(k => secili.has(k.key))
-    const anaSecili = anaVeriler.filter(k => secili.has(k.key))
-
-    // Ana veriler seçildiyse şifre iste
-    if (anaSecili.length > 0) {
-      const sifre = await showPrompt('⚠ Tehlikeli İşlem!\n\n' + anaSecili.map(k => k.ad).join(', ') + ' silinecek.\n\nŞifre girin:', '')
-      if (sifre !== 'SIFIRLA') { toast.error('Şifre hatalı — "SIFIRLA" yazmalısınız'); return }
-    } else {
-      if (!await showConfirm(`${seciliKalemler.length} kategori silinecek:\n${seciliKalemler.map(k => k.ad).join(', ')}\n\nDevam?`)) return
-    }
-
+    if (toplamSecili === 0) { toast.error('Silinecek kayıt seçin'); return }
+    if (!await showConfirm(`${toplamSecili} kayıt silinecek. Devam?`)) return
     setSiliniyor(true)
-    const count = seciliKalemler.length
-    for (const k of seciliKalemler) {
-      await supabase.from(k.tablo).delete().neq('id', '___impossible___')
+    let deleted = 0
+    for (const [key, ids] of Object.entries(seciliIds)) {
+      if (!ids.size) continue
+      const kat = kategoriler.find(k => k.key === key)
+      if (!kat) continue
+      for (const id of ids) {
+        await supabase.from(kat.tablo).delete().eq('id', id)
+        // İlişkili stok hareketlerini de sil (log silinince)
+        if (key === 'logs') await supabase.from('uys_stok_hareketler').delete().eq('log_id', id)
+      }
+      deleted += ids.size
     }
-    setSecili(new Set()); setSiliniyor(false); loadAll()
-    toast.success(count + ' kategori sıfırlandı')
+    setSeciliIds({}); setSiliniyor(false); loadAll()
+    toast.success(deleted + ' kayıt silindi')
   }
 
   return (
     <div>
-      {/* Üretim Verileri — güvenli alan */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-amber">Üretim Verileri</span>
-          <button onClick={secUretim} className="text-[10px] text-amber hover:text-white px-2 py-0.5 bg-amber/10 rounded">Tümünü Seç</button>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {uretimVerileri.map(k => (
-            <label key={k.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${secili.has(k.key) ? 'bg-amber/10 border-amber/30' : 'bg-bg-2 border-border/50 hover:border-border'}`}>
-              <input type="checkbox" checked={secili.has(k.key)} onChange={() => toggle(k.key)} className="accent-amber" />
-              <div><div className="text-xs">{k.ad}</div><div className="text-[10px] text-zinc-600 font-mono">{k.sayi} kayıt</div></div>
-            </label>
-          ))}
-        </div>
+      <div className="space-y-1.5 mb-4">
+        {kategoriler.map(k => {
+          const isOpen = acik === k.key
+          const items = isOpen ? getItems(k.key) : []
+          const seciliCount = seciliIds[k.key]?.size || 0
+          return (
+            <div key={k.key} className="border border-border/50 rounded-lg overflow-hidden">
+              <div className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-bg-3/30 ${seciliCount > 0 ? 'bg-red/5' : ''}`}
+                onClick={() => setAcik(isOpen ? null : k.key)}>
+                <span className="text-[10px] text-zinc-600">{isOpen ? '▼' : '▶'}</span>
+                <span className="text-xs flex-1">{k.ad}</span>
+                <span className="text-[10px] font-mono text-zinc-500">{k.sayi} kayıt</span>
+                {seciliCount > 0 && <span className="text-[10px] font-bold text-red bg-red/10 px-1.5 py-0.5 rounded">{seciliCount} seçili</span>}
+              </div>
+              {isOpen && (
+                <div className="border-t border-border/30 bg-bg-2/50 p-2">
+                  <div className="flex gap-2 mb-2">
+                    <button onClick={() => selectAll(k.key)} className="text-[10px] text-accent hover:text-white px-2 py-0.5 bg-bg-3 rounded">Tümünü Seç</button>
+                    <button onClick={() => selectNone(k.key)} className="text-[10px] text-zinc-500 hover:text-white px-2 py-0.5 bg-bg-3 rounded">Temizle</button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    {items.length ? items.map(item => (
+                      <label key={item.id} className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-[11px] ${seciliIds[k.key]?.has(item.id) ? 'bg-red/10 text-zinc-200' : 'text-zinc-400 hover:bg-bg-3/50'}`}>
+                        <input type="checkbox" checked={seciliIds[k.key]?.has(item.id) || false} onChange={() => toggleId(k.key, item.id)} className="accent-red" />
+                        <span className="truncate">{item.label}</span>
+                      </label>
+                    )) : <div className="text-[10px] text-zinc-600 text-center py-2">Kayıt yok</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
-
-      {/* Ana Veriler — tehlikeli, şifre gerekir */}
-      <div className="mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-semibold text-red">🔒 Ana Veriler (şifre gerekir)</span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {anaVeriler.map(k => (
-            <label key={k.key} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer border transition-colors ${secili.has(k.key) ? 'bg-red/10 border-red/30' : 'bg-bg-2 border-border/50 hover:border-border'}`}>
-              <input type="checkbox" checked={secili.has(k.key)} onChange={() => toggle(k.key)} className="accent-red" />
-              <div><div className="text-xs">{k.ad}</div><div className="text-[10px] text-zinc-600 font-mono">{k.sayi} kayıt</div></div>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <button onClick={sil} disabled={!secili.size || siliniyor} className="w-full px-4 py-2.5 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold disabled:opacity-30">
-        {siliniyor ? 'Siliniyor...' : `🗑 Seçili ${secili.size} Kategoriyi Sıfırla`}
+      <button onClick={sil} disabled={toplamSecili === 0 || siliniyor} className="w-full px-4 py-2.5 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold disabled:opacity-30">
+        {siliniyor ? 'Siliniyor...' : `🗑 Seçili ${toplamSecili} Kaydı Sil`}
       </button>
     </div>
   )

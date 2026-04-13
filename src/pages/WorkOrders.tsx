@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +13,7 @@ import { OprEntryModal } from '@/pages/OperatorPanel'
 
 export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, loadAll } = useStore()
+  const { isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['siparis', 'ym']))

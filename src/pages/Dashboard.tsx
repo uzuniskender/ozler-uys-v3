@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { showConfirm, showPrompt } from '@/lib/prompt'
@@ -22,6 +23,7 @@ function StatCard({ value, label, color, icon: Icon }: { value: number | string;
 
 export function Dashboard() {
   const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler, tedarikler, cuttingPlans, loadAll } = useStore()
+  const { isGuest } = useAuth()
   const todayStr = today()
 
   // Calculations
