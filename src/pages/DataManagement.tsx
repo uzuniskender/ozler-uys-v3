@@ -1,9 +1,9 @@
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
-
+import { useState } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
-import { today } from '@/lib/utils'
+import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 

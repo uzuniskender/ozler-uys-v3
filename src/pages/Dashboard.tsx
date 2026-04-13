@@ -82,7 +82,7 @@ export function Dashboard() {
       {(() => {
         const bekleyenTed = tedarikler.filter(t => !t.geldi).length
         const bekleyenKP = cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
-        const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && aktifOrders.some(a => a.id === o.id)).length
+        const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && workOrders.some(w => w.orderId === o.id) && aktifOrders.some(a => a.id === o.id)).length
         const kesimEksik = (() => {
           const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
           const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
@@ -422,7 +422,7 @@ export function Dashboard() {
         if (recetesiz.length) adimlar.push({ icon: '📋', mesaj: `${recetesiz.length} siparişin reçetesi bağlı değil`, link: '#/orders' })
         const ieSiz = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id))
         if (ieSiz.length) adimlar.push({ icon: '⚙', mesaj: `${ieSiz.length} sipariş için İE oluşturulmamış`, link: '#/orders' })
-        const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && aktifOrders.some(a => a.id === o.id)).length
+        const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && workOrders.some(w => w.orderId === o.id) && aktifOrders.some(a => a.id === o.id)).length
         if (mrpYok) adimlar.push({ icon: '📊', mesaj: `${mrpYok} siparişin malzeme ihtiyacı (MRP) henüz hesaplanmadı`, link: '#/mrp' })
         const _kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
         const _planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))

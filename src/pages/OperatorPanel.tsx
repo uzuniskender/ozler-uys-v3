@@ -144,7 +144,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet') => void; onLogout: () => void
 }) {
   const { workOrders, logs, activeWork, operations, operators, durusKodlari, loadAll } = useStore()
-  const [entryWO, setEntryWO] = useState<string | null>(null)
+  const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
 
   const acikWOs = useMemo(() => {
     const bolumUpper = (opr.bolum || '').trim().toUpperCase()
@@ -252,7 +252,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                         <div className="text-[10px] text-zinc-500">Başlangıç: {a.baslangic}</div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => aw && setEntryWO(aw.woId)} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
+                        <button onClick={() => aw && setEntryWO({ woId: aw.woId })} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
                           <CheckCircle size={12} className="inline mr-1" />Kayıt
                         </button>
                         <button onClick={() => stopWork(a.id)} className="px-3 py-1.5 bg-red/20 text-red rounded-lg text-[11px] font-semibold hover:bg-red/30">
@@ -294,7 +294,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                         <Play size={12} className="inline mr-1" />İşe Başla
                       </button>
                     )}
-                    <button onClick={() => setEntryWO(w.id)} className="flex-1 py-2 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs font-bold hover:bg-accent/20">
+                    <button onClick={() => setEntryWO({ woId: w.id })} className="flex-1 py-2 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs font-bold hover:bg-accent/20">
                       <CheckCircle size={12} className="inline mr-1" />Üretim Kaydı
                     </button>
                   </div>
@@ -336,7 +336,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                           <div className="flex items-center gap-2">
                             <span className="text-green text-xs font-bold">+{l.qty}</span>
                             {l.fire > 0 && <span className="text-red text-[10px]">🔥{l.fire}</span>}
-                            <button onClick={() => wo && setEntryWO(wo.id)} className="text-[10px] text-accent hover:text-white px-1.5 py-0.5 bg-accent/10 rounded">Düzenle</button>
+                            <button onClick={() => wo && setEntryWO({ woId: wo.id, logId: l.id })} className="text-[10px] text-accent hover:text-white px-1.5 py-0.5 bg-accent/10 rounded">Düzenle</button>
                           </div>
                         </div>
                         {duruslar.length > 0 && (
@@ -408,7 +408,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
         })()}
 
         {/* Üretim Kayıt Modal */}
-        {entryWO && <OprEntryModal woId={entryWO} oprId={oprId} oprAd={opr.ad} allOperators={operators} durusKodlari={durusKodlari}
+        {entryWO && <OprEntryModal woId={entryWO.woId} editLogId={entryWO.logId} oprId={oprId} oprAd={opr.ad} allOperators={operators} durusKodlari={durusKodlari}
           onClose={() => setEntryWO(null)}
           onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }} />}
       </div>
@@ -418,31 +418,40 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
 /* Operatör Üretim Kayıt Modal — admin'den de kullanılır */
 /* Operatör Üretim Kayıt Modal — admin'den de kullanılır */
-export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, onClose, onSaved }: {
+export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, editLogId, onClose, onSaved }: {
   woId: string; oprId: string; oprAd: string
   allOperators: { id: string; ad: string; kod: string; bolum: string; aktif?: boolean }[]
   durusKodlari: { id: string; kod: string; ad: string }[]
+  editLogId?: string
   onClose: () => void; onSaved: () => void
 }) {
   const { workOrders, logs, recipes, stokHareketler } = useStore()
   const w = workOrders.find(x => x.id === woId)
   const now = new Date()
   const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-  const [qty, setQty] = useState('')
-  const [fire, setFire] = useState('')
-  const [aciklama, setAciklama] = useState('')
+
+  // Mevcut log (düzenleme modu)
+  const editLog = editLogId ? logs.find(l => l.id === editLogId) : null
+
+  const [qty, setQty] = useState(editLog ? String(editLog.qty) : '')
+  const [fire, setFire] = useState(editLog ? String(editLog.fire || 0) : '')
+  const [aciklama, setAciklama] = useState(editLog?.not || '')
   const [saving, setSaving] = useState(false)
-  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
-  const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>([
-    { id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM }
-  ])
+  const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>(
+    editLog?.duruslar ? (editLog.duruslar as any[]).map(d => ({ kodId: d.kodId || '', kodAd: d.kodAd || '', sure: d.sure || 0, bas: d.bas || '', bit: d.bit || '' })) : []
+  )
+  const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>(
+    editLog?.operatorlar ? (editLog.operatorlar as any[]).map(o => ({ id: o.id, ad: o.ad, bas: o.bas || nowHHMM, bit: o.bit || nowHHMM }))
+    : [{ id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM }]
+  )
   const [addOprId, setAddOprId] = useState('')
 
   if (!w) return null
   const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
-  const kalan = Math.max(0, w.hedef - prod)
-  const rc = recipes.find(r => r.id === w.receteId)
-  const hmSatirlar = (rc?.satirlar || []).filter((s: any) => s.tip === 'Hammadde' || s.tip === 'hammadde')
+  const editQtyDelta = editLog ? (parseInt(qty) || 0) - editLog.qty : 0
+  const kalan = Math.max(0, w.hedef - prod + (editLog?.qty || 0)) // Düzenlemede mevcut qty'yi geri ekle
+  const rc = recipes.find(r => r.id === w.receteId) || recipes.find(r => r.mamulKod === w.malkod)
+  const hmSatirlar = (rc?.satirlar || []).filter((s: any) => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
 
   function stokNet(malkod: string) {
     return stokHareketler.filter(h => h.malkod === malkod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
@@ -530,30 +539,59 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     if (toplamCalisma > 0 && toplamDurusDk > toplamCalisma) { toast.error('Duruş (' + toplamDurusDk + 'dk) çalışmayı (' + toplamCalisma + 'dk) aşamaz'); return }
 
     setSaving(true)
-    const logId = uid()
-    await supabase.from('uys_logs').insert({
-      id: logId, wo_id: woId, tarih: today(), qty: q, fire: f,
-      operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
-      not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
-    })
-    if (q > 0) {
-      await supabase.from('uys_stok_hareketler').insert({
-        id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-        tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
-        tarih: today(), log_id: logId, wo_id: woId,
+    if (editLog && editLogId) {
+      // DÜZENLEME MODU — mevcut logu güncelle
+      await supabase.from('uys_logs').update({
+        qty: q, fire: f, not_: aciklama,
+        operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
+        duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
+      }).eq('id', editLogId)
+      // Stok hareketlerini yeniden oluştur
+      await supabase.from('uys_stok_hareketler').delete().eq('log_id', editLogId)
+      if (q > 0) {
+        await supabase.from('uys_stok_hareketler').insert({
+          id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
+          tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
+          tarih: today(), log_id: editLogId, wo_id: woId,
+        })
+        for (const hm of hmSatirlar) {
+          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+          if (hmMiktar > 0) {
+            await supabase.from('uys_stok_hareketler').insert({
+              id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
+              tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim (düzenlendi)',
+              tarih: today(), log_id: editLogId, wo_id: woId,
+            })
+          }
+        }
+      }
+    } else {
+      // YENİ KAYIT MODU
+      const logId = uid()
+      await supabase.from('uys_logs').insert({
+        id: logId, wo_id: woId, tarih: today(), qty: q, fire: f,
+        operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
+        not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
       })
-      for (const hm of hmSatirlar) {
-        const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
-        if (hmMiktar > 0) {
-          await supabase.from('uys_stok_hareketler').insert({
-            id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-            tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
-            tarih: today(), log_id: logId, wo_id: woId,
-          })
+      if (q > 0) {
+        await supabase.from('uys_stok_hareketler').insert({
+          id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
+          tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
+          tarih: today(), log_id: logId, wo_id: woId,
+        })
+        for (const hm of hmSatirlar) {
+          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+          if (hmMiktar > 0) {
+            await supabase.from('uys_stok_hareketler').insert({
+              id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
+              tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
+              tarih: today(), log_id: logId, wo_id: woId,
+            })
+          }
         }
       }
     }
-    if (f > 0) {
+    if (f > 0 && !editLog) {
       await supabase.from('uys_fire_logs').insert({
         id: uid(), wo_id: woId, tarih: today(), miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
       })
@@ -564,8 +602,11 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
       <div className="bg-bg-1 border border-border rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="bg-accent/10 border-b border-accent/20 p-4 rounded-t-xl">
-          <div className="font-mono text-accent text-xs font-bold">{w.ieNo}</div>
+        <div className={`${editLog ? 'bg-amber/10 border-b border-amber/20' : 'bg-accent/10 border-b border-accent/20'} p-4 rounded-t-xl`}>
+          <div className="flex items-center justify-between">
+            <div className="font-mono text-accent text-xs font-bold">{w.ieNo}</div>
+            {editLog && <span className="text-[10px] px-2 py-0.5 bg-amber/20 text-amber rounded font-semibold">✏ Düzenleme Modu</span>}
+          </div>
           <div className="text-sm font-semibold text-white mt-0.5">{w.malad}</div>
           <div className="text-[11px] text-zinc-400 mt-1">Operasyon: <b>{w.opAd}</b> · Kalan: <b className="text-amber">{kalan}</b></div>
         </div>
@@ -671,7 +712,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           <button onClick={onClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm font-semibold">İptal</button>
           <button onClick={save} disabled={saving || (maxUretim <= 0 && hmSatirlar.length > 0)}
             className="flex-1 py-3 bg-green hover:bg-green/80 text-black font-bold rounded-lg text-sm disabled:opacity-30">
-            {saving ? 'Kaydediliyor...' : '✅ Kaydet'}
+            {saving ? 'Kaydediliyor...' : editLog ? '✏ Güncelle' : '✅ Kaydet'}
           </button>
         </div>
       </div>

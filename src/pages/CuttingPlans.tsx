@@ -13,8 +13,10 @@ export function CuttingPlans() {
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [artikInfo, setArtikInfo] = useState<{ planId: string; hamMalkod: string; hamMalad: string; fireMm: number; barIdx: number } | null>(null)
+  const [showTamamlanan, setShowTamamlanan] = useState(false)
 
   const bekleyen = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
+  const gosterilen = showTamamlanan ? cuttingPlans : bekleyen
 
   async function deletePlan(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -43,8 +45,11 @@ export function CuttingPlans() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Kesim Planları</h1><p className="text-xs text-zinc-500">{cuttingPlans.length} plan · {bekleyen.length} bekleyen</p></div>
+        <div><h1 className="text-xl font-semibold">Kesim Planları</h1><p className="text-xs text-zinc-500">{cuttingPlans.length} plan · {bekleyen.length} bekleyen · {cuttingPlans.length - bekleyen.length} tamamlanan</p></div>
         <div className="flex gap-2">
+          <button onClick={() => setShowTamamlanan(!showTamamlanan)} className={`px-3 py-1.5 rounded-lg text-xs border ${showTamamlanan ? 'bg-green/10 border-green/25 text-green' : 'bg-bg-2 border-border text-zinc-500'}`}>
+            {showTamamlanan ? '✓ Tamamlananlar Görünür' : '○ Tamamlananları Göster'}
+          </button>
           <button onClick={async () => {
             const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
             const cpMapped = cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
@@ -88,12 +93,12 @@ export function CuttingPlans() {
       })()}
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        {cuttingPlans.length ? (
+        {gosterilen.length ? (
           <div>
             <table className="w-full text-xs">
               <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">Gerekli</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
               <tbody>
-                {cuttingPlans.map(p => {
+                {gosterilen.map(p => {
                   const isOpen = selected === p.id
                   const satirlar = (p.satirlar || []) as { id: string; hamAdet: number; fireMm: number; kesimler: { woId: string; ieNo?: string; malkod: string; malad: string; parcaBoy: number; parcaEn?: number; adet: number; tamamlandi: number }[]; durum: string }[]
                   const toplamBar = satirlar.reduce((a, s) => a + (s.hamAdet || 0), 0)
