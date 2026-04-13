@@ -1,24 +1,73 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
-import { Plus, Trash2, Pencil, Download } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload } from 'lucide-react'
 
 export function Recipes() {
   const { recipes, operations, bomTrees, loadAll } = useStore()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function toggleCheck(id: string) { setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  function toggleAll() { checkedIds.size === recipes.length ? setCheckedIds(new Set()) : setCheckedIds(new Set(recipes.map(r => r.id))) }
+
+  async function deleteSelected() {
+    if (!checkedIds.size) return
+    if (!await showConfirm(`${checkedIds.size} reçeteyi silmek istediğinize emin misiniz?`)) return
+    for (const id of checkedIds) { await supabase.from('uys_recipes').delete().eq('id', id) }
+    setCheckedIds(new Set()); loadAll(); toast.success(checkedIds.size + ' reçete silindi')
+  }
 
   function exportRecipes() {
     import('xlsx').then(XLSX => {
       const rows = recipes.flatMap(r => (r.satirlar || []).map(s => ({
-        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim
+        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim, 'OpId': s.opId || '', 'İşlemSüre': s.islemSure || 0
       })))
       const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Reçeteler'); XLSX.writeFile(wb, 'receteler.xlsx')
+      toast.success(rows.length + ' satır dışa aktarıldı')
+    })
+  }
+
+  // #11: Excel Import
+  function importExcel(file: File) {
+    import('xlsx').then(async XLSX => {
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows: any[] = XLSX.utils.sheet_to_json(ws)
+      if (!rows.length) { toast.error('Boş dosya'); return }
+
+      const gruplar: Record<string, { ad: string; mamulKod: string; satirlar: RecipeRow[] }> = {}
+      for (const r of rows) {
+        const mk = r['Mamul Kod'] || r.mamulKod || r.MamulKod || ''
+        if (!mk) continue
+        if (!gruplar[mk]) gruplar[mk] = { ad: r['Reçete'] || r.Recete || mk, mamulKod: mk, satirlar: [] }
+        gruplar[mk].satirlar.push({
+          id: uid(), kirno: r['Kırılım'] || r.Kirno || r.kirno || '1',
+          malkod: r['Malzeme Kod'] || r.MalKod || r.malkod || '', malad: r['Malzeme'] || r.MalAd || r.malad || '',
+          tip: (r.Tip || r.tip || 'Hammadde') as RecipeRow['tip'], miktar: parseFloat(r.Miktar || r.miktar) || 1, birim: r.Birim || r.birim || 'Adet',
+          opId: r.OpId || r.opId || '', istId: '', hazirlikSure: 0, islemSure: parseFloat(r['İşlemSüre'] || r.islemSure) || 0,
+        })
+      }
+
+      let yeni = 0, guncellenen = 0
+      for (const g of Object.values(gruplar)) {
+        const existing = recipes.find(r => r.mamulKod === g.mamulKod)
+        if (existing) {
+          await supabase.from('uys_recipes').update({ satirlar: g.satirlar, ad: g.ad }).eq('id', existing.id)
+          guncellenen++
+        } else {
+          await supabase.from('uys_recipes').insert({ id: uid(), rc_kod: 'RC-' + g.mamulKod, ad: g.ad, mamul_kod: g.mamulKod, mamul_ad: g.ad, satirlar: g.satirlar })
+          yeni++
+        }
+      }
+      loadAll(); toast.success(`${yeni} yeni · ${guncellenen} güncellendi`)
     })
   }
 
@@ -58,18 +107,24 @@ export function Recipes() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete</p></div>
         <div className="flex gap-2">
-          {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan Reçete ({bomTrees.length})</button>}
-          <button onClick={exportRecipes} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Reçete</button>
+          {checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
+          {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan ({bomTrees.length})</button>}
+          <button onClick={exportRecipes} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> İndir</button>
+          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Yükle</button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { if (e.target.files?.[0]) importExcel(e.target.files[0]); e.target.value = '' }} />
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
         </div>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {recipes.length ? (
           <table className="w-full text-xs">
-            <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Reçete Adı</th><th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
+            <thead><tr className="border-b border-border text-zinc-500">
+              <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === recipes.length && recipes.length > 0} onChange={toggleAll} className="accent-accent" /></th>
+              <th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Reçete Adı</th><th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
             <tbody>
               {recipes.map(r => (
-                <tr key={r.id} className="border-b border-border/30 hover:bg-bg-3/30">
+                <tr key={r.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(r.id) ? 'bg-accent/5' : ''}`}>
+                  <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleCheck(r.id)} className="accent-accent" /></td>
                   <td className="px-4 py-2 font-mono text-accent">{r.rcKod || '—'}</td>
                   <td className="px-4 py-2 text-zinc-300">{r.ad}</td>
                   <td className="px-4 py-2 font-mono text-zinc-500">{r.mamulKod}</td>

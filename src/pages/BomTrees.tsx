@@ -1,21 +1,89 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { BomTree } from '@/types'
-import { Plus, Trash2, Pencil } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload } from 'lucide-react'
 
 export function BomTrees() {
   const { bomTrees, recipes, loadAll } = useStore()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function toggleCheck(id: string) {
+    setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleAll() {
+    if (checkedIds.size === bomTrees.length) setCheckedIds(new Set())
+    else setCheckedIds(new Set(bomTrees.map(b => b.id)))
+  }
+
+  async function deleteSelected() {
+    if (!checkedIds.size) return
+    if (!await showConfirm(`${checkedIds.size} ürün ağacını silmek istediğinize emin misiniz?`)) return
+    for (const id of checkedIds) { await supabase.from('uys_bom_trees').delete().eq('id', id) }
+    setCheckedIds(new Set()); loadAll(); toast.success(checkedIds.size + ' ürün ağacı silindi')
+  }
 
   async function deleteBom(id: string) {
     if (!await showConfirm('Bu ürün ağacını silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_bom_trees').delete().eq('id', id)
     loadAll(); toast.success('Ürün ağacı silindi')
+  }
+
+  // #10: Excel Export
+  function exportExcel() {
+    import('xlsx').then(XLSX => {
+      const rows: any[] = []
+      bomTrees.forEach(bt => {
+        (bt.rows || []).forEach(r => {
+          rows.push({ MamulKod: bt.mamulKod, UrunAdi: bt.ad, Kirno: r.kirno, MalKod: r.malkod, MalAd: r.malad, Tip: r.tip, Miktar: r.miktar, Birim: r.birim })
+        })
+      })
+      const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'UrunAgaclari'); XLSX.writeFile(wb, 'urun_agaclari.xlsx')
+      toast.success(rows.length + ' satır dışa aktarıldı')
+    })
+  }
+
+  // #10: Excel Import
+  function importExcel(file: File) {
+    import('xlsx').then(async XLSX => {
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data); const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows: any[] = XLSX.utils.sheet_to_json(ws)
+      if (!rows.length) { toast.error('Boş dosya'); return }
+
+      // MamulKod bazlı grupla
+      const gruplar: Record<string, { mamulKod: string; ad: string; rows: any[] }> = {}
+      for (const r of rows) {
+        const mk = r.MamulKod || r.mamulKod || r.mamulkod || ''
+        if (!mk) continue
+        if (!gruplar[mk]) gruplar[mk] = { mamulKod: mk, ad: r.UrunAdi || r.urunAdi || mk, rows: [] }
+        gruplar[mk].rows.push({
+          id: uid(), kirno: r.Kirno || r.kirno || '1',
+          malkod: r.MalKod || r.malKod || r.malkod || '', malad: r.MalAd || r.malAd || r.malad || '',
+          tip: r.Tip || r.tip || 'Hammadde', miktar: parseFloat(r.Miktar || r.miktar) || 1, birim: r.Birim || r.birim || 'Adet',
+        })
+      }
+
+      let yeni = 0, guncellenen = 0
+      for (const g of Object.values(gruplar)) {
+        const existing = bomTrees.find(bt => bt.mamulKod === g.mamulKod)
+        if (existing) {
+          await supabase.from('uys_bom_trees').update({ rows: g.rows, ad: g.ad, mamul_ad: g.ad }).eq('id', existing.id)
+          guncellenen++
+        } else {
+          await supabase.from('uys_bom_trees').insert({ id: uid(), mamul_kod: g.mamulKod, mamul_ad: g.ad, ad: g.ad, rows: g.rows })
+          yeni++
+        }
+      }
+      loadAll(); toast.success(`${yeni} yeni · ${guncellenen} güncellendi`)
+    })
   }
 
   async function createRecipeFromBom(bt: BomTree) {
@@ -41,14 +109,23 @@ export function BomTrees() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Ürün Ağaçları</h1><p className="text-xs text-zinc-500">{bomTrees.length} ağaç</p></div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ürün Ağacı</button>
+        <div className="flex gap-2">
+          {checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
+          <button onClick={exportExcel} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={12} /> Excel İndir</button>
+          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={12} /> Excel Yükle</button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { if (e.target.files?.[0]) importExcel(e.target.files[0]); e.target.value = '' }} />
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+        </div>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {bomTrees.length ? (
-          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-left px-4 py-2.5">Ürün Adı</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
+          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500">
+            <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === bomTrees.length && bomTrees.length > 0} onChange={toggleAll} className="accent-accent" /></th>
+            <th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-left px-4 py-2.5">Ürün Adı</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {bomTrees.map(bt => (
-              <tr key={bt.id} className="border-b border-border/30 hover:bg-bg-3/30">
+              <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
+                <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent">{bt.mamulKod}</td>
                 <td className="px-4 py-2 text-zinc-300">{bt.ad || bt.mamulAd}</td>
                 <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
