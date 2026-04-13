@@ -227,23 +227,28 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
   materials: import('@/types').Material[]; workOrders: any[]; operations: any[]; recipes: any[]; logs: any[]
   onClose: () => void; onSaved: () => void
 }) {
+  const { cuttingPlans, loadAll } = useStore()
   const [artikKod, setArtikKod] = useState(info.hamMalkod + '-ARTIK-' + info.fireMm)
   const [stokGirisi, setStokGirisi] = useState(true)
+  const [eklenen, setEklenen] = useState<Set<string>>(new Set())
 
   const fireMm = info.fireMm
+  // Kalan fire hesabı — eklenen parçaları çıkar
+  const plan = cuttingPlans.find(p => p.id === info.planId) as any
+  const bar = plan?.satirlar?.[info.barIdx]
+  const ekliParcalar = (bar?.kesimler || []) as any[]
 
   // Aynı HM'yi kullanan, fire'a sığabilecek açık İE'ler
   const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
   const uygunIEler = workOrders.filter(w => {
     if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    if (ekliParcalar.some((k: any) => k.woId === w.id)) return false // Zaten planda
     const prod = logs.filter((l: any) => l.woId === w.id).reduce((a: number, l: any) => a + l.qty, 0)
     if (prod >= w.hedef) return false
     const wOp = operations.find((o: any) => o.id === w.opId)
     const opAd = (wOp?.ad || w.opAd || '').toUpperCase()
     if (!kesimOps.some(k => opAd.includes(k))) return false
-    // Aynı HM'yi kullanıyor mu? — sadece direkt bağlı HM kontrol
     if (w.hm?.some((h: any) => h.malkod === info.hamMalkod)) return true
-    // Reçeteden kontrol — sadece İE'nin kırılımının direkt alt satırları
     const rc = recipes.find((r: any) => r.id === w.rcId) || recipes.find((r: any) => r.mamulKod === w.malkod)
     if (rc?.satirlar) {
       const woKirno = w.kirno || '1'
@@ -264,13 +269,38 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
   }).filter(w => w.parcaBoy > 0 && w.parcaBoy <= fireMm)
   .sort((a, b) => b.parcaBoy - a.parcaBoy)
 
+  async function planaEkle(w: any) {
+    if (!plan || !bar) return
+    const sigacak = Math.min(Math.floor(fireMm / w.parcaBoy), w.kalan)
+    if (sigacak <= 0) return
+    // Plan satirlarını güncelle — bu bar'a yeni kesim ekle
+    const yeniSatirlar = [...(plan.satirlar || [])]
+    const yeniKesimler = [...(yeniSatirlar[info.barIdx]?.kesimler || []), {
+      woId: w.id, ieNo: w.ieNo, malkod: w.malkod, malad: w.malad,
+      parcaBoy: w.parcaBoy, adet: sigacak, tamamlandi: 0,
+    }]
+    // Yeni fire hesapla
+    const toplamKesim = yeniKesimler.reduce((a: number, k: any) => a + k.parcaBoy * k.adet, 0)
+    const hamBoy = plan.hamBoy || 0
+    const yeniFire = hamBoy - toplamKesim
+    yeniSatirlar[info.barIdx] = { ...yeniSatirlar[info.barIdx], kesimler: yeniKesimler, fireMm: Math.max(0, yeniFire) }
+
+    await supabase.from('uys_kesim_planlari').update({ satirlar: yeniSatirlar }).eq('id', info.planId)
+    setEklenen(prev => new Set(prev).add(w.id))
+    loadAll()
+    toast.success(`${w.ieNo} plana eklendi — ${sigacak} adet × ${w.parcaBoy}mm`)
+  }
+
   async function stokaGir() {
     if (!stokGirisi) { onClose(); return }
+    // Kalan fire'ı hesapla (eklenen parçalardan sonra)
+    const kalanFire = plan?.satirlar?.[info.barIdx]?.fireMm ?? fireMm
+    if (kalanFire <= 10) { toast.info('Artık kalmadı'); onSaved(); return }
     await supabase.from('uys_stok_hareketler').insert({
-      id: uid(), tarih: today(), malkod: artikKod, malad: info.hamMalad + ' (artık ' + fireMm + 'mm)',
-      miktar: 1, tip: 'giris', aciklama: 'Kesim artığı — ' + fireMm + 'mm',
+      id: uid(), tarih: today(), malkod: artikKod, malad: info.hamMalad + ' (artık ' + kalanFire + 'mm)',
+      miktar: 1, tip: 'giris', aciklama: 'Kesim artığı — ' + kalanFire + 'mm',
     })
-    toast.success('Artık stoka girildi: ' + fireMm + 'mm')
+    toast.success('Artık stoka girildi: ' + kalanFire + 'mm')
     onSaved()
   }
 
@@ -303,16 +333,24 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
           {uygunIEler.length > 0 ? (
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {uygunIEler.map(w => {
-                const sigacak = Math.floor(fireMm / w.parcaBoy)
+                const sigacak = Math.min(Math.floor(fireMm / w.parcaBoy), w.kalan)
+                const zatenEklendi = eklenen.has(w.id)
                 return (
                   <div key={w.id} className="flex items-center justify-between bg-bg-2 border border-border/50 rounded-lg p-2">
                     <div>
                       <span className="font-mono text-accent text-[11px]">{w.ieNo}</span>
                       <div className="text-[10px] text-zinc-400 truncate max-w-[200px]">{w.malad}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs font-mono">{w.parcaBoy}mm</div>
-                      <div className="text-[10px] text-green font-semibold">{sigacak} adet sığar · {w.kalan} kalan</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <div className="text-xs font-mono">{w.parcaBoy}mm</div>
+                        <div className="text-[10px] text-green font-semibold">{sigacak} adet · {w.kalan} kalan</div>
+                      </div>
+                      {zatenEklendi ? (
+                        <span className="text-[10px] px-2 py-1 bg-green/20 text-green rounded font-semibold">✓ Eklendi</span>
+                      ) : (
+                        <button onClick={() => planaEkle(w)} className="text-[10px] px-2 py-1 bg-accent/20 text-accent rounded font-semibold hover:bg-accent/30">+ Ekle</button>
+                      )}
                     </div>
                   </div>
                 )
