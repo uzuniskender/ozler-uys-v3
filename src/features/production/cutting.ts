@@ -213,7 +213,8 @@ function boykesimOptimum(
     }
   }
 
-  // Fire doldurma — kalan boşluklara mevcut WO'lardan ekle
+  // Fire doldurma — 3 aşama
+  // 1) Diğer açık İE'lerden parça sığdır
   for (const bar of barlar) {
     if (bar.kalan < 10) continue
     const ilgiliWOs = allWOs.filter(w => {
@@ -233,6 +234,27 @@ function boykesimOptimum(
       if (mev) mev.adet += sigacak
       else bar.kesimler.push({ woId: w.id, ieNo: w.ieNo || w.id, malkod: w.malkod, malad: w.malad, parcaBoy: pb, adet: sigacak, tamamlandi: 0 })
       bar.kalan -= sigacak * pb
+    }
+  }
+
+  // 2) Mevcut parçalardan fire doldurma — aynı parçadan daha fazla kes (stok oluştur)
+  for (const bar of barlar) {
+    if (bar.kalan < 10) continue
+    let devam = true; let maxLoop = 50
+    while (devam && maxLoop-- > 0) {
+      devam = false
+      // En büyük sığabilecek mevcut parçayı bul
+      let enIyiK: KesimKesim | null = null; let enIyiEk = 0
+      for (const k of bar.kesimler) {
+        const pb = k.parcaBoy || 0; if (!pb || pb > bar.kalan) continue
+        const ekAdet = Math.floor(bar.kalan / pb)
+        if (ekAdet > 0 && ekAdet > enIyiEk) { enIyiK = k; enIyiEk = ekAdet }
+      }
+      if (enIyiK && enIyiEk > 0) {
+        enIyiK.adet += enIyiEk
+        bar.kalan -= enIyiEk * (enIyiK.parcaBoy || 0)
+        devam = true
+      }
     }
   }
 
