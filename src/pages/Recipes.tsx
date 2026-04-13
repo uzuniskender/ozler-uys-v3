@@ -156,33 +156,37 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     }))
   }
 
-  // ✂ Kesim Hesapla — boy kesim (boru) + yüzey kesim (levha)
+  // ✂ Kesim Hesapla — boy kesim (boru/profil) + yüzey kesim (levha)
   function kesimHesapla() {
     const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
     if (!mamulRow) { toast.error('Mamul satırı bulunamadı'); return }
     const mamulMat = materials.find(m => m.kod === mamulRow.malkod || m.kod === recipe.mamulKod)
     if (!mamulMat) { toast.error('Mamul tanımı bulunamadı'); return }
-    const uB = mamulMat.boy || 0; const uE = mamulMat.en || 0
-    if (!uB && !uE) { toast.error('Mamul boy/en bilgisi yok'); return }
+    const uB = mamulMat.boy || 0; const uE = mamulMat.en || 0; const uUz = mamulMat.uzunluk || 0
+    if (!uB && !uE && !uUz) { toast.error('Mamul boy/en/uzunluk bilgisi yok'); return }
+    const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
 
     let guncellenen = 0
     const detaylar: string[] = []
     const yeniRows = rows.map(r => {
       if (r.tip !== 'Hammadde') return r
       const hmMat = materials.find(m => m.kod === r.malkod)
-      if (!hmMat || !hmMat.boy) return r
-      const hB = hmMat.boy || 0; const hE = hmMat.en || 0
+      if (!hmMat) return r
+      const hB = hmMat.boy || 0; const hE = hmMat.en || 0; const hUz = hmMat.uzunluk || 0
       let adetPer: number
-      if (hE > 0 && uE > 0) {
+      if (hUz > 0) {
+        if (!urunParBoy) return r
+        adetPer = Math.floor(hUz / urunParBoy)
+        detaylar.push(`${hUz}mm bar → ${urunParBoy}mm: ${adetPer}/bar`)
+      } else if (hE > 0 && hB > 0 && uE > 0 && uB > 0) {
         const hmBoy = Math.max(hB, hE); const hmEn = Math.min(hB, hE)
         const urunBoy = Math.min(uB, uE); const urunEn = Math.max(uB, uE)
         adetPer = Math.max(Math.floor(hmBoy / urunEn) * Math.floor(hmEn / urunBoy), Math.floor(hmBoy / urunBoy) * Math.floor(hmEn / urunEn))
         detaylar.push(`${hmEn}×${hmBoy} → ${urunBoy}×${urunEn}: ${adetPer}/plaka`)
       } else {
-        const hmBoy = Math.max(hB, hE); const urunBoy = Math.max(uB, uE)
-        if (!urunBoy) return r
-        adetPer = Math.floor(hmBoy / urunBoy)
-        detaylar.push(`${hmBoy}mm → ${urunBoy}mm: ${adetPer}/bar`)
+        const hmBoy = Math.max(hB, hE); if (!hmBoy || !urunParBoy) return r
+        adetPer = Math.floor(hmBoy / urunParBoy)
+        detaylar.push(`${hmBoy}mm → ${urunParBoy}mm: ${adetPer}/bar`)
       }
       if (adetPer <= 0) { toast.error(`${r.malkod}: sığmıyor`); return r }
       guncellenen++
@@ -191,7 +195,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     if (guncellenen > 0) {
       setRows(yeniRows)
       toast.success(`${guncellenen} hammadde güncellendi — ${detaylar.join(' | ')}`)
-    } else toast.error('Hesaplanacak hammadde bulunamadı (boy/en bilgisi gerekli)')
+    } else toast.error('Hesaplanacak hammadde bulunamadı (boy/en/uzunluk bilgisi gerekli)')
   }
 
   function addRow(parentKirno: string) {

@@ -102,6 +102,7 @@ export interface Material {
   boy: number
   en: number
   kalinlik: number
+  uzunluk: number
   cap: number
   icCap: number
   minStok: number

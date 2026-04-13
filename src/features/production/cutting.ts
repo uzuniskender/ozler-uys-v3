@@ -20,18 +20,28 @@ interface KesimPlanSonuc {
   satirlar: KesimSatir[]; gerekliAdet: number
 }
 
-// Parça boyunu malzeme bilgisinden veya adından al
+// Parça boyunu malzeme bilgisinden al
 function getParcaBoy(malkod: string, materials: Material[]): number {
   const m = materials.find(x => x.kod === malkod)
-  if (m && m.boy && m.en) return Math.min(m.boy, m.en)
-  if (m && m.boy) return m.boy
+  if (!m) return 0
+  if (m.uzunluk > 0) return m.uzunluk // profil/boru parça uzunluğu
+  if (m.boy && m.en) return Math.min(m.boy, m.en)
+  if (m.boy) return m.boy
   return 0
 }
 
 function getParcaEn(malkod: string, materials: Material[]): number {
   const m = materials.find(x => x.kod === malkod)
-  if (m && m.boy && m.en) return Math.max(m.boy, m.en)
+  if (!m) return 0
+  if (m.uzunluk > 0) return 0 // uzunluk varsa boy kesim, en yok
+  if (m.boy && m.en) return Math.max(m.boy, m.en)
   return 0
+}
+
+// HM bar boyu: uzunluk > 0 ise uzunluk, yoksa max(boy,en)
+function getHamBoy(m: Material): number {
+  if (m.uzunluk > 0) return m.uzunluk
+  return Math.max(m.boy || 0, m.en || 0)
 }
 
 // ═══ KESİM PLANI OLUŞTUR — v2 _kesimPlanOlusturCore port'u ═══
@@ -85,8 +95,9 @@ export function kesimPlanOlustur(
     for (const hm of hmSatirlar) {
       const hmalkod = hm.malkod; if (!hmalkod) continue
       const hmM = materials.find(m => m.kod === hmalkod)
-      const hamBoy = hmM?.boy || 0
-      const hamEn = hmM?.en || 0
+      if (!hmM) continue
+      const hamBoy = getHamBoy(hmM)
+      const hamEn = hmM.uzunluk > 0 ? 0 : Math.min(hmM.boy || 0, hmM.en || 0)
       if (!hamBoy) continue // Boy bilgisi yoksa kesim yapılamaz
 
       const parcaBoy = getParcaBoy(w.malkod, materials)

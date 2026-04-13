@@ -134,20 +134,30 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
 
     const uB = mamulMat.boy || 0
     const uE = mamulMat.en || 0
-    if (!uB && !uE) { toast.error('Mamul boy/en bilgisi yok — Malzeme Listesi\'nden doldurun'); return }
+    const uUz = mamulMat.uzunluk || 0
+    if (!uB && !uE && !uUz) { toast.error('Mamul boy/en/uzunluk bilgisi yok — Malzeme Listesi\'nden doldurun'); return }
 
     let guncellenen = 0
     const detaylar: string[] = []
     const yeniRows = rows.map(r => {
       if (r.tip !== 'Hammadde') return r
       const hmMat = materials.find(m => m.kod === r.malkod)
-      if (!hmMat || !hmMat.boy) return r
+      if (!hmMat) return r
 
       let adetPer: number
       const hB = hmMat.boy || 0
       const hE = hmMat.en || 0
+      const hUz = hmMat.uzunluk || 0
 
-      if (hE > 0 && uE > 0) {
+      // Ürün parça boyu: uzunluk varsa uzunluk, yoksa max(boy,en)
+      const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
+
+      if (hUz > 0) {
+        // BOY KESİM — hammadde uzunluk bazlı (profil/boru)
+        if (!urunParBoy) return r
+        adetPer = Math.floor(hUz / urunParBoy)
+        detaylar.push(`${hUz}mm bar → ${urunParBoy}mm parça: ${adetPer} adet/bar`)
+      } else if (hE > 0 && hB > 0 && uE > 0 && uB > 0) {
         // YÜZEY KESİM (levha → levha)
         const hmBoy = Math.max(hB, hE); const hmEn = Math.min(hB, hE)
         const urunBoy = Math.min(uB, uE); const urunEn = Math.max(uB, uE)
@@ -156,12 +166,11 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
         adetPer = Math.max(n1, n2)
         detaylar.push(`${hmEn}×${hmBoy} → ${urunBoy}×${urunEn}: ${adetPer} adet/plaka`)
       } else {
-        // BOY KESİM (boru/profil → parça)
+        // BOY KESİM fallback — boy bazlı
         const hmBoy = Math.max(hB, hE)
-        const urunBoy = Math.max(uB, uE)
-        if (!urunBoy) return r
-        adetPer = Math.floor(hmBoy / urunBoy)
-        detaylar.push(`${hmBoy}mm → ${urunBoy}mm: ${adetPer} adet/bar`)
+        if (!hmBoy || !urunParBoy) return r
+        adetPer = Math.floor(hmBoy / urunParBoy)
+        detaylar.push(`${hmBoy}mm → ${urunParBoy}mm: ${adetPer} adet/bar`)
       }
 
       if (adetPer <= 0) { toast.error(`${r.malkod}: ürün sığmıyor`); return r }
