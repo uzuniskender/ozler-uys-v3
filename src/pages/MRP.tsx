@@ -14,9 +14,17 @@ export function MRP() {
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
-  const aktifOrders = useMemo(() =>
-    orders.filter(o => o.durum !== 'Tamamlandı' && o.durum !== 'İptal').sort((a, b) => (a.termin || '').localeCompare(b.termin || '')),
-    [orders])
+  const aktifOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
+      // Gerçek ilerlemeye bak — %100 ise gösterme
+      const wos = workOrders.filter(w => w.orderId === o.id)
+      if (!wos.length) return true // İE yoksa göster (henüz oluşturulmamış)
+      const total = wos.reduce((a, w) => a + w.hedef, 0)
+      const done = wos.reduce((a, w) => a + logs.filter(l => l.woId === w.id).reduce((s, l) => s + l.qty, 0), 0)
+      return total <= 0 || done < total
+    }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
+  }, [orders, workOrders, logs])
 
   // Bağımsız YM İE'leri
   const ymIEs = useMemo(() =>

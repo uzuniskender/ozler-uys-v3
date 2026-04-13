@@ -37,10 +37,13 @@ export function Operations() {
           <button onClick={async () => {
             const bos = operations.filter(o => !o.bolum)
             if (!bos.length) { toast.info('Tüm operasyonların bölümü zaten dolu'); return }
+            // Akıllı bölüm çıkarma: son kelimeyi al (PRES, LAZER, TESTERE vb.)
             for (const o of bos) {
-              await supabase.from('uys_operations').update({ bolum: o.ad }).eq('id', o.id)
+              const kelimeler = (o.ad || '').trim().split(/\s+/)
+              const sonKelime = kelimeler[kelimeler.length - 1] || o.ad
+              await supabase.from('uys_operations').update({ bolum: sonKelime }).eq('id', o.id)
             }
-            loadAll(); toast.success(bos.length + ' operasyonun bölümü güncellendi (ad → bölüm)')
+            loadAll(); toast.success(bos.length + ' operasyonun bölümü güncellendi (son kelime → bölüm)')
           }} className="px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20">🔄 Bölümleri Doldur</button>
           <button onClick={() => { import('xlsx').then(XLSX => {
             const rows = operations.map(o => ({ Kod: o.kod, Ad: o.ad, Bölüm: o.bolum || '' }))
@@ -82,7 +85,9 @@ function SimpleFormModal({ title, initial, onClose, onSave }: { title: string; i
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')
   const [bolum, setBolum] = useState(initial?.bolum || '')
-  const bolumler = [...new Set(operations.map(o => o.bolum).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'))
+  const onceTanimli = ['PRES', 'LAZER', 'TESTERE', 'KAYNAK', 'MONTAJ', 'BOYA', 'TALAŞLI', 'DELME', 'BÜKME', 'TAŞLAMA', 'PAKETLEME', 'KALİTE']
+  const mevcutBolumler = [...new Set(operations.map(o => o.bolum).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'))
+  const tumBolumler = [...new Set([...onceTanimli, ...mevcutBolumler])].sort((a, b) => a.localeCompare(b, 'tr'))
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
@@ -94,7 +99,7 @@ function SimpleFormModal({ title, initial, onClose, onSave }: { title: string; i
             <label className="text-[11px] text-zinc-500 mb-1 block">Bölüm</label>
             <select value={bolum} onChange={e => setBolum(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent">
               <option value="">— Seçin veya yazın —</option>
-              {bolumler.map(b => <option key={b} value={b}>{b}</option>)}
+              {tumBolumler.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
             <input value={bolum} onChange={e => setBolum(e.target.value)} placeholder="veya yeni bölüm yazın..." className="w-full px-3 py-1.5 bg-bg-3 border border-border/50 rounded-lg text-xs text-zinc-400 mt-1 focus:outline-none focus:border-accent" />
           </div>
