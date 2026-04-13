@@ -106,9 +106,63 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const [rows, setRows] = useState<RecipeRow[]>(recipe.satirlar || [])
+  const { materials } = useStore()
 
   function updateRow(idx: number, field: keyof RecipeRow, value: string | number) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
+  }
+
+  // Malkod değiştiğinde malzeme listesinden otomatik doldur
+  function onMalkodChange(idx: number, malkod: string) {
+    const mat = materials.find(m => m.kod === malkod)
+    setRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      const updated = { ...r, malkod }
+      if (mat) {
+        updated.malad = mat.ad
+        if (mat.tip) updated.tip = mat.tip as RecipeRow['tip']
+        if (mat.birim) updated.birim = mat.birim
+      }
+      return updated
+    }))
+  }
+
+  // ✂ Kesim Hesapla — boy kesim (boru) + yüzey kesim (levha)
+  function kesimHesapla() {
+    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
+    if (!mamulRow) { toast.error('Mamul satırı bulunamadı'); return }
+    const mamulMat = materials.find(m => m.kod === mamulRow.malkod || m.kod === recipe.mamulKod)
+    if (!mamulMat) { toast.error('Mamul tanımı bulunamadı'); return }
+    const uB = mamulMat.boy || 0; const uE = mamulMat.en || 0
+    if (!uB && !uE) { toast.error('Mamul boy/en bilgisi yok'); return }
+
+    let guncellenen = 0
+    const detaylar: string[] = []
+    const yeniRows = rows.map(r => {
+      if (r.tip !== 'Hammadde') return r
+      const hmMat = materials.find(m => m.kod === r.malkod)
+      if (!hmMat || !hmMat.boy) return r
+      const hB = hmMat.boy || 0; const hE = hmMat.en || 0
+      let adetPer: number
+      if (hE > 0 && uE > 0) {
+        const hmBoy = Math.max(hB, hE); const hmEn = Math.min(hB, hE)
+        const urunBoy = Math.min(uB, uE); const urunEn = Math.max(uB, uE)
+        adetPer = Math.max(Math.floor(hmBoy / urunEn) * Math.floor(hmEn / urunBoy), Math.floor(hmBoy / urunBoy) * Math.floor(hmEn / urunEn))
+        detaylar.push(`${hmEn}×${hmBoy} → ${urunBoy}×${urunEn}: ${adetPer}/plaka`)
+      } else {
+        const hmBoy = Math.max(hB, hE); const urunBoy = Math.max(uB, uE)
+        if (!urunBoy) return r
+        adetPer = Math.floor(hmBoy / urunBoy)
+        detaylar.push(`${hmBoy}mm → ${urunBoy}mm: ${adetPer}/bar`)
+      }
+      if (adetPer <= 0) { toast.error(`${r.malkod}: sığmıyor`); return r }
+      guncellenen++
+      return { ...r, miktar: Math.round((1 / adetPer) * 10000) / 10000 }
+    })
+    if (guncellenen > 0) {
+      setRows(yeniRows)
+      toast.success(`${guncellenen} hammadde güncellendi — ${detaylar.join(' | ')}`)
+    } else toast.error('Hesaplanacak hammadde bulunamadı (boy/en bilgisi gerekli)')
   }
 
   function addRow(parentKirno: string) {
@@ -159,8 +213,8 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                   <tr key={r.id || i} className="border-b border-border/20 hover:bg-bg-3/20">
                     <td className="px-2 py-1"><span className="font-mono text-zinc-500">{r.kirno}</span></td>
                     <td className="px-2 py-1">
-                      <input value={r.malkod || ''} onChange={e => updateRow(i, 'malkod', e.target.value)}
-                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
+                      <input value={r.malkod || ''} onChange={e => onMalkodChange(i, e.target.value)}
+                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" placeholder="Kod yazın..." />
                     </td>
                     <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
@@ -209,23 +263,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         <div className="flex justify-between mt-4">
           <div className="flex gap-2">
             <button onClick={() => addRow('1')} className="flex items-center gap-1 px-3 py-1.5 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"><Plus size={12} /> Kök Bileşen</button>
-            <button onClick={async () => {
-              const hmRows = rows.filter(r => r.tip === 'Hammadde')
-              if (!hmRows.length) { toast.error('Hammadde satırı yok'); return }
-              const { materials: mats } = useStore.getState()
-              const satirlar = hmRows.map(r => {
-                const m = mats.find(mm => mm.kod === r.malkod)
-                return { malkod: r.malkod, malad: r.malad, boy: m?.boy || 0, adet: r.miktar || 1 }
-              }).filter(s => s.boy > 0)
-              if (!satirlar.length) { toast.error('Boy bilgisi olan hammadde bulunamadı'); return }
-              const { optimizeKesim, kesimPlaniKaydet } = await import('@/features/production/cutting')
-              const hmMalz = mats.filter(m => m.tip === 'Hammadde' && m.boy > 0) as unknown as import('@/types').Material[]
-              const sonuclar = optimizeKesim(satirlar, hmMalz)
-              if (sonuclar.length) {
-                await kesimPlaniKaydet(sonuclar)
-                toast.success(sonuclar.length + ' kesim planı oluşturuldu')
-              } else toast.error('Uygun ham malzeme bulunamadı')
-            }} className="flex items-center gap-1 px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">✂ Kesim Hesapla</button>
+            <button onClick={kesimHesapla} className="flex items-center gap-1 px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">✂ Kesim Hesapla</button>
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>

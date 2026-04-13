@@ -96,14 +96,86 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => void; onSaved: () => void }) {
   const [rows, setRows] = useState(bom.rows || [])
   const [viewMode, setViewMode] = useState<'edit'|'tree'>('edit')
+  const { materials } = useStore()
 
   function updateRow(i: number, field: string, value: string | number) { setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r)) }
+
+  // Malkod değiştiğinde malzeme listesinden otomatik doldur
+  function onMalkodChange(i: number, malkod: string) {
+    const mat = materials.find(m => m.kod === malkod)
+    setRows(prev => prev.map((r, idx) => {
+      if (idx !== i) return r
+      const updated = { ...r, malkod }
+      if (mat) {
+        updated.malad = mat.ad
+        if (mat.tip) updated.tip = mat.tip as 'Mamul' | 'YarıMamul' | 'Hammadde' | 'Sarf'
+        if (mat.birim) updated.birim = mat.birim
+      }
+      return updated
+    }))
+  }
+
   function addRow(parentKirno: string) {
     const children = rows.filter(r => r.kirno.startsWith(parentKirno + '.') && r.kirno.split('.').length === parentKirno.split('.').length + 1)
     const newKirno = parentKirno + '.' + (children.length + 1)
     setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: 'Yeni Bileşen', tip: 'Hammadde', miktar: 1, birim: 'Adet' }])
   }
   function deleteRow(i: number) { const k = rows[i].kirno; setRows(prev => prev.filter((r, idx) => idx !== i && !r.kirno.startsWith(k + '.'))) }
+
+  // ✂ KESİM HESAPLA — hammadde ölçüsünden ürün ölçüsüne verim hesabı
+  // Boy kesim (boru/profil): HM boy=6000 → ürün boy=1500 → 4 adet → miktar=0.25
+  // Yüzey kesim (levha):     HM 1500×3000 → ürün 150×1500 → 20 adet → miktar=0.05
+  function kesimHesapla() {
+    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
+    if (!mamulRow) { toast.error('Mamul satırı bulunamadı'); return }
+
+    const mamulMat = materials.find(m => m.kod === mamulRow.malkod)
+    if (!mamulMat) { toast.error('Mamul malzeme tanımı bulunamadı: ' + mamulRow.malkod); return }
+
+    const uB = mamulMat.boy || 0
+    const uE = mamulMat.en || 0
+    if (!uB && !uE) { toast.error('Mamul boy/en bilgisi yok — Malzeme Listesi\'nden doldurun'); return }
+
+    let guncellenen = 0
+    const detaylar: string[] = []
+    const yeniRows = rows.map(r => {
+      if (r.tip !== 'Hammadde') return r
+      const hmMat = materials.find(m => m.kod === r.malkod)
+      if (!hmMat || !hmMat.boy) return r
+
+      let adetPer: number
+      const hB = hmMat.boy || 0
+      const hE = hmMat.en || 0
+
+      if (hE > 0 && uE > 0) {
+        // YÜZEY KESİM (levha → levha)
+        const hmBoy = Math.max(hB, hE); const hmEn = Math.min(hB, hE)
+        const urunBoy = Math.min(uB, uE); const urunEn = Math.max(uB, uE)
+        const n1 = Math.floor(hmBoy / urunEn) * Math.floor(hmEn / urunBoy)
+        const n2 = Math.floor(hmBoy / urunBoy) * Math.floor(hmEn / urunEn)
+        adetPer = Math.max(n1, n2)
+        detaylar.push(`${hmEn}×${hmBoy} → ${urunBoy}×${urunEn}: ${adetPer} adet/plaka`)
+      } else {
+        // BOY KESİM (boru/profil → parça)
+        const hmBoy = Math.max(hB, hE)
+        const urunBoy = Math.max(uB, uE)
+        if (!urunBoy) return r
+        adetPer = Math.floor(hmBoy / urunBoy)
+        detaylar.push(`${hmBoy}mm → ${urunBoy}mm: ${adetPer} adet/bar`)
+      }
+
+      if (adetPer <= 0) { toast.error(`${r.malkod}: ürün sığmıyor`); return r }
+      guncellenen++
+      return { ...r, miktar: Math.round((1 / adetPer) * 10000) / 10000 }
+    })
+
+    if (guncellenen > 0) {
+      setRows(yeniRows)
+      toast.success(`${guncellenen} hammadde güncellendi — ${detaylar.join(' | ')}`)
+    } else {
+      toast.error('Hesaplanacak hammadde bulunamadı (boy/en bilgisi gerekli)')
+    }
+  }
 
   async function save() {
     await supabase.from('uys_bom_trees').update({ rows }).eq('id', bom.id)
@@ -118,17 +190,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
           <div className="flex gap-2 items-center">
             <button onClick={() => setViewMode('edit')} className={`px-2 py-1 rounded text-[10px] ${viewMode === 'edit' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Düzenle</button>
             <button onClick={() => setViewMode('tree')} className={`px-2 py-1 rounded text-[10px] ${viewMode === 'tree' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400'}`}>Ağaç Görünüm</button>
-            <button onClick={async () => {
-              const { materials: mats2 } = useStore.getState(); const hmRows = rows.filter(r => r.tip === 'Hammadde').filter(r => { const m = mats2.find(mm => mm.kod === r.malkod); return m && m.boy > 0 })
-              if (!hmRows.length) { toast.error('Kesim yapılacak hammadde yok (boy bilgisi olan)'); return }
-              const { optimizeKesim, kesimPlaniKaydet } = await import('@/features/production/cutting')
-              const { materials: mats } = useStore.getState()
-              const satirlar = hmRows.map(r => { const m = mats2.find(mm => mm.kod === r.malkod); return { malkod: r.malkod, malad: r.malad, boy: m?.boy || 0, adet: r.miktar || 1 } })
-              const hmMalz = mats.filter(m => m.tip === 'Hammadde' && m.boy > 0) as unknown as import('@/types').Material[]
-              const sonuclar = optimizeKesim(satirlar, hmMalz)
-              if (sonuclar.length) { await kesimPlaniKaydet(sonuclar); toast.success(sonuclar.length + ' kesim planı oluşturuldu') }
-              else toast.error('Uygun ham malzeme bulunamadı')
-            }} className="px-2 py-1 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20">✂ Kesim Hesapla</button>
+            <button onClick={kesimHesapla} className="px-2 py-1 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20">✂ Kesim Hesapla</button>
             <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg ml-2">✕</button>
           </div>
         </div>
@@ -160,7 +222,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
               return (
                 <tr key={i} className="border-b border-border/20 hover:bg-bg-3/20">
                   <td className="px-2 py-1 font-mono text-zinc-500">{r.kirno}</td>
-                  <td className="px-2 py-1"><input value={r.malkod || ''} onChange={e => updateRow(i, 'malkod', e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" /></td>
+                  <td className="px-2 py-1"><input value={r.malkod || ''} onChange={e => onMalkodChange(i, e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" placeholder="Kod yazın..." /></td>
                   <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}><input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" /></td>
                   <td className="px-2 py-1"><select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200"><option value="Mamul">Mamul</option><option value="YarıMamul">Yarı Mamul</option><option value="Hammadde">Hammadde</option><option value="Sarf">Sarf</option></select></td>
                   <td className="px-2 py-1"><input type="number" value={r.miktar} onChange={e => updateRow(i, 'miktar', parseFloat(e.target.value) || 0)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" /></td>
