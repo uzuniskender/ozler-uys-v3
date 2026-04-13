@@ -135,7 +135,8 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const [rows, setRows] = useState<RecipeRow[]>(recipe.satirlar || [])
-  const { materials } = useStore()
+  const { materials, loadAll: storeLoadAll } = useStore()
+  const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
 
   function updateRow(idx: number, field: keyof RecipeRow, value: string | number) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
@@ -156,12 +157,58 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     }))
   }
 
-  // ✂ Kesim Hesapla — boy kesim (boru/profil) + yüzey kesim (levha)
+  // Adından ölçü tahmin et
+  function parseDimsFromName(ad: string): { boy: number; en: number; kalinlik: number; uzunluk: number; cap: number } {
+    const r = { boy: 0, en: 0, kalinlik: 0, uzunluk: 0, cap: 0 }
+    const capM = ad.match(/Ø([\d,]+)[xX×]([\d,]+)/)
+    if (capM) { r.cap = parseFloat(capM[1].replace(',', '.')); r.kalinlik = parseFloat(capM[2].replace(',', '.')) }
+    const mmM = ad.match(/(\d+)[xX×](\d+)\s*mm/i)
+    if (mmM) { r.boy = parseInt(mmM[1]); r.en = parseInt(mmM[2]) }
+    else {
+      const singleMM = ad.match(/[-–]\s*(\d+)\s*mm/i) || ad.match(/(\d{3,})\s*mm/i)
+      if (singleMM) r.uzunluk = parseInt(singleMM[1])
+    }
+    const thkM = ad.match(/(\d+)\s*mm\s*PLYWOOD/i)
+    if (thkM) r.kalinlik = parseInt(thkM[1])
+    return r
+  }
+
+  function needsDims(mat: { boy: number; en: number; uzunluk: number; cap: number }): boolean {
+    return !mat.boy && !mat.en && !mat.uzunluk && !mat.cap
+  }
+
+  // ✂ Kesim Hesapla
   function kesimHesapla() {
     const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
     if (!mamulRow) { toast.error('Mamul satırı bulunamadı'); return }
     const mamulMat = materials.find(m => m.kod === mamulRow.malkod || m.kod === recipe.mamulKod)
     if (!mamulMat) { toast.error('Mamul tanımı bulunamadı'); return }
+
+    // Ölçüsü eksik malzemeleri topla
+    const eksikler: NonNullable<typeof dimFixList> = []
+    if (needsDims(mamulMat)) {
+      const guess = parseDimsFromName(mamulMat.ad)
+      eksikler.push({ kod: mamulMat.kod, ad: mamulMat.ad, id: mamulMat.id, ...guess, hmTipi: mamulMat.hammaddeTipi })
+    }
+    for (const r of rows) {
+      if (r.tip !== 'Hammadde') continue
+      const hmMat = materials.find(m => m.kod === r.malkod)
+      if (!hmMat) continue
+      if (needsDims(hmMat)) {
+        const guess = parseDimsFromName(hmMat.ad)
+        eksikler.push({ kod: hmMat.kod, ad: hmMat.ad, id: hmMat.id, ...guess, hmTipi: hmMat.hammaddeTipi })
+      }
+    }
+
+    if (eksikler.length > 0) { setDimFixList(eksikler); return }
+    runKesimCalc()
+  }
+
+  function runKesimCalc() {
+    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
+    if (!mamulRow) return
+    const mamulMat = materials.find(m => m.kod === mamulRow.malkod || m.kod === recipe.mamulKod)
+    if (!mamulMat) return
     const uB = mamulMat.boy || 0; const uE = mamulMat.en || 0; const uUz = mamulMat.uzunluk || 0
     if (!uB && !uE && !uUz) { toast.error('Mamul boy/en/uzunluk bilgisi yok'); return }
     const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
@@ -196,6 +243,18 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
       setRows(yeniRows)
       toast.success(`${guncellenen} hammadde güncellendi — ${detaylar.join(' | ')}`)
     } else toast.error('Hesaplanacak hammadde bulunamadı (boy/en/uzunluk bilgisi gerekli)')
+  }
+
+  async function saveDimFixes(fixes: NonNullable<typeof dimFixList>) {
+    for (const f of fixes) {
+      await supabase.from('uys_malzemeler').update({
+        boy: f.boy, en: f.en, kalinlik: f.kalinlik, uzunluk: f.uzunluk, cap: f.cap,
+      }).eq('id', f.id)
+    }
+    await storeLoadAll()
+    setDimFixList(null)
+    toast.success(`${fixes.length} malzeme kartı güncellendi`)
+    setTimeout(() => runKesimCalc(), 300)
   }
 
   function addRow(parentKirno: string) {
@@ -302,6 +361,65 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
             <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
             <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
           </div>
+        </div>
+      </div>
+      {dimFixList && <DimFixModal items={dimFixList} onSave={saveDimFixes} onClose={() => setDimFixList(null)} />}
+    </div>
+  )
+}
+
+// ═══ ÖLÇÜ DÜZELTME MODALI ═══
+function DimFixModal({ items, onSave, onClose }: {
+  items: { kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[]
+  onSave: (fixes: typeof items) => void; onClose: () => void
+}) {
+  const [fixes, setFixes] = useState(items.map(it => ({ ...it })))
+  const [saving, setSaving] = useState(false)
+
+  function updateFix(i: number, field: string, val: number) {
+    setFixes(prev => prev.map((f, idx) => idx === i ? { ...f, [field]: val } : f))
+  }
+
+  async function handleSave() {
+    const hepsiBosMu = fixes.every(f => !f.boy && !f.en && !f.uzunluk && !f.cap)
+    if (hepsiBosMu) { toast.error('En az bir malzeme için ölçü girin'); return }
+    setSaving(true)
+    await onSave(fixes)
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={onClose}>
+      <div className="bg-bg-1 border border-amber/30 rounded-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold text-amber mb-1">⚠ Eksik Ölçüler</h2>
+        <p className="text-xs text-zinc-500 mb-4">Aşağıdaki malzemelerin ölçüleri eksik. Adından tahmin edilenler dolduruldu — kontrol edip onaylayın.</p>
+        <div className="space-y-3">
+          {fixes.map((f, i) => (
+            <div key={f.id} className="bg-bg-2 border border-border rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-mono text-accent text-[11px]">{f.kod}</span>
+                <span className="text-zinc-300 text-xs truncate">{f.ad}</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                <div><label className="text-[10px] text-zinc-500 block">Boy (mm)</label>
+                  <input type="number" value={f.boy || ''} onChange={e => updateFix(i, 'boy', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-amber" /></div>
+                <div><label className="text-[10px] text-zinc-500 block">En (mm)</label>
+                  <input type="number" value={f.en || ''} onChange={e => updateFix(i, 'en', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-amber" /></div>
+                <div><label className="text-[10px] text-zinc-500 block">Kalınlık</label>
+                  <input type="number" value={f.kalinlik || ''} onChange={e => updateFix(i, 'kalinlik', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-amber" /></div>
+                <div><label className="text-[10px] text-amber block font-semibold">Uzunluk</label>
+                  <input type="number" value={f.uzunluk || ''} onChange={e => updateFix(i, 'uzunluk', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-bg-3 border border-amber/30 rounded text-xs text-zinc-200 focus:outline-none focus:border-amber" /></div>
+                <div><label className="text-[10px] text-zinc-500 block">Çap (mm)</label>
+                  <input type="number" value={f.cap || ''} onChange={e => updateFix(i, 'cap', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-amber" /></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
+          <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-amber hover:bg-amber/80 disabled:opacity-40 text-black rounded-lg text-xs font-semibold">
+            {saving ? 'Kaydediliyor...' : `✓ Kaydet ve Hesapla (${fixes.length})`}
+          </button>
         </div>
       </div>
     </div>
