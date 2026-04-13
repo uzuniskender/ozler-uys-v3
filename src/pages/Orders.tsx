@@ -370,21 +370,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
             const count = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, fullRecipes)
             loadAll(); toast.success(count + ' eksik İE oluşturuldu')
           }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">+ Eksik İE Tamamla</button>}
-          {order.receteId && <button onClick={async () => {
-            if (!await showConfirm('Tam Zincir: İE → Kesim Planı → MRP → Tedarik çalıştırılacak. Devam?')) return
-            const s = useStore.getState()
-            const woCount = workOrders.length || (await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes))
-            const cpMapped = s.cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
-            const result = await autoZincir(
-              order.id, woCount,
-              s.orders as any, s.workOrders, s.recipes, s.operations as any,
-              s.materials, s.stokHareketler, s.tedarikler,
-              s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
-              cpMapped
-            )
-            loadAll()
-            toast.success(`Zincir tamamlandı: ${result.woCount} İE · ${result.kesimCount} kesim · ${result.mrpCount} MRP · ${result.tedCount} tedarik`)
-          }} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs hover:bg-cyan-500/20">⚙ Tam Zincir</button>}
+          {order.receteId && <TamZincirButton order={order} workOrders={workOrders} loadAll={loadAll} onClose={onClose} />}
         </div>
 
         {tab === 'ie' && (
@@ -465,6 +451,87 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
               )}
             </div>
           )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order; workOrders: any[]; loadAll: () => void; onClose: () => void }) {
+  const [running, setRunning] = useState(false)
+  const [adimlar, setAdimlar] = useState<string[]>([])
+  const [sonuc, setSonuc] = useState<{ woCount: number; kesimCount: number; mrpCount: number; tedCount: number; eksikler: any[] } | null>(null)
+
+  async function run() {
+    if (!await showConfirm('Tam Zincir: İE → Kesim Planı → MRP → Tedarik çalıştırılacak. Devam?')) return
+    setRunning(true)
+    setAdimlar(['⏳ İş emirleri kontrol ediliyor...'])
+    try {
+      const s = useStore.getState()
+      const woCount = workOrders.length || (await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes))
+      setAdimlar(['✅ ' + woCount + ' iş emri hazır'])
+
+      const cpMapped = s.cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
+      const result = await autoZincir(
+        order.id, woCount,
+        s.orders as any, s.workOrders, s.recipes, s.operations as any,
+        s.materials, s.stokHareketler, s.tedarikler,
+        s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
+        cpMapped,
+        (steps) => setAdimlar([...steps])
+      )
+      setSonuc(result)
+      loadAll()
+    } catch (e: any) {
+      setAdimlar(prev => [...prev, '❌ Hata: ' + e.message])
+    }
+  }
+
+  if (!running) {
+    return <button onClick={run} className="px-3 py-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs hover:bg-cyan-500/20">⚙ Tam Zincir</button>
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={sonuc ? () => { setRunning(false); setSonuc(null) } : undefined}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold mb-1">⚙ Sipariş Zinciri</h3>
+        <div className="text-xs text-zinc-500 mb-4">{order.siparisNo} · {order.musteri}</div>
+
+        {/* Adımlar */}
+        <div className="space-y-2 mb-4">
+          {adimlar.map((a, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span>{a.startsWith('✅') ? '✅' : a.startsWith('⚠') ? '⚠️' : a.startsWith('❌') ? '❌' : a.startsWith('ℹ') ? 'ℹ️' : '⏳'}</span>
+              <span className="text-zinc-300">{a.replace(/^[✅⚠️❌ℹ️⏳]\s*/, '')}</span>
+            </div>
+          ))}
+          {!sonuc && <div className="flex items-center gap-2 text-xs text-zinc-500"><span className="animate-spin">⏳</span> Çalışıyor...</div>}
+        </div>
+
+        {/* Sonuç */}
+        {sonuc && (
+          <>
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="bg-accent/10 rounded-lg p-3 text-center"><div className="text-lg font-mono text-accent">{sonuc.woCount}</div><div className="text-[9px] text-zinc-500">İE</div></div>
+            <div className="bg-green/10 rounded-lg p-3 text-center"><div className="text-lg font-mono text-green">{sonuc.kesimCount}</div><div className="text-[9px] text-zinc-500">Kesim</div></div>
+            <div className="bg-cyan-500/10 rounded-lg p-3 text-center"><div className="text-lg font-mono text-cyan-400">{sonuc.mrpCount}</div><div className="text-[9px] text-zinc-500">MRP</div></div>
+            <div className={`${sonuc.tedCount > 0 ? 'bg-amber/10' : 'bg-green/10'} rounded-lg p-3 text-center`}><div className={`text-lg font-mono ${sonuc.tedCount > 0 ? 'text-amber' : 'text-green'}`}>{sonuc.tedCount}</div><div className="text-[9px] text-zinc-500">Tedarik</div></div>
+          </div>
+          {sonuc.eksikler.length > 0 && (
+            <div className="mb-4 max-h-[150px] overflow-y-auto">
+              <div className="text-[10px] text-red font-semibold mb-1">Eksik Malzemeler ({sonuc.eksikler.length})</div>
+              <table className="w-full text-[10px]"><thead><tr className="text-zinc-600"><th className="text-left">Kod</th><th className="text-left">Malzeme</th><th className="text-right">İhtiyaç</th><th className="text-right">Stok</th><th className="text-right font-semibold">Eksik</th></tr></thead>
+              <tbody>{sonuc.eksikler.slice(0, 15).map((e, i) => (
+                <tr key={i}><td className="font-mono text-accent">{e.malkod}</td><td className="text-zinc-400 truncate max-w-[120px]">{e.malad}</td><td className="text-right font-mono">{e.brut}</td><td className="text-right font-mono text-green">{Math.round(e.stok)}</td><td className="text-right font-mono text-red font-semibold">{e.net}</td></tr>
+              ))}</tbody></table>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button onClick={() => { setRunning(false); setSonuc(null) }} className="flex-1 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">Kapat</button>
+            <button onClick={() => { setRunning(false); setSonuc(null); window.location.hash = '#/mrp' }} className="px-3 py-2 bg-cyan-500/10 text-cyan-400 rounded-lg text-xs">📊 MRP</button>
+            <button onClick={() => { setRunning(false); setSonuc(null); window.location.hash = '#/cutting' }} className="px-3 py-2 bg-green/10 text-green rounded-lg text-xs">✂ Kesim</button>
+          </div>
           </>
         )}
       </div>

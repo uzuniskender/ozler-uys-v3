@@ -78,6 +78,58 @@ export function Dashboard() {
         <StatCard value={activeWork.length} label="Aktif Çalışma" color={activeWork.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} />
       </div>
 
+      {/* Üretim Zinciri Özet */}
+      {(() => {
+        const { tedarikler, cuttingPlans } = useStore.getState()
+        const bekleyenTed = tedarikler.filter(t => !t.geldi).length
+        const bekleyenKP = cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
+        const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor')).length
+        const kesimEksik = (() => {
+          const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
+          const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
+          return workOrders.filter(w => {
+            if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+            const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+            if (prod >= w.hedef) return false
+            if (planliWoIds.has(w.id)) return false
+            return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
+          }).length
+        })()
+        if (!bekleyenTed && !bekleyenKP && !mrpBekleyen && !kesimEksik) return null
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            {mrpBekleyen > 0 && (
+              <button onClick={() => { window.location.hash = '#/mrp' }} className="bg-bg-2 border border-cyan-500/20 rounded-lg p-3 text-left hover:bg-cyan-500/5">
+                <div className="text-[10px] text-cyan-400 mb-1">📊 MRP Bekliyor</div>
+                <div className="text-lg font-mono text-cyan-300">{mrpBekleyen}</div>
+                <div className="text-[10px] text-zinc-600">sipariş</div>
+              </button>
+            )}
+            {kesimEksik > 0 && (
+              <button onClick={() => { window.location.hash = '#/cutting' }} className="bg-bg-2 border border-amber/20 rounded-lg p-3 text-left hover:bg-amber/5">
+                <div className="text-[10px] text-amber mb-1">✂ Kesim Planlanmamış</div>
+                <div className="text-lg font-mono text-amber">{kesimEksik}</div>
+                <div className="text-[10px] text-zinc-600">iş emri</div>
+              </button>
+            )}
+            {bekleyenKP > 0 && (
+              <button onClick={() => { window.location.hash = '#/cutting' }} className="bg-bg-2 border border-green/20 rounded-lg p-3 text-left hover:bg-green/5">
+                <div className="text-[10px] text-green mb-1">✂ Kesim Bekliyor</div>
+                <div className="text-lg font-mono text-green">{bekleyenKP}</div>
+                <div className="text-[10px] text-zinc-600">plan</div>
+              </button>
+            )}
+            {bekleyenTed > 0 && (
+              <button onClick={() => { window.location.hash = '#/procurement' }} className="bg-bg-2 border border-purple-500/20 rounded-lg p-3 text-left hover:bg-purple-500/5">
+                <div className="text-[10px] text-purple-400 mb-1">📦 Tedarik Bekliyor</div>
+                <div className="text-lg font-mono text-purple-300">{bekleyenTed}</div>
+                <div className="text-[10px] text-zinc-600">kalem</div>
+              </button>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Termin Geçmiş */}
       {terminGecen.length > 0 && (
         <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg">
