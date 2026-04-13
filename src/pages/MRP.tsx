@@ -27,6 +27,14 @@ export function MRP() {
   function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))) }
   function selectNone() { setSelectedOrders(new Set()) }
 
+  // Tarih filtre: termini bu tarihe kadar olan siparişleri seç
+  function filterByDate(tarih: string) {
+    if (!tarih) { selectAll(); return }
+    const secilen = aktifOrders.filter(o => !o.termin || o.termin <= tarih)
+    setSelectedOrders(new Set(secilen.map(o => o.id)))
+    toast.info(secilen.length + ' sipariş seçildi (termin ≤ ' + tarih + ')')
+  }
+
   function orderPct(orderId: string) {
     const wos = workOrders.filter(w => w.orderId === orderId)
     if (!wos.length) return 0
@@ -104,7 +112,24 @@ export function MRP() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">📊 MRP — Malzeme İhtiyaç Planlaması</h1>
           <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş · {ymIEs.length} YM İE</p></div>
-        {hesaplandi && <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>}
+        {hesaplandi && <div className="flex gap-2">
+          <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> MRP Excel</button>
+          {eksikler.length > 0 && <button onClick={() => {
+            import('xlsx').then(XLSX => {
+              const rows = eksikler.map(s => ({
+                'Malzeme Kodu': s.malkod, 'Sipariş Miktarı': Math.ceil(s.net),
+                'Beklenen Tarih': '', 'Tedarikçi': '',
+                '(Bilgi) Malzeme Adı': s.malad, '(Bilgi) Net İhtiyaç': Math.ceil(s.net),
+                '(Bilgi) Mevcut Stok': Math.round(s.stok),
+              }))
+              const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
+              ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 20 }, { wch: 40 }, { wch: 14 }, { wch: 14 }]
+              XLSX.utils.book_append_sheet(wb, ws, 'Tedarik')
+              XLSX.writeFile(wb, `tedarik_mrp_${today()}.xlsx`)
+              toast.success('Tedarik şablonu indirildi — Beklenen Tarih ve Tedarikçi doldurup Tedarik sayfasından yükleyin')
+            })
+          }} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20"><Download size={13} /> Tedarik Şablonu ({eksikler.length})</button>}
+        </div>}
       </div>
 
       {/* Sipariş Seçimi */}
@@ -112,6 +137,10 @@ export function MRP() {
         <div className="flex items-center justify-between mb-3">
           <div className="text-xs font-semibold text-zinc-500 uppercase">Siparişler</div>
           <div className="flex gap-2">
+            <div className="flex items-center gap-1.5">
+              <label className="text-[10px] text-zinc-500">Termin ≤</label>
+              <input type="date" onChange={e => filterByDate(e.target.value)} className="px-2 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-300 focus:outline-none focus:border-accent" />
+            </div>
             <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
             <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
           </div>

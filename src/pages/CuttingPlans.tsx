@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -88,64 +88,94 @@ export function CuttingPlans() {
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {cuttingPlans.length ? (
-          <table className="w-full text-xs">
-            <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">Gerekli</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
-            <tbody>
-              {cuttingPlans.map(p => {
-                const isOpen = selected === p.id
-                const satirlar = p.satirlar || []
-                return (
-                  <tr key={p.id} className="border-b border-border/30 hover:bg-bg-3/30 cursor-pointer" onClick={() => setSelected(isOpen ? null : p.id)}>
-                    <td className="px-4 py-2"><div className="font-mono text-accent text-[11px]">{p.hamMalkod}</div><div className="text-zinc-500 text-[10px]">{p.hamMalad}</div>
-                      {/* #31: Kesim Görsel SVG */}
-                      {isOpen && p.hamBoy > 0 && satirlar.length > 0 && (
-                        <div className="mt-2 mb-1">
-                          <svg width="100%" height="32" viewBox={`0 0 ${p.hamBoy} 30`} className="bg-bg-3 rounded overflow-hidden">
-                            {(() => {
-                              let x = 0
-                              const colors = ['#06b6d4', '#f59e0b', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6']
-                              const rects = satirlar.map((s, i) => {
-                                const boy = (s as unknown as Record<string, number>).boy || (s as unknown as Record<string, number>).hamAdet || 100
-                                const rect = <rect key={i} x={x} y={2} width={Math.max(1, boy - 2)} height={26} rx={2} fill={colors[i % colors.length]} opacity={0.7}><title>{(s as unknown as Record<string, string>).malad || ''} — {boy}mm</title></rect>
-                                x += boy
-                                return rect
-                              })
-                              if (x < p.hamBoy) rects.push(<rect key="fire" x={x} y={2} width={p.hamBoy - x - 2} height={26} rx={2} fill="#ef4444" opacity={0.2}><title>Fire: {p.hamBoy - x}mm</title></rect>)
-                              return rects
-                            })()}
-                          </svg>
-                          <div className="flex gap-2 mt-1 flex-wrap">
-                            {satirlar.map((s, i) => {
-                              const colors = ['text-cyan-400', 'text-amber-400', 'text-green-400', 'text-purple-400', 'text-pink-400', 'text-teal-400']
-                              return <span key={i} className={`text-[9px] ${colors[i % colors.length]}`}>■ {(s as unknown as Record<string, string>).malad || 'Parça'} {(s as unknown as Record<string, number>).boy || ''}mm ×{(s as unknown as Record<string, number>).adet || 1}</span>
-                            })}
-                          </div>
+          <div>
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">Gerekli</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
+              <tbody>
+                {cuttingPlans.map(p => {
+                  const isOpen = selected === p.id
+                  const satirlar = (p.satirlar || []) as { id: string; hamAdet: number; fireMm: number; kesimler: { woId: string; ieNo?: string; malkod: string; malad: string; parcaBoy: number; parcaEn?: number; adet: number; tamamlandi: number }[]; durum: string }[]
+                  const toplamBar = satirlar.reduce((a, s) => a + (s.hamAdet || 0), 0)
+                  return (
+                    <React.Fragment key={p.id}>
+                    <tr className={`border-b border-border/30 hover:bg-bg-3/30 cursor-pointer ${isOpen ? 'bg-bg-3/20' : ''}`} onClick={() => setSelected(isOpen ? null : p.id)}>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-zinc-500 text-[10px]">{isOpen ? '▼' : '▶'}</span>
+                          <div><div className="font-mono text-accent text-[11px]">{p.hamMalkod}</div><div className="text-zinc-500 text-[10px]">{p.hamMalad}</div></div>
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-zinc-400">{p.kesimTip}</td>
-                    <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
-                    <td className="px-4 py-2 text-right font-mono">{p.gerekliAdet} adet</td>
-                    <td className="px-4 py-2">
-                      <select value={p.durum} onChange={e => { e.stopPropagation(); updateDurum(p.id, e.target.value) }}
-                        className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${p.durum === 'tamamlandi' ? 'text-green' : p.durum === 'kismi' ? 'text-amber' : 'text-accent'}`}>
-                        <option value="bekliyor">Bekliyor</option><option value="kismi">Kısmi</option><option value="tamamlandi">Tamamlandı</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => {
-                        const toplamKesim = (p.satirlar || []).reduce((a: number, s: any) => a + ((s.parcaBoy || 0) * (s.adet || 0)), 0)
-                        const artik = p.hamBoy - toplamKesim
-                        if (artik <= 0) { toast.error('Artık yok — tüm malzeme kullanıldı'); return }
-                        artikStokaGir(p.id, p.hamMalkod, p.hamMalad, artik)
-                      }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green mr-1" title="Artık stoka gir">♻ Artık</button>
-                      <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-4 py-2 text-zinc-400">{p.kesimTip}</td>
+                      <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
+                      <td className="px-4 py-2 text-right font-mono">{toplamBar} bar</td>
+                      <td className="px-4 py-2">
+                        <select value={p.durum} onChange={e => { e.stopPropagation(); updateDurum(p.id, e.target.value) }} onClick={e => e.stopPropagation()}
+                          className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${p.durum === 'tamamlandi' ? 'text-green' : p.durum === 'kismi' ? 'text-amber' : 'text-accent'}`}>
+                          <option value="bekliyor">Bekliyor</option><option value="kismi">Kısmi</option><option value="tamamlandi">Tamamlandı</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="border-b border-border/30 bg-bg-3/10">
+                        <td colSpan={6} className="px-4 py-3">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="text-xs text-zinc-400">{p.hamBoy}mm × {toplamBar} bar</div>
+                            <div className="flex gap-2">
+                              <button onClick={() => {
+                                const topFire = satirlar.reduce((a, s) => a + (s.fireMm || 0) * (s.hamAdet || 1), 0)
+                                if (topFire <= 0) { toast.error('Artık yok'); return }
+                                artikStokaGir(p.id, p.hamMalkod, p.hamMalad, topFire)
+                              }} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green">♻ Artık</button>
+                            </div>
+                          </div>
+                          {satirlar.map((s, si) => {
+                            const COLORS = ['#4f9cf9', '#f97b4f', '#6fcf97', '#bb6bd9', '#f2c94c', '#56ccf2', '#eb5757', '#219653', '#f78fb3', '#a29bfe']
+                            const COLORS_TEXT = ['text-blue-400', 'text-orange-400', 'text-green-400', 'text-purple-400', 'text-yellow-400', 'text-cyan-400', 'text-red-400', 'text-emerald-400']
+                            return (
+                              <div key={s.id || si} className="mb-3 p-2 bg-bg-3/50 border border-border/50 rounded-lg">
+                                <div className="text-[10px] text-zinc-500 font-mono mb-1.5">Bar #{si + 1} · {s.hamAdet} adet · Fire: {s.fireMm}mm</div>
+                                {p.hamBoy > 0 && (
+                                  <svg width="100%" height="36" viewBox={`0 0 ${p.hamBoy} 34`} className="bg-zinc-900 rounded overflow-hidden mb-1.5">
+                                    {(() => {
+                                      let x = 0
+                                      const rects: JSX.Element[] = []
+                                      s.kesimler.forEach((k, ki) => {
+                                        if (!k.parcaBoy) return
+                                        for (let ai = 0; ai < k.adet; ai++) {
+                                          rects.push(<rect key={`${ki}-${ai}`} x={x} y={2} width={Math.max(1, k.parcaBoy - 1)} height={30} rx={1} fill={COLORS[ki % COLORS.length]} opacity={0.75}><title>{k.ieNo || k.woId} — {k.malad || k.malkod} {k.parcaBoy}mm</title></rect>)
+                                          x += k.parcaBoy
+                                        }
+                                      })
+                                      if (x < p.hamBoy) rects.push(<rect key="fire" x={x} y={2} width={p.hamBoy - x - 1} height={30} rx={1} fill="#ef4444" opacity={0.15}><title>Fire: {Math.round(p.hamBoy - x)}mm</title></rect>)
+                                      return rects
+                                    })()}
+                                  </svg>
+                                )}
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                  {s.kesimler.map((k, ki) => (
+                                    <div key={ki} className="text-[10px] flex items-center gap-1">
+                                      <span className={COLORS_TEXT[ki % COLORS_TEXT.length]}>■</span>
+                                      <span className="font-mono text-accent">{k.ieNo || '—'}</span>
+                                      <span className="text-zinc-400 truncate max-w-[120px]">{k.malad || k.malkod}</span>
+                                      <span className="font-mono text-zinc-300">{k.parcaBoy}mm × {k.adet}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz kesim planı yok</div>}
       </div>
 

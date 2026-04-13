@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Search, Plus, Pencil, Trash2, Check, Download } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, Check, Download, Upload } from 'lucide-react'
 
 export function Procurement() {
   const { tedarikler, tedarikciler, orders, loadAll } = useStore()
@@ -63,6 +63,38 @@ export function Procurement() {
     })
   }
 
+  // Excel import — v2 tedarikExcelYukle portu
+  async function importExcel() {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.xlsx,.xls,.csv'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return
+      const XLSX = await import('xlsx')
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf); const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws) as Record<string, unknown>[]
+      if (!rows.length) { toast.error('Dosya boş'); return }
+      let count = 0
+      const { materials: mats } = useStore.getState()
+      for (const row of rows) {
+        const malkod = String(row['Malzeme Kodu'] || row['malkod'] || row['Malzeme Kod'] || '').trim(); if (!malkod) continue
+        const miktar = parseFloat(String(row['Sipariş Miktarı'] || row['Miktar'] || row['miktar'] || '0')); if (!miktar) continue
+        const mat = mats.find(m => m.kod === malkod)
+        const malad = String(row['Malzeme Adı'] || row['malad'] || row['Malzeme'] || mat?.ad || malkod)
+        const teslim = String(row['Beklenen Tarih'] || row['Teslim'] || row['teslim'] || '').trim()
+        const tedAd = String(row['Tedarikçi'] || row['Tedarikci'] || row['tedarikci'] || '').trim()
+        await supabase.from('uys_tedarikler').insert({
+          id: uid(), malkod, malad, miktar, birim: String(row['Birim'] || mat?.birim || 'Adet'),
+          teslim_tarihi: teslim, tedarikci_ad: tedAd,
+          tarih: today(), durum: 'bekliyor', geldi: false, not_: 'Excel import',
+        })
+        count++
+      }
+      loadAll(); toast.success(count + ' tedarik yüklendi')
+    }
+    input.click()
+  }
+
   const toplamBekleyen = tedarikler.filter(t => !t.geldi).length
 
   return (
@@ -70,6 +102,7 @@ export function Procurement() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Tedarik Yönetimi</h1><p className="text-xs text-zinc-500">{tedarikler.length} kayıt · {toplamBekleyen} bekleyen</p></div>
         <div className="flex gap-2">
+          <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarik</button>
         </div>
