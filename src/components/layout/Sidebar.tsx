@@ -101,14 +101,12 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
         <nav className="py-2">
           {NAV.map(group => {
-            const visibleItems = isGuest ? group.items.filter(i => i.guest) : group.items
-            if (!visibleItems.length) return null
             return (
             <div key={group.label}>
               <div className="px-4 pt-4 pb-1 text-[10px] font-semibold text-zinc-500 tracking-widest">
                 {group.label}
               </div>
-              {visibleItems.map(item => {
+              {group.items.map(item => {
                 const active = location.pathname === item.path
                 const badge = getBadge(item.badge)
                 return (

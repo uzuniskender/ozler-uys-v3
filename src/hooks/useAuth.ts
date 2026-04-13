@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, setGuestMode } from '@/lib/supabase'
 
 interface AuthUser {
   role: 'admin' | 'guest' | 'operator'
@@ -20,7 +20,11 @@ function getStored(): AuthUser | null {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(getStored())
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const stored = getStored()
+    if (stored?.role === 'guest') setGuestMode(true)
+    return stored
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -92,6 +96,7 @@ export function useAuth() {
     try { await supabase.auth.signOut() } catch {}
     localStorage.removeItem(AUTH_KEY)
     setUser(null)
+    setGuestMode(false)
     window.location.reload()
   }
 
@@ -99,6 +104,7 @@ export function useAuth() {
     const authUser: AuthUser = { role: 'guest', username: 'misafir', loginTime: new Date().toISOString() }
     localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
     setUser(authUser)
+    setGuestMode(true)
   }
 
   function operatorLogin(oprId: string, oprAd: string) {

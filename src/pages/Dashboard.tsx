@@ -284,7 +284,6 @@ export function Dashboard() {
                   <span className={`font-medium ${!n.okundu ? 'text-white' : 'text-zinc-400'}`}>{n.opAd}</span>
                   <span className="font-mono text-zinc-600 text-[10px]">{n.tarih} {n.saat}</span>
                   <span className="flex-1" />
-                  {!isGuest && <>
                   {!n.okundu && (
                     <button onClick={async () => { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id); loadAll() }}
                       className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">✓</button>
@@ -304,7 +303,6 @@ export function Dashboard() {
                     loadAll(); toast.success('Cevap gönderildi — operatör görecek')
                   }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">💬 Cevapla</button>
                   <button onClick={async () => { if (!await showConfirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
-                  </>}
                 </div>
                 {/* Operatör mesajı */}
                 <div className="bg-bg-3/50 rounded-lg px-3 py-2 text-zinc-300 mb-1">{n.mesaj}</div>
