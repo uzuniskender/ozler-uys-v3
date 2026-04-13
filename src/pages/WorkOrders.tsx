@@ -327,6 +327,83 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
   const { durusKodlari } = useStore()
   const [adminEntryWO, setAdminEntryWO] = useState<string | null>(null)
   const prod = wProd(wo.id); const pct = wPct(wo); const kalan = Math.max(0, wo.hedef - prod)
+
+  // #7: Stok kontrollü log düzenleme
+  async function editLog(l: any) {
+    const result = await showMultiPrompt('Log Düzenle — Stok Kontrollü', [
+      { label: 'Adet', key: 'qty', defaultValue: String(l.qty), type: 'number' },
+      { label: 'Fire', key: 'fire', defaultValue: String(l.fire || 0), type: 'number' },
+    ])
+    if (!result) return
+    const yeniQty = parseInt(result.qty) || 0
+    const yeniFire = parseInt(result.fire) || 0
+    if (yeniQty <= 0) { toast.error('Geçersiz adet'); return }
+
+    const delta = yeniQty - (l.qty || 0)
+    const rc = wo.rcId ? recipes.find((r: any) => r.id === wo.rcId) : recipes.find((r: any) => r.mamulKod === wo.mamulKod)
+    const hmSatirlar = (rc?.satirlar || []).filter((s: any) => s.tip === 'Hammadde' || s.tip === 'hammadde')
+
+    // Delta > 0 ise stok kontrolü yap
+    if (delta > 0 && hmSatirlar.length > 0) {
+      const eksikler: string[] = []
+      for (const hm of hmSatirlar) {
+        const birAdet = (hm.miktar || 0) * (wo.mpm || 1)
+        if (birAdet <= 0) continue
+        const ekTuketim = birAdet * delta
+        const mevcut = stokHareketler.filter((h: any) => h.malkod === (hm.malkod || hm.kod))
+          .reduce((a: number, h: any) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+        if (mevcut < ekTuketim) {
+          eksikler.push(`${hm.malad || hm.malkod}: mevcut ${Math.round(mevcut)}, gerekli ${Math.round(ekTuketim)}`)
+        }
+      }
+      if (eksikler.length > 0) {
+        toast.error('Stok yetersiz!\n' + eksikler.join('\n'))
+        return
+      }
+    }
+
+    // Log güncelle
+    await supabase.from('uys_logs').update({ qty: yeniQty, fire: yeniFire }).eq('id', l.id)
+
+    // Ürün stok hareketi güncelle
+    const { data: sh } = await supabase.from('uys_stok_hareketler').select('id').eq('log_id', l.id).eq('tip', 'giris').limit(1)
+    if (sh?.[0]) await supabase.from('uys_stok_hareketler').update({ miktar: yeniQty }).eq('id', sh[0].id)
+
+    // HM stok hareketlerini güncelle (delta)
+    if (delta !== 0 && hmSatirlar.length > 0) {
+      for (const hm of hmSatirlar) {
+        const birAdet = (hm.miktar || 0) * (wo.mpm || 1)
+        if (birAdet <= 0) continue
+        const hmDelta = birAdet * Math.abs(delta)
+        if (delta > 0) {
+          // Arttı → ek HM tüketimi
+          await supabase.from('uys_stok_hareketler').insert({
+            id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmDelta,
+            tip: 'cikis', kaynak: 'uretim-hm-duzeltme', aciklama: wo.ieNo + ' düzeltme +' + delta,
+            tarih: today(), log_id: l.id, wo_id: wo.id,
+          })
+        } else {
+          // Azaldı → HM iadesi
+          await supabase.from('uys_stok_hareketler').insert({
+            id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmDelta,
+            tip: 'giris', kaynak: 'uretim-hm-iade', aciklama: wo.ieNo + ' düzeltme ' + delta,
+            tarih: today(), log_id: l.id, wo_id: wo.id,
+          })
+        }
+      }
+      toast.success(`Log güncellendi: ${l.qty} → ${yeniQty} (${delta > 0 ? '+' : ''}${delta}) · HM stok ${delta > 0 ? 'tüketildi' : 'iade edildi'}`)
+    } else {
+      toast.success('Log güncellendi')
+    }
+    loadAll()
+  }
+
+  async function deleteLog(l: any) {
+    if (!await showConfirm('Bu logu silmek istediğinize emin misiniz? İlişkili stok hareketleri de silinecek.')) return
+    await supabase.from('uys_logs').delete().eq('id', l.id)
+    await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id)
+    loadAll(); toast.success('Log ve stok hareketleri silindi')
+  }
   const ord = orders.find((o: any) => o.id === wo.orderId)
   const woLogs = logs.filter((l: any) => l.woId === wo.id).sort((a: any, b: any) => (b.tarih || '').localeCompare(a.tarih || ''))
   const gunler = new Set(woLogs.map((l: any) => l.tarih))
@@ -415,7 +492,10 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
                 <td className="px-3 py-1.5 text-right font-mono text-sm font-bold text-green pr-3">+{l.qty}{l.fire > 0 && <span className="text-red text-[10px] ml-1">🔥{l.fire}</span>}</td>
                 <td className="px-3 py-1.5"><div className="flex flex-wrap gap-1">{oprList.length > 0 ? oprList.map((op: any, i: number) => <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-accent/10 text-[10px]">{op.ad}{(op.bas || op.bit) && <span className="font-mono text-zinc-500 ml-1">{op.bas || ''}→{op.bit || ''}</span>}</span>) : <span className="text-[10px] text-zinc-600">—</span>}</div>{durusList.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{durusList.map((d: any, i: number) => <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-red/8 border border-red/15 text-[10px] text-red">⏸ {d.sebep || d.kodAd || ''}{d.sure ? ` ${d.sure}dk` : ''}</span>)}</div>}</td>
                 <td className="px-3 py-1.5 text-zinc-500 text-[11px]">{l.not || ''}</td>
-                <td className="px-3 py-1.5 whitespace-nowrap"><button onClick={async () => { const result = await showMultiPrompt('Log Düzenle', [{label:'Adet',key:'qty',defaultValue:String(l.qty),type:'number'},{label:'Fire',key:'fire',defaultValue:String(l.fire||0),type:'number'}]); if (!result) return; const q = parseInt(result.qty)||0; const f = parseInt(result.fire)||0; if (q <= 0) { toast.error('Geçersiz adet'); return }; await supabase.from('uys_logs').update({ qty: q, fire: f }).eq('id', l.id); const { data: sh } = await supabase.from('uys_stok_hareketler').select('id').eq('log_id', l.id).eq('tip', 'giris').limit(1); if (sh?.[0]) await supabase.from('uys_stok_hareketler').update({ miktar: q }).eq('id', sh[0].id); loadAll(); toast.success('Log güncellendi') }} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düz.</button><button onClick={async () => { if (!await showConfirm('Bu logu silmek istediğinize emin misiniz?')) return; await supabase.from('uys_logs').delete().eq('id', l.id); await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id); loadAll(); toast.success('Log silindi') }} className="text-zinc-600 hover:text-red text-[10px]">×</button></td>
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <button onClick={() => editLog(l)} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düz.</button>
+                  <button onClick={() => deleteLog(l)} className="text-zinc-600 hover:text-red text-[10px]">×</button>
+                </td>
               </tr>)
             })}
           </tbody></table></div>

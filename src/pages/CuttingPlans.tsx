@@ -12,6 +12,7 @@ export function CuttingPlans() {
   const { cuttingPlans, materials, workOrders, operations, recipes, logs, loadAll } = useStore()
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [artikInfo, setArtikInfo] = useState<{ planId: string; hamMalkod: string; hamMalad: string; fireMm: number; barIdx: number } | null>(null)
 
   const bekleyen = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
 
@@ -136,7 +137,13 @@ export function CuttingPlans() {
                             const COLORS_TEXT = ['text-blue-400', 'text-orange-400', 'text-green-400', 'text-purple-400', 'text-yellow-400', 'text-cyan-400', 'text-red-400', 'text-emerald-400']
                             return (
                               <div key={s.id || si} className="mb-3 p-2 bg-bg-3/50 border border-border/50 rounded-lg">
-                                <div className="text-[10px] text-zinc-500 font-mono mb-1.5">Bar #{si + 1} · {s.hamAdet} adet · Fire: {s.fireMm}mm</div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10px] text-zinc-500 font-mono">Bar #{si + 1} · {s.hamAdet} adet · Fire: {s.fireMm}mm</span>
+                                  {s.fireMm > 10 && (
+                                    <button onClick={() => setArtikInfo({ planId: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, fireMm: s.fireMm, barIdx: si })}
+                                      className="px-2 py-0.5 bg-green/10 border border-green/20 text-green rounded text-[10px] font-semibold hover:bg-green/20">♻ Fire Yönet ({s.fireMm}mm)</button>
+                                  )}
+                                </div>
                                 {p.hamBoy > 0 && (
                                   <svg width="100%" height="36" viewBox={`0 0 ${p.hamBoy} 34`} className="bg-zinc-900 rounded overflow-hidden mb-1.5">
                                     {(() => {
@@ -180,6 +187,114 @@ export function CuttingPlans() {
       </div>
 
       {showCreate && <KesimOlusturModal materials={materials} workOrders={workOrders} onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); loadAll(); toast.success('Kesim planları oluşturuldu') }} />}
+      {artikInfo && <ArtikOneriModal info={artikInfo} materials={materials} workOrders={workOrders} operations={operations} recipes={recipes} logs={logs} onClose={() => setArtikInfo(null)} onSaved={() => { setArtikInfo(null); loadAll() }} />}
+    </div>
+  )
+}
+
+// #8-9: Artık yönetimi — fire'dan stok girişi + uygun parça önerisi
+function ArtikOneriModal({ info, materials, workOrders, operations, recipes, logs, onClose, onSaved }: {
+  info: { planId: string; hamMalkod: string; hamMalad: string; fireMm: number; barIdx: number }
+  materials: import('@/types').Material[]; workOrders: any[]; operations: any[]; recipes: any[]; logs: any[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const [artikKod, setArtikKod] = useState(info.hamMalkod + '-ARTIK-' + info.fireMm)
+  const [stokGirisi, setStokGirisi] = useState(true)
+
+  const fireMm = info.fireMm
+
+  // Aynı HM'yi kullanan, fire'a sığabilecek açık İE'ler
+  const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
+  const uygunIEler = workOrders.filter(w => {
+    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    const prod = logs.filter((l: any) => l.woId === w.id).reduce((a: number, l: any) => a + l.qty, 0)
+    if (prod >= w.hedef) return false
+    // Kesim operasyonu mu?
+    const wOp = operations.find((o: any) => o.id === w.opId)
+    const opAd = (wOp?.ad || w.opAd || '').toUpperCase()
+    if (!kesimOps.some(k => opAd.includes(k))) return false
+    // Aynı HM'yi kullanıyor mu?
+    if (w.hm?.some((h: any) => h.malkod === info.hamMalkod)) return true
+    const rc = recipes.find((r: any) => r.id === w.rcId) || recipes.find((r: any) => r.mamulKod === w.malkod)
+    if (rc?.satirlar?.some((s: any) => s.malkod === info.hamMalkod)) return true
+    return false
+  }).map(w => {
+    const prod = logs.filter((l: any) => l.woId === w.id).reduce((a: number, l: any) => a + l.qty, 0)
+    const kalan = Math.max(0, w.hedef - prod)
+    const m = materials.find(x => x.kod === w.malkod)
+    const parcaBoy = m ? getParcaBoy(w.malkod, materials) : 0
+    return { ...w, kalan, parcaBoy }
+  }).filter(w => w.parcaBoy > 0 && w.parcaBoy <= fireMm)
+  .sort((a, b) => b.parcaBoy - a.parcaBoy)
+
+  async function stokaGir() {
+    if (!stokGirisi) { onClose(); return }
+    await supabase.from('uys_stok_hareketler').insert({
+      id: uid(), tarih: today(), malkod: artikKod, malad: info.hamMalad + ' (artık ' + fireMm + 'mm)',
+      miktar: 1, tip: 'giris', aciklama: 'Kesim artığı — ' + fireMm + 'mm',
+    })
+    toast.success('Artık stoka girildi: ' + fireMm + 'mm')
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">♻ Fire Yönetimi</h2>
+            <p className="text-xs text-zinc-500">{info.hamMalkod} · Bar #{info.barIdx + 1} · <b className="text-amber">{fireMm}mm</b> fire</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+        </div>
+
+        {/* Stok girişi */}
+        <div className="bg-bg-2 border border-border rounded-lg p-3 mb-4">
+          <label className="flex items-center gap-2 mb-2 cursor-pointer">
+            <input type="checkbox" checked={stokGirisi} onChange={e => setStokGirisi(e.target.checked)} className="accent-green" />
+            <span className="text-xs font-semibold">Artık malzemeyi stoka gir</span>
+          </label>
+          {stokGirisi && (
+            <input value={artikKod} onChange={e => setArtikKod(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-3 border border-border rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-green" />
+          )}
+        </div>
+
+        {/* Uygun parça önerileri */}
+        <div className="mb-4">
+          <div className="text-xs font-semibold text-zinc-400 mb-2">🔍 Fire'a sığabilecek parçalar ({uygunIEler.length})</div>
+          {uygunIEler.length > 0 ? (
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {uygunIEler.map(w => {
+                const sigacak = Math.floor(fireMm / w.parcaBoy)
+                return (
+                  <div key={w.id} className="flex items-center justify-between bg-bg-2 border border-border/50 rounded-lg p-2">
+                    <div>
+                      <span className="font-mono text-accent text-[11px]">{w.ieNo}</span>
+                      <div className="text-[10px] text-zinc-400 truncate max-w-[200px]">{w.malad}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-mono">{w.parcaBoy}mm</div>
+                      <div className="text-[10px] text-green font-semibold">{sigacak} adet sığar · {w.kalan} kalan</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-600 bg-bg-2 rounded-lg p-3 text-center">
+              {fireMm}mm fire'a sığabilecek açık İE bulunamadı
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={stokaGir} className="px-4 py-2 bg-green hover:bg-green/80 text-black rounded-lg text-xs font-semibold">
+            {stokGirisi ? '♻ Stoka Gir & Kapat' : 'Kapat'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
