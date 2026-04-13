@@ -45,7 +45,7 @@ export function Materials() {
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
       if (!rows.length) { toast.error('Excel boş'); return }
 
-      let created = 0
+      let created = 0; let errors = 0
       for (const row of rows) {
         const kod = String(row['Kod'] || row['kod'] || row['Malzeme Kodu'] || '').trim()
         const ad = String(row['Ad'] || row['ad'] || row['Malzeme Adı'] || row['Malzeme'] || '').trim()
@@ -53,19 +53,34 @@ export function Materials() {
         const existing = materials.find(m => m.kod === kod)
         if (existing) continue // Var olan malzemeyi atla
 
-        await supabase.from('uys_malzemeler').insert({
+        const insertRow: Record<string, unknown> = {
           id: uid(), kod, ad,
           tip: String(row['Tip'] || row['tip'] || 'Hammadde'),
+          hammadde_tipi: String(row['HM Tipi'] || row['Hammadde Tipi'] || row['hammadde_tipi'] || ''),
           birim: String(row['Birim'] || row['birim'] || 'Adet'),
           boy: parseFloat(String(row['Boy'] || row['boy'] || 0)) || 0,
           en: parseFloat(String(row['En'] || row['en'] || 0)) || 0,
           kalinlik: parseFloat(String(row['Kalınlık'] || row['kalinlik'] || 0)) || 0,
-          uzunluk: parseFloat(String(row['Uzunluk'] || row['uzunluk'] || 0)) || 0,
+          cap: parseFloat(String(row['Çap'] || row['cap'] || 0)) || 0,
           min_stok: parseFloat(String(row['Min Stok'] || row['min_stok'] || 0)) || 0,
-        })
-        created++
+        }
+        // uzunluk kolonu yoksa hata vermemesi için try
+        const uzVal = parseFloat(String(row['Uzunluk'] || row['uzunluk'] || 0)) || 0
+        if (uzVal > 0) insertRow.uzunluk = uzVal
+
+        const { error } = await supabase.from('uys_malzemeler').insert(insertRow)
+        if (error) {
+          // uzunluk kolonu yoksa onsuz dene
+          if (error.message?.includes('uzunluk')) {
+            delete insertRow.uzunluk
+            const { error: e2 } = await supabase.from('uys_malzemeler').insert(insertRow)
+            if (e2) { errors++; if (errors === 1) console.error('Insert hatası:', e2.message) }
+            else created++
+          } else { errors++; if (errors === 1) { console.error('Insert hatası:', error.message); toast.error('Hata: ' + error.message) } }
+        } else created++
       }
-      loadAll(); toast.success(created + ' malzeme eklendi')
+      loadAll()
+      toast.success(created + ' malzeme eklendi' + (errors > 0 ? ` (${errors} hata)` : ''))
     }
     input.click()
   }
