@@ -191,14 +191,14 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   async function startWork(woId: string) {
     const w = workOrders.find(x => x.id === woId)
     if (!w) return
-    // Aynı İE'de zaten aktif mi?
     if (myActiveList.some(a => a.woId === woId)) { toast.error('Bu işte zaten çalışıyorsun'); return }
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-    await supabase.from('uys_active_work').insert({
+    const { error } = await supabase.from('uys_active_work').insert({
       id: uid(), op_id: oprId, op_ad: opr.ad, wo_id: woId,
       wo_ad: w.malad, baslangic: saat, tarih: today(),
     })
+    if (error) { toast.error('İşe başlatılamadı: ' + error.message); return }
     loadAll(); toast.success('İş başlatıldı: ' + w.ieNo)
   }
 
@@ -471,13 +471,23 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
 
   async function save() {
     const q = parseInt(qty) || 0; const f = parseInt(fire) || 0
-    if (q <= 0) { toast.error('Adet girin'); return }
+    const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
+    if (q <= 0 && !hasDurus) { toast.error('Adet veya duruş girin'); return }
     if (q > kalan) { toast.error('Hedeften fazla üretilemez! Kalan: ' + kalan); return }
-    if (maxUretim <= 0 && hmSatirlar.length > 0) { toast.error('Stok yetersiz — üretim yapılamaz'); return }
-    if (q > maxUretim && hmSatirlar.length > 0) { toast.error('Stok yetersiz! En fazla ' + maxUretim + ' adet'); return }
+    if (q > 0 && maxUretim <= 0 && hmSatirlar.length > 0) { toast.error('Stok yetersiz — üretim yapılamaz'); return }
+    if (q > 0 && q > maxUretim && hmSatirlar.length > 0) { toast.error('Stok yetersiz! En fazla ' + maxUretim + ' adet'); return }
     if (!oprList.length) { toast.error('En az bir operatör eklenmeli'); return }
     for (const o of oprList) {
       if (o.bas && o.bit && o.bit < o.bas) { toast.error(o.ad + ': Bitiş başlamadan önce olamaz'); return }
+    }
+    // Duruş saatleri validasyonu
+    for (let di = 0; di < duruslar.length; di++) {
+      const d = duruslar[di]
+      if (!d.kodId) continue
+      if (d.bas && d.bit && d.bit <= d.bas) { toast.error(`Duruş #${di + 1}: Bitiş başlangıçtan önce olamaz`); return }
+      // Duruş saatleri çalışma saatleri içinde mi?
+      if (d.bas && oprList[0]?.bas && d.bas < oprList[0].bas) { toast.error(`Duruş #${di + 1}: Başlangıç (${d.bas}) çalışma başlangıcından (${oprList[0].bas}) önce olamaz`); return }
+      if (d.bit && oprList[0]?.bit && d.bit > oprList[0].bit) { toast.error(`Duruş #${di + 1}: Bitiş (${d.bit}) çalışma bitişinden (${oprList[0].bit}) sonra olamaz`); return }
     }
     const toplamDurusDk = duruslar.reduce((a, d) => a + (d.sure || 0), 0)
     const toplamCalisma = oprList.reduce((a, o) => {
@@ -491,21 +501,23 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih: today(), qty: q, fire: f,
       operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
-      not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0),
+      not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
     })
-    await supabase.from('uys_stok_hareketler').insert({
-      id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-      tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
-      tarih: today(), log_id: logId, wo_id: woId,
-    })
-    for (const hm of hmSatirlar) {
-      const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
-      if (hmMiktar > 0) {
-        await supabase.from('uys_stok_hareketler').insert({
-          id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-          tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
-          tarih: today(), log_id: logId, wo_id: woId,
-        })
+    if (q > 0) {
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
+        tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
+        tarih: today(), log_id: logId, wo_id: woId,
+      })
+      for (const hm of hmSatirlar) {
+        const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+        if (hmMiktar > 0) {
+          await supabase.from('uys_stok_hareketler').insert({
+            id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
+            tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
+            tarih: today(), log_id: logId, wo_id: woId,
+          })
+        }
       }
     }
     if (f > 0) {
@@ -646,10 +658,11 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
     if (!mesaj.trim()) return
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-    await supabase.from('uys_operator_notes').insert({
+    const { error } = await supabase.from('uys_operator_notes').insert({
       id: uid(), op_id: oprId, op_ad: oprAd, tarih: today(), saat,
       mesaj: mesaj.trim(), okundu: false,
     })
+    if (error) { toast.error('Mesaj gönderilemedi: ' + error.message); return }
     setMesaj(''); loadAll(); onSent()
   }
 

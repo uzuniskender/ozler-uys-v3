@@ -99,7 +99,7 @@ export function Dashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             {mrpBekleyen > 0 && (
               <button onClick={() => { window.location.hash = '#/mrp' }} className="bg-bg-2 border border-cyan-500/20 rounded-lg p-3 text-left hover:bg-cyan-500/5">
-                <div className="text-[10px] text-cyan-400 mb-1">📊 MRP Bekliyor</div>
+                <div className="text-[10px] text-cyan-400 mb-1">📊 MRP Hesaplanmamış Sipariş</div>
                 <div className="text-lg font-mono text-cyan-300">{mrpBekleyen}</div>
                 <div className="text-[10px] text-zinc-600">sipariş</div>
               </button>
@@ -209,7 +209,7 @@ export function Dashboard() {
           gunMap[l.tarih].fire += l.fire || 0
         })
         const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-7)
-        if (data.length < 2) return null
+        if (data.length < 1) return null
         return (
           <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
             <div className="text-xs font-semibold text-zinc-400 mb-3">Son 7 Gün Üretim</div>
@@ -416,7 +416,7 @@ export function Dashboard() {
         const ieSiz = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id))
         if (ieSiz.length) adimlar.push({ icon: '⚙', mesaj: `${ieSiz.length} sipariş için İE oluşturulmamış`, link: '#/orders' })
         const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor')).length
-        if (mrpYok) adimlar.push({ icon: '📊', mesaj: `${mrpYok} sipariş MRP hesaplanmamış`, link: '#/mrp' })
+        if (mrpYok) adimlar.push({ icon: '📊', mesaj: `${mrpYok} siparişin malzeme ihtiyacı (MRP) henüz hesaplanmadı`, link: '#/mrp' })
         const _kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
         const _planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
         const _kesimEksik = workOrders.filter(w => {
@@ -463,7 +463,7 @@ export function Dashboard() {
         })
         const data = Object.entries(deptMap).map(([name, value]) => ({ name: name.slice(0, 12), value })).sort((a, b) => b.value - a.value).slice(0, 8)
         const COLORS = ['#4f9cf9', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#ec4899', '#84cc16']
-        if (data.length < 2) return null
+        if (data.length < 1) return null
         return (
           <div className="mt-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
             <div className="text-xs font-semibold text-zinc-400 mb-3">Operasyon Bazlı Üretim Dağılımı</div>

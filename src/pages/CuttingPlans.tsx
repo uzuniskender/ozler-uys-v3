@@ -97,6 +97,23 @@ export function CuttingPlans() {
                   const isOpen = selected === p.id
                   const satirlar = (p.satirlar || []) as { id: string; hamAdet: number; fireMm: number; kesimler: { woId: string; ieNo?: string; malkod: string; malad: string; parcaBoy: number; parcaEn?: number; adet: number; tamamlandi: number }[]; durum: string }[]
                   const toplamBar = satirlar.reduce((a, s) => a + (s.hamAdet || 0), 0)
+                  // Otomatik durum hesapla: tüm İE'ler tamamlandı mı?
+                  const allWoIds = satirlar.flatMap(s => s.kesimler.map(k => k.woId)).filter(Boolean)
+                  const allDone = allWoIds.length > 0 && allWoIds.every(woId => {
+                    const wo = workOrders.find(w => w.id === woId)
+                    if (!wo) return true
+                    const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+                    return prod >= wo.hedef
+                  })
+                  const someDone = allWoIds.some(woId => {
+                    const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+                    return prod > 0
+                  })
+                  const gercekDurum = allDone ? 'tamamlandi' : someDone ? 'kismi' : 'bekliyor'
+                  // Auto-update if status is wrong
+                  if (gercekDurum === 'tamamlandi' && p.durum !== 'tamamlandi') {
+                    supabase.from('uys_kesim_planlari').update({ durum: 'tamamlandi' }).eq('id', p.id).then(() => loadAll())
+                  }
                   return (
                     <React.Fragment key={p.id}>
                     <tr className={`border-b border-border/30 hover:bg-bg-3/30 cursor-pointer ${isOpen ? 'bg-bg-3/20' : ''}`} onClick={() => setSelected(isOpen ? null : p.id)}>
@@ -110,10 +127,13 @@ export function CuttingPlans() {
                       <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
                       <td className="px-4 py-2 text-right font-mono">{toplamBar} bar</td>
                       <td className="px-4 py-2">
-                        <select value={p.durum} onChange={e => { e.stopPropagation(); updateDurum(p.id, e.target.value) }} onClick={e => e.stopPropagation()}
-                          className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${p.durum === 'tamamlandi' ? 'text-green' : p.durum === 'kismi' ? 'text-amber' : 'text-accent'}`}>
-                          <option value="bekliyor">Bekliyor</option><option value="kismi">Kısmi</option><option value="tamamlandi">Tamamlandı</option>
-                        </select>
+                        <div className="flex items-center gap-1.5">
+                          <select value={p.durum} onChange={e => { e.stopPropagation(); updateDurum(p.id, e.target.value) }} onClick={e => e.stopPropagation()}
+                            className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${gercekDurum === 'tamamlandi' ? 'text-green' : gercekDurum === 'kismi' ? 'text-amber' : 'text-accent'}`}>
+                            <option value="bekliyor">Bekliyor</option><option value="kismi">Kısmi</option><option value="tamamlandi">Tamamlandı</option>
+                          </select>
+                          {gercekDurum !== p.durum && <span className={`text-[9px] px-1 py-0.5 rounded ${gercekDurum === 'tamamlandi' ? 'bg-green/20 text-green' : 'bg-amber/20 text-amber'}`}>{gercekDurum === 'tamamlandi' ? '✓ Bitti' : '◐ Kısmi'}</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
                         <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
@@ -209,14 +229,22 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
     if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
     const prod = logs.filter((l: any) => l.woId === w.id).reduce((a: number, l: any) => a + l.qty, 0)
     if (prod >= w.hedef) return false
-    // Kesim operasyonu mu?
     const wOp = operations.find((o: any) => o.id === w.opId)
     const opAd = (wOp?.ad || w.opAd || '').toUpperCase()
     if (!kesimOps.some(k => opAd.includes(k))) return false
-    // Aynı HM'yi kullanıyor mu?
+    // Aynı HM'yi kullanıyor mu? — sadece direkt bağlı HM kontrol
     if (w.hm?.some((h: any) => h.malkod === info.hamMalkod)) return true
+    // Reçeteden kontrol — sadece İE'nin kırılımının direkt alt satırları
     const rc = recipes.find((r: any) => r.id === w.rcId) || recipes.find((r: any) => r.mamulKod === w.malkod)
-    if (rc?.satirlar?.some((s: any) => s.malkod === info.hamMalkod)) return true
+    if (rc?.satirlar) {
+      const woKirno = w.kirno || '1'
+      const depth = woKirno.split('.').length
+      const direktAlt = rc.satirlar.filter((s: any) =>
+        (s.kirno || '').startsWith(woKirno + '.') &&
+        (s.kirno || '').split('.').length === depth + 1
+      )
+      if (direktAlt.some((s: any) => s.malkod === info.hamMalkod)) return true
+    }
     return false
   }).map(w => {
     const prod = logs.filter((l: any) => l.woId === w.id).reduce((a: number, l: any) => a + l.qty, 0)

@@ -24,9 +24,10 @@ export function BomTrees() {
 
   async function deleteSelected() {
     if (!checkedIds.size) return
-    if (!await showConfirm(`${checkedIds.size} ürün ağacını silmek istediğinize emin misiniz?`)) return
+    const count = checkedIds.size
+    if (!await showConfirm(`${count} ürün ağacını silmek istediğinize emin misiniz?`)) return
     for (const id of checkedIds) { await supabase.from('uys_bom_trees').delete().eq('id', id) }
-    setCheckedIds(new Set()); loadAll(); toast.success(checkedIds.size + ' ürün ağacı silindi')
+    setCheckedIds(new Set()); loadAll(); toast.success(count + ' ürün ağacı silindi')
   }
 
   async function deleteBom(id: string) {
