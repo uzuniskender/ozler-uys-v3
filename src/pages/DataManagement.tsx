@@ -91,6 +91,19 @@ export function DataManagement() {
         <div className="flex gap-2">
           <button onClick={() => store.loadAll()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><RefreshCw size={13} /> Yenile</button>
           <button onClick={importJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20"><Upload size={13} /> JSON Geri Yükle</button>
+          <button onClick={() => {
+            import('xlsx').then(XLSX => {
+              const wb = XLSX.utils.book_new()
+              tables.forEach(t => {
+                const arr = (store as unknown as Record<string, unknown[]>)[t.key] || []
+                if (!arr.length) return
+                const ws = XLSX.utils.json_to_sheet(arr as Record<string, unknown>[])
+                XLSX.utils.book_append_sheet(wb, ws, t.label.slice(0, 31))
+              })
+              XLSX.writeFile(wb, `uys_tum_veriler_${today()}.xlsx`)
+              toast.success('Tüm veriler Excel\'e aktarıldı')
+            })
+          }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel Aktar</button>
           <button onClick={exportJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Download size={13} /> JSON Yedek</button>
         </div>
       </div>
@@ -178,6 +191,19 @@ export function DataManagement() {
           // Hedefi 0 olan İE
           const zeroHedef = store.workOrders.filter(w => w.hedef <= 0)
           if (zeroHedef.length) sorunlar.push(`${zeroHedef.length} İE'nin hedefi 0`)
+          // Bölümsüz operasyon
+          const bolumYok = store.operations.filter(o => !o.bolum)
+          if (bolumYok.length) sorunlar.push(`${bolumYok.length} operasyonun bölümü yok (operatör eşleşmesi çalışmaz)`)
+          // Kesim planında orphan woId
+          const woIdSet = new Set(store.workOrders.map(w => w.id))
+          let orphanKesim = 0
+          store.cuttingPlans.forEach(p => (p.satirlar || []).forEach((s: any) => (s.kesimler || []).forEach((k: any) => { if (k.woId && !woIdSet.has(k.woId)) orphanKesim++ })))
+          if (orphanKesim) sorunlar.push(`${orphanKesim} kesim kaydında silinmiş İE referansı (orphan)`)
+          // Gelmiş tedarik ama stok girişi yok
+          const gelmisTed = store.tedarikler.filter(t => t.geldi)
+          const stokTedIds = new Set(store.stokHareketler.filter(h => h.aciklama?.includes('Tedarik')).map(h => h.malkod))
+          const stokYokTed = gelmisTed.filter(t => !stokTedIds.has(t.malkod))
+          if (stokYokTed.length) sorunlar.push(`${stokYokTed.length} tedarik "geldi" ama stok girişi bulunamadı`)
 
           if (sorunlar.length) {
             toast.warning(`${sorunlar.length} sorun bulundu`)
@@ -271,6 +297,15 @@ export function DataManagement() {
           }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
             🚚 Tedarikleri Sıfırla
             <div className="text-[10px] text-red/60 mt-0.5">Tüm tedarik kayıtları</div>
+          </button>
+
+          <button onClick={async () => {
+            if (!await showConfirm('Tüm kesim planları silinecek. Devam?')) return
+            await supabase.from('uys_kesim_planlari').delete().neq('id', '___impossible___')
+            store.loadAll(); toast.success('Kesim planları sıfırlandı')
+          }} className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 text-left">
+            ✂ Kesim Planlarını Sıfırla
+            <div className="text-[10px] text-red/60 mt-0.5">Tüm kesim planları</div>
           </button>
         </div>
 

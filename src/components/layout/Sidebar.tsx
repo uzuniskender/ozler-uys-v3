@@ -111,7 +111,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                     <item.icon size={15} />
                     <span className="flex-1 text-left">{item.label}</span>
                     {badge && (
-                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${item.badge === 'dash' && parseInt(badge) > 0 ? 'bg-red/20 text-red' : 'bg-bg-3 text-zinc-400'}`}>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                        item.badge === 'dash' && parseInt(badge) > 0 ? 'bg-red/20 text-red' :
+                        item.badge === 'tedarikler' ? 'bg-amber/15 text-amber' :
+                        item.badge === 'workOrders' ? 'bg-accent/15 text-accent' :
+                        item.badge === 'cuttingPlans' ? 'bg-green/15 text-green' :
+                        'bg-bg-3 text-zinc-400'
+                      }`}>
                         {badge}
                       </span>
                     )}

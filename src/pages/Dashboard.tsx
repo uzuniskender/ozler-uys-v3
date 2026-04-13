@@ -21,7 +21,7 @@ function StatCard({ value, label, color, icon: Icon }: { value: number | string;
 }
 
 export function Dashboard() {
-  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler, loadAll } = useStore()
+  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler, tedarikler, cuttingPlans, loadAll } = useStore()
   const todayStr = today()
 
   // Calculations
@@ -80,7 +80,6 @@ export function Dashboard() {
 
       {/* Üretim Zinciri Özet */}
       {(() => {
-        const { tedarikler, cuttingPlans } = useStore.getState()
         const bekleyenTed = tedarikler.filter(t => !t.geldi).length
         const bekleyenKP = cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
         const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor')).length

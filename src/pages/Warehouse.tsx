@@ -148,7 +148,7 @@ export function Warehouse() {
       </div>
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
-        {tab === 'stok' ? (
+        {tab === 'stok' && (
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th></tr></thead>
             <tbody>
@@ -167,7 +167,9 @@ export function Warehouse() {
               })}
             </tbody>
           </table>
-        ) : (
+        )}
+
+        {tab === 'hareketler' && (
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Tarih</th><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Miktar</th><th className="text-left px-4 py-2.5">Açıklama</th></tr></thead>
             <tbody>

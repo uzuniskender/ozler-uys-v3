@@ -57,7 +57,6 @@ export function CuttingPlans() {
 
       {/* Kesim Önerileri — planlanmamış İE'ler */}
       {(() => {
-        const { logs } = useStore.getState()
         const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
         const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap(s => (s.kesimler || []).map((k: { woId?: string }) => k.woId))))
         const oneriler = workOrders.filter(w => {
