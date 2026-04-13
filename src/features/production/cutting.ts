@@ -85,7 +85,7 @@ export function kesimPlanOlustur(
         const woKirno = w.kirno || '1'
         const depth = woKirno.split('.').length
         rc.satirlar.filter(s =>
-          (s.tip === 'Hammadde' || s.tip === 'Sarf') &&
+          (s.tip === 'Hammadde' || s.tip === 'YarıMamul' || s.tip === 'Sarf') &&
           (s.kirno || '').startsWith(woKirno + '.') &&
           (s.kirno || '').split('.').length === depth + 1
         ).forEach(s => hmSatirlar.push({ malkod: s.malkod || '', malad: s.malad || '' }))
@@ -279,7 +279,7 @@ export function optimizeKesim(ihtiyaclar: KesimIhtiyacCompat[], hamMalzemeler: M
   ihtiyaclar.forEach(k => { const key = k.malkod.replace(/\d+$/, ''); if (!groups[key]) groups[key] = []; groups[key].push(k) })
   const sonuclar: KesimSonucCompat[] = []
   for (const [, parcalar] of Object.entries(groups)) {
-    const uygunHM = hamMalzemeler.filter(m => m.tip === 'Hammadde' && m.boy > 0 && parcalar.some(p => p.boy > 0 && p.boy <= m.boy))
+    const uygunHM = hamMalzemeler.filter(m => (m.tip === 'Hammadde' || m.tip === 'YarıMamul') && m.boy > 0 && parcalar.some(p => p.boy > 0 && p.boy <= m.boy))
     if (!uygunHM.length) continue
     let best: KesimSonucCompat | null = null
     for (const hm of uygunHM) {

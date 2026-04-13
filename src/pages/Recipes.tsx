@@ -191,7 +191,8 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
       eksikler.push({ kod: mamulMat.kod, ad: mamulMat.ad, id: mamulMat.id, ...guess, hmTipi: mamulMat.hammaddeTipi })
     }
     for (const r of rows) {
-      if (r.tip !== 'Hammadde') continue
+      if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') continue
+      if (r.kirno === '1') continue
       const hmMat = materials.find(m => m.kod === r.malkod)
       if (!hmMat) continue
       if (needsDims(hmMat)) {
@@ -216,7 +217,8 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     let guncellenen = 0
     const detaylar: string[] = []
     const yeniRows = rows.map(r => {
-      if (r.tip !== 'Hammadde') return r
+      if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') return r
+      if (r.kirno === '1') return r
       const hmMat = materials.find(m => m.kod === r.malkod)
       if (!hmMat) return r
       const hB = hmMat.boy || 0; const hE = hmMat.en || 0; const hUz = hmMat.uzunluk || 0

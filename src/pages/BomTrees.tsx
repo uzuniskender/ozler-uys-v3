@@ -161,9 +161,10 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
       const guess = parseDimsFromName(mamulMat.ad)
       eksikler.push({ kod: mamulMat.kod, ad: mamulMat.ad, id: mamulMat.id, boy: guess.boy, en: guess.en, kalinlik: guess.kalinlik, uzunluk: guess.uzunluk, cap: guess.cap, hmTipi: mamulMat.hammaddeTipi })
     }
-    // Hammadde kontrolü
+    // Hammadde VE YarıMamul kontrolü — kesim her ikisinden de olabilir
     for (const r of rows) {
-      if (r.tip !== 'Hammadde') continue
+      if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') continue
+      if (r.kirno === '1') continue // Mamul satırı atla
       const hmMat = materials.find(m => m.kod === r.malkod)
       if (!hmMat) continue
       if (needsDims(hmMat)) {
@@ -196,7 +197,8 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
     let guncellenen = 0
     const detaylar: string[] = []
     const yeniRows = rows.map(r => {
-      if (r.tip !== 'Hammadde') return r
+      if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') return r
+      if (r.kirno === '1') return r // Mamul satırı atla
       const hmMat = materials.find(m => m.kod === r.malkod)
       if (!hmMat) return r
 
