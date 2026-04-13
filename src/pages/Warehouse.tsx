@@ -150,15 +150,21 @@ export function Warehouse() {
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
         {tab === 'stok' ? (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-right px-4 py-2.5">Stok</th></tr></thead>
+            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th></tr></thead>
             <tbody>
-              {filteredStok.map(s => (
-                <tr key={s.malkod} className="border-b border-border/30 hover:bg-bg-3/30">
+              {filteredStok.map(s => {
+                const mat = materials.find(m => m.kod === s.malkod)
+                const minStokAlt = mat?.minStok && s.miktar < mat.minStok
+                return (
+                <tr key={s.malkod} className={`border-b border-border/30 hover:bg-bg-3/30 ${minStokAlt ? 'bg-red/5' : ''}`}>
                   <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
                   <td className="px-4 py-1.5 text-zinc-300">{s.malad}</td>
-                  <td className={`px-4 py-1.5 text-right font-mono font-semibold ${s.miktar < 0 ? 'text-red' : 'text-green'}`}>{Math.round(s.miktar)}</td>
-                </tr>
-              ))}
+                  <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{mat?.tip || '—'}</span></td>
+                  <td className={`px-4 py-1.5 text-right font-mono font-semibold ${s.miktar < 0 ? 'text-red' : minStokAlt ? 'text-amber' : 'text-green'}`}>{Math.round(s.miktar)}</td>
+                  <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{mat?.birim || 'Ad'}</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-zinc-600 text-[10px]">{mat?.minStok || '—'}</td>
+                </tr>)
+              })}
             </tbody>
           </table>
         ) : (

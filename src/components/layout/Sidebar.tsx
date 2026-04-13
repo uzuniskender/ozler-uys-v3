@@ -4,7 +4,7 @@ import { useStore } from '@/store'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu
 } from 'lucide-react'
 
 const NAV = [
@@ -17,6 +17,7 @@ const NAV = [
     { path: '/production', label: 'Üretim Girişi', icon: PlusCircle },
     { path: '/cutting', label: 'Kesim Planları', icon: Scissors, badge: 'cuttingPlans' },
     { path: '/mrp', label: 'MRP', icon: Calculator },
+    { path: '/procurement', label: 'Tedarik', icon: ShoppingCart, badge: 'tedarikler' },
     { path: '/warehouse', label: 'Depolar', icon: Warehouse, badge: 'stokHareketler' },
     { path: '/shipment', label: 'Sevkiyat', icon: Truck, badge: 'sevkler' },
   ]},
@@ -25,9 +26,9 @@ const NAV = [
     { path: '/recipes', label: 'Reçeteler', icon: BookOpen, badge: 'recipes' },
     { path: '/materials', label: 'Malzeme Listesi', icon: Package, badge: 'materials' },
     { path: '/operations', label: 'Operasyonlar', icon: Settings2, badge: 'operations' },
+    { path: '/stations', label: 'İstasyonlar', icon: Cpu, badge: 'stations' },
     { path: '/operators', label: 'Operatörler', icon: Users, badge: 'operators' },
     { path: '/suppliers', label: 'Tedarikçiler', icon: Building2, badge: 'tedarikciler' },
-    { path: '/procurement', label: 'Tedarik Yönetimi', icon: ShoppingCart, badge: 'tedarikler' },
     { path: '/downtime-codes', label: 'Duruş Kodları', icon: AlertCircle, badge: 'durusKodlari' },
   ]},
   { label: 'SİSTEM', items: [
@@ -59,6 +60,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     if (key === 'dash') {
       const okunmamis = store.operatorNotes.filter(n => !n.okundu).length
       return okunmamis > 0 ? String(okunmamis) : ''
+    }
+    if (key === 'tedarikler') {
+      const bekleyen = store.tedarikler.filter(t => !t.geldi).length
+      return bekleyen > 0 ? String(bekleyen) : ''
+    }
+    if (key === 'cuttingPlans') {
+      const bekleyen = store.cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
+      return bekleyen > 0 ? String(bekleyen) : ''
     }
     const arr = (store as unknown as Record<string, unknown>)[key]
     if (Array.isArray(arr) && arr.length > 0) return String(arr.length)

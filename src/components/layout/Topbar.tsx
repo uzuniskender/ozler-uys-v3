@@ -36,7 +36,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
       )}
 
       {user && (
-        <span className="text-[11px] text-zinc-500 font-mono">{user.username}</span>
+        <span className="text-[11px] text-zinc-500 font-mono">{user.email ? `${user.username} (${user.email})` : user.username}</span>
       )}
 
       <div className="flex items-center gap-1.5 text-[11px] font-mono">
