@@ -9,7 +9,7 @@ import { showConfirm } from '@/lib/prompt'
 import { Search, Play, CheckCircle, ScanBarcode } from 'lucide-react'
 
 export function ProductionEntry() {
-  const { workOrders, logs, operators, loadAll } = useStore()
+  const { workOrders, logs, operators, operations, loadAll } = useStore()
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState('')
   const [selectedOpr, setSelectedOpr] = useState<string | null>(null)
@@ -42,9 +42,18 @@ export function ProductionEntry() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [barkodAktif, workOrders])
 
+  // Operasyonların bölüm alanından benzersiz bölüm listesi
+  const opBolumMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    operations.forEach(o => { if (o.bolum) map[o.id] = o.bolum })
+    return map
+  }, [operations])
+  function getWoBolum(w: { opId: string; opAd: string }) {
+    return opBolumMap[w.opId] || w.opAd || ''
+  }
   const bolumler = useMemo(() =>
-    [...new Set(workOrders.map(w => w.opAd).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
-  [workOrders])
+    [...new Set(workOrders.map(w => getWoBolum(w)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
+  [workOrders, opBolumMap])
 
   function wProd(woId: string): number {
     return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
@@ -54,7 +63,7 @@ export function ProductionEntry() {
     return workOrders.filter(w => {
       if (w.hedef <= 0) return false
       if (wProd(w.id) >= w.hedef) return false
-      if (bolumFilter && w.opAd !== bolumFilter) return false
+      if (bolumFilter && getWoBolum(w) !== bolumFilter) return false
       if (search) {
         const q = search.toLowerCase()
         if (!(w.ieNo + w.malad + w.opAd).toLowerCase().includes(q)) return false
@@ -81,7 +90,7 @@ export function ProductionEntry() {
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">1. Bölüm Seçin</div>
           <div className="flex flex-wrap gap-2">
             {bolumler.map(b => {
-              const bWOs = workOrders.filter(w => w.opAd === b && w.hedef > 0 && wProd(w.id) < w.hedef)
+              const bWOs = workOrders.filter(w => getWoBolum(w) === b && w.hedef > 0 && wProd(w.id) < w.hedef)
               return (
                 <button key={b} onClick={() => { setBolumFilter(b); setSelectedOpr(null) }}
                   className={`px-4 py-3 border rounded-lg text-sm transition-colors ${bWOs.length > 0 ? 'bg-green/10 border-green/30 text-green hover:bg-green/20' : 'bg-red/10 border-red/30 text-red/70 hover:bg-red/20'}`}>

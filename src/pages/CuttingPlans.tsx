@@ -145,7 +145,7 @@ export function CuttingPlans() {
                         </div>
                       </td>
                       <td className="px-4 py-2 text-right" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                        {!isGuest && <button onClick={() => deletePlan(p.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
                       </td>
                     </tr>
                     {isOpen && (

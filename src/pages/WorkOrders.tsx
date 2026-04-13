@@ -200,8 +200,8 @@ export function WorkOrders() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">İş Emirleri</h1><p className="text-xs text-zinc-500">{workOrders.length} toplam · {filtered.length} gösterilen</p></div>
-        <div className="flex gap-2">
+        <div><h1 className="text-xl font-semibold">İş Emirleri</h1><p className="text-xs text-zinc-500">{workOrders.length} toplam · {filtered.length} gösterilen{isGuest ? ' (salt okunur)' : ''}</p></div>
+        {!isGuest && <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           <button onClick={async () => {
             let count = 0
@@ -214,7 +214,7 @@ export function WorkOrders() {
             if (count > 0) { loadAll(); toast.success(count + ' İE durumu güncellendi') } else toast.info('Tüm durumlar güncel')
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">🔄 Durumları Güncelle</button>
           <button onClick={() => setShowNewIE(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>
-        </div>
+        </div>}
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap items-center">
@@ -240,7 +240,7 @@ export function WorkOrders() {
         </>}
       </div>
 
-      {selected.size > 0 && (
+      {selected.size > 0 && !isGuest && (
         <div className="mb-3 p-2 bg-accent/5 border border-accent/20 rounded-lg flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-accent"><CheckSquare size={13} className="inline" /> {selected.size} seçili</span>
           <button onClick={() => topluDurumGuncelle('uretimde')} className="px-2 py-1 bg-accent/20 text-accent rounded text-[10px] hover:bg-accent/30">→ Üretimde</button>
@@ -483,7 +483,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
 
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Hareket Geçmişi ({woLogs.length} kayıt)</h3>
-          <button onClick={() => setAdminEntryWO(wo.id)} className="px-3 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-semibold hover:bg-green/20">+ Kayıt Ekle</button>
+          {!isGuest && <button onClick={() => setAdminEntryWO(wo.id)} className="px-3 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-semibold hover:bg-green/20">+ Kayıt Ekle</button>}
         </div>
         {woLogs.length > 0 ? (
           <div className="overflow-x-auto mb-4"><table className="w-full text-xs min-w-[500px]"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-right px-3 py-2">Adet</th><th className="text-left px-3 py-2">Operatör / Duruş</th><th className="text-left px-3 py-2">Not</th><th className="px-3 py-2"></th></tr></thead><tbody>
