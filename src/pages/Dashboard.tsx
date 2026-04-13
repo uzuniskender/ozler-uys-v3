@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
@@ -5,12 +6,18 @@ import { showConfirm, showPrompt } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
-import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight } from 'lucide-react'
+import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag } from 'lucide-react'
 
-function StatCard({ value, label, color, icon: Icon }: { value: number | string; label: string; color: string; icon: React.ElementType }) {
+/* ── #2: Tıklanabilir Stat Card ── */
+function StatCard({ value, label, color, icon: Icon, onClick }: {
+  value: number | string; label: string; color: string; icon: React.ElementType; onClick?: () => void
+}) {
   const isZero = value === 0 || value === '—'
   return (
-    <div className={`relative overflow-hidden bg-bg-2 border border-border rounded-xl p-4 hover:border-${color}/30 transition-all group`}>
+    <div
+      onClick={onClick}
+      className={`relative overflow-hidden bg-bg-2 border border-border rounded-xl p-4 hover:border-${color}/30 transition-all group ${onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''}`}
+    >
       <div className={`absolute top-0 right-0 w-16 h-16 bg-${color}/5 rounded-bl-[40px] group-hover:bg-${color}/10 transition-colors`} />
       <Icon size={16} className={`text-${color}/60 mb-2`} />
       <div className={`text-2xl font-light font-mono ${isZero ? 'text-zinc-600' : `text-${color}`}`}>{value}</div>
@@ -19,13 +26,44 @@ function StatCard({ value, label, color, icon: Icon }: { value: number | string;
   )
 }
 
+/* ── #8: Workflow Adım Butonu (yanıp sönen) ── */
+function WorkflowBtn({ icon, label, count, color, pulse, onClick }: {
+  icon: string; label: string; count: number; color: string; pulse: boolean; onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'bg-bg-2 border rounded-lg p-3 text-left transition-all',
+        pulse
+          ? `border-${color}/50 ring-1 ring-${color}/30`
+          : `border-${color}/20 hover:bg-${color}/5`,
+      ].join(' ')}
+      style={pulse ? { animation: 'wfPulse 1.5s ease-in-out infinite' } : undefined}
+    >
+      <div className={`text-[10px] text-${color} mb-1 flex items-center gap-1`}>
+        <span>{icon}</span>
+        <span className="font-semibold">{label}</span>
+        {pulse && <span className={`ml-auto text-[9px] bg-${color}/20 px-1.5 py-px rounded font-bold tracking-wide`}>YAPILMALI</span>}
+      </div>
+      <div className={`text-lg font-mono text-${color}`}>{count}</div>
+    </button>
+  )
+}
+
 export function Dashboard() {
-  const { orders, workOrders, logs, operatorNotes, activeWork, operators, fireLogs, materials, stokHareketler, tedarikler, cuttingPlans, loadAll } = useStore()
+  const navigate = useNavigate()
+  const {
+    orders, workOrders, logs, operatorNotes, activeWork, operators,
+    fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
+    operations, stations, sevkler, loadAll,
+  } = useStore()
   const { isGuest } = useAuth()
   const todayStr = today()
 
-  // Calculations
+  // ═══ TEMEL HESAPLAMALAR ═══
   const aktifOrders = orders.filter(o => {
+    if (o.durum === 'iptal' || o.durum === 'tamamlandi') return false
     const wos = workOrders.filter(w => w.orderId === o.id)
     const totalProd = wos.reduce((s, w) => {
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
@@ -37,22 +75,78 @@ export function Dashboard() {
 
   const terminGecen = aktifOrders.filter(o => o.termin && o.termin < todayStr)
   const acikWOs = workOrders.filter(w => {
+    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
     const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
     return w.hedef > 0 && prod < w.hedef
   })
 
   const bugunFire = fireLogs.filter(f => f.tarih === todayStr)
   const toplamFire = bugunFire.reduce((a, f) => a + f.qty, 0)
-
   const okunmamis = operatorNotes.filter(n => !n.okundu)
 
-  // Bugün giriş yapmayan operatörler
-  const bugunLogOprIds = new Set(
-    logs.filter(l => l.tarih === todayStr).flatMap(l => (Array.isArray(l.operatorlar) ? l.operatorlar : []).map((o: any) => o.id))
-  )
-  const girmeyenler = operators.filter(o => o.aktif !== false && !bugunLogOprIds.has(o.id))
+  // ═══ #1: MRP — doğru ibare & doğru hesaplama ═══
+  const mrpYapilmamis = orders.filter(o =>
+    o.receteId &&
+    aktifOrders.some(a => a.id === o.id) &&
+    workOrders.some(w => w.orderId === o.id) &&
+    (!o.mrpDurum || o.mrpDurum === 'bekliyor')
+  ).length
 
-  // Min stok uyarıları
+  // ═══ #3: Giriş yapmayan operatörler ═══
+  const bugunLogOprIds = new Set(
+    logs.filter(l => l.tarih === todayStr).flatMap(l =>
+      (Array.isArray(l.operatorlar) ? l.operatorlar : []).map((o: any) => o.id)
+    )
+  )
+  const aktifOps = operators.filter(o => o.aktif !== false)
+  const girmeyenler = aktifOps.filter(o => !bugunLogOprIds.has(o.id))
+
+  // ═══ #4: Bugün duruş yaşayan istasyonlar ═══
+  const durusIstSet = new Set<string>()
+  const durusDetay: { istAd: string; durusAd: string; woAd: string }[] = []
+  logs.filter(l => l.tarih === todayStr && Array.isArray(l.duruslar) && l.duruslar.length > 0).forEach(l => {
+    const wo = workOrders.find(w => w.id === l.woId)
+    if (wo?.istId) {
+      durusIstSet.add(wo.istId)
+      l.duruslar.forEach((d: any) => {
+        durusDetay.push({ istAd: wo.istAd || wo.istKod || '—', durusAd: d.ad || d.kod || 'Duruş', woAd: wo.malad || wo.opAd || '—' })
+      })
+    }
+  })
+
+  // ═══ #5: Tedarik bekleyen ═══
+  const bekleyenTed = tedarikler.filter(t => !t.geldi)
+
+  // ═══ #6: Bu haftanın sevkleri ═══
+  const nowDate = new Date()
+  const dow = nowDate.getDay() || 7
+  const mon = new Date(nowDate); mon.setDate(nowDate.getDate() - (dow - 1))
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
+  const monStr = mon.toISOString().slice(0, 10)
+  const sunStr = sun.toISOString().slice(0, 10)
+  const buHaftaSevk = sevkler.filter(s => s.tarih >= monStr && s.tarih <= sunStr)
+
+  // ═══ #7: Bölüm tanımlanmamış ═══
+  const bolumsuzOp = operations.filter(o => !o.bolum || o.bolum.trim() === '')
+  const bolumsuzOpr = operators.filter(o => o.aktif !== false && (!o.bolum || o.bolum.trim() === ''))
+
+  // ═══ #8: Akıllı workflow ═══
+  const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
+  const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
+  const kesimEksik = workOrders.filter(w => {
+    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    if (prod >= w.hedef) return false
+    if (planliWoIds.has(w.id)) return false
+    return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
+  }).length
+  const bekleyenKP = cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
+
+  const pulseKesim = kesimEksik > 0
+  const pulseMRP = mrpYapilmamis > 0
+  const pulseTedarik = bekleyenTed.length > 0 && mrpYapilmamis === 0
+
+  // Min stok
   const minStokUyari = materials.filter(m => {
     if (!m.minStok || m.minStok <= 0) return false
     const stok = stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
@@ -61,6 +155,8 @@ export function Dashboard() {
 
   return (
     <div>
+      <style>{`@keyframes wfPulse { 0%,100% { opacity:1; box-shadow:0 0 4px rgba(250,204,21,0.1) } 50% { opacity:.82; box-shadow:0 0 20px rgba(250,204,21,0.25) } }`}</style>
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">Genel Durum</h1>
@@ -72,76 +168,46 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Stat Cards */}
+      {/* ═══ #2: Tıklanabilir Stat Kartları ═══ */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <StatCard value={aktifOrders.length} label="Aktif Sipariş" color="accent" icon={Package} />
-        <StatCard value={terminGecen.length} label="Termin Geçmiş" color="red" icon={AlertTriangle} />
-        <StatCard value={acikWOs.length} label="Açık İş Emri" color="zinc-300" icon={Clock} />
-        <StatCard value={toplamFire || '—'} label="Bugün Fire" color={toplamFire > 0 ? 'red' : 'zinc-500'} icon={Flame} />
+        <StatCard value={aktifOrders.length} label="Aktif Sipariş" color="accent" icon={Package} onClick={() => navigate('/orders')} />
+        <StatCard value={terminGecen.length} label="Termin Geçmiş" color="red" icon={AlertTriangle} onClick={() => navigate('/orders')} />
+        <StatCard value={acikWOs.length} label="Açık İş Emri" color="zinc-300" icon={Clock} onClick={() => navigate('/work-orders')} />
+        <StatCard value={toplamFire || '—'} label="Bugün Fire" color={toplamFire > 0 ? 'red' : 'zinc-500'} icon={Flame} onClick={() => navigate('/reports')} />
         <StatCard value={okunmamis.length} label="Yeni Mesaj" color={okunmamis.length > 0 ? 'amber' : 'zinc-500'} icon={MessageSquare} />
-        <StatCard value={activeWork.length} label="Aktif Çalışma" color={activeWork.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} />
+        <StatCard value={activeWork.length} label="Aktif Çalışma" color={activeWork.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} onClick={() => navigate('/production')} />
       </div>
 
-      {/* Üretim Zinciri Özet */}
-      {(() => {
-        const bekleyenTed = tedarikler.filter(t => !t.geldi).length
-        const bekleyenKP = cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
-        const mrpBekleyen = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && workOrders.some(w => w.orderId === o.id) && aktifOrders.some(a => a.id === o.id)).length
-        const kesimEksik = (() => {
-          const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
-          const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
-          return workOrders.filter(w => {
-            if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
-            const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-            if (prod >= w.hedef) return false
-            if (planliWoIds.has(w.id)) return false
-            return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
-          }).length
-        })()
-        if (!bekleyenTed && !bekleyenKP && !mrpBekleyen && !kesimEksik) return null
-        return (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            {mrpBekleyen > 0 && (
-              <button onClick={() => { window.location.hash = '#/mrp' }} className="bg-bg-2 border border-cyan-500/20 rounded-lg p-3 text-left hover:bg-cyan-500/5">
-                <div className="text-[10px] text-cyan-400 mb-1">📊 MRP Hesaplanmamış Sipariş</div>
-                <div className="text-lg font-mono text-cyan-300">{mrpBekleyen}</div>
-                <div className="text-[10px] text-zinc-600">sipariş</div>
-              </button>
-            )}
+      {/* ═══ #8: Akıllı Workflow — Yanıp Sönen Butonlar ═══ */}
+      {(kesimEksik > 0 || mrpYapilmamis > 0 || bekleyenKP > 0 || bekleyenTed.length > 0) && (
+        <div className="mb-5">
+          <div className="text-[10px] text-zinc-500 font-semibold mb-2 uppercase tracking-wider flex items-center gap-2">
+            <ArrowRight size={10} /> Üretim Akışı — Sonraki Adımlar
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {kesimEksik > 0 && (
-              <button onClick={() => { window.location.hash = '#/cutting' }} className="bg-bg-2 border border-amber/20 rounded-lg p-3 text-left hover:bg-amber/5">
-                <div className="text-[10px] text-amber mb-1">✂ Kesim Planlanmamış</div>
-                <div className="text-lg font-mono text-amber">{kesimEksik}</div>
-                <div className="text-[10px] text-zinc-600">iş emri</div>
-              </button>
+              <WorkflowBtn icon="✂️" label="Kesim Planla" count={kesimEksik} color="amber" pulse={pulseKesim} onClick={() => navigate('/cutting')} />
+            )}
+            {mrpYapilmamis > 0 && (
+              <WorkflowBtn icon="📊" label="MRP Hesapla" count={mrpYapilmamis} color="cyan-400" pulse={pulseMRP} onClick={() => navigate('/mrp')} />
             )}
             {bekleyenKP > 0 && (
-              <button onClick={() => { window.location.hash = '#/cutting' }} className="bg-bg-2 border border-green/20 rounded-lg p-3 text-left hover:bg-green/5">
-                <div className="text-[10px] text-green mb-1">✂ Kesim Bekliyor</div>
-                <div className="text-lg font-mono text-green">{bekleyenKP}</div>
-                <div className="text-[10px] text-zinc-600">plan</div>
-              </button>
+              <WorkflowBtn icon="🔪" label="Kesim Bekliyor" count={bekleyenKP} color="green" pulse={false} onClick={() => navigate('/cutting')} />
             )}
-            {bekleyenTed > 0 && (
-              <button onClick={() => { window.location.hash = '#/procurement' }} className="bg-bg-2 border border-purple-500/20 rounded-lg p-3 text-left hover:bg-purple-500/5">
-                <div className="text-[10px] text-purple-400 mb-1">📦 Tedarik Bekliyor</div>
-                <div className="text-lg font-mono text-purple-300">{bekleyenTed}</div>
-                <div className="text-[10px] text-zinc-600">kalem</div>
-              </button>
+            {bekleyenTed.length > 0 && (
+              <WorkflowBtn icon="📦" label="Tedarik Takip Et" count={bekleyenTed.length} color="purple-400" pulse={pulseTedarik} onClick={() => navigate('/procurement')} />
             )}
           </div>
-        )
-      })()}
+        </div>
+      )}
 
       {/* Termin Geçmiş */}
       {terminGecen.length > 0 && (
         <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg">
-          <div className="text-sm font-semibold text-red mb-2">
-            🚨 {terminGecen.length} siparişin termini geçmiş!
-          </div>
+          <div className="text-sm font-semibold text-red mb-2">🚨 {terminGecen.length} siparişin termini geçmiş!</div>
           <div className="space-y-1">
             {terminGecen.map(o => (
-              <div key={o.id} className="flex items-center gap-3 text-xs">
+              <div key={o.id} className="flex items-center gap-3 text-xs cursor-pointer hover:bg-red/5 rounded px-1 -mx-1" onClick={() => navigate('/orders')}>
                 <span className="font-mono text-accent">{o.siparisNo}</span>
                 <span className="text-zinc-400">{o.musteri || '—'}</span>
                 <span className="font-mono text-red ml-auto">{o.termin}</span>
@@ -151,24 +217,24 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Min Stok Uyarı */}
       {/* Yedek Uyarısı */}
       {(() => {
         const lastBackup = localStorage.getItem('uys_last_backup')
         if (!lastBackup) return (
           <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg text-xs text-amber">
-            ⚠ Henüz yedek alınmamış — <button onClick={() => window.location.hash = '#/data'} className="underline hover:text-white">Veri Yönetimi</button> sayfasından JSON yedek alın.
+            ⚠ Henüz yedek alınmamış — <button onClick={() => navigate('/data')} className="underline hover:text-white">Veri Yönetimi</button> sayfasından JSON yedek alın.
           </div>
         )
         const days = Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000)
         if (days >= 7) return (
           <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg text-xs text-amber">
-            ⚠ Son yedek {days} gün önce ({lastBackup}) — <button onClick={() => window.location.hash = '#/data'} className="underline hover:text-white">yedek alın</button>
+            ⚠ Son yedek {days} gün önce ({lastBackup}) — <button onClick={() => navigate('/data')} className="underline hover:text-white">yedek alın</button>
           </div>
         )
         return null
       })()}
 
+      {/* Min Stok Uyarı */}
       {minStokUyari.length > 0 && (
         <div className="mb-4 p-3 bg-amber/5 border border-amber/20 rounded-lg">
           <div className="text-sm font-semibold text-amber mb-2 flex items-center justify-between">
@@ -192,7 +258,7 @@ export function Dashboard() {
           </div>
           <div className="space-y-1">
             {minStokUyari.slice(0, 5).map(m => (
-              <div key={m.id} className="flex items-center gap-3 text-xs">
+              <div key={m.id} className="flex items-center gap-3 text-xs cursor-pointer hover:bg-amber/5 rounded px-1 -mx-1" onClick={() => navigate('/materials')}>
                 <span className="font-mono text-accent">{m.kod}</span>
                 <span className="text-zinc-400">{m.ad}</span>
                 <span className="font-mono text-red ml-auto">Min: {m.minStok}</span>
@@ -202,6 +268,30 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ═══ #6: Bu Haftanın Sevkleri ═══ */}
+      <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400 flex items-center gap-2 cursor-pointer" onClick={() => navigate('/shipment')}>
+          <Truck size={14} className="text-blue-400" />
+          Bu Haftanın Sevkleri
+          <span className="text-[10px] font-mono text-zinc-600 ml-1">({monStr} — {sunStr})</span>
+          <span className="ml-auto text-xs font-mono text-blue-400">{buHaftaSevk.length}</span>
+        </div>
+        {buHaftaSevk.length > 0 ? (
+          <div className="divide-y divide-border/30">
+            {buHaftaSevk.map(s => (
+              <div key={s.id} className="flex items-center gap-3 px-4 py-2 text-xs cursor-pointer hover:bg-bg-3/30" onClick={() => navigate('/shipment')}>
+                <span className="font-mono text-blue-400">{s.tarih}</span>
+                <span className="font-mono text-accent">{s.siparisNo}</span>
+                <span className="text-zinc-300 flex-1 truncate">{s.musteri || '—'}</span>
+                <span className="text-zinc-500">{(s.kalemler || []).length} kalem</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-4 text-center text-xs text-zinc-600">Bu hafta planlanmış sevk yok</div>
+        )}
+      </div>
 
       {/* Günlük Üretim Grafiği */}
       {(() => {
@@ -214,7 +304,7 @@ export function Dashboard() {
         })
         const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-7)
         return (
-          <div className="bg-bg-2 border border-border rounded-xl overflow-hidden p-4">
+          <div className="mb-4 bg-bg-2 border border-border rounded-xl overflow-hidden p-4">
             <div className="text-xs font-semibold text-zinc-400 mb-3 flex items-center gap-2">📊 Son 7 Gün Üretim</div>
             {data.length > 0 ? (
               <ResponsiveContainer width="100%" height={180}>
@@ -267,9 +357,7 @@ export function Dashboard() {
             {okunmamis.length > 0 ? '📩' : '📬'} Operatör Mesajları
             {okunmamis.length > 0 && (
               <>
-              <span className="bg-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-mono">
-                {okunmamis.length} yeni
-              </span>
+              <span className="bg-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-mono">{okunmamis.length} yeni</span>
               <button onClick={async () => {
                 for (const n of okunmamis) { await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id) }
                 loadAll()
@@ -293,20 +381,16 @@ export function Dashboard() {
                     if (!cevap) return
                     const now = new Date()
                     const saat = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
-                    // Yeni mesaj olarak ekle (operatörün göreceği şekilde)
                     await supabase.from('uys_operator_notes').insert({
                       id: uid(), op_id: n.opId, op_ad: '📋 Yönetim', tarih: today(), saat,
                       mesaj: cevap.trim(), okundu: true,
                     })
-                    // Orijinal mesajı okundu yap
                     if (!n.okundu) await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)
                     loadAll(); toast.success('Cevap gönderildi — operatör görecek')
                   }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">💬 Cevapla</button>
                   <button onClick={async () => { if (!await showConfirm('Mesajı silmek istediğinize emin misiniz?')) return; await supabase.from('uys_operator_notes').delete().eq('id', n.id); loadAll() }} className="text-zinc-600 hover:text-red text-[10px]">✕</button>
                 </div>
-                {/* Operatör mesajı */}
                 <div className="bg-bg-3/50 rounded-lg px-3 py-2 text-zinc-300 mb-1">{n.mesaj}</div>
-                {/* Cevap */}
                 {n.cevap && (
                   <div className="ml-6 bg-accent/5 border-l-2 border-accent/30 rounded-r-lg px-3 py-2 text-zinc-300">
                     <span className="text-accent text-[10px] font-medium">{n.cevaplayan || 'Yönetim'}</span>
@@ -320,28 +404,89 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Bugün giriş yapmayan */}
+      {/* ═══ #3: Giriş Yapmayan Operatörler ═══ */}
       {girmeyenler.length > 0 && (
         <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400">
-            Bugün Giriş Yapmayan Operatörler ({girmeyenler.length})
+          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400 flex items-center gap-2 cursor-pointer" onClick={() => navigate('/operators')}>
+            <UserX size={14} className="text-orange-400" />
+            Bugün Giriş Yapmayan Operatörler
+            <span className="text-xs font-mono text-orange-400 ml-1">{girmeyenler.length}/{aktifOps.length}</span>
           </div>
           <div className="flex flex-wrap gap-1.5 p-3">
-            {girmeyenler.slice(0, 20).map(o => (
-              <span key={o.id} className="text-[11px] px-2 py-0.5 bg-bg-3 rounded text-zinc-400">
+            {girmeyenler.slice(0, 30).map(o => (
+              <span key={o.id} className="text-[11px] px-2 py-0.5 bg-bg-3 rounded text-zinc-400 flex items-center gap-1">
                 {o.ad}
+                {o.bolum && <span className="text-[9px] text-zinc-600">({o.bolum})</span>}
               </span>
             ))}
-            {girmeyenler.length > 20 && (
-              <span className="text-[11px] text-zinc-600">+{girmeyenler.length - 20} daha</span>
+            {girmeyenler.length > 30 && <span className="text-[11px] text-zinc-600">+{girmeyenler.length - 30} daha</span>}
+          </div>
+          <div className="px-3 pb-2">
+            <div className="text-[10px] text-zinc-600 italic">💡 İzinli / raporlu takibi için operatörlere durum alanı eklenebilir</div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ #4: Duruşlu İstasyonlar ═══ */}
+      {durusDetay.length > 0 && (
+        <div className="mb-4 bg-bg-2 border border-red/20 rounded-lg overflow-hidden">
+          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-red flex items-center gap-2 cursor-pointer" onClick={() => navigate('/stations')}>
+            <Cpu size={14} /> Bugün Duruş Yaşayan İstasyonlar
+            <span className="text-xs font-mono ml-1">{durusIstSet.size} istasyon</span>
+          </div>
+          <div className="divide-y divide-border/30">
+            {durusDetay.slice(0, 8).map((d, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-2 text-xs">
+                <span className="text-zinc-300 font-semibold">{d.istAd}</span>
+                <span className="text-red">{d.durusAd}</span>
+                <span className="text-zinc-500 truncate ml-auto">{d.woAd}</span>
+              </div>
+            ))}
+            {durusDetay.length > 8 && <div className="px-4 py-1.5 text-[11px] text-zinc-600">+{durusDetay.length - 8} daha</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ #7: Bölüm Tanımlanmamış ═══ */}
+      {(bolumsuzOpr.length > 0 || bolumsuzOp.length > 0) && (
+        <div className="mb-4 bg-bg-2 border border-amber/20 rounded-lg overflow-hidden">
+          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-amber flex items-center gap-2">
+            <Tag size={14} /> Bölüm Tanımlanmamış
+          </div>
+          <div className="p-3 space-y-2">
+            {bolumsuzOp.length > 0 && (
+              <div>
+                <div className="text-[10px] text-zinc-500 mb-1 font-semibold">Operasyonlar ({bolumsuzOp.length})</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {bolumsuzOp.slice(0, 10).map(o => (
+                    <span key={o.id} className="text-[11px] px-2 py-0.5 bg-amber/10 border border-amber/20 rounded text-amber cursor-pointer hover:bg-amber/20" onClick={() => navigate('/operations')}>
+                      {o.kod} — {o.ad}
+                    </span>
+                  ))}
+                  {bolumsuzOp.length > 10 && <span className="text-[11px] text-zinc-600">+{bolumsuzOp.length - 10}</span>}
+                </div>
+              </div>
+            )}
+            {bolumsuzOpr.length > 0 && (
+              <div>
+                <div className="text-[10px] text-zinc-500 mb-1 font-semibold">Operatörler ({bolumsuzOpr.length})</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {bolumsuzOpr.slice(0, 10).map(o => (
+                    <span key={o.id} className="text-[11px] px-2 py-0.5 bg-amber/10 border border-amber/20 rounded text-amber cursor-pointer hover:bg-amber/20" onClick={() => navigate('/operators')}>
+                      {o.ad}
+                    </span>
+                  ))}
+                  {bolumsuzOpr.length > 10 && <span className="text-[11px] text-zinc-600">+{bolumsuzOpr.length - 10}</span>}
+                </div>
+              </div>
             )}
           </div>
         </div>
       )}
 
       {/* Aktif Siparişler */}
-      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        <div className="px-4 py-2 border-b border-border text-sm font-semibold">Aktif Siparişler</div>
+      <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-2 border-b border-border text-sm font-semibold cursor-pointer hover:text-accent" onClick={() => navigate('/orders')}>Aktif Siparişler</div>
         {aktifOrders.length ? (
           <table className="w-full text-xs">
             <thead>
@@ -364,17 +509,14 @@ export function Dashboard() {
                 const pct = Math.round(totalPct)
                 const terminColor = o.termin && o.termin < todayStr ? 'text-red' : o.termin && o.termin <= todayStr ? 'text-amber' : 'text-zinc-500'
                 return (
-                  <tr key={o.id} className="border-b border-border/50 hover:bg-bg-3/50 cursor-pointer">
+                  <tr key={o.id} className="border-b border-border/50 hover:bg-bg-3/50 cursor-pointer" onClick={() => navigate('/orders')}>
                     <td className="px-4 py-2 font-mono text-accent">{o.siparisNo}</td>
                     <td className="px-4 py-2 text-zinc-300">{o.musteri || '—'}</td>
                     <td className={`px-4 py-2 font-mono ${terminColor}`}>{o.termin || '—'}</td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-16 h-1.5 bg-bg-3 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`}
-                            style={{ width: `${pct}%` }}
-                          />
+                          <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} />
                         </div>
                         <span className={`font-mono text-[11px] ${pctColor(pct)}`}>{pct}%</span>
                       </div>
@@ -389,23 +531,22 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* #16: Uzun Süredir Açık İşler */}
+      {/* Uzun Süredir Açık İşler */}
       {(() => {
         const now = new Date()
         const uzunAcik = activeWork.filter(a => {
           if (!a.baslangic || !a.tarih) return false
-          const baslangic = new Date(a.tarih + 'T' + a.baslangic + ':00')
-          const dakika = Math.round((now.getTime() - baslangic.getTime()) / 60000)
-          return dakika > 480
+          const bas = new Date(a.tarih + 'T' + a.baslangic + ':00')
+          return Math.round((now.getTime() - bas.getTime()) / 60000) > 480
         }).map(a => {
-          const baslangic = new Date(a.tarih + 'T' + a.baslangic + ':00')
-          const dakika = Math.round((now.getTime() - baslangic.getTime()) / 60000)
+          const bas = new Date(a.tarih + 'T' + a.baslangic + ':00')
+          const dakika = Math.round((now.getTime() - bas.getTime()) / 60000)
           const wo = workOrders.find(w => w.id === a.woId)
           return { ...a, dakika, saat: Math.floor(dakika / 60), ieNo: wo?.ieNo || '—' }
         })
         if (!uzunAcik.length) return null
         return (
-          <div className="mt-4 p-3 bg-red/5 border border-red/20 rounded-lg">
+          <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg">
             <div className="text-sm font-semibold text-red mb-2">⏰ {uzunAcik.length} iş 8+ saattir açık — kapatılmayı unutmuş olabilir!</div>
             {uzunAcik.map(a => (
               <div key={a.id} className="flex items-center gap-3 text-xs py-1">
@@ -419,41 +560,32 @@ export function Dashboard() {
         )
       })()}
 
-      {/* #14: Yapılması Gerekenler — Akıllı Yönlendirme */}
+      {/* Yapılması Gerekenler */}
       {(() => {
         const adimlar: { icon: string; mesaj: string; link: string }[] = []
-        const recetesiz = orders.filter(o => !o.receteId)
-        if (recetesiz.length) adimlar.push({ icon: '📋', mesaj: `${recetesiz.length} siparişin reçetesi bağlı değil`, link: '#/orders' })
-        const ieSiz = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id))
-        if (ieSiz.length) adimlar.push({ icon: '⚙', mesaj: `${ieSiz.length} sipariş için İE oluşturulmamış`, link: '#/orders' })
-        const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor') && workOrders.some(w => w.orderId === o.id) && aktifOrders.some(a => a.id === o.id)).length
-        if (mrpYok) adimlar.push({ icon: '📊', mesaj: `${mrpYok} siparişin malzeme ihtiyacı (MRP) henüz hesaplanmadı`, link: '#/mrp' })
-        const _kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
-        const _planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
-        const _kesimEksik = workOrders.filter(w => {
-          if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
-          const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-          if (prod >= w.hedef) return false
-          if (_planliWoIds.has(w.id)) return false
-          return _kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
-        }).length
-        if (_kesimEksik) adimlar.push({ icon: '✂', mesaj: `${_kesimEksik} İE kesim planlanmamış`, link: '#/cutting' })
-        const _bekleyenTed = tedarikler.filter(t => !t.geldi).length
-        if (_bekleyenTed) adimlar.push({ icon: '📦', mesaj: `${_bekleyenTed} tedarik bekliyor`, link: '#/procurement' })
+        const recetesiz = orders.filter(o => !o.receteId && aktifOrders.some(a => a.id === o.id))
+        if (recetesiz.length) adimlar.push({ icon: '📋', mesaj: `${recetesiz.length} siparişin reçetesi bağlı değil`, link: '/orders' })
+        const ieSiz = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id) && aktifOrders.some(a => a.id === o.id))
+        if (ieSiz.length) adimlar.push({ icon: '⚙', mesaj: `${ieSiz.length} sipariş için İE oluşturulmamış`, link: '/orders' })
+        if (mrpYapilmamis) adimlar.push({ icon: '📊', mesaj: `${mrpYapilmamis} siparişin MRP hesabı yapılmadı`, link: '/mrp' })
+        if (kesimEksik) adimlar.push({ icon: '✂', mesaj: `${kesimEksik} İE kesim planlanmamış`, link: '/cutting' })
+        if (bekleyenTed.length) adimlar.push({ icon: '📦', mesaj: `${bekleyenTed.length} tedarik bekliyor`, link: '/procurement' })
+        if (bolumsuzOp.length) adimlar.push({ icon: '🏷', mesaj: `${bolumsuzOp.length} operasyonun bölümü tanımlı değil`, link: '/operations' })
+        if (bolumsuzOpr.length) adimlar.push({ icon: '👤', mesaj: `${bolumsuzOpr.length} operatörün bölümü tanımlı değil`, link: '/operators' })
         if (!adimlar.length) return (
-          <div className="mt-4 p-4 bg-green/5 border border-green/20 rounded-lg flex items-center gap-3">
+          <div className="mb-4 p-4 bg-green/5 border border-green/20 rounded-lg flex items-center gap-3">
             <CheckCircle size={18} className="text-green" />
             <div><div className="text-sm font-semibold text-green">Tüm Süreçler Güncel</div><div className="text-[11px] text-zinc-500">Bekleyen adım yok</div></div>
           </div>
         )
         return (
-          <div className="mt-4 bg-bg-2 border border-amber/20 rounded-lg overflow-hidden">
+          <div className="mb-4 bg-bg-2 border border-amber/20 rounded-lg overflow-hidden">
             <div className="px-4 py-2 border-b border-border text-sm font-semibold text-amber flex items-center gap-2">
               <AlertTriangle size={14} /> Yapılması Gerekenler ({adimlar.length})
             </div>
             <div className="divide-y divide-border/30">
               {adimlar.map((a, i) => (
-                <button key={i} onClick={() => { window.location.hash = a.link }} className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-bg-3/30">
+                <button key={i} onClick={() => navigate(a.link)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-bg-3/30">
                   <span className="text-lg">{a.icon}</span>
                   <span className="flex-1 text-xs text-zinc-300">{a.mesaj}</span>
                   <ArrowRight size={14} className="text-amber" />
@@ -464,7 +596,7 @@ export function Dashboard() {
         )
       })()}
 
-      {/* #17: Operasyon Bazlı Dağılım */}
+      {/* Operasyon Bazlı Dağılım */}
       {(() => {
         const deptMap: Record<string, number> = {}
         logs.forEach(l => {
@@ -476,7 +608,7 @@ export function Dashboard() {
         const COLORS = ['#4f9cf9', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#ec4899', '#84cc16']
         if (data.length < 1) return null
         return (
-          <div className="mt-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
+          <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
             <div className="text-xs font-semibold text-zinc-400 mb-3">Operasyon Bazlı Üretim Dağılımı</div>
             <div className="flex items-center gap-6">
               <ResponsiveContainer width="40%" height={140}>
@@ -501,8 +633,8 @@ export function Dashboard() {
         )
       })()}
 
-      {/* #13: Sistem Durumu */}
-      <div className="mt-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+      {/* Sistem Durumu */}
+      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400">🔧 Sistem Durumu</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border/30">
           {[

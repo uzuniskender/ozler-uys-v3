@@ -122,6 +122,8 @@ export interface Station {
   kod: string
   ad: string
   opIds: string[]
+  durum: string
+  arizaNot: string
 }
 
 export interface Operator {
@@ -131,6 +133,7 @@ export interface Operator {
   bolum: string
   aktif: boolean
   sifre: string
+  durum: string
 }
 
 export interface Recipe {
