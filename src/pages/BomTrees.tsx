@@ -148,28 +148,28 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
 
   // ✂ KESİM HESAPLA — hammadde ölçüsünden ürün ölçüsüne verim hesabı
   function kesimHesapla() {
-    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
-    if (!mamulRow) { toast.error('Mamul satırı bulunamadı'); return }
-
-    const mamulMat = materials.find(m => m.kod === mamulRow.malkod)
-    if (!mamulMat) { toast.error('Mamul malzeme tanımı bulunamadı: ' + mamulRow.malkod); return }
-
-    // Ölçüsü eksik malzemeleri topla
+    // Ölçüsü eksik malzemeleri topla — sadece kesim ilişkisindeki satırlarda
     const eksikler: typeof dimFixList = []
-    // Mamul kontrolü
-    if (needsDims(mamulMat)) {
-      const guess = parseDimsFromName(mamulMat.ad)
-      eksikler.push({ kod: mamulMat.kod, ad: mamulMat.ad, id: mamulMat.id, boy: guess.boy, en: guess.en, kalinlik: guess.kalinlik, uzunluk: guess.uzunluk, cap: guess.cap, hmTipi: mamulMat.hammaddeTipi })
-    }
-    // Hammadde VE YarıMamul kontrolü — kesim her ikisinden de olabilir
     for (const r of rows) {
       if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') continue
-      if (r.kirno === '1') continue // Mamul satırı atla
+      if (r.kirno === '1') continue
+      // Üst satırı bul
+      const parts = (r.kirno || '').split('.')
+      const parentKirno = parts.slice(0, -1).join('.')
+      const parentRow = rows.find(pr => pr.kirno === parentKirno)
+      if (!parentRow || !isKesimRow(parentRow)) continue // Kesim değilse atla
+
+      // Üst satırın ölçüleri eksik mi?
+      const parentMat = materials.find(m => m.kod === parentRow.malkod)
+      if (parentMat && needsDims(parentMat) && !eksikler.some(e => e.kod === parentMat.kod)) {
+        const guess = parseDimsFromName(parentMat.ad)
+        eksikler.push({ kod: parentMat.kod, ad: parentMat.ad, id: parentMat.id, ...guess, hmTipi: parentMat.hammaddeTipi })
+      }
+      // Bu satırın ölçüleri eksik mi?
       const hmMat = materials.find(m => m.kod === r.malkod)
-      if (!hmMat) continue
-      if (needsDims(hmMat)) {
+      if (hmMat && needsDims(hmMat) && !eksikler.some(e => e.kod === hmMat.kod)) {
         const guess = parseDimsFromName(hmMat.ad)
-        eksikler.push({ kod: hmMat.kod, ad: hmMat.ad, id: hmMat.id, boy: guess.boy, en: guess.en, kalinlik: guess.kalinlik, uzunluk: guess.uzunluk, cap: guess.cap, hmTipi: hmMat.hammaddeTipi })
+        eksikler.push({ kod: hmMat.kod, ad: hmMat.ad, id: hmMat.id, ...guess, hmTipi: hmMat.hammaddeTipi })
       }
     }
 
@@ -178,37 +178,50 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
       return
     }
 
-    // Ölçüler tamam — hesapla
     runKesimCalc()
   }
 
+  // Üst satırın adı/operasyonu kesim mi?
+  function isKesimRow(r: { malad?: string; malkod?: string }): boolean {
+    const ad = (r.malad || '').toUpperCase()
+    return ad.includes('KESİM') || ad.includes('KESME') || ad.includes('KESİM') || ad.includes('BANT KESİM')
+  }
+
   function runKesimCalc() {
-    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
-    if (!mamulRow) return
-    const mamulMat = materials.find(m => m.kod === mamulRow.malkod)
-    if (!mamulMat) return
-
-    const uB = mamulMat.boy || 0
-    const uE = mamulMat.en || 0
-    const uUz = mamulMat.uzunluk || 0
-    if (!uB && !uE && !uUz) { toast.error('Mamul boy/en/uzunluk bilgisi yok'); return }
-    const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
-
     let guncellenen = 0
     const detaylar: string[] = []
     const yeniRows = rows.map(r => {
       if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') return r
-      if (r.kirno === '1') return r // Mamul satırı atla
+      if (r.kirno === '1') return r
+
+      // Üst satırı bul (1.1 → parent 1, 1.1.2 → parent 1.1)
+      const parts = (r.kirno || '').split('.')
+      const parentKirno = parts.slice(0, -1).join('.')
+      const parentRow = rows.find(pr => pr.kirno === parentKirno)
+      if (!parentRow) return r
+
+      // Üst satır kesim işlemi mi?
+      if (!isKesimRow(parentRow)) return r
+
+      // Üst satırın malzeme ölçüleri — ürün boyutları
+      const parentMat = materials.find(m => m.kod === parentRow.malkod)
+      if (!parentMat) return r
+      const uB = parentMat.boy || 0
+      const uE = parentMat.en || 0
+      const uUz = parentMat.uzunluk || 0
+      if (!uB && !uE && !uUz) return r
+      const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
+
+      // Bu satırın malzeme ölçüleri — kaynak boyutları
       const hmMat = materials.find(m => m.kod === r.malkod)
       if (!hmMat) return r
-
-      let adetPer: number
       const hB = hmMat.boy || 0
       const hE = hmMat.en || 0
       const hUz = hmMat.uzunluk || 0
 
+      let adetPer: number
       if (hUz > 0) {
-        if (!urunParBoy) return r
+        if (!urunParBoy || hUz <= urunParBoy) return r // Kaynak küçükse kesim değil
         adetPer = Math.floor(hUz / urunParBoy)
         detaylar.push(`${hUz}mm bar → ${urunParBoy}mm parça: ${adetPer} adet/bar`)
       } else if (hE > 0 && hB > 0 && uE > 0 && uB > 0) {
@@ -220,7 +233,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
         detaylar.push(`${hmEn}×${hmBoy} → ${urunBoy}×${urunEn}: ${adetPer} adet/plaka`)
       } else {
         const hmBoy = Math.max(hB, hE)
-        if (!hmBoy || !urunParBoy) return r
+        if (!hmBoy || !urunParBoy || hmBoy <= urunParBoy) return r
         adetPer = Math.floor(hmBoy / urunParBoy)
         detaylar.push(`${hmBoy}mm → ${urunParBoy}mm: ${adetPer} adet/bar`)
       }
@@ -234,7 +247,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
       setRows(yeniRows)
       toast.success(`${guncellenen} hammadde güncellendi — ${detaylar.join(' | ')}`)
     } else {
-      toast.error('Hesaplanacak hammadde bulunamadı (boy/en/uzunluk bilgisi gerekli)')
+      toast.error('Kesim işlemi bulunamadı (üst satır adında KESİM/KESME olmalı)')
     }
   }
 

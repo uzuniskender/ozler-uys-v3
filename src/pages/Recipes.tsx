@@ -179,23 +179,22 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
 
   // ✂ Kesim Hesapla
   function kesimHesapla() {
-    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
-    if (!mamulRow) { toast.error('Mamul satırı bulunamadı'); return }
-    const mamulMat = materials.find(m => m.kod === mamulRow.malkod || m.kod === recipe.mamulKod)
-    if (!mamulMat) { toast.error('Mamul tanımı bulunamadı'); return }
-
-    // Ölçüsü eksik malzemeleri topla
     const eksikler: NonNullable<typeof dimFixList> = []
-    if (needsDims(mamulMat)) {
-      const guess = parseDimsFromName(mamulMat.ad)
-      eksikler.push({ kod: mamulMat.kod, ad: mamulMat.ad, id: mamulMat.id, ...guess, hmTipi: mamulMat.hammaddeTipi })
-    }
     for (const r of rows) {
       if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') continue
       if (r.kirno === '1') continue
+      const parts = (r.kirno || '').split('.')
+      const parentKirno = parts.slice(0, -1).join('.')
+      const parentRow = rows.find(pr => pr.kirno === parentKirno)
+      if (!parentRow || !isKesimRow(parentRow)) continue
+
+      const parentMat = materials.find(m => m.kod === parentRow.malkod)
+      if (parentMat && needsDims(parentMat) && !eksikler.some(e => e.kod === parentMat.kod)) {
+        const guess = parseDimsFromName(parentMat.ad)
+        eksikler.push({ kod: parentMat.kod, ad: parentMat.ad, id: parentMat.id, ...guess, hmTipi: parentMat.hammaddeTipi })
+      }
       const hmMat = materials.find(m => m.kod === r.malkod)
-      if (!hmMat) continue
-      if (needsDims(hmMat)) {
+      if (hmMat && needsDims(hmMat) && !eksikler.some(e => e.kod === hmMat.kod)) {
         const guess = parseDimsFromName(hmMat.ad)
         eksikler.push({ kod: hmMat.kod, ad: hmMat.ad, id: hmMat.id, ...guess, hmTipi: hmMat.hammaddeTipi })
       }
@@ -205,26 +204,49 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     runKesimCalc()
   }
 
-  function runKesimCalc() {
-    const mamulRow = rows.find(r => r.kirno === '1' || r.tip === 'Mamul')
-    if (!mamulRow) return
-    const mamulMat = materials.find(m => m.kod === mamulRow.malkod || m.kod === recipe.mamulKod)
-    if (!mamulMat) return
-    const uB = mamulMat.boy || 0; const uE = mamulMat.en || 0; const uUz = mamulMat.uzunluk || 0
-    if (!uB && !uE && !uUz) { toast.error('Mamul boy/en/uzunluk bilgisi yok'); return }
-    const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
+  // Üst satırın adı veya operasyonu kesim mi?
+  function isKesimRow(r: RecipeRow): boolean {
+    const ad = (r.malad || '').toUpperCase()
+    if (ad.includes('KESİM') || ad.includes('KESME')) return true
+    if (r.opId) {
+      const op = operations.find(o => o.id === r.opId)
+      if (op) {
+        const opAd = (op.ad || '').toUpperCase()
+        if (opAd.includes('KESME') || opAd.includes('KESİM')) return true
+      }
+    }
+    return false
+  }
 
+  function runKesimCalc() {
     let guncellenen = 0
     const detaylar: string[] = []
     const yeniRows = rows.map(r => {
       if (r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') return r
       if (r.kirno === '1') return r
+
+      // Üst satırı bul
+      const parts = (r.kirno || '').split('.')
+      const parentKirno = parts.slice(0, -1).join('.')
+      const parentRow = rows.find(pr => pr.kirno === parentKirno)
+      if (!parentRow) return r
+
+      // Üst satır kesim işlemi mi?
+      if (!isKesimRow(parentRow)) return r
+
+      // Üst satırın malzeme ölçüleri
+      const parentMat = materials.find(m => m.kod === parentRow.malkod)
+      if (!parentMat) return r
+      const uB = parentMat.boy || 0; const uE = parentMat.en || 0; const uUz = parentMat.uzunluk || 0
+      if (!uB && !uE && !uUz) return r
+      const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
+
       const hmMat = materials.find(m => m.kod === r.malkod)
       if (!hmMat) return r
       const hB = hmMat.boy || 0; const hE = hmMat.en || 0; const hUz = hmMat.uzunluk || 0
       let adetPer: number
       if (hUz > 0) {
-        if (!urunParBoy) return r
+        if (!urunParBoy || hUz <= urunParBoy) return r
         adetPer = Math.floor(hUz / urunParBoy)
         detaylar.push(`${hUz}mm bar → ${urunParBoy}mm: ${adetPer}/bar`)
       } else if (hE > 0 && hB > 0 && uE > 0 && uB > 0) {
@@ -233,7 +255,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         adetPer = Math.max(Math.floor(hmBoy / urunEn) * Math.floor(hmEn / urunBoy), Math.floor(hmBoy / urunBoy) * Math.floor(hmEn / urunEn))
         detaylar.push(`${hmEn}×${hmBoy} → ${urunBoy}×${urunEn}: ${adetPer}/plaka`)
       } else {
-        const hmBoy = Math.max(hB, hE); if (!hmBoy || !urunParBoy) return r
+        const hmBoy = Math.max(hB, hE); if (!hmBoy || !urunParBoy || hmBoy <= urunParBoy) return r
         adetPer = Math.floor(hmBoy / urunParBoy)
         detaylar.push(`${hmBoy}mm → ${urunParBoy}mm: ${adetPer}/bar`)
       }
@@ -244,7 +266,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     if (guncellenen > 0) {
       setRows(yeniRows)
       toast.success(`${guncellenen} hammadde güncellendi — ${detaylar.join(' | ')}`)
-    } else toast.error('Hesaplanacak hammadde bulunamadı (boy/en/uzunluk bilgisi gerekli)')
+    } else toast.error('Kesim işlemi bulunamadı (üst satır adında/operasyonunda KESİM/KESME olmalı)')
   }
 
   async function saveDimFixes(fixes: NonNullable<typeof dimFixList>) {
