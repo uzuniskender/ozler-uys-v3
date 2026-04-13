@@ -1,10 +1,10 @@
 import { toast } from 'sonner'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { showConfirm, showPrompt } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
-import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench } from 'lucide-react'
+import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight } from 'lucide-react'
 
 function StatCard({ value, label, color, icon: Icon }: { value: number | string; label: string; color: string; icon: React.ElementType }) {
   return (
@@ -376,6 +376,143 @@ export function Dashboard() {
         ) : (
           <div className="p-8 text-center text-zinc-600 text-sm">Aktif sipariş yok</div>
         )}
+      </div>
+
+      {/* #16: Uzun Süredir Açık İşler */}
+      {(() => {
+        const now = new Date()
+        const uzunAcik = activeWork.filter(a => {
+          if (!a.baslangic || !a.tarih) return false
+          const baslangic = new Date(a.tarih + 'T' + a.baslangic + ':00')
+          const dakika = Math.round((now.getTime() - baslangic.getTime()) / 60000)
+          return dakika > 480
+        }).map(a => {
+          const baslangic = new Date(a.tarih + 'T' + a.baslangic + ':00')
+          const dakika = Math.round((now.getTime() - baslangic.getTime()) / 60000)
+          const wo = workOrders.find(w => w.id === a.woId)
+          return { ...a, dakika, saat: Math.floor(dakika / 60), ieNo: wo?.ieNo || '—' }
+        })
+        if (!uzunAcik.length) return null
+        return (
+          <div className="mt-4 p-3 bg-red/5 border border-red/20 rounded-lg">
+            <div className="text-sm font-semibold text-red mb-2">⏰ {uzunAcik.length} iş 8+ saattir açık — kapatılmayı unutmuş olabilir!</div>
+            {uzunAcik.map(a => (
+              <div key={a.id} className="flex items-center gap-3 text-xs py-1">
+                <span className="text-zinc-300 font-semibold">{a.opAd}</span>
+                <span className="font-mono text-accent">{a.ieNo}</span>
+                <span className="text-zinc-500 truncate">{a.woAd?.slice(0, 30)}</span>
+                <span className="ml-auto font-mono text-red font-bold">{a.saat}s {a.dakika % 60}dk</span>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
+      {/* #14: Yapılması Gerekenler — Akıllı Yönlendirme */}
+      {(() => {
+        const adimlar: { icon: string; mesaj: string; link: string }[] = []
+        const recetesiz = orders.filter(o => !o.receteId)
+        if (recetesiz.length) adimlar.push({ icon: '📋', mesaj: `${recetesiz.length} siparişin reçetesi bağlı değil`, link: '#/orders' })
+        const ieSiz = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id))
+        if (ieSiz.length) adimlar.push({ icon: '⚙', mesaj: `${ieSiz.length} sipariş için İE oluşturulmamış`, link: '#/orders' })
+        const mrpYok = orders.filter(o => o.receteId && (!o.mrpDurum || o.mrpDurum === 'bekliyor')).length
+        if (mrpYok) adimlar.push({ icon: '📊', mesaj: `${mrpYok} sipariş MRP hesaplanmamış`, link: '#/mrp' })
+        const _kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
+        const _planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
+        const _kesimEksik = workOrders.filter(w => {
+          if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+          const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+          if (prod >= w.hedef) return false
+          if (_planliWoIds.has(w.id)) return false
+          return _kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
+        }).length
+        if (_kesimEksik) adimlar.push({ icon: '✂', mesaj: `${_kesimEksik} İE kesim planlanmamış`, link: '#/cutting' })
+        const _bekleyenTed = tedarikler.filter(t => !t.geldi).length
+        if (_bekleyenTed) adimlar.push({ icon: '📦', mesaj: `${_bekleyenTed} tedarik bekliyor`, link: '#/procurement' })
+        if (!adimlar.length) return (
+          <div className="mt-4 p-4 bg-green/5 border border-green/20 rounded-lg flex items-center gap-3">
+            <CheckCircle size={18} className="text-green" />
+            <div><div className="text-sm font-semibold text-green">Tüm Süreçler Güncel</div><div className="text-[11px] text-zinc-500">Bekleyen adım yok</div></div>
+          </div>
+        )
+        return (
+          <div className="mt-4 bg-bg-2 border border-amber/20 rounded-lg overflow-hidden">
+            <div className="px-4 py-2 border-b border-border text-sm font-semibold text-amber flex items-center gap-2">
+              <AlertTriangle size={14} /> Yapılması Gerekenler ({adimlar.length})
+            </div>
+            <div className="divide-y divide-border/30">
+              {adimlar.map((a, i) => (
+                <button key={i} onClick={() => { window.location.hash = a.link }} className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-bg-3/30">
+                  <span className="text-lg">{a.icon}</span>
+                  <span className="flex-1 text-xs text-zinc-300">{a.mesaj}</span>
+                  <ArrowRight size={14} className="text-amber" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* #17: Operasyon Bazlı Dağılım */}
+      {(() => {
+        const deptMap: Record<string, number> = {}
+        logs.forEach(l => {
+          const wo = workOrders.find(w => w.id === l.woId)
+          const dept = wo?.opAd?.split(' ')[0] || 'Diğer'
+          deptMap[dept] = (deptMap[dept] || 0) + l.qty
+        })
+        const data = Object.entries(deptMap).map(([name, value]) => ({ name: name.slice(0, 12), value })).sort((a, b) => b.value - a.value).slice(0, 8)
+        const COLORS = ['#4f9cf9', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#ec4899', '#84cc16']
+        if (data.length < 2) return null
+        return (
+          <div className="mt-4 bg-bg-2 border border-border rounded-lg overflow-hidden p-4">
+            <div className="text-xs font-semibold text-zinc-400 mb-3">Operasyon Bazlı Üretim Dağılımı</div>
+            <div className="flex items-center gap-6">
+              <ResponsiveContainer width="40%" height={140}>
+                <PieChart>
+                  <Pie data={data} dataKey="value" cx="50%" cy="50%" outerRadius={55} strokeWidth={0}>
+                    {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-1">
+                {data.map((d, i) => (
+                  <div key={d.name} className="flex items-center gap-2 text-xs">
+                    <span className="w-2.5 h-2.5 rounded" style={{ background: COLORS[i % COLORS.length] }} />
+                    <span className="text-zinc-400 flex-1">{d.name}</span>
+                    <span className="font-mono text-zinc-300">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* #13: Sistem Durumu */}
+      <div className="mt-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400">🔧 Sistem Durumu</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border/30">
+          {[
+            { ad: 'Malzemeler', d: materials.length },
+            { ad: 'Siparişler', d: orders.length },
+            { ad: 'İş Emirleri', d: workOrders.length },
+            { ad: 'Operatörler', d: operators.length },
+            { ad: 'Kesim Planları', d: cuttingPlans.length },
+            { ad: 'Stok Hareketleri', d: stokHareketler.length },
+            { ad: 'Tedarikler', d: tedarikler.length },
+            { ad: 'Üretim Logları', d: logs.length },
+          ].map(c => (
+            <div key={c.ad} className="bg-bg-2 p-3 flex items-center gap-2">
+              {c.d > 0 ? <CheckCircle size={12} className="text-green" /> : <XCircle size={12} className="text-zinc-600" />}
+              <div>
+                <div className="text-[10px] text-zinc-500">{c.ad}</div>
+                <div className="text-xs font-mono text-zinc-300">{c.d}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
