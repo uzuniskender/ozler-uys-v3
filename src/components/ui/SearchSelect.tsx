@@ -13,9 +13,10 @@ interface SearchSelectProps {
   placeholder?: string
   allowNew?: boolean  // Yeni değer girmeye izin ver
   className?: string
+  inputClassName?: string
 }
 
-export function SearchSelect({ options, value, onChange, placeholder = 'Ara...', allowNew = true, className = '' }: SearchSelectProps) {
+export function SearchSelect({ options, value, onChange, placeholder = 'Ara...', allowNew = true, className = '', inputClassName }: SearchSelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -59,7 +60,7 @@ export function SearchSelect({ options, value, onChange, placeholder = 'Ara...',
         onChange={e => handleInputChange(e.target.value)}
         onFocus={() => { setOpen(true); setSearch('') }}
         placeholder={placeholder}
-        className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
+        className={inputClassName || "w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"}
       />
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-bg-1 border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">

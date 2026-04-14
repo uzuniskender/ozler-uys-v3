@@ -10,22 +10,26 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
 
 export function Materials() {
-  const { materials, operations, loadAll } = useStore()
+  const { materials, operations, recipes, loadAll } = useStore()
   const { isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
+  const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
 
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
+  const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
       if (tipFilter.size > 0 && !tipFilter.has(m.tip) && !tipFilter.has(m.hammaddeTipi)) return false
+      if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
+      if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
       if (search) return (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
-  }, [materials, search, tipFilter])
+  }, [materials, search, tipFilter, receteFilter, receteKodSet])
 
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
@@ -112,6 +116,12 @@ export function Materials() {
             className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
         <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
+        <select value={receteFilter} onChange={e => setReceteFilter(e.target.value)}
+          className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-accent">
+          <option value="">Yarı Mamul Reçete</option>
+          <option value="var">✅ Reçetesi Var</option>
+          <option value="yok">⚠ Reçetesi Yok</option>
+        </select>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         <div className="max-h-[65vh] overflow-y-auto">
@@ -132,7 +142,14 @@ export function Materials() {
                   <tr key={m.id} className="border-b border-border/30 hover:bg-bg-3/30">
                     <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{m.kod}</td>
                     <td className="px-4 py-1.5 text-zinc-300">{m.ad}</td>
-                    <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span></td>
+                    <td className="px-4 py-1.5">
+                      <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span>
+                      {m.tip === 'YarıMamul' && (
+                        receteKodSet.has(m.kod)
+                          ? <span className="ml-1 px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">RC ✓</span>
+                          : <span className="ml-1 px-1 py-0.5 bg-amber/10 text-amber rounded text-[9px]">RC ✗</span>
+                      )}
+                    </td>
                     <td className="px-4 py-1.5 text-zinc-500">{m.birim}</td>
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.boy || '—'}</td>
                     <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>

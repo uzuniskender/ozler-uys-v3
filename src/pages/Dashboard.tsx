@@ -639,6 +639,9 @@ export function Dashboard() {
         if (bekleyenTed.length) adimlar.push({ icon: '📦', mesaj: `${bekleyenTed.length} tedarik bekliyor`, link: '/procurement' })
         if (bolumsuzOp.length) adimlar.push({ icon: '🏷', mesaj: `${bolumsuzOp.length} operasyonun bölümü tanımlı değil`, link: '/operations' })
         if (bolumsuzOpr.length) adimlar.push({ icon: '👤', mesaj: `${bolumsuzOpr.length} operatörün bölümü tanımlı değil`, link: '/operators' })
+        // YarıMamul reçetesiz kontrolü
+        const ymRecetesiz = materials.filter(m => m.tip === 'YarıMamul' && !recipes.some(r => r.mamulKod === m.kod))
+        if (ymRecetesiz.length) adimlar.push({ icon: '⚠', mesaj: `${ymRecetesiz.length} yarı mamulün reçetesi tanımlı değil`, link: '/materials' })
         if (!adimlar.length) return (
           <div className="mb-4 p-4 bg-green/5 border border-green/20 rounded-lg flex items-center gap-3">
             <CheckCircle size={18} className="text-green" />

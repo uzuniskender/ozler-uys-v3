@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload } from 'lucide-react'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Recipes() {
   const { recipes, operations, bomTrees, loadAll } = useStore()
@@ -190,7 +191,10 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const [rows, setRows] = useState<RecipeRow[]>(recipe.satirlar || [])
+  const [ad, setAd] = useState(recipe.ad || '')
+  const [rcKod, setRcKod] = useState(recipe.rcKod || '')
   const { materials, loadAll: storeLoadAll } = useStore()
+  const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
 
   function updateRow(idx: number, field: keyof RecipeRow, value: string | number) {
@@ -350,7 +354,8 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   }
 
   async function save() {
-    await supabase.from('uys_recipes').update({ satirlar: rows }).eq('id', recipe.id)
+    if (!ad.trim()) { toast.error('Reçete adı zorunlu'); return }
+    await supabase.from('uys_recipes').update({ satirlar: rows, ad: ad.trim(), rc_kod: rcKod.trim() }).eq('id', recipe.id)
     onSaved()
   }
 
@@ -358,7 +363,15 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-5xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
-          <div><h2 className="text-lg font-semibold">{recipe.ad}</h2><p className="text-xs text-zinc-500">{recipe.mamulKod} · {rows.length} satır</p></div>
+          <div className="flex-1 mr-4">
+            <div className="flex items-center gap-2 mb-1">
+              <input value={rcKod} onChange={e => setRcKod(e.target.value)} placeholder="RC-..."
+                className="px-2 py-1 bg-bg-3/50 border border-border/50 rounded text-xs font-mono text-accent w-28 focus:outline-none focus:border-accent" />
+              <input value={ad} onChange={e => setAd(e.target.value)} placeholder="Reçete Adı *"
+                className="flex-1 px-2 py-1 bg-bg-3/50 border border-border/50 rounded text-sm font-semibold text-zinc-200 focus:outline-none focus:border-accent" />
+            </div>
+            <p className="text-xs text-zinc-500">{recipe.mamulKod} · {rows.length} satır</p>
+          </div>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
         </div>
 
@@ -384,8 +397,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                   <tr key={r.id || i} className="border-b border-border/20 hover:bg-bg-3/20">
                     <td className="px-2 py-1"><span className="font-mono text-zinc-500">{r.kirno}</span></td>
                     <td className="px-2 py-1">
-                      <input value={r.malkod || ''} onChange={e => onMalkodChange(i, e.target.value)}
-                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" placeholder="Kod yazın..." />
+                      <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
                     </td>
                     <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { BomTree } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload } from 'lucide-react'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function BomTrees() {
   const { bomTrees, recipes, loadAll } = useStore()
@@ -147,8 +148,18 @@ export function BomTrees() {
 }
 
 function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const { materials } = useStore()
   const [mamulKod, setMamulKod] = useState('')
   const [ad, setAd] = useState('')
+
+  const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
+
+  function onMamulKodChange(kod: string, label: string) {
+    setMamulKod(kod)
+    const mat = materials.find(m => m.kod === kod)
+    if (mat) setAd(mat.ad)
+  }
+
   async function save() {
     if (!ad.trim()) { toast.error('Ürün adı zorunlu'); return }
     await supabase.from('uys_bom_trees').insert({ id: uid(), mamul_kod: mamulKod.trim(), mamul_ad: ad.trim(), ad: ad.trim(), rows: [{ id: uid(), kirno: '1', malkod: mamulKod.trim(), malad: ad.trim(), tip: 'Mamul', miktar: 1, birim: 'Adet' }] })
@@ -156,10 +167,11 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni Ürün Ağacı</h2>
         <div className="space-y-3">
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Mamul Kodu</label><input value={mamulKod} onChange={e => setMamulKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Mamul Kodu (Malzeme listesinden arayın)</label>
+          <SearchSelect options={matOptions} value={mamulKod} onChange={onMamulKodChange} placeholder="Kod yazın veya arayın..." allowNew={true} /></div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Ürün Adı *</label><input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
@@ -176,6 +188,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
   const [viewMode, setViewMode] = useState<'edit'|'tree'>('edit')
   const { materials, loadAll: storeLoadAll } = useStore()
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
+  const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
 
   function updateRow(i: number, field: string, value: string | number) { setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r)) }
 
@@ -387,7 +400,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
               return (
                 <tr key={i} className="border-b border-border/20 hover:bg-bg-3/20">
                   <td className="px-2 py-1 font-mono text-zinc-500">{r.kirno}</td>
-                  <td className="px-2 py-1"><input value={r.malkod || ''} onChange={e => onMalkodChange(i, e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" placeholder="Kod yazın..." /></td>
+                  <td className="px-2 py-1"><SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" /></td>
                   <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}><input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" /></td>
                   <td className="px-2 py-1"><select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200"><option value="Mamul">Mamul</option><option value="YarıMamul">Yarı Mamul</option><option value="Hammadde">Hammadde</option><option value="Sarf">Sarf</option></select></td>
                   <td className="px-2 py-1"><input type="number" value={r.miktar} onChange={e => updateRow(i, 'miktar', parseFloat(e.target.value) || 0)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" /></td>
