@@ -303,10 +303,14 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
     if (q <= 0 && !hasDurus) { toast.error('Miktar veya duruş girmelisiniz'); return }
-    // #2: Fazla üretim kontrolü
-    if (q > 0 && q + prod > w.hedef) {
-      const fazla = (q + prod) - w.hedef
-      if (!await showConfirm(`Hedef: ${w.hedef}, mevcut: ${prod}, girilecek: ${q}\n${fazla} adet FAZLA üretim olacak. Devam?`)) return
+    // #2: Fazla üretim kontrolü — HARD BLOCK
+    // Güncel üretimi Supabase'den çek (stale data riski)
+    const { data: freshLogs } = await supabase.from('uys_logs').select('qty').eq('wo_id', woId)
+    const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
+    const freshKalan = Math.max(0, w.hedef - freshProd)
+    if (q > 0 && q > freshKalan) {
+      toast.error(`Hedef aşılamaz! Hedef: ${w.hedef}, mevcut üretim: ${freshProd}, kalan: ${freshKalan}`)
+      return
     }
     // Stok uyarısı — admin override olabilir
     if (q > 0 && hmSatirlar.length > 0 && q > maxUretim) {
@@ -562,6 +566,15 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       const f = parseInt(r.fire) || 0
       const wo = acikWOs.find(w => w.id === r.woId)
       if (!wo || q <= 0) continue
+
+      // Hedef kontrolü — güncel veri ile
+      const { data: fLogs } = await supabase.from('uys_logs').select('qty').eq('wo_id', r.woId)
+      const fProd = (fLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
+      const fKalan = Math.max(0, wo.hedef - fProd)
+      if (q > fKalan) {
+        toast.error(`${wo.ieNo}: Hedef aşılamaz! Kalan: ${fKalan}, girilen: ${q}`)
+        continue
+      }
 
       const logId = uid()
       await supabase.from('uys_logs').insert({
