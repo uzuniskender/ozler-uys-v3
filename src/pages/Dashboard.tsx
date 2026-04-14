@@ -549,7 +549,7 @@ export function Dashboard() {
           <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg">
             <div className="text-sm font-semibold text-red mb-2">⏰ {uzunAcik.length} iş 8+ saattir açık — kapatılmayı unutmuş olabilir!</div>
             {uzunAcik.map(a => (
-              <div key={a.id} className="flex items-center gap-3 text-xs py-1 cursor-pointer hover:bg-red/5 rounded px-1 -mx-1" onClick={() => navigate('/operators')}>
+              <div key={a.id} className="flex items-center gap-3 text-xs py-1 cursor-pointer hover:bg-red/5 rounded px-1 -mx-1" onClick={() => navigate('/work-orders')}>
                 <span className="text-zinc-300 font-semibold">{a.opAd}</span>
                 <span className="font-mono text-accent">{a.ieNo}</span>
                 <span className="text-zinc-500 truncate">{a.woAd?.slice(0, 30)}</span>
