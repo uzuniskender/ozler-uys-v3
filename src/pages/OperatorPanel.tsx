@@ -286,7 +286,7 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                         <div className="text-[10px] text-zinc-500">Başlangıç: {a.baslangic}</div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => aw && setEntryWO({ woId: aw.woId })} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
+                        <button onClick={() => aw && setEntryWO({ woId: aw.id })} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
                           <CheckCircle size={12} className="inline mr-1" />Kayıt
                         </button>
                         <button onClick={() => stopWork(a.id)} className="px-3 py-1.5 bg-red/20 text-red rounded-lg text-[11px] font-semibold hover:bg-red/30">
@@ -299,19 +299,16 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
               </div>
             )}
 
-            {acikWOs.map(w => {
+            {acikWOs.filter(w => !myActiveList.some(a => a.woId === w.id)).map(w => {
               const prod = wProd(w.id)
               const pct = Math.min(100, Math.round(prod / w.hedef * 100))
               const kalan = Math.max(0, w.hedef - prod)
-              const isActive = myActiveList.some(a => a.woId === w.id)
+              const othersWorking = activeWork.filter(a => a.woId === w.id && a.opId !== oprId)
               return (
-                <div key={w.id} className={`bg-bg-1 border rounded-xl p-4 transition-all ${isActive ? 'border-green/40 shadow-lg shadow-green/10' : 'border-border hover:border-accent/50'}`}>
+                <div key={w.id} className={`bg-bg-1 border rounded-xl p-4 transition-all ${othersWorking.length > 0 ? 'border-cyan-500/30' : 'border-border hover:border-accent/50'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-mono text-accent text-xs font-bold">{w.ieNo}</span>
-                    <div className="flex items-center gap-2">
-                      {isActive && <span className="text-[10px] text-green font-bold bg-green/10 px-2 py-0.5 rounded">▶ AKTİF</span>}
-                      <span className={`text-sm font-bold ${pct >= 100 ? 'text-green' : pct > 0 ? 'text-amber' : 'text-red'}`}>{pct}%</span>
-                    </div>
+                    <span className={`text-sm font-bold ${pct >= 100 ? 'text-green' : pct > 0 ? 'text-amber' : 'text-red'}`}>{pct}%</span>
                   </div>
                   <div className="text-[15px] font-semibold text-white mb-2">{w.malad}</div>
                   <div className="flex items-center gap-4 text-xs mb-3">
@@ -319,15 +316,22 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                     <span className="text-green">Yapılan: <b>{prod}</b></span>
                     <span className="text-amber">Kalan: <b>{kalan}</b></span>
                   </div>
+                  {othersWorking.length > 0 && (
+                    <div className="mb-2 px-2 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-[10px] text-cyan-400">
+                      🟢 {othersWorking.map(a => a.opAd).join(', ')} {othersWorking[0].baslangic}'den beri çalışıyor
+                    </div>
+                  )}
                   <div className="w-full h-2 bg-bg-3 rounded-full overflow-hidden mb-3">
                     <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-accent'}`} style={{ width: `${Math.max(2, pct)}%` }} />
                   </div>
                   <div className="flex gap-2">
-                    {!isActive && (
-                      <button onClick={() => startWork(w.id)} className="flex-1 py-2 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-bold hover:bg-green/20">
-                        <Play size={12} className="inline mr-1" />İşe Başla
-                      </button>
-                    )}
+                    <button onClick={() => startWork(w.id)} className={`flex-1 py-2 rounded-lg text-xs font-bold ${
+                      othersWorking.length > 0
+                        ? 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20'
+                        : 'bg-green/10 border border-green/20 text-green hover:bg-green/20'
+                    }`}>
+                      <Play size={12} className="inline mr-1" />{othersWorking.length > 0 ? 'İşe Katıl' : 'İşe Başla'}
+                    </button>
                     <button onClick={() => setEntryWO({ woId: w.id })} className="flex-1 py-2 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs font-bold hover:bg-accent/20">
                       <CheckCircle size={12} className="inline mr-1" />Üretim Kaydı
                     </button>
@@ -629,6 +633,20 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       await supabase.from('uys_fire_logs').insert({
         id: uid(), wo_id: woId, tarih: today(), miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
       })
+    }
+    // ═══ AUTO-CLOSE: İE tamamlandı mı? ═══
+    const q_ = parseInt(qty) || 0
+    const yeniToplam = prod - (editLog?.qty || 0) + q_
+    if (yeniToplam >= w.hedef && w.hedef > 0) {
+      // Bu İE'ye ait tüm active_work kayıtlarını otomatik kapat
+      await supabase.from('uys_active_work').delete().eq('wo_id', woId)
+      // Her operatörün bitiş saatini kaydet (sonraki iş için akıllı saat)
+      const stopNow = new Date()
+      const stopSaat = String(stopNow.getHours()).padStart(2, '0') + ':' + String(stopNow.getMinutes()).padStart(2, '0')
+      oprList.forEach(o => {
+        try { localStorage.setItem('uys_lastStop_' + o.id, JSON.stringify({ tarih: today(), saat: stopSaat })) } catch {}
+      })
+      toast.success(w.ieNo + ' tamamlandı ✓ Aktif çalışma otomatik kapatıldı', { duration: 4000 })
     }
     setSaving(false); onSaved()
   }

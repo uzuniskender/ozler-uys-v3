@@ -84,6 +84,14 @@ export function Dashboard() {
   const toplamFire = bugunFire.reduce((a, f) => a + f.qty, 0)
   const okunmamis = operatorNotes.filter(n => !n.okundu)
 
+  // Tamamlanmış İE'lerin aktif çalışma hayaletlerini filtrele
+  const gercekAktif = activeWork.filter(a => {
+    const wo = workOrders.find(w => w.id === a.woId)
+    if (!wo || wo.hedef <= 0) return false
+    const prod = logs.filter(l => l.woId === a.woId).reduce((s, l) => s + l.qty, 0)
+    return prod < wo.hedef
+  })
+
   // ═══ #1: MRP — doğru ibare & doğru hesaplama ═══
   const mrpYapilmamis = orders.filter(o =>
     o.receteId &&
@@ -175,7 +183,7 @@ export function Dashboard() {
         <StatCard value={acikWOs.length} label="Açık İş Emri" color="zinc-300" icon={Clock} onClick={() => navigate('/work-orders')} />
         <StatCard value={toplamFire || '—'} label="Bugün Fire" color={toplamFire > 0 ? 'red' : 'zinc-500'} icon={Flame} onClick={() => navigate('/reports')} />
         <StatCard value={okunmamis.length} label="Yeni Mesaj" color={okunmamis.length > 0 ? 'amber' : 'zinc-500'} icon={MessageSquare} />
-        <StatCard value={activeWork.length} label="Aktif Çalışma" color={activeWork.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} onClick={() => navigate('/production')} />
+        <StatCard value={gercekAktif.length} label="Aktif Çalışma" color={gercekAktif.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} onClick={() => navigate('/production')} />
       </div>
 
       {/* ═══ #8: Akıllı Workflow — Yanıp Sönen Butonlar ═══ */}
@@ -322,10 +330,10 @@ export function Dashboard() {
       })()}
 
       {/* Aktif Çalışmalar */}
-      {activeWork.length > 0 && (
+      {gercekAktif.length > 0 && (
         <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-2 border-b border-border text-sm font-semibold flex items-center gap-2">
-            <Wrench size={14} className="text-green" /> Aktif Çalışmalar ({activeWork.length})
+            <Wrench size={14} className="text-green" /> Aktif Çalışmalar ({gercekAktif.length})
           </div>
           <table className="w-full text-xs">
             <thead>
@@ -337,7 +345,7 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {activeWork.map(a => (
+              {gercekAktif.map(a => (
                 <tr key={a.id} className="border-b border-border/50 cursor-pointer hover:bg-bg-3/50" onClick={() => navigate('/operator?oprId=' + a.opId)}>
                   <td className="px-4 py-1.5 font-medium underline decoration-dotted">{a.opAd}</td>
                   <td className="px-4 py-1.5 font-mono text-accent">{workOrders.find(w => w.id === a.woId)?.ieNo || a.woId}</td>
@@ -534,7 +542,7 @@ export function Dashboard() {
       {/* Uzun Süredir Açık İşler */}
       {(() => {
         const now = new Date()
-        const uzunAcik = activeWork.filter(a => {
+        const uzunAcik = gercekAktif.filter(a => {
           if (!a.baslangic || !a.tarih) return false
           const bas = new Date(a.tarih + 'T' + a.baslangic + ':00')
           return Math.round((now.getTime() - bas.getTime()) / 60000) > 480
