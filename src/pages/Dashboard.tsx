@@ -16,12 +16,12 @@ function StatCard({ value, label, color, icon: Icon, onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`relative overflow-hidden bg-bg-2 border border-border rounded-xl p-4 hover:border-${color}/30 transition-all group ${onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''}`}
+      className={`relative overflow-hidden bg-bg-1 border border-border rounded-xl p-4 hover:border-${color}/40 transition-all group ${onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''}`}
     >
-      <div className={`absolute top-0 right-0 w-16 h-16 bg-${color}/5 rounded-bl-[40px] group-hover:bg-${color}/10 transition-colors`} />
-      <Icon size={16} className={`text-${color}/60 mb-2`} />
-      <div className={`text-2xl font-light font-mono ${isZero ? 'text-zinc-600' : `text-${color}`}`}>{value}</div>
-      <div className="text-[10px] text-zinc-500 mt-0.5">{label}</div>
+      <div className={`absolute top-0 right-0 w-16 h-16 bg-${color}/8 rounded-bl-[40px] group-hover:bg-${color}/15 transition-colors`} />
+      <Icon size={16} className={`text-${color} mb-2`} />
+      <div className={`text-2xl font-bold font-mono ${isZero ? 'text-zinc-500' : 'text-white'}`}>{value}</div>
+      <div className={`text-[11px] font-semibold mt-0.5 ${isZero ? 'text-zinc-600' : `text-${color}`}`}>{label}</div>
     </div>
   )
 }
