@@ -203,7 +203,27 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
   const myActiveList = activeWork.filter(a => a.opId === oprId)
 
+  // ═══ İZİN KONTROLÜ ═══
+  const todayStr = today()
+  const nowTime = (() => { const n = new Date(); return String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0') })()
+  const myOnayliIzinler = izinler.filter(iz => iz.opId === oprId && iz.durum === 'onaylandi' && iz.baslangic <= todayStr && iz.bitis >= todayStr)
+  const izinEngel = (() => {
+    for (const iz of myOnayliIzinler) {
+      if (iz.saatBaslangic && iz.saatBitis) {
+        // Saatlik izin — sadece o saat aralığında engel
+        if (nowTime >= iz.saatBaslangic && nowTime <= iz.saatBitis) {
+          return { engel: true, mesaj: `${iz.saatBaslangic}–${iz.saatBitis} arası ${iz.tip} izniniz var. Bu saatlerde işe başlayamazsınız.`, saatlik: true, iz }
+        }
+      } else {
+        // Tam gün izin — tüm gün engel
+        return { engel: true, mesaj: `Bugün ${iz.tip} izniniz var (${iz.baslangic}${iz.bitis !== iz.baslangic ? ' → ' + iz.bitis : ''}). İşe başlayamazsınız.`, saatlik: false, iz }
+      }
+    }
+    return { engel: false, mesaj: '', saatlik: false, iz: null }
+  })()
+
   async function startWork(woId: string) {
+    if (izinEngel.engel) { toast.error(izinEngel.mesaj); return }
     const w = workOrders.find(x => x.id === woId)
     if (!w) return
     if (myActiveList.some(a => a.woId === woId)) { toast.error('Bu işte zaten çalışıyorsun'); return }
@@ -256,6 +276,20 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
           </div>
           <button onClick={onLogout} className="px-4 py-2 bg-red/20 border border-red/30 text-red text-xs rounded-lg hover:bg-red/30 font-semibold">Çıkış</button>
         </div>
+
+        {/* İzin Uyarı Banner */}
+        {izinEngel.engel && (
+          <div className="mb-3 p-3 bg-red/10 border border-red/30 rounded-xl text-xs text-red font-semibold flex items-center gap-2">
+            <span className="text-lg">🚫</span>
+            <span>{izinEngel.mesaj}</span>
+          </div>
+        )}
+        {myOnayliIzinler.length > 0 && !izinEngel.engel && (
+          <div className="mb-3 p-2.5 bg-amber/10 border border-amber/20 rounded-xl text-[11px] text-amber flex items-center gap-2">
+            <span>📅</span>
+            <span>Bugün {myOnayliIzinler.map(iz => iz.saatBaslangic ? `${iz.saatBaslangic}–${iz.saatBitis} ${iz.tip}` : iz.tip).join(', ')} izniniz var</span>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
@@ -328,14 +362,17 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
                     <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-accent'}`} style={{ width: `${Math.max(2, pct)}%` }} />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => startWork(w.id)} className={`flex-1 py-2 rounded-lg text-xs font-bold ${
+                    <button disabled={izinEngel.engel} onClick={() => startWork(w.id)} className={`flex-1 py-2 rounded-lg text-xs font-bold ${
+                      izinEngel.engel ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed' :
                       othersWorking.length > 0
                         ? 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20'
                         : 'bg-green/10 border border-green/20 text-green hover:bg-green/20'
                     }`}>
-                      <Play size={12} className="inline mr-1" />{othersWorking.length > 0 ? 'İşe Katıl' : 'İşe Başla'}
+                      <Play size={12} className="inline mr-1" />{izinEngel.engel ? '🚫 İzinli' : othersWorking.length > 0 ? 'İşe Katıl' : 'İşe Başla'}
                     </button>
-                    <button onClick={() => setEntryWO({ woId: w.id })} className="flex-1 py-2 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs font-bold hover:bg-accent/20">
+                    <button disabled={izinEngel.engel && !izinEngel.saatlik} onClick={() => setEntryWO({ woId: w.id })} className={`flex-1 py-2 rounded-lg text-xs font-bold ${
+                      izinEngel.engel && !izinEngel.saatlik ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed' : 'bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20'
+                    }`}>
                       <CheckCircle size={12} className="inline mr-1" />Üretim Kaydı
                     </button>
                   </div>
