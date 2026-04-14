@@ -7,6 +7,7 @@ import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
@@ -320,7 +321,7 @@ export function WorkOrders() {
       {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
 
       {detailW && <WODetailModal wo={detailW} onClose={() => setDetailWO(null)} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAll} />}
-      {showNewIE && <NewIEModal operations={operations} orders={orders} onClose={() => setShowNewIE(false)} onSaved={() => { setShowNewIE(false); loadAll(); toast.success('İş emri oluşturuldu') }} />}
+      {showNewIE && <NewIEModal operations={operations} orders={orders} onClose={() => setShowNewIE(false)} onSaved={() => { setShowNewIE(false); loadAll(); toast.success('İş emri oluşturuldu') }} recipes={recipes} />}
     </div>
   )
 }
@@ -510,28 +511,208 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
   )
 }
 
-function NewIEModal({ operations, orders, onClose, onSaved }: { operations: { id: string; kod: string; ad: string }[]; orders: { id: string; siparisNo: string }[]; onClose: () => void; onSaved: () => void }) {
-  const { materials } = useStore()
-  const [malkod, setMalkod] = useState(''); const [malad, setMalad] = useState(''); const [hedef, setHedef] = useState(''); const [opId, setOpId] = useState(''); const [orderId, setOrderId] = useState(''); const [not_, setNot] = useState('')
+function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
+  operations: { id: string; kod: string; ad: string; bolum?: string }[]
+  orders: { id: string; siparisNo: string }[]
+  recipes: { id: string; rcKod: string; ad: string; mamulKod: string; mamulAd: string; satirlar: { id: string; kirno: string; malkod: string; malad: string; tip: string; miktar: number; birim: string; opId: string; istId: string; hazirlikSure: number; islemSure: number }[] }[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const { materials, stations } = useStore()
+  const [rcId, setRcId] = useState('')
+  const [malkod, setMalkod] = useState('')
+  const [malad, setMalad] = useState('')
+  const [hedef, setHedef] = useState('')
+  const [opId, setOpId] = useState('')
+  const [istId, setIstId] = useState('')
+  const [orderId, setOrderId] = useState('')
+  const [not_, setNot] = useState('')
+  const [rcSearch, setRcSearch] = useState('')
+
+  // Reçete seçilince auto-fill
+  function selectRecipe(id: string) {
+    setRcId(id)
+    const rc = recipes.find(r => r.id === id)
+    if (!rc) return
+    setMalkod(rc.mamulKod || '')
+    setMalad(rc.mamulAd || '')
+    // İlk operasyon satırını al
+    const firstOp = rc.satirlar?.find(s => s.opId)
+    if (firstOp) {
+      setOpId(firstOp.opId)
+      if (firstOp.istId) setIstId(firstOp.istId)
+    }
+  }
+
+  // Reçete listesi (filtrelenmiş)
+  const filteredRecipes = useMemo(() => {
+    if (!rcSearch) return recipes.slice(0, 30)
+    const q = rcSearch.toLowerCase()
+    return recipes.filter(r =>
+      (r.rcKod || '').toLowerCase().includes(q) ||
+      (r.ad || '').toLowerCase().includes(q) ||
+      (r.mamulKod || '').toLowerCase().includes(q) ||
+      (r.mamulAd || '').toLowerCase().includes(q)
+    ).slice(0, 30)
+  }, [recipes, rcSearch])
+
+  // Malzeme seçenekleri (SearchSelect için)
+  const malOptions = useMemo(() =>
+    materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip || '' }))
+  , [materials])
+
+  // İstasyon listesi (seçili operasyona göre filtrelenmiş)
+  const uygunIstasyonlar = useMemo(() => {
+    if (!opId) return stations
+    return stations.filter(s => (s.opIds || []).includes(opId))
+  }, [stations, opId])
+
+  // Seçili reçetenin HM satırları
+  const selectedRc = recipes.find(r => r.id === rcId)
+  const hmSatirlar = selectedRc?.satirlar?.filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul') || []
+
   async function save() {
     if (!malad.trim() || !hedef) { toast.error('Malzeme adı ve hedef zorunlu'); return }
     const op = operations.find(o => o.id === opId)
-    await supabase.from('uys_work_orders').insert({ id: uid(), order_id: orderId || null, sira: 1, kirno: '1', op_id: opId || null, op_kod: op?.kod || '', op_ad: op?.ad || '', malkod: malkod.trim(), malad: malad.trim(), hedef: parseInt(hedef) || 0, mpm: 1, hm: [], ie_no: `IE-MANUAL-${Date.now().toString(36).toUpperCase()}`, durum: 'bekliyor', bagimsiz: !orderId, siparis_disi: !orderId, mamul_kod: malkod.trim(), mamul_ad: malad.trim(), not_: not_, olusturma: today() })
+    const ist = stations.find(s => s.id === istId)
+    // HM dizisini reçeteden al
+    const hm = hmSatirlar.map(s => ({
+      malkod: s.malkod, malad: s.malad,
+      miktarTotal: s.miktar * (parseInt(hedef) || 1)
+    }))
+    await supabase.from('uys_work_orders').insert({
+      id: uid(), order_id: orderId || null, rc_id: rcId || null,
+      sira: 1, kirno: '1',
+      op_id: opId || null, op_kod: op?.kod || '', op_ad: op?.ad || '',
+      ist_id: istId || null, ist_kod: ist?.kod || '', ist_ad: ist?.ad || '',
+      malkod: malkod.trim(), malad: malad.trim(),
+      hedef: parseInt(hedef) || 0, mpm: 1,
+      hm: hm.length ? hm : [],
+      ie_no: `IE-MANUAL-${Date.now().toString(36).toUpperCase()}`,
+      durum: 'bekliyor', bagimsiz: !orderId, siparis_disi: !orderId,
+      mamul_kod: malkod.trim(), mamul_ad: malad.trim(),
+      not_: not_, olusturma: today()
+    })
     onSaved()
   }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni İş Emri</h2>
         <div className="space-y-3">
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme *</label><select value={malkod} onChange={e => { setMalkod(e.target.value); const m = materials.find(mm => mm.kod === e.target.value); if (m) setMalad(m.ad) }} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none"><option value="">— Seçin —</option>{materials.map(m => <option key={m.id} value={m.kod}>{m.kod} — {m.ad}</option>)}</select></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label><input value={malad} onChange={e => setMalad(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hedef Adet *</label><input type="number" value={hedef} onChange={e => setHedef(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label><select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none"><option value="">— Seçin —</option>{operations.map(o => <option key={o.id} value={o.id}>{o.ad}</option>)}</select></div>
+
+          {/* Reçete seçimi */}
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Reçete (opsiyonel)</label>
+            <div className="relative">
+              <input
+                value={rcId ? (selectedRc ? `${selectedRc.rcKod} — ${selectedRc.mamulAd}` : rcId) : rcSearch}
+                onChange={e => { setRcSearch(e.target.value); if (rcId) { setRcId(''); setRcSearch(e.target.value) } }}
+                onFocus={() => { if (rcId) { setRcId(''); setRcSearch('') } }}
+                placeholder="Reçete ara... (kod veya ürün adı)"
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
+              />
+              {rcId && <button onClick={() => { setRcId(''); setRcSearch('') }} className="absolute right-2 top-2 text-zinc-500 hover:text-white text-sm">✕</button>}
+            </div>
+            {!rcId && rcSearch && filteredRecipes.length > 0 && (
+              <div className="mt-1 bg-bg-1 border border-border rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                {filteredRecipes.map(r => (
+                  <button key={r.id} onClick={() => { selectRecipe(r.id); setRcSearch('') }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-bg-3 text-zinc-300">
+                    <span className="font-mono text-accent">{r.rcKod}</span> — {r.mamulAd || r.ad}
+                    {r.satirlar?.length > 0 && <span className="text-zinc-600 ml-1">({r.satirlar.length} satır)</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!rcId && !rcSearch && (
+              <div className="text-[10px] text-zinc-600 mt-1">Reçetesiz de İE oluşturulabilir — aşağıdan manuel doldurun</div>
+            )}
           </div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Sipariş Bağla (opsiyonel)</label><select value={orderId} onChange={e => setOrderId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none"><option value="">— Bağımsız İE —</option>{orders.map(o => <option key={o.id} value={o.id}>{o.siparisNo}</option>)}</select></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Not</label><input value={not_} onChange={e => setNot(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+
+          {/* Malzeme — Aranabilir */}
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Malzeme / Ürün *</label>
+            <SearchSelect
+              options={malOptions}
+              value={malkod}
+              onChange={(val, lbl) => {
+                setMalkod(val)
+                const m = materials.find(mm => mm.kod === val)
+                setMalad(m ? m.ad : lbl.includes(' — ') ? lbl.split(' — ').slice(1).join(' — ') : lbl)
+              }}
+              placeholder="Malzeme ara... (kod veya ad)"
+              allowNew={false}
+            />
+            {malkod && <div className="text-[10px] text-zinc-600 mt-0.5 font-mono">{malkod}</div>}
+          </div>
+
+          {/* Malzeme Adı (düzenlenebilir) */}
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
+            <input value={malad} onChange={e => setMalad(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Hedef Adet *</label>
+              <input type="number" value={hedef} onChange={e => setHedef(e.target.value)} min={1}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
+              <select value={opId} onChange={e => setOpId(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+                <option value="">— Seçin —</option>
+                {operations.map(o => <option key={o.id} value={o.id}>{o.ad}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">İstasyon</label>
+              <select value={istId} onChange={e => setIstId(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+                <option value="">— Seçin —</option>
+                {uygunIstasyonlar.map(s => <option key={s.id} value={s.id}>{s.ad}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Sipariş Bağla</label>
+              <select value={orderId} onChange={e => setOrderId(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+                <option value="">— Bağımsız İE —</option>
+                {orders.map(o => <option key={o.id} value={o.id}>{o.siparisNo}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
+            <input value={not_} onChange={e => setNot(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+
+          {/* Seçili reçetenin HM bilgisi */}
+          {hmSatirlar.length > 0 && (
+            <div>
+              <div className="text-[10px] text-zinc-500 mb-1">Reçeteden gelen hammaddeler ({hmSatirlar.length})</div>
+              <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+                <table className="w-full text-[11px]">
+                  <thead><tr className="border-b border-border text-zinc-600"><th className="text-left px-2 py-1">Malzeme</th><th className="text-right px-2 py-1">Birim Miktar</th><th className="text-right px-2 py-1">Toplam</th></tr></thead>
+                  <tbody>{hmSatirlar.map((s, i) => (
+                    <tr key={i} className="border-b border-border/20">
+                      <td className="px-2 py-1 text-zinc-300" title={s.malkod}>{s.malad || s.malkod}</td>
+                      <td className="px-2 py-1 text-right font-mono text-zinc-400">{s.miktar} {s.birim}</td>
+                      <td className="px-2 py-1 text-right font-mono text-accent">{Math.round(s.miktar * (parseInt(hedef) || 1) * 100) / 100}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
