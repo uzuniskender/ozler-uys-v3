@@ -338,8 +338,8 @@ export function Dashboard() {
             </thead>
             <tbody>
               {activeWork.map(a => (
-                <tr key={a.id} className="border-b border-border/50">
-                  <td className="px-4 py-1.5 font-medium">{a.opAd}</td>
+                <tr key={a.id} className="border-b border-border/50 cursor-pointer hover:bg-bg-3/50" onClick={() => navigate('/operator?oprId=' + a.opId)}>
+                  <td className="px-4 py-1.5 font-medium underline decoration-dotted">{a.opAd}</td>
                   <td className="px-4 py-1.5 font-mono text-accent">{workOrders.find(w => w.id === a.woId)?.ieNo || a.woId}</td>
                   <td className="px-4 py-1.5 text-zinc-400">{a.woAd}</td>
                   <td className="px-4 py-1.5 font-mono text-zinc-500">{a.baslangic}</td>
@@ -549,8 +549,8 @@ export function Dashboard() {
           <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg">
             <div className="text-sm font-semibold text-red mb-2">⏰ {uzunAcik.length} iş 8+ saattir açık — kapatılmayı unutmuş olabilir!</div>
             {uzunAcik.map(a => (
-              <div key={a.id} className="flex items-center gap-3 text-xs py-1 cursor-pointer hover:bg-red/5 rounded px-1 -mx-1" onClick={() => navigate('/work-orders')}>
-                <span className="text-zinc-300 font-semibold">{a.opAd}</span>
+              <div key={a.id} className="flex items-center gap-3 text-xs py-1 cursor-pointer hover:bg-red/5 rounded px-1 -mx-1" onClick={() => navigate('/operator?oprId=' + a.opId)}>
+                <span className="text-zinc-300 font-semibold underline decoration-dotted">{a.opAd}</span>
                 <span className="font-mono text-accent">{a.ieNo}</span>
                 <span className="text-zinc-500 truncate">{a.woAd?.slice(0, 30)}</span>
                 <span className="ml-auto font-mono text-red font-bold">{a.saat}s {a.dakika % 60}dk</span>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +10,7 @@ import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user, signOut } = useAuth()
   const [step, setStep] = useState<'bolum'|'operator'|'sifre'>('bolum')
   const [bolum, setBolum] = useState('')
@@ -28,6 +29,20 @@ export function OperatorPanel() {
       setLoggedIn(true)
     }
   }, [user])
+
+  // Dashboard'dan oprId ile gelince auto-login
+  useEffect(() => {
+    const urlOprId = searchParams.get('oprId')
+    if (urlOprId && !loggedIn && operators.length > 0) {
+      const op = operators.find(o => o.id === urlOprId)
+      if (op) {
+        setOprId(urlOprId)
+        setBolum(op.bolum || '')
+        setSifre(op.sifre || '')
+        setLoggedIn(true)
+      }
+    }
+  }, [searchParams, operators, loggedIn])
 
   const isAdmin = user?.role === 'admin' || user?.email
 
@@ -193,18 +208,37 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
     if (!w) return
     if (myActiveList.some(a => a.woId === woId)) { toast.error('Bu işte zaten çalışıyorsun'); return }
     const now = new Date()
-    const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+    const currentSaat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+    let saat = currentSaat
+    // Zaten aktif işi varsa → şu anki saat
+    // Aktif işi yoksa ama bugün bir iş bitirdiyse → bitiş saati default
+    if (myActiveList.length === 0) {
+      try {
+        const raw = localStorage.getItem('uys_lastStop_' + oprId)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (parsed.tarih === today() && parsed.saat) {
+            saat = parsed.saat
+            toast.info('Başlangıç saati önceki işin bitişinden alındı: ' + saat)
+          }
+        }
+      } catch {}
+    }
     const { error } = await supabase.from('uys_active_work').insert({
       id: uid(), op_id: oprId, op_ad: opr.ad, wo_id: woId,
       wo_ad: w.malad, baslangic: saat, tarih: today(),
     })
     if (error) { toast.error('İşe başlatılamadı: ' + error.message); return }
-    loadAll(); toast.success('İş başlatıldı: ' + w.ieNo)
+    loadAll(); toast.success('İş başlatıldı: ' + w.ieNo + ' (' + saat + ')')
   }
 
   async function stopWork(activeId?: string) {
     const target = activeId ? myActiveList.find(a => a.id === activeId) : myActiveList[0]
     if (!target) return
+    // Bitiş saatini kaydet — sonraki işin başlangıcı olacak
+    const now = new Date()
+    const stopSaat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+    try { localStorage.setItem('uys_lastStop_' + oprId, JSON.stringify({ tarih: today(), saat: stopSaat })) } catch {}
     await supabase.from('uys_active_work').delete().eq('id', target.id)
     loadAll(); toast.success('İş durduruldu')
   }
