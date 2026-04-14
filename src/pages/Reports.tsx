@@ -7,11 +7,20 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export function Reports() {
-  const { workOrders, logs, operators, fireLogs, orders } = useStore()
+  const { workOrders, logs, operators, fireLogs, orders, operations } = useStore()
   const [tab, setTab] = useState('ozet')
+
+  // Detaylı Rapor filtreleri
+  const [dBaslangic, setDBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
+  const [dBitis, setDBitis] = useState(today())
+  const [dOperator, setDOperator] = useState('')
+  const [dOperasyon, setDOperasyon] = useState('')
+  const [dBolum, setDBolum] = useState('')
+  const [dSiparis, setDSiparis] = useState('')
 
   const tabs = [
     { id: 'ozet', label: 'Özet' },
+    { id: 'detayli', label: '📋 Detaylı Üretim' },
     { id: 'gunluk', label: 'Günlük Üretim' },
     { id: 'fire', label: 'Fire Analizi' },
     { id: 'operasyon', label: 'Operasyon Bazlı' },
@@ -57,6 +66,133 @@ export function Reports() {
     fireLogs.forEach(f => { const k = f.opAd || 'Tanımsız'; map[k] = (map[k] || 0) + f.qty })
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
   }, [fireLogs])
+
+  // ═══ DETAYLI ÜRETİM RAPORU ═══
+  // Lookup maps
+  const woMap = useMemo(() => { const m: Record<string, typeof workOrders[0]> = {}; workOrders.forEach(w => { m[w.id] = w }); return m }, [workOrders])
+  const orderMap = useMemo(() => { const m: Record<string, typeof orders[0]> = {}; orders.forEach(o => { m[o.id] = o }); return m }, [orders])
+  const opBolumMap = useMemo(() => { const m: Record<string, string> = {}; operations.forEach(op => { if (op.bolum) m[op.id] = op.bolum }); return m }, [operations])
+
+  // Unique filter options
+  const dOperatorList = useMemo(() => {
+    const s = new Set<string>()
+    logs.forEach(l => Array.isArray(l.operatorlar) && l.operatorlar.forEach(o => o.ad && s.add(o.ad)))
+    return [...s].sort()
+  }, [logs])
+  const dOperasyonList = useMemo(() => [...new Set(workOrders.map(w => w.opAd).filter(Boolean))].sort(), [workOrders])
+  const dBolumList = useMemo(() => [...new Set(operations.map(o => o.bolum).filter(Boolean))].sort(), [operations])
+  const dSiparisList = useMemo(() => [...new Set(orders.map(o => o.siparisNo).filter(Boolean))].sort(), [orders])
+
+  interface DetayRow {
+    logId: string; tarih: string; siparisNo: string; ieNo: string
+    mamulKod: string; mamulAd: string; opAd: string; operatorler: string
+    basStr: string; bitStr: string; calismaDk: number; calismaStr: string
+    uretim: number; fire: number; fireOran: number; durusDk: number
+    istAd: string; bolum: string
+  }
+
+  const detayliData = useMemo(() => {
+    const rows: DetayRow[] = []
+    logs.forEach(l => {
+      if (l.tarih < dBaslangic || l.tarih > dBitis) return
+      const wo = woMap[l.woId]
+      if (!wo) return
+      const order = wo.orderId ? orderMap[wo.orderId] : null
+      const siparisNo = order?.siparisNo || (wo.siparisDisi ? 'Sipariş Dışı' : '')
+      const bolum = wo.opId ? (opBolumMap[wo.opId] || '') : ''
+
+      // Filters
+      if (dSiparis && siparisNo !== dSiparis) return
+      if (dOperasyon && wo.opAd !== dOperasyon) return
+      if (dBolum && bolum !== dBolum) return
+
+      const oprArr = Array.isArray(l.operatorlar) ? l.operatorlar : []
+      const oprNames = oprArr.map(o => o.ad || '').filter(Boolean)
+      if (dOperator && !oprNames.includes(dOperator)) return
+
+      // Çalışma süresi: ilk bas — son bit
+      let minBas = '', maxBit = '', calismaDk = 0
+      oprArr.forEach(o => {
+        if (o.bas && (!minBas || o.bas < minBas)) minBas = o.bas
+        if (o.bit && (!maxBit || o.bit > maxBit)) maxBit = o.bit
+        if (o.bas && o.bit && o.bit >= o.bas) {
+          const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
+          const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
+          calismaDk = Math.max(calismaDk, e - b)
+        }
+      })
+
+      // Duruş süresi
+      let durusDk = 0
+      if (Array.isArray(l.duruslar)) {
+        l.duruslar.forEach(d => {
+          const sure = (d as unknown as Record<string, unknown>).sure as number
+          if (sure) { durusDk += sure }
+          else if (d.bas && d.bit && d.bit >= d.bas) {
+            const b = parseInt(d.bas.split(':')[0]) * 60 + parseInt(d.bas.split(':')[1] || '0')
+            const e = parseInt(d.bit.split(':')[0]) * 60 + parseInt(d.bit.split(':')[1] || '0')
+            durusDk += Math.max(0, e - b)
+          }
+        })
+      }
+
+      const fireQty = l.fire || 0
+      const totalQty = l.qty + fireQty
+      rows.push({
+        logId: l.id, tarih: l.tarih, siparisNo, ieNo: wo.ieNo || l.ieNo || '',
+        mamulKod: wo.mamulKod || wo.malkod || '', mamulAd: wo.mamulAd || wo.malad || '',
+        opAd: wo.opAd || '', operatorler: oprNames.join(', '),
+        basStr: minBas, bitStr: maxBit, calismaDk,
+        calismaStr: calismaDk > 0 ? Math.floor(calismaDk / 60) + 's ' + (calismaDk % 60) + 'dk' : '',
+        uretim: l.qty, fire: fireQty,
+        fireOran: totalQty > 0 ? Math.round(fireQty / totalQty * 1000) / 10 : 0,
+        durusDk, istAd: wo.istAd || '', bolum,
+      })
+    })
+    return rows.sort((a, b) => b.tarih.localeCompare(a.tarih) || b.basStr.localeCompare(a.basStr))
+  }, [logs, dBaslangic, dBitis, dOperator, dOperasyon, dBolum, dSiparis, woMap, orderMap, opBolumMap])
+
+  const detayliTotals = useMemo(() => {
+    const t = { uretim: 0, fire: 0, calismaDk: 0, durusDk: 0 }
+    detayliData.forEach(r => { t.uretim += r.uretim; t.fire += r.fire; t.calismaDk += r.calismaDk; t.durusDk += r.durusDk })
+    return {
+      ...t,
+      fireOran: (t.uretim + t.fire) > 0 ? Math.round(t.fire / (t.uretim + t.fire) * 1000) / 10 : 0,
+      calismaStr: t.calismaDk > 0 ? Math.floor(t.calismaDk / 60) + 's ' + (t.calismaDk % 60) + 'dk' : '',
+      count: detayliData.length,
+    }
+  }, [detayliData])
+
+  const exportDetayli = () => {
+    import('xlsx').then(XLSX => {
+      const rows = detayliData.map(r => ({
+        'Tarih': r.tarih, 'Sipariş No': r.siparisNo, 'İE No': r.ieNo,
+        'Mamul Kodu': r.mamulKod, 'Mamul Adı': r.mamulAd, 'Operasyon': r.opAd,
+        'Operatör(ler)': r.operatorler, 'Başlangıç': r.basStr, 'Bitiş': r.bitStr,
+        'Çalışma (dk)': r.calismaDk, 'Üretim': r.uretim, 'Fire': r.fire,
+        'Fire %': r.fireOran, 'Duruş (dk)': r.durusDk, 'İstasyon': r.istAd, 'Bölüm': r.bolum,
+      }))
+      // Toplam satırı
+      rows.push({
+        'Tarih': 'TOPLAM', 'Sipariş No': '', 'İE No': `${detayliTotals.count} kayıt`,
+        'Mamul Kodu': '', 'Mamul Adı': '', 'Operasyon': '',
+        'Operatör(ler)': '', 'Başlangıç': '', 'Bitiş': '',
+        'Çalışma (dk)': detayliTotals.calismaDk, 'Üretim': detayliTotals.uretim, 'Fire': detayliTotals.fire,
+        'Fire %': detayliTotals.fireOran, 'Duruş (dk)': detayliTotals.durusDk, 'İstasyon': '', 'Bölüm': '',
+      })
+      const ws = XLSX.utils.json_to_sheet(rows)
+      // Sütun genişlikleri
+      ws['!cols'] = [
+        { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 16 },
+        { wch: 22 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 7 },
+        { wch: 8 }, { wch: 10 }, { wch: 16 }, { wch: 14 },
+      ]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Detaylı Üretim')
+      XLSX.writeFile(wb, `detayli_uretim_${dBaslangic}_${dBitis}.xlsx`)
+      toast.success('Detaylı rapor Excel indirildi')
+    })
+  }
 
   return (
     <div>
@@ -118,6 +254,131 @@ export function Reports() {
             </div>
           )}
         </>
+      )}
+
+      {/* ═══ DETAYLI ÜRETİM RAPORU ═══ */}
+      {tab === 'detayli' && (
+        <div>
+          {/* Filtreler */}
+          <div className="bg-bg-2 border border-border rounded-lg p-3 mb-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Başlangıç</label>
+                <input type="date" value={dBaslangic} onChange={e => setDBaslangic(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Bitiş</label>
+                <input type="date" value={dBitis} onChange={e => setDBitis(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Operatör</label>
+                <select value={dOperator} onChange={e => setDOperator(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300 min-w-[120px]">
+                  <option value="">Tümü</option>
+                  {dOperatorList.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Operasyon</label>
+                <select value={dOperasyon} onChange={e => setDOperasyon(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300 min-w-[120px]">
+                  <option value="">Tümü</option>
+                  {dOperasyonList.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Bölüm</label>
+                <select value={dBolum} onChange={e => setDBolum(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300 min-w-[100px]">
+                  <option value="">Tümü</option>
+                  {dBolumList.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Sipariş</label>
+                <select value={dSiparis} onChange={e => setDSiparis(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300 min-w-[120px]">
+                  <option value="">Tümü</option>
+                  {dSiparisList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <button onClick={() => { setDOperator(''); setDOperasyon(''); setDBolum(''); setDSiparis('') }} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-500 hover:text-white">✕ Temizle</button>
+              <span className="flex-1" />
+              <span className="text-[11px] text-zinc-500">{detayliTotals.count} kayıt</span>
+              <button onClick={exportDetayli} className="px-3 py-1.5 bg-green/20 border border-green/30 rounded text-xs text-green hover:bg-green/30">📥 Excel</button>
+            </div>
+          </div>
+
+          {/* Tablo */}
+          <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead>
+                  <tr className="border-b border-border text-zinc-500 bg-bg-1/50">
+                    <th className="text-left px-3 py-2">Tarih</th>
+                    <th className="text-left px-3 py-2">Sipariş</th>
+                    <th className="text-left px-3 py-2">İE No</th>
+                    <th className="text-left px-3 py-2">Ürün</th>
+                    <th className="text-left px-3 py-2">Operasyon</th>
+                    <th className="text-left px-3 py-2">Operatör(ler)</th>
+                    <th className="text-center px-3 py-2">Başlangıç</th>
+                    <th className="text-center px-3 py-2">Bitiş</th>
+                    <th className="text-right px-3 py-2">Süre</th>
+                    <th className="text-right px-3 py-2">Üretim</th>
+                    <th className="text-right px-3 py-2">Fire</th>
+                    <th className="text-right px-3 py-2">Fire%</th>
+                    <th className="text-right px-3 py-2">Duruş</th>
+                    <th className="text-left px-3 py-2">İstasyon</th>
+                    <th className="text-left px-3 py-2">Bölüm</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detayliData.length === 0 && (
+                    <tr><td colSpan={15} className="px-3 py-8 text-center text-zinc-600">Filtre kriterlerine uygun kayıt bulunamadı</td></tr>
+                  )}
+                  {detayliData.map(r => (
+                    <tr key={r.logId} className="border-b border-border/20 hover:bg-bg-1/30">
+                      <td className="px-3 py-1.5 font-mono text-zinc-400">{r.tarih}</td>
+                      <td className="px-3 py-1.5 font-mono text-zinc-300">{r.siparisNo}</td>
+                      <td className="px-3 py-1.5 font-mono text-accent">{r.ieNo}</td>
+                      <td className="px-3 py-1.5 text-zinc-300" title={r.mamulKod}>{r.mamulAd || r.mamulKod}</td>
+                      <td className="px-3 py-1.5 text-zinc-300">{r.opAd}</td>
+                      <td className="px-3 py-1.5 text-zinc-300 max-w-[150px] truncate" title={r.operatorler}>{r.operatorler}</td>
+                      <td className="px-3 py-1.5 text-center font-mono text-zinc-500">{r.basStr}</td>
+                      <td className="px-3 py-1.5 text-center font-mono text-zinc-500">{r.bitStr}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-zinc-400">{r.calismaStr}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-green">{r.uretim}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono ${r.fire > 0 ? 'text-red' : 'text-zinc-600'}`}>{r.fire}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono ${r.fireOran > 5 ? 'text-red' : r.fireOran > 0 ? 'text-amber' : 'text-zinc-600'}`}>{r.fireOran > 0 ? r.fireOran + '%' : '-'}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono ${r.durusDk > 0 ? 'text-amber' : 'text-zinc-600'}`}>{r.durusDk > 0 ? r.durusDk + ' dk' : '-'}</td>
+                      <td className="px-3 py-1.5 text-zinc-400">{r.istAd}</td>
+                      <td className="px-3 py-1.5 text-zinc-400">{r.bolum}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {detayliData.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-border bg-bg-1/60 font-semibold">
+                      <td className="px-3 py-2 text-zinc-300" colSpan={2}>TOPLAM</td>
+                      <td className="px-3 py-2 text-zinc-500 font-mono">{detayliTotals.count} kayıt</td>
+                      <td colSpan={5} />
+                      <td className="px-3 py-2 text-right font-mono text-zinc-300">{detayliTotals.calismaStr}</td>
+                      <td className="px-3 py-2 text-right font-mono text-green">{detayliTotals.uretim}</td>
+                      <td className="px-3 py-2 text-right font-mono text-red">{detayliTotals.fire}</td>
+                      <td className="px-3 py-2 text-right font-mono text-amber">{detayliTotals.fireOran}%</td>
+                      <td className="px-3 py-2 text-right font-mono text-amber">{detayliTotals.durusDk} dk</td>
+                      <td colSpan={2} />
+                    </tr>
+                    <tr className="bg-bg-1/30">
+                      <td className="px-3 py-1.5 text-zinc-500 text-[10px]" colSpan={2}>ORTALAMA</td>
+                      <td colSpan={6} />
+                      <td className="px-3 py-1.5 text-right font-mono text-[10px] text-zinc-500">{detayliTotals.count > 0 ? Math.floor(detayliTotals.calismaDk / detayliTotals.count) + ' dk' : ''}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-[10px] text-zinc-500">{detayliTotals.count > 0 ? Math.round(detayliTotals.uretim / detayliTotals.count * 10) / 10 : ''}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-[10px] text-zinc-500">{detayliTotals.count > 0 ? Math.round(detayliTotals.fire / detayliTotals.count * 10) / 10 : ''}</td>
+                      <td colSpan={4} />
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
       )}
 
       {tab === 'gunluk' && (
