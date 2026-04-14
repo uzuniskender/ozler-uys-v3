@@ -151,12 +151,12 @@ export function OperatorPanel() {
     )
   }
 
-  return <OperatorMain oprId={oprId} opr={opr} tab={tab} setTab={setTab} onLogout={() => { signOut(); window.location.hash = '#/'; window.location.reload() }} />
+  return <OperatorMain oprId={oprId} opr={opr} tab={tab} setTab={setTab} isAdmin={!!isAdmin} onLogout={() => { signOut(); window.location.hash = '#/'; window.location.reload() }} onBack={() => navigate('/')} />
 }
 
-function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
+function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
-  tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; onLogout: () => void
+  tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
   const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, loadAll } = useStore()
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
@@ -274,7 +274,10 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
             <div className="text-lg font-bold text-white">{opr.ad}</div>
             <div className="text-xs text-zinc-400">{opr.bolum} · {today()}</div>
           </div>
-          <button onClick={onLogout} className="px-4 py-2 bg-red/20 border border-red/30 text-red text-xs rounded-lg hover:bg-red/30 font-semibold">Çıkış</button>
+          <div className="flex gap-2">
+            {isAdmin && <button onClick={onBack} className="px-4 py-2 bg-accent/20 border border-accent/30 text-accent text-xs rounded-lg hover:bg-accent/30 font-semibold">← Yönetime Dön</button>}
+            <button onClick={onLogout} className="px-4 py-2 bg-red/20 border border-red/30 text-red text-xs rounded-lg hover:bg-red/30 font-semibold">Çıkış</button>
+          </div>
         </div>
 
         {/* İzin Uyarı Banner */}

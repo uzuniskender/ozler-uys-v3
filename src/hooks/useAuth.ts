@@ -23,6 +23,11 @@ export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(() => {
     const stored = getStored()
     if (stored?.role === 'guest') setGuestMode(true)
+    // Operatör oturumu kalıcı değil — her açılışta şifre sorulsun
+    if (stored?.role === 'operator') {
+      localStorage.removeItem(AUTH_KEY)
+      return null
+    }
     return stored
   })
   const [loading, setLoading] = useState(true)
