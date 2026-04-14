@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
@@ -56,7 +57,7 @@ export function Dashboard() {
   const {
     orders, workOrders, logs, operatorNotes, activeWork, operators,
     fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
-    operations, stations, sevkler, izinler, loadAll,
+    operations, stations, sevkler, izinler, recipes, loadAll,
   } = useStore()
   const { isGuest } = useAuth()
   const todayStr = today()
@@ -92,13 +93,59 @@ export function Dashboard() {
     return prod < wo.hedef
   })
 
-  // ═══ #1: MRP — doğru ibare & doğru hesaplama ═══
-  const mrpYapilmamis = orders.filter(o =>
-    o.receteId &&
-    aktifOrders.some(a => a.id === o.id) &&
-    workOrders.some(w => w.orderId === o.id) &&
-    (!o.mrpDurum || o.mrpDurum === 'bekliyor')
-  ).length
+  // ═══ #1: MRP — Gerçek stok ihtiyaç kontrolü ═══
+  const mrpYapilmamis = useMemo(() => {
+    // Stok net hesabı
+    const stokNet: Record<string, number> = {}
+    stokHareketler.forEach(h => {
+      if (!stokNet[h.malkod]) stokNet[h.malkod] = 0
+      stokNet[h.malkod] += h.tip === 'giris' ? h.miktar : -h.miktar
+    })
+    // Açık tedarik (yoldaki malzeme)
+    const acikTed: Record<string, number> = {}
+    tedarikler.filter(t => !t.geldi).forEach(t => {
+      if (!acikTed[t.malkod]) acikTed[t.malkod] = 0
+      acikTed[t.malkod] += t.miktar
+    })
+
+    let count = 0
+    for (const o of aktifOrders) {
+      // A: Reçetesi var ama İE'si yok → MRP hiç çalıştırılmamış
+      const orderWOs = workOrders.filter(w => w.orderId === o.id)
+      if (o.receteId && !orderWOs.length) { count++; continue }
+
+      // B: İE'leri var, kalan üretim için HM yeterli mi?
+      let eksikVar = false
+      for (const w of orderWOs) {
+        if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
+        const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+        const kalan = Math.max(0, w.hedef - prod)
+        if (kalan <= 0) continue
+
+        // HM ihtiyacı: wo.hm'den veya reçeteden
+        let hmItems: { malkod: string; perUnit: number }[] = []
+        if (w.hm?.length && w.hedef > 0) {
+          hmItems = w.hm.map(h => ({ malkod: h.malkod, perUnit: h.miktarTotal / w.hedef }))
+        } else if (w.rcId) {
+          const rc = recipes.find(r => r.id === w.rcId)
+          if (rc?.satirlar) {
+            hmItems = rc.satirlar
+              .filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
+              .map(s => ({ malkod: s.malkod, perUnit: (s.miktar || 0) * (w.mpm || 1) }))
+          }
+        }
+
+        for (const hm of hmItems) {
+          const ihtiyac = hm.perUnit * kalan
+          const mevcut = (stokNet[hm.malkod] || 0) + (acikTed[hm.malkod] || 0)
+          if (mevcut < ihtiyac) { eksikVar = true; break }
+        }
+        if (eksikVar) break
+      }
+      if (eksikVar) count++
+    }
+    return count
+  }, [aktifOrders, workOrders, logs, stokHareketler, tedarikler, recipes])
 
   // ═══ #3: Giriş yapmayan operatörler ═══
   const bugunLogOprIds = new Set(
