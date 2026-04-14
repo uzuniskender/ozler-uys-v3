@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag, CalendarX2, Bell } from 'lucide-react'
+import { hesaplaMRP } from '@/features/production/mrp'
 
 /* ── #2: Tıklanabilir Stat Card ── */
 function StatCard({ value, label, color, icon: Icon, onClick }: {
@@ -93,59 +94,17 @@ export function Dashboard() {
     return prod < wo.hedef
   })
 
-  // ═══ #1: MRP — Gerçek stok ihtiyaç kontrolü ═══
+  // ═══ #1: MRP — MRP sayfasıyla aynı hesaplama ═══
   const mrpYapilmamis = useMemo(() => {
-    // Stok net hesabı
-    const stokNet: Record<string, number> = {}
-    stokHareketler.forEach(h => {
-      if (!stokNet[h.malkod]) stokNet[h.malkod] = 0
-      stokNet[h.malkod] += h.tip === 'giris' ? h.miktar : -h.miktar
-    })
-    // Açık tedarik (yoldaki malzeme)
-    const acikTed: Record<string, number> = {}
-    tedarikler.filter(t => !t.geldi).forEach(t => {
-      if (!acikTed[t.malkod]) acikTed[t.malkod] = 0
-      acikTed[t.malkod] += t.miktar
-    })
-
-    let count = 0
-    for (const o of aktifOrders) {
-      // A: Reçetesi var ama İE'si yok → MRP hiç çalıştırılmamış
-      const orderWOs = workOrders.filter(w => w.orderId === o.id)
-      if (o.receteId && !orderWOs.length) { count++; continue }
-
-      // B: İE'leri var, kalan üretim için HM yeterli mi?
-      let eksikVar = false
-      for (const w of orderWOs) {
-        if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
-        const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-        const kalan = Math.max(0, w.hedef - prod)
-        if (kalan <= 0) continue
-
-        // HM ihtiyacı: wo.hm'den veya reçeteden
-        let hmItems: { malkod: string; perUnit: number }[] = []
-        if (w.hm?.length && w.hedef > 0) {
-          hmItems = w.hm.map(h => ({ malkod: h.malkod, perUnit: h.miktarTotal / w.hedef }))
-        } else if (w.rcId) {
-          const rc = recipes.find(r => r.id === w.rcId)
-          if (rc?.satirlar) {
-            hmItems = rc.satirlar
-              .filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
-              .map(s => ({ malkod: s.malkod, perUnit: (s.miktar || 0) * (w.mpm || 1) }))
-          }
-        }
-
-        for (const hm of hmItems) {
-          const ihtiyac = hm.perUnit * kalan
-          const mevcut = (stokNet[hm.malkod] || 0) + (acikTed[hm.malkod] || 0)
-          if (mevcut < ihtiyac) { eksikVar = true; break }
-        }
-        if (eksikVar) break
-      }
-      if (eksikVar) count++
-    }
-    return count
-  }, [aktifOrders, workOrders, logs, stokHareketler, tedarikler, recipes])
+    try {
+      const cpMapped = cuttingPlans.map(p => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum,
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const result = hesaplaMRP(null, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
+      return result.filter(r => r.net > 0).length
+    } catch { return 0 }
+  }, [orders, workOrders, recipes, stokHareketler, tedarikler, cuttingPlans, materials])
 
   // ═══ #3: Giriş yapmayan operatörler ═══
   const bugunLogOprIds = new Set(
