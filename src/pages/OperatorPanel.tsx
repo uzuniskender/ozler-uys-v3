@@ -396,29 +396,99 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
         {tab === 'izin' && (() => {
           const myIzinler = izinler.filter(iz => iz.opId === oprId).sort((a, b) => b.baslangic.localeCompare(a.baslangic))
+          const adminOlusturan = myIzinler.filter(iz => iz.olusturan === 'admin' && iz.durum === 'bekliyor')
+          const duzenlenenler = myIzinler.filter(iz => iz.durum === 'duzenlendi')
           return (
             <div className="space-y-3">
               {/* İzin Talep Formu */}
               <IzinTalepForm oprId={oprId} oprAd={opr.ad} onSaved={() => { loadAll(); toast.success('İzin talebi gönderildi — onay bekleniyor') }} />
-              {/* Mevcut İzinlerim */}
+
+              {/* Admin tarafından oluşturulan — operatör onayı bekleyen */}
+              {adminOlusturan.length > 0 && (
+                <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-3">
+                  <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider mb-2">🏢 Yönetim Tarafından Oluşturulan İzinler</div>
+                  {adminOlusturan.map(iz => (
+                    <div key={iz.id} className="bg-bg-1 rounded-lg p-2.5 mb-1.5 border border-cyan-500/20">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="px-1.5 py-0.5 rounded bg-amber/10 text-amber text-[10px]">{iz.tip}</span>
+                        <span className="text-amber text-[10px] font-semibold">⏳ Onayınız Bekleniyor</span>
+                      </div>
+                      <div className="font-mono text-zinc-400 text-xs mb-2">
+                        {iz.baslangic}{iz.bitis !== iz.baslangic ? ' — ' + iz.bitis : ''}
+                        {iz.saatBaslangic && iz.saatBitis ? ` (${iz.saatBaslangic}–${iz.saatBitis})` : ''}
+                      </div>
+                      {iz.not && <div className="text-[10px] text-zinc-500 mb-2">Not: {iz.not}</div>}
+                      <div className="flex gap-2">
+                        <button onClick={async () => {
+                          await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          loadAll(); toast.success('İzin onaylandı')
+                        }} className="flex-1 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-[11px] font-bold">✓ Onayla</button>
+                        <button onClick={async () => {
+                          await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          loadAll(); toast.success('İzin reddedildi')
+                        }} className="flex-1 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-[11px] font-bold">✕ Reddet</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Düzenlenen talepler — operatör tekrar onaylamalı */}
+              {duzenlenenler.length > 0 && (
+                <div className="bg-amber/5 border border-amber/20 rounded-xl p-3">
+                  <div className="text-[10px] text-amber font-bold uppercase tracking-wider mb-2">✏ Talebiniz Düzenlendi — Tekrar Onaylayın</div>
+                  {duzenlenenler.map(iz => (
+                    <div key={iz.id} className="bg-bg-1 rounded-lg p-2.5 mb-1.5 border border-amber/20">
+                      <div className="font-mono text-zinc-400 text-xs mb-2">
+                        {iz.tip} · {iz.baslangic}{iz.bitis !== iz.baslangic ? ' — ' + iz.bitis : ''}
+                        {iz.saatBaslangic && iz.saatBitis ? ` (${iz.saatBaslangic}–${iz.saatBitis})` : ''}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={async () => {
+                          await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          loadAll(); toast.success('Düzenlenen izin onaylandı')
+                        }} className="flex-1 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-[11px] font-bold">✓ Onayla</button>
+                        <button onClick={async () => {
+                          await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          loadAll(); toast.success('Düzenlenen izin reddedildi')
+                        }} className="flex-1 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-[11px] font-bold">✕ Reddet</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* İzin Geçmişim */}
               {myIzinler.length > 0 && (
                 <div className="bg-bg-2 border border-border rounded-xl overflow-hidden">
                   <div className="px-3 py-2 border-b border-border text-[11px] font-semibold text-zinc-400">📅 İzin Geçmişim</div>
                   <div className="divide-y divide-border/30">
-                    {myIzinler.slice(0, 10).map(iz => {
-                      const durumColor = iz.durum === 'onaylandi' ? 'text-green' : iz.durum === 'reddedildi' ? 'text-red' : 'text-amber'
-                      const durumIcon = iz.durum === 'onaylandi' ? '✅' : iz.durum === 'reddedildi' ? '❌' : '⏳'
+                    {myIzinler.slice(0, 15).map(iz => {
+                      const durumColor = iz.durum === 'onaylandi' ? 'text-green' : iz.durum === 'reddedildi' ? 'text-red' : iz.durum === 'duzenlendi' ? 'text-cyan-400' : 'text-amber'
+                      const durumIcon = iz.durum === 'onaylandi' ? '✅' : iz.durum === 'reddedildi' ? '❌' : iz.durum === 'duzenlendi' ? '✏️' : '⏳'
+                      const canEdit = iz.olusturan === 'operator' && iz.durum === 'bekliyor'
+                      const isApproved = iz.durum === 'onaylandi'
                       return (
                         <div key={iz.id} className="px-3 py-2 text-xs">
                           <div className="flex items-center justify-between mb-1">
                             <span className="px-1.5 py-0.5 rounded bg-amber/10 text-amber text-[10px]">{iz.tip}</span>
-                            <span className={`font-semibold ${durumColor}`}>{durumIcon} {iz.durum}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold ${durumColor}`}>{durumIcon} {iz.durum}</span>
+                              {isApproved && (
+                                <button onClick={() => toast.info('Onaylanan izin düzenlenemez. İptal için kullanıcı yanına gidiniz.')} className="text-[9px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded">🔒</button>
+                              )}
+                            </div>
                           </div>
                           <div className="font-mono text-zinc-500">
                             {iz.baslangic}{iz.bitis !== iz.baslangic ? ' — ' + iz.bitis : ''}
                             {iz.saatBaslangic && iz.saatBitis ? ` (${iz.saatBaslangic}–${iz.saatBitis})` : ''}
                           </div>
-                          {iz.onaylayan && <div className="text-[10px] text-zinc-600 mt-0.5">Onaylayan: {iz.onaylayan} · {iz.onayTarihi}</div>}
+                          <div className="flex items-center justify-between mt-1">
+                            <div className="text-[10px] text-zinc-600">
+                              {iz.olusturan === 'admin' ? '🏢 Yönetim oluşturdu' : '👷 Kendi talebim'}
+                              {iz.onaylayan ? ` · Onay: ${iz.onaylayan}` : ''}
+                            </div>
+                          </div>
                         </div>
                       )
                     })}

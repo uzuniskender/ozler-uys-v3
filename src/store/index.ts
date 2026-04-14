@@ -145,7 +145,7 @@ const M = {
     tip: (r.tip || 'yıllık') as string, durum: (r.durum || 'bekliyor') as string,
     saatBaslangic: (r.saat_baslangic || '') as string, saatBitis: (r.saat_bitis || '') as string,
     onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
-    not: (r.not_ || '') as string,
+    not: (r.not_ || '') as string, olusturan: (r.olusturan || 'admin') as string,
   }),
 }
 

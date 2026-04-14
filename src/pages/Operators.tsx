@@ -14,7 +14,7 @@ export function Operators() {
   const [showForm, setShowForm] = useState(false)
   const [editOpr, setEditOpr] = useState<typeof operators[0] | null>(null)
   const [tab, setTab] = useState<'liste'|'izin'>('liste')
-  const [izinForm, setIzinForm] = useState(false)
+  const [izinForm, setIzinForm] = useState<boolean | 'toplu' | Record<string, any>>(false)
 
   const bolumler = useMemo(() => [...new Set(operators.map(o => o.bolum).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')), [operators])
 
@@ -115,52 +115,63 @@ export function Operators() {
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold">İzin / Mesai Kayıtları ({izinler.length})</h3>
-            <button onClick={() => setIzinForm(true)} className="flex items-center gap-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={12} /> İzin Ekle</button>
+            <div className="flex gap-2">
+              <button onClick={() => setIzinForm(true)} className="flex items-center gap-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={12} /> İzin Ekle</button>
+              <button onClick={() => setIzinForm('toplu')} className="flex items-center gap-1 px-3 py-1.5 bg-green/20 hover:bg-green/30 text-green border border-green/30 rounded-lg text-xs font-semibold"><Plus size={12} /> Toplu İzin</button>
+            </div>
           </div>
           {izinler.length ? (
             <table className="w-full text-xs">
               <thead><tr className="border-b border-border text-zinc-500">
                 <th className="text-left px-3 py-2">Operatör</th>
-                <th className="text-left px-3 py-2">Başlangıç</th>
-                <th className="text-left px-3 py-2">Bitiş</th>
-                <th className="text-left px-3 py-2">Saat</th>
+                <th className="text-left px-3 py-2">Tarih</th>
                 <th className="text-left px-3 py-2">Tip</th>
+                <th className="text-left px-3 py-2">Oluşturan</th>
                 <th className="text-left px-3 py-2">Durum</th>
                 <th className="text-left px-3 py-2">Onaylayan</th>
                 <th className="text-right px-3 py-2">İşlem</th>
               </tr></thead>
               <tbody>
                 {izinler.sort((a, b) => b.baslangic.localeCompare(a.baslangic)).map(iz => {
-                  const gun = iz.saatBaslangic ? '—' : Math.ceil((new Date(iz.bitis).getTime() - new Date(iz.baslangic).getTime()) / 86400000) + 1
-                  const durumColor = iz.durum === 'onaylandi' ? 'bg-green/10 text-green' : iz.durum === 'reddedildi' ? 'bg-red/10 text-red' : 'bg-amber/10 text-amber'
+                  const durumColor = iz.durum === 'onaylandi' ? 'bg-green/10 text-green' : iz.durum === 'reddedildi' ? 'bg-red/10 text-red' : iz.durum === 'duzenlendi' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-amber/10 text-amber'
                   const tipColor = iz.tip === 'mesai' ? 'bg-cyan-500/10 text-cyan-400' : iz.tip === 'rapor' ? 'bg-red/10 text-red' : 'bg-amber/10 text-amber'
+                  const saatStr = iz.saatBaslangic && iz.saatBitis ? ` (${iz.saatBaslangic}–${iz.saatBitis})` : ''
+                  const olusturanBadge = iz.olusturan === 'operator' ? '👷 Operatör' : '🏢 Admin'
+                  const canEdit = iz.durum !== 'onaylandi' && iz.durum !== 'reddedildi'
                   return (
                     <tr key={iz.id} className="border-b border-border/30">
                       <td className="px-3 py-1.5 text-zinc-300 font-medium">{iz.opAd}</td>
-                      <td className="px-3 py-1.5 font-mono text-zinc-500">{iz.baslangic}</td>
-                      <td className="px-3 py-1.5 font-mono text-zinc-500">{iz.bitis}</td>
-                      <td className="px-3 py-1.5 font-mono text-zinc-500 text-[10px]">{iz.saatBaslangic && iz.saatBitis ? `${iz.saatBaslangic}–${iz.saatBitis}` : gun + ' gün'}</td>
+                      <td className="px-3 py-1.5 font-mono text-zinc-500 text-[10px]">{iz.baslangic}{iz.bitis !== iz.baslangic ? ' → ' + iz.bitis : ''}{saatStr}</td>
                       <td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${tipColor}`}>{iz.tip}</span></td>
+                      <td className="px-3 py-1.5 text-[10px] text-zinc-500">{olusturanBadge}</td>
                       <td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[10px] ${durumColor}`}>{iz.durum}</span></td>
-                      <td className="px-3 py-1.5 text-zinc-500 text-[10px]">{iz.onaylayan || '—'}{iz.onayTarihi ? ` (${iz.onayTarihi})` : ''}</td>
-                      <td className="px-3 py-1.5 text-right flex items-center justify-end gap-1">
-                        {iz.durum === 'bekliyor' && (
-                          <>
-                            <button onClick={async () => {
-                              await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
-                              loadAll(); toast.success(iz.opAd + ' izni onaylandı')
-                            }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">✓ Onayla</button>
-                            <button onClick={async () => {
-                              await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
-                              loadAll(); toast.success(iz.opAd + ' izni reddedildi')
-                            }} className="px-2 py-0.5 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">✕ Red</button>
-                          </>
-                        )}
-                        <button onClick={async () => {
-                          if (!await showConfirm('İzni silmek istediğinize emin misiniz?')) return
-                          await supabase.from('uys_izinler').delete().eq('id', iz.id)
-                          loadAll(); toast.success('İzin silindi')
-                        }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button>
+                      <td className="px-3 py-1.5 text-zinc-500 text-[10px]">{iz.onaylayan || '—'}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {iz.durum === 'bekliyor' && iz.olusturan === 'operator' && (
+                            <>
+                              <button onClick={async () => {
+                                await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
+                                loadAll(); toast.success(iz.opAd + ' izni onaylandı')
+                              }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">✓ Onayla</button>
+                              <button onClick={async () => {
+                                await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
+                                loadAll(); toast.success(iz.opAd + ' izni reddedildi')
+                              }} className="px-2 py-0.5 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">✕ Red</button>
+                            </>
+                          )}
+                          {canEdit && (
+                            <button onClick={() => setIzinForm(iz)} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">✏ Düzenle</button>
+                          )}
+                          {iz.durum === 'onaylandi' && (
+                            <button onClick={() => toast.info('Onaylanan izin düzenlenemez. İptal edip yeniden oluşturabilirsiniz.')} className="px-2 py-0.5 bg-zinc-800 text-zinc-500 rounded text-[10px] cursor-not-allowed">🔒</button>
+                          )}
+                          <button onClick={async () => {
+                            if (!await showConfirm('İzni silmek istediğinize emin misiniz?')) return
+                            await supabase.from('uys_izinler').delete().eq('id', iz.id)
+                            loadAll(); toast.success('İzin silindi')
+                          }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -171,10 +182,27 @@ export function Operators() {
         </div>
       )}
 
-      {izinForm && <IzinFormModal operators={operators} onClose={() => setIzinForm(false)} onSave={async (data) => {
-        await supabase.from('uys_izinler').insert(data)
-        loadAll(); setIzinForm(false); toast.success(data.op_ad + ' için izin eklendi')
-      }} />}
+      {izinForm && <IzinFormModal
+        operators={operators}
+        editData={typeof izinForm === 'object' && izinForm !== true ? izinForm : undefined}
+        toplu={izinForm === 'toplu'}
+        onClose={() => setIzinForm(false)}
+        onSave={async (dataList) => {
+          for (const data of dataList) {
+            if (data._update) {
+              await supabase.from('uys_izinler').update({
+                baslangic: data.baslangic, bitis: data.bitis, tip: data.tip,
+                saat_baslangic: data.saat_baslangic, saat_bitis: data.saat_bitis,
+                not_: data.not_, durum: data.olusturan === 'operator' ? 'duzenlendi' : data.durum,
+              }).eq('id', data.id)
+            } else {
+              await supabase.from('uys_izinler').insert(data)
+            }
+          }
+          loadAll(); setIzinForm(false)
+          toast.success(dataList.length > 1 ? dataList.length + ' izin oluşturuldu' : (dataList[0]._update ? 'İzin düzenlendi' : 'İzin eklendi'))
+        }}
+      />}
 
       {showForm && <OprFormModal initial={editOpr} bolumler={bolumler} onClose={() => { setShowForm(false); setEditOpr(null) }} onSave={saveOpr} />}
     </div>
@@ -215,97 +243,147 @@ function OprFormModal({ initial, bolumler, onClose, onSave }: {
   )
 }
 
-/* İzin Ekleme Modalı — dropdown + saatlik destek */
-function IzinFormModal({ operators, onClose, onSave }: {
-  operators: { id: string; kod: string; ad: string; bolum: string }[]
+/* İzin Modalı — Yeni/Düzenle/Toplu */
+function IzinFormModal({ operators, editData, toplu, onClose, onSave }: {
+  operators: { id: string; kod: string; ad: string; bolum: string; aktif?: boolean }[]
+  editData?: Record<string, any>
+  toplu?: boolean
   onClose: () => void
-  onSave: (data: Record<string, unknown>) => void
+  onSave: (dataList: Record<string, any>[]) => void
 }) {
-  const [oprId, setOprId] = useState('')
-  const [baslangic, setBaslangic] = useState(today())
-  const [bitis, setBitis] = useState(today())
-  const [tip, setTip] = useState('yıllık')
-  const [saatlik, setSaatlik] = useState(false)
-  const [saatBas, setSaatBas] = useState('')
-  const [saatBit, setSaatBit] = useState('')
-  const [not_, setNot] = useState('')
+  const isEdit = !!editData
+  const aktifOps = operators.filter(o => (o as any).aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
+
+  // Tekil mod state
+  const [oprId, setOprId] = useState(editData?.opId || '')
+  const [baslangic, setBaslangic] = useState(editData?.baslangic || today())
+  const [bitis, setBitis] = useState(editData?.bitis || today())
+  const [tip, setTip] = useState(editData?.tip || 'yıllık')
+  const [saatlik, setSaatlik] = useState(!!(editData?.saatBaslangic))
+  const [saatBas, setSaatBas] = useState(editData?.saatBaslangic || '')
+  const [saatBit, setSaatBit] = useState(editData?.saatBitis || '')
+  const [not_, setNot] = useState(editData?.not || '')
+
+  // Toplu mod state
+  const [selectedOps, setSelectedOps] = useState<Set<string>>(new Set())
 
   const opr = operators.find(o => o.id === oprId)
-  const aktifOps = operators.filter(o => (o as any).aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
+  const title = isEdit ? 'İzin Düzenle' : toplu ? 'Toplu İzin Oluştur' : 'İzin / Mesai Ekle'
+
+  function toggleOp(id: string) {
+    setSelectedOps(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  function selectAll() { setSelectedOps(new Set(aktifOps.map(o => o.id))) }
+  function clearAll() { setSelectedOps(new Set()) }
+
+  function handleSave() {
+    if (isEdit) {
+      if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
+      onSave([{
+        ...editData, _update: true,
+        baslangic, bitis: bitis || baslangic, tip,
+        saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
+        not_: not_,
+      }])
+    } else if (toplu) {
+      if (!selectedOps.size) { toast.error('En az bir operatör seçin'); return }
+      if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
+      const list = [...selectedOps].map(opId => {
+        const op = operators.find(o => o.id === opId)!
+        return {
+          id: uid(), op_id: op.id, op_ad: op.ad,
+          baslangic, bitis: bitis || baslangic, tip,
+          durum: 'bekliyor', olusturan: 'admin',
+          saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
+          onaylayan: '', onay_tarihi: '', not_: not_,
+        }
+      })
+      onSave(list)
+    } else {
+      if (!oprId || !opr) { toast.error('Operatör seçiniz'); return }
+      if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
+      onSave([{
+        id: uid(), op_id: opr.id, op_ad: opr.ad,
+        baslangic, bitis: bitis || baslangic, tip,
+        durum: 'bekliyor', olusturan: 'admin',
+        saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
+        onaylayan: '', onay_tarihi: '', not_: not_,
+      }])
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold mb-4">İzin / Mesai Ekle</h2>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">{title}</h2>
         <div className="space-y-3">
-          <div>
-            <label className="text-[11px] text-zinc-500 mb-1 block">Operatör</label>
-            <select value={oprId} onChange={e => setOprId(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent">
-              <option value="">Seçiniz...</option>
-              {aktifOps.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.kod})</option>)}
-            </select>
-          </div>
+          {/* Operatör seçimi */}
+          {isEdit ? (
+            <div className="px-3 py-2 bg-bg-2 rounded-lg text-sm text-zinc-300">{editData.opAd}</div>
+          ) : toplu ? (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-zinc-500">Operatörler ({selectedOps.size} seçili)</label>
+                <div className="flex gap-2">
+                  <button onClick={selectAll} className="text-[10px] text-accent hover:underline">Tümünü Seç</button>
+                  <button onClick={clearAll} className="text-[10px] text-zinc-500 hover:underline">Temizle</button>
+                </div>
+              </div>
+              <div className="max-h-40 overflow-y-auto bg-bg-2 border border-border rounded-lg p-2 space-y-0.5">
+                {aktifOps.map(o => (
+                  <label key={o.id} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer hover:bg-bg-3/50 rounded px-1">
+                    <input type="checkbox" checked={selectedOps.has(o.id)} onChange={() => toggleOp(o.id)} className="rounded" />
+                    <span className="text-zinc-300">{o.ad}</span>
+                    <span className="text-[10px] text-zinc-600">({o.kod})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Operatör</label>
+              <select value={oprId} onChange={e => setOprId(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent">
+                <option value="">Seçiniz...</option>
+                {aktifOps.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.kod})</option>)}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[11px] text-zinc-500 mb-1 block">Başlangıç</label>
-              <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)}
-                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-            </div>
-            <div>
-              <label className="text-[11px] text-zinc-500 mb-1 block">Bitiş</label>
-              <input type="date" value={bitis} onChange={e => setBitis(e.target.value)}
-                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-            </div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Başlangıç</label>
+            <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Bitiş</label>
+            <input type="date" value={bitis} onChange={e => setBitis(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
           <div className="flex items-center gap-2">
-            <input type="checkbox" checked={saatlik} onChange={e => setSaatlik(e.target.checked)} id="saatlik" className="rounded" />
-            <label htmlFor="saatlik" className="text-[11px] text-zinc-400">Saatlik izin</label>
+            <input type="checkbox" checked={saatlik} onChange={e => setSaatlik(e.target.checked)} id="saatlik2" className="rounded" />
+            <label htmlFor="saatlik2" className="text-[11px] text-zinc-400">Saatlik izin</label>
           </div>
           {saatlik && (
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[11px] text-zinc-500 mb-1 block">Başlangıç Saati</label>
-                <input type="time" value={saatBas} onChange={e => setSaatBas(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-              </div>
-              <div>
-                <label className="text-[11px] text-zinc-500 mb-1 block">Bitiş Saati</label>
-                <input type="time" value={saatBit} onChange={e => setSaatBit(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-              </div>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Saat Başlangıç</label>
+              <input type="time" value={saatBas} onChange={e => setSaatBas(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Saat Bitiş</label>
+              <input type="time" value={saatBit} onChange={e => setSaatBit(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
             </div>
           )}
-          <div>
-            <label className="text-[11px] text-zinc-500 mb-1 block">Tip</label>
-            <select value={tip} onChange={e => setTip(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent">
-              <option value="yıllık">Yıllık İzin</option>
-              <option value="mazeret">Mazeret İzni</option>
-              <option value="rapor">Rapor</option>
-              <option value="mesai">Mesai</option>
-              <option value="ücretsiz">Ücretsiz İzin</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
-            <input value={not_} onChange={e => setNot(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-          </div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Tip</label>
+          <select value={tip} onChange={e => setTip(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent">
+            <option value="yıllık">Yıllık İzin</option><option value="mazeret">Mazeret İzni</option><option value="rapor">Rapor</option><option value="mesai">Mesai</option><option value="ücretsiz">Ücretsiz İzin</option>
+          </select></div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
+          <input value={not_} onChange={e => setNot(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          {toplu && <div className="text-[10px] text-amber italic">⚠ Toplu izin oluşturulduğunda her operatör kendi panelinden onaylamalıdır.</div>}
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
-          <button onClick={() => {
-            if (!oprId || !opr) { toast.error('Operatör seçiniz'); return }
-            if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
-            onSave({
-              id: uid(), op_id: opr.id, op_ad: opr.ad,
-              baslangic, bitis: bitis || baslangic, tip,
-              durum: 'onaylandi', // Admin eklediği için otomatik onaylı
-              saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
-              onaylayan: 'Admin', onay_tarihi: today(), not_: not_,
-            })
-          }} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">
+            {isEdit ? 'Güncelle' : toplu ? `${selectedOps.size} Kişiye İzin Oluştur` : 'Kaydet'}
+          </button>
         </div>
       </div>
     </div>

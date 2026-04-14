@@ -345,4 +345,5 @@ export interface Izin {
   onaylayan: string
   onayTarihi: string
   not: string
+  olusturan: string
 }
