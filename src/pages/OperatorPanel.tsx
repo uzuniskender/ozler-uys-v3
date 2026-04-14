@@ -658,20 +658,20 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   )
   const [addOprId, setAddOprId] = useState('')
 
-  // ═══ TASLAK KAYDET: kapanırken localStorage'a yaz ═══
-  function saveDraft() {
+  // ═══ TASLAK OTOMATIK KAYDET: her değişiklikte localStorage'a yaz ═══
+  useEffect(() => {
+    if (editLog) return
     const hasSomething = qty || fire || aciklama || duruslar.some(d => d.kodId) || oprList.length > 1
-    if (hasSomething && !editLog) {
+    if (hasSomething) {
       localStorage.setItem(draftKey, JSON.stringify({ qty, fire, aciklama, duruslar, oprList }))
     }
-  }
+  }, [qty, fire, aciklama, duruslar, oprList, editLog, draftKey])
 
   function clearDraft() {
     localStorage.removeItem(draftKey)
   }
 
   function handleClose() {
-    saveDraft()
     onClose()
   }
 
