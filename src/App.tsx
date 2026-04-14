@@ -38,11 +38,23 @@ function GuestGuard({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent() {
-  const { signOut, isGuest } = useAuth()
+  const { signOut, isGuest, isOperator } = useAuth()
   const { loadAll } = useStore()
   useRealtime()
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Operatör sadece /operator rotasına erişebilir
+  if (isOperator) {
+    return (
+      <HashRouter>
+        <Routes>
+          <Route path="/operator" element={<OperatorPanel />} />
+          <Route path="*" element={<Navigate to="/operator" replace />} />
+        </Routes>
+      </HashRouter>
+    )
+  }
 
   return (
     <HashRouter>
