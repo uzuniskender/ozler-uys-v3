@@ -15,9 +15,13 @@ export function MRP() {
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
+  const [showTamamlanan, setShowTamamlanan] = useState(false)
+
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
       if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
+      // MRP tamamlanmış siparişleri varsayılan olarak gizle
+      if (!showTamamlanan && o.mrpDurum === 'tamamlandi') return false
       // Gerçek ilerlemeye bak — %100 ise gösterme
       const wos = workOrders.filter(w => w.orderId === o.id)
       if (!wos.length) return true // İE yoksa göster (henüz oluşturulmamış)
@@ -25,7 +29,12 @@ export function MRP() {
       const done = wos.reduce((a, w) => a + logs.filter(l => l.woId === w.id).reduce((s, l) => s + l.qty, 0), 0)
       return total <= 0 || done < total
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
-  }, [orders, workOrders, logs])
+  }, [orders, workOrders, logs, showTamamlanan])
+
+  // MRP tamamlanmış ama hâlâ aktif sipariş sayısı (toggle label için)
+  const mrpTamamSayisi = useMemo(() =>
+    orders.filter(o => o.mrpDurum === 'tamamlandi' && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
+  , [orders])
 
   // Bağımsız YM İE'leri
   const ymIEs = useMemo(() =>
@@ -161,17 +170,25 @@ export function MRP() {
             </div>
             <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
             <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
+            {mrpTamamSayisi > 0 && (
+              <button onClick={() => setShowTamamlanan(!showTamamlanan)}
+                className={`px-2 py-1 rounded text-[10px] ${showTamamlanan ? 'bg-green/10 text-green border border-green/20' : 'bg-bg-3 text-zinc-500 hover:text-white'}`}>
+                {showTamamlanan ? `✓ Tamamlananlar (${mrpTamamSayisi})` : `+ Tamamlananlar (${mrpTamamSayisi})`}
+              </button>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[250px] overflow-y-auto">
           {aktifOrders.map(o => {
             const sel = selectedOrders.has(o.id); const pct = orderPct(o.id)
+            const mrpDone = o.mrpDurum === 'tamamlandi'
             return (
               <button key={o.id} onClick={() => toggleOrder(o.id)}
-                className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : 'bg-bg-3 border border-border'}`}>
+                className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : mrpDone ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
                 <div className="flex items-center gap-2">
                   <input type="checkbox" checked={sel} readOnly className="accent-accent" />
                   <span className="font-mono font-medium">{o.siparisNo}</span>
+                  {mrpDone && <span className="px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">MRP ✓</span>}
                   <span className="text-zinc-500 ml-auto">{pct}%</span>
                 </div>
                 <div className="text-zinc-500 truncate mt-0.5">{o.musteri} · {o.mamulAd || ''}</div>
@@ -179,6 +196,9 @@ export function MRP() {
             )
           })}
         </div>
+        {aktifOrders.length === 0 && mrpTamamSayisi > 0 && !showTamamlanan && (
+          <div className="p-3 text-center text-xs text-green">✓ Tüm siparişlerin MRP hesabı yapıldı. Tekrar hesaplamak için "Tamamlananlar" butonuna tıklayın.</div>
+        )}
 
         {/* Bağımsız YM İş Emirleri */}
         {ymIEs.length > 0 && (<>
