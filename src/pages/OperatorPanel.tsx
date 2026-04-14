@@ -672,6 +672,10 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   }
 
   function handleClose() {
+    const hasSomething = qty || fire || aciklama || duruslar.some(d => d.kodId) || oprList.length > 1
+    if (hasSomething && !editLog) {
+      toast.info('Taslak kaydedildi — tekrar açtığınızda veriler gelecek', { duration: 2000 })
+    }
     onClose()
   }
 
@@ -958,7 +962,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           </div>
         </div>
         <div className="flex gap-2 p-4 border-t border-border">
-          <button onClick={handleClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm font-semibold">İptal</button>
+          <button onClick={handleClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm font-semibold">Kapat</button>
           <button onClick={save} disabled={saving}
             className="flex-1 py-3 bg-green hover:bg-green/80 text-black font-bold rounded-lg text-sm disabled:opacity-30">
             {saving ? 'Kaydediliyor...' : editLog ? '✏ Güncelle' : '✅ Kaydet'}
