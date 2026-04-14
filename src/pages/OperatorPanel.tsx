@@ -1063,7 +1063,7 @@ function IzinTalepForm({ oprId, oprAd, onSaved }: { oprId: string; oprAd: string
             await supabase.from('uys_izinler').insert({
               id: uid(), op_id: oprId, op_ad: oprAd,
               baslangic, bitis: bitis || baslangic, tip,
-              durum: 'bekliyor',
+              durum: 'bekliyor', olusturan: 'operator',
               saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
               onaylayan: '', onay_tarihi: '', not_: not_,
             })
