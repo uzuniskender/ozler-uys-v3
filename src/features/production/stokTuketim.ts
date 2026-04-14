@@ -1,32 +1,54 @@
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import type { WorkOrder } from '@/types'
+import type { WorkOrder, Recipe } from '@/types'
 
 /**
  * #8: Stok Tüketim — Üretim yapıldığında HM bileşenlerini stoktan düş
+ * wo.hm varsa oradan, yoksa reçeteden (recipes) alır
  */
 export async function stokTuketimIsle(
   woId: string,
   qty: number,
   logId: string,
-  workOrders: WorkOrder[]
+  workOrders: WorkOrder[],
+  recipes?: Recipe[]
 ): Promise<number> {
   const wo = workOrders.find(w => w.id === woId)
-  if (!wo?.hm?.length || !wo.hedef) return 0
+  if (!wo || qty <= 0) return 0
 
   const rows: Record<string, unknown>[] = []
-  for (const h of wo.hm) {
-    const perUnit = h.miktarTotal / wo.hedef
-    const consume = Math.round(qty * perUnit * 100) / 100
-    if (consume <= 0) continue
 
-    rows.push({
-      id: uid(), tarih: today(),
-      malkod: h.malkod, malad: h.malad,
-      miktar: consume, tip: 'cikis',
-      log_id: logId, wo_id: woId,
-      aciklama: 'HM tüketim — üretim',
-    })
+  if (wo.hm?.length && wo.hedef) {
+    // wo.hm'den hesapla
+    for (const h of wo.hm) {
+      const perUnit = h.miktarTotal / wo.hedef
+      const consume = Math.round(qty * perUnit * 100) / 100
+      if (consume <= 0) continue
+      rows.push({
+        id: uid(), tarih: today(),
+        malkod: h.malkod, malad: h.malad,
+        miktar: consume, tip: 'cikis',
+        log_id: logId, wo_id: woId,
+        aciklama: 'HM tüketim — üretim',
+      })
+    }
+  } else if (recipes?.length && wo.rcId) {
+    // Reçeteden fallback
+    const rc = recipes.find(r => r.id === wo.rcId)
+    if (rc?.satirlar?.length) {
+      const hmRows = rc.satirlar.filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
+      for (const s of hmRows) {
+        const consume = Math.round((s.miktar || 0) * (wo.mpm || 1) * qty * 100) / 100
+        if (consume <= 0) continue
+        rows.push({
+          id: uid(), tarih: today(),
+          malkod: s.malkod, malad: s.malad,
+          miktar: consume, tip: 'cikis',
+          log_id: logId, wo_id: woId,
+          aciklama: 'HM tüketim — reçeteden',
+        })
+      }
+    }
   }
 
   if (rows.length) {

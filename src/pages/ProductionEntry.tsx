@@ -206,13 +206,44 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   defaultOprId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, durusKodlari } = useStore()
+  const { workOrders, logs, durusKodlari, stokHareketler, recipes } = useStore()
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
   const [not, setNot] = useState('')
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
+
+  // ═══ STOK KONTROL ═══
+  const rc = recipes.find(r => r.id === w?.rcId)
+  const hmSatirlar = useMemo(() => {
+    // Önce wo.hm'den, yoksa reçeteden al
+    if (w?.hm?.length) return w.hm.map(h => ({ malkod: h.malkod, malad: h.malad, miktar: h.miktarTotal / (w.hedef || 1) }))
+    if (rc?.satirlar?.length) return rc.satirlar.filter((s: { tip: string }) => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
+      .map((s: { malkod?: string; kod?: string; malad?: string; ad?: string; miktar?: number }) => ({ malkod: s.malkod || s.kod || '', malad: s.malad || s.ad || '', miktar: s.miktar || 0 }))
+    return []
+  }, [w, rc])
+
+  function stokNet(malkod: string) {
+    return stokHareketler.filter(h => h.malkod === malkod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+  }
+
+  const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+  const kalan = w ? Math.max(0, w.hedef - prod) : 0
+
+  const maxUretim = useMemo(() => {
+    if (!hmSatirlar.length) return kalan
+    let min = kalan
+    for (const hm of hmSatirlar) {
+      const mevcut = stokNet(hm.malkod)
+      const birimIhtiyac = (hm.miktar || 0) * (w?.mpm || 1)
+      if (birimIhtiyac > 0) {
+        const yapilabilir = Math.floor(mevcut / birimIhtiyac)
+        if (yapilabilir < min) min = yapilabilir
+      }
+    }
+    return Math.max(0, min)
+  }, [hmSatirlar, stokHareketler, w, kalan])
 
   // Çoklu operatör — varsayılan operatör otomatik ekle
   const defaultOpr = defaultOprId ? operators.find(o => o.id === defaultOprId) : null
@@ -265,9 +296,6 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     }))
   }
 
-  const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
-  const kalan = w ? Math.max(0, w.hedef - prod) : 0
-
   async function save() {
     const q = parseInt(qty) || 0
     const f = parseInt(fire) || 0
@@ -277,6 +305,15 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     if (q > 0 && q + prod > w.hedef) {
       const fazla = (q + prod) - w.hedef
       if (!await showConfirm(`Hedef: ${w.hedef}, mevcut: ${prod}, girilecek: ${q}\n${fazla} adet FAZLA üretim olacak. Devam?`)) return
+    }
+    // Stok uyarısı — admin override olabilir
+    if (q > 0 && hmSatirlar.length > 0 && q > maxUretim) {
+      const eksikler = hmSatirlar.filter(hm => {
+        const mevcut = Math.round(stokNet(hm.malkod))
+        const ihtiyac = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q)
+        return mevcut < ihtiyac
+      }).map(hm => `${hm.malad || hm.malkod}: mevcut ${Math.round(stokNet(hm.malkod))}, gerekli ${Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q)}`).join('\n')
+      if (!await showConfirm(`⚠️ STOK YETERSİZ!\nMax yapılabilir: ${maxUretim} adet\n\n${eksikler}\n\nEksi stok oluşacak. Yine de devam edilsin mi?`)) return
     }
     setSaving(true)
 
@@ -316,8 +353,20 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       })
     }
 
-    // HM stok tüketimi (#8)
-    await stokTuketimIsle(woId, q, logId, workOrders)
+    // HM stok tüketimi — wo.hm veya reçeteden
+    if (q > 0 && hmSatirlar.length > 0) {
+      for (const hm of hmSatirlar) {
+        const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+        if (hmMiktar > 0) {
+          await supabase.from('uys_stok_hareketler').insert({
+            id: uid(), tarih, malkod: hm.malkod, malad: hm.malad,
+            miktar: Math.round(hmMiktar * 100) / 100, tip: 'cikis',
+            log_id: logId, wo_id: woId,
+            aciklama: 'HM tüketim — ' + w.ieNo,
+          })
+        }
+      }
+    }
 
     // Fire → sipariş dışı İE teklifi (#6)
     if (f > 0 && f >= 5) {
@@ -367,6 +416,32 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
             <div className="font-mono text-sm text-amber">{kalan}</div>
           </div>
         </div>
+
+        {/* HM Stok Kontrol */}
+        {hmSatirlar.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[10px] text-zinc-500 mb-1">Hammadde Stok Durumu {maxUretim < kalan && <span className="text-amber ml-1">— Max: {maxUretim} adet</span>}</div>
+            <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead><tr className="border-b border-border text-zinc-600"><th className="text-left px-2 py-1">Malzeme</th><th className="text-right px-2 py-1">Stok</th><th className="text-right px-2 py-1">Gerekli</th><th className="text-right px-2 py-1">Durum</th></tr></thead>
+                <tbody>{hmSatirlar.map((hm, i) => {
+                  const mevcut = Math.round(stokNet(hm.malkod))
+                  const q_ = parseInt(qty) || kalan
+                  const gerekli = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q_)
+                  const yeterli = mevcut >= gerekli
+                  return (
+                    <tr key={i} className="border-b border-border/20">
+                      <td className="px-2 py-1 text-zinc-300 truncate max-w-[140px]" title={hm.malkod}>{hm.malad || hm.malkod}</td>
+                      <td className={`px-2 py-1 text-right font-mono ${mevcut <= 0 ? 'text-red' : 'text-zinc-400'}`}>{mevcut}</td>
+                      <td className="px-2 py-1 text-right font-mono text-zinc-500">{gerekli}</td>
+                      <td className={`px-2 py-1 text-right font-mono font-semibold ${yeterli ? 'text-green' : 'text-red'}`}>{yeterli ? '✓' : '✗'}</td>
+                    </tr>
+                  )
+                })}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -459,7 +534,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
   operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders } = useStore()
+  const { workOrders, recipes } = useStore()
   const [rows, setRows] = useState<{ woId: string; qty: string; fire: string }[]>(
     acikWOs.slice(0, 20).map(w => ({ woId: w.id, qty: '', fire: '' }))
   )
@@ -500,7 +575,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       })
 
       // HM tüketim
-      await stokTuketimIsle(r.woId, q, logId, workOrders)
+      await stokTuketimIsle(r.woId, q, logId, workOrders, recipes)
 
       if (f > 0) {
         await supabase.from('uys_fire_logs').insert({
