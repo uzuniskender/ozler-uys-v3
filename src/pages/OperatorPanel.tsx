@@ -463,13 +463,16 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   editLogId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, recipes, stokHareketler } = useStore()
+  const { workOrders, logs, recipes, stokHareketler, activeWork } = useStore()
   const w = workOrders.find(x => x.id === woId)
   const now = new Date()
   const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
 
   // Mevcut log (düzenleme modu)
   const editLog = editLogId ? logs.find(l => l.id === editLogId) : null
+
+  // Bu İE'de aktif çalışan diğer operatörler — otomatik ekle
+  const othersOnThisIE = activeWork.filter(a => a.woId === woId && a.opId !== oprId)
 
   const [qty, setQty] = useState(editLog ? String(editLog.qty) : '')
   const [fire, setFire] = useState(editLog ? String(editLog.fire || 0) : '')
@@ -480,7 +483,10 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   )
   const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>(
     editLog?.operatorlar ? (editLog.operatorlar as any[]).map(o => ({ id: o.id, ad: o.ad, bas: o.bas || nowHHMM, bit: o.bit || nowHHMM }))
-    : [{ id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM }]
+    : [
+        { id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM },
+        ...othersOnThisIE.map(a => ({ id: a.opId, ad: a.opAd, bas: a.baslangic || nowHHMM, bit: nowHHMM })),
+      ]
   )
   const [addOprId, setAddOprId] = useState('')
 
