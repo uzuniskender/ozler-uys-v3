@@ -620,21 +620,60 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   // Bu İE'de aktif çalışan diğer operatörler — otomatik ekle
   const othersOnThisIE = activeWork.filter(a => a.woId === woId && a.opId !== oprId)
 
-  const [qty, setQty] = useState(editLog ? String(editLog.qty) : '')
-  const [fire, setFire] = useState(editLog ? String(editLog.fire || 0) : '')
-  const [aciklama, setAciklama] = useState(editLog?.not || '')
+  // ═══ İŞE BAŞLAMA SAATİ: active_work'ten al ═══
+  const myAW = activeWork.find(a => a.woId === woId && a.opId === oprId)
+  const basSaat = myAW?.baslangic || nowHHMM
+
+  // ═══ TASLAK: localStorage'dan geri yükle ═══
+  const draftKey = `uys_draft_${oprId}_${woId}`
+  function loadDraft(): { qty?: string; fire?: string; aciklama?: string; duruslar?: any[]; oprList?: any[] } | null {
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (!raw) return null
+      return JSON.parse(raw)
+    } catch { return null }
+  }
+  const draft = editLog ? null : loadDraft()
+
+  const [qty, setQty] = useState(editLog ? String(editLog.qty) : draft?.qty || '')
+  const [fire, setFire] = useState(editLog ? String(editLog.fire || 0) : draft?.fire || '')
+  const [aciklama, setAciklama] = useState(editLog?.not || draft?.aciklama || '')
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>(
-    editLog?.duruslar ? (editLog.duruslar as any[]).map(d => ({ kodId: d.kodId || '', kodAd: d.kodAd || '', sure: d.sure || 0, bas: d.bas || '', bit: d.bit || '' })) : []
+    editLog?.duruslar
+      ? (editLog.duruslar as any[]).map(d => ({ kodId: d.kodId || '', kodAd: d.kodAd || '', sure: d.sure || 0, bas: d.bas || '', bit: d.bit || '' }))
+      : draft?.duruslar?.length
+        ? draft.duruslar
+        : []
   )
   const [oprList, setOprList] = useState<{ id: string; ad: string; bas: string; bit: string }[]>(
-    editLog?.operatorlar ? (editLog.operatorlar as any[]).map(o => ({ id: o.id, ad: o.ad, bas: o.bas || nowHHMM, bit: o.bit || nowHHMM }))
-    : [
-        { id: oprId, ad: oprAd, bas: nowHHMM, bit: nowHHMM },
-        ...othersOnThisIE.map(a => ({ id: a.opId, ad: a.opAd, bas: a.baslangic || nowHHMM, bit: nowHHMM })),
-      ]
+    editLog?.operatorlar
+      ? (editLog.operatorlar as any[]).map(o => ({ id: o.id, ad: o.ad, bas: o.bas || basSaat, bit: o.bit || nowHHMM }))
+      : draft?.oprList?.length
+        ? draft.oprList.map(o => ({ ...o, bit: nowHHMM }))
+        : [
+            { id: oprId, ad: oprAd, bas: basSaat, bit: nowHHMM },
+            ...othersOnThisIE.map(a => ({ id: a.opId, ad: a.opAd, bas: a.baslangic || basSaat, bit: nowHHMM })),
+          ]
   )
   const [addOprId, setAddOprId] = useState('')
+
+  // ═══ TASLAK KAYDET: kapanırken localStorage'a yaz ═══
+  function saveDraft() {
+    const hasSomething = qty || fire || aciklama || duruslar.some(d => d.kodId) || oprList.length > 1
+    if (hasSomething && !editLog) {
+      localStorage.setItem(draftKey, JSON.stringify({ qty, fire, aciklama, duruslar, oprList }))
+    }
+  }
+
+  function clearDraft() {
+    localStorage.removeItem(draftKey)
+  }
+
+  function handleClose() {
+    saveDraft()
+    onClose()
+  }
 
   if (!w) return null
   const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
@@ -800,16 +839,22 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       })
       toast.success(w.ieNo + ' tamamlandı ✓ Aktif çalışma otomatik kapatıldı', { duration: 4000 })
     }
-    setSaving(false); onSaved()
+    setSaving(false); clearDraft(); onSaved()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={handleClose}>
       <div className="bg-bg-1 border border-border rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className={`${editLog ? 'bg-amber/10 border-b border-amber/20' : 'bg-accent/10 border-b border-accent/20'} p-4 rounded-t-xl`}>
           <div className="flex items-center justify-between">
             <div className="font-mono text-accent text-xs font-bold">{w.ieNo}</div>
             {editLog && <span className="text-[10px] px-2 py-0.5 bg-amber/20 text-amber rounded font-semibold">✏ Düzenleme Modu</span>}
+            {draft && !editLog && (
+              <span className="flex items-center gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 bg-accent/20 text-accent rounded font-semibold">📋 Önceki kayıtlar yüklendi</span>
+                <button onClick={() => { clearDraft(); setQty(''); setFire(''); setAciklama(''); setDuruslar([]); setOprList([{ id: oprId, ad: oprAd, bas: basSaat, bit: nowHHMM }]) }} className="text-[9px] text-zinc-500 hover:text-red underline">Temizle</button>
+              </span>
+            )}
           </div>
           <div className="text-sm font-semibold text-white mt-0.5">{w.malad}</div>
           <div className="text-[11px] text-zinc-400 mt-1">Operasyon: <b>{w.opAd}</b> · Kalan: <b className="text-amber">{kalan}</b></div>
@@ -913,7 +958,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           </div>
         </div>
         <div className="flex gap-2 p-4 border-t border-border">
-          <button onClick={onClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm font-semibold">İptal</button>
+          <button onClick={handleClose} className="flex-1 py-3 bg-bg-3 text-zinc-400 rounded-lg text-sm font-semibold">İptal</button>
           <button onClick={save} disabled={saving}
             className="flex-1 py-3 bg-green hover:bg-green/80 text-black font-bold rounded-lg text-sm disabled:opacity-30">
             {saving ? 'Kaydediliyor...' : editLog ? '✏ Güncelle' : '✅ Kaydet'}
