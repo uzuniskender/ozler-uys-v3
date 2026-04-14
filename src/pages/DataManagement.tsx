@@ -363,7 +363,7 @@ function SifirlamaSecimli() {
   )
 }
 
-// ═══ TEST MODU — SNAPSHOT BAZLI TEMİZLİK ═══
+// ═══ TEST MODU — AYRI SUPABASE PROJESİ ═══
 const TEST_TABLES = [
   { key: 'orders', table: 'uys_orders', label: 'Siparişler' },
   { key: 'workOrders', table: 'uys_work_orders', label: 'İş Emirleri' },
@@ -379,158 +379,195 @@ const TEST_TABLES = [
   { key: 'checklist', table: 'uys_checklist', label: 'Checklist' },
 ]
 
+// Sabit verileri test DB'ye kopyalamak için
+const MASTER_TABLES = [
+  { key: 'materials', table: 'uys_malzemeler', label: 'Malzemeler' },
+  { key: 'operations', table: 'uys_operations', label: 'Operasyonlar' },
+  { key: 'stations', table: 'uys_stations', label: 'İstasyonlar' },
+  { key: 'operators', table: 'uys_operators', label: 'Operatörler' },
+  { key: 'recipes', table: 'uys_recipes', label: 'Reçeteler' },
+  { key: 'bomTrees', table: 'uys_bom_trees', label: 'Ürün Ağaçları' },
+  { key: 'tedarikciler', table: 'uys_tedarikciler', label: 'Tedarikçiler' },
+  { key: 'durusKodlari', table: 'uys_durus_kodlari', label: 'Duruş Kodları' },
+  { key: 'customers', table: 'uys_customers', label: 'Müşteriler' },
+]
+
 function TestModuPanel() {
   const store = useStore()
   const [siliniyor, setSiliniyor] = useState(false)
+  const [kopyalaniyor, setKopyalaniyor] = useState(false)
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
-  const snapshotRaw = localStorage.getItem('uys_test_snapshot')
-  const snapshot: Record<string, string[]> | null = snapshotRaw ? JSON.parse(snapshotRaw) : null
-  const snapshotTime = localStorage.getItem('uys_test_snapshot_time') || ''
+  const hasTestDB = !!(localStorage.getItem('uys_test_sb_url') && localStorage.getItem('uys_test_sb_key'))
 
-  // Test sırasında eklenen kayıtları bul
-  function getTestRecords() {
-    if (!snapshot) return { total: 0, byTable: {} as Record<string, string[]> }
-    const byTable: Record<string, string[]> = {}
-    let total = 0
-    for (const t of TEST_TABLES) {
-      const arr = (store as unknown as Record<string, { id: string }[]>)[t.key] || []
-      const snapIds = new Set(snapshot[t.key] || [])
-      const newIds = arr.filter(r => !snapIds.has(r.id)).map(r => r.id)
-      if (newIds.length) { byTable[t.key] = newIds; total += newIds.length }
+  const [testUrl, setTestUrl] = useState(localStorage.getItem('uys_test_sb_url') || '')
+  const [testKey, setTestKey] = useState(localStorage.getItem('uys_test_sb_key') || '')
+
+  function saveTestDB() {
+    if (!testUrl.trim() || !testKey.trim()) {
+      toast.error('URL ve Anon Key zorunlu')
+      return
     }
-    return { total, byTable }
+    localStorage.setItem('uys_test_sb_url', testUrl.trim())
+    localStorage.setItem('uys_test_sb_key', testKey.trim())
+    toast.success('Test DB bilgileri kaydedildi')
+  }
+
+  function clearTestDB() {
+    localStorage.removeItem('uys_test_sb_url')
+    localStorage.removeItem('uys_test_sb_key')
+    localStorage.removeItem('uys_test_mode')
+    setTestUrl(''); setTestKey('')
+    toast.success('Test DB bilgileri silindi')
+    window.location.reload()
   }
 
   function startTestMode() {
-    // Snapshot al
-    const snap: Record<string, string[]> = {}
-    for (const t of TEST_TABLES) {
-      const arr = (store as unknown as Record<string, { id: string }[]>)[t.key] || []
-      snap[t.key] = arr.map(r => r.id)
+    if (!hasTestDB) {
+      toast.error('Önce test Supabase projesini ayarlayın')
+      return
     }
-    localStorage.setItem('uys_test_snapshot', JSON.stringify(snap))
-    localStorage.setItem('uys_test_snapshot_time', new Date().toLocaleString('tr-TR'))
     localStorage.setItem('uys_test_mode', 'true')
-    toast.success('Test modu açıldı — veri görüntüsü kaydedildi')
+    toast.success('Test modu açıldı — test veritabanına bağlanılıyor')
     window.location.reload()
   }
 
   function stopTestMode() {
     localStorage.setItem('uys_test_mode', 'false')
-    // Snapshot'u sakla — temizlik için lazım olabilir
-    toast.info('Test modu kapatıldı — snapshot korunuyor')
+    toast.info('Test modu kapatıldı — canlı veritabanına dönüldü')
     window.location.reload()
   }
 
-  async function deleteTestData() {
-    const { total, byTable } = getTestRecords()
-    if (total === 0) { toast.info('Silinecek test verisi yok'); return }
+  // Ana veriyi test DB'ye kopyala
+  async function copyMasterToTest() {
+    if (!hasTestDB) return
+    if (!await showConfirm('Malzeme, Operasyon, İstasyon, Operatör, Reçete vb. sabit veriler test DB\'ye kopyalanacak.\nMevcut test DB verileri SİLİNİP yeniden yazılacak.\n\nDevam?')) return
+    setKopyalaniyor(true)
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const testClient = createClient(testUrl.trim(), testKey.trim())
 
-    const detay = Object.entries(byTable).map(([key, ids]) => {
-      const t = TEST_TABLES.find(x => x.key === key)
-      return `${t?.label || key}: ${ids.length}`
-    }).join('\n')
+      // RLS policy oluştur (ilk seferde gerekli)
+      // Bu zaten test DB'de manuel yapılmalı — skip
 
-    if (!await showConfirm(`🧪 TEST VERİLERİNİ SİL\n\nSnapshot: ${snapshotTime}\nToplam: ${total} kayıt\n\n${detay}\n\nDevam?`)) return
+      let copied = 0
+      for (const mt of MASTER_TABLES) {
+        const arr = (store as unknown as Record<string, Record<string, unknown>[]>)[mt.key] || []
+        if (!arr.length) continue
 
-    setSiliniyor(true)
-    let deleted = 0
+        // Mevcut veriyi sil
+        await testClient.from(mt.table).delete().neq('id', '__impossible__')
 
-    // Sıralama önemli: önce bağımlı tablolar, sonra ana tablolar
-    const deleteOrder = ['activeWork', 'operatorNotes', 'izinler', 'checklist', 'fireLogs', 'stokHareketler', 'logs', 'sevkler', 'tedarikler', 'cuttingPlans', 'workOrders', 'orders']
-    for (const key of deleteOrder) {
-      const ids = byTable[key]
-      if (!ids?.length) continue
-      const t = TEST_TABLES.find(x => x.key === key)
-      if (!t) continue
-      // Log silinirken ilişkili stok hareketlerini de sil
-      if (key === 'logs') {
-        for (const id of ids) {
-          await supabase.from('uys_stok_hareketler').delete().eq('log_id', id)
-          await supabase.from('uys_fire_logs').delete().eq('log_id', id)
+        // Batch insert (100'erli)
+        // Store'daki JS objelerini DB formatına çevirmek gerekiyor — doğrudan yazıyoruz
+        // Store mapper'ları JS→DB dönüşümü yapmaz, bu yüzden direkt DB'den alıp yazacağız
+        const { data } = await supabase.from(mt.table).select('*')
+        if (data?.length) {
+          for (let i = 0; i < data.length; i += 100) {
+            const batch = data.slice(i, i + 100)
+            await testClient.from(mt.table).insert(batch)
+          }
+          copied += data.length
         }
       }
-      // İş emri silinirken ilişkili logları sil
-      if (key === 'workOrders') {
-        for (const id of ids) {
-          await supabase.from('uys_logs').delete().eq('wo_id', id)
-          await supabase.from('uys_stok_hareketler').delete().eq('wo_id', id)
-          await supabase.from('uys_fire_logs').delete().eq('wo_id', id)
-          await supabase.from('uys_active_work').delete().eq('wo_id', id)
-        }
-      }
-      // Sipariş silinirken ilişkili İE'leri sil
-      if (key === 'orders') {
-        for (const id of ids) {
-          await supabase.from('uys_work_orders').delete().eq('order_id', id)
-        }
-      }
-      // Batch delete (50'şer)
-      for (let i = 0; i < ids.length; i += 50) {
-        const batch = ids.slice(i, i + 50)
-        await supabase.from(t.table).delete().in('id', batch)
-      }
-      deleted += ids.length
+
+      setKopyalaniyor(false)
+      toast.success(`${copied} kayıt test DB'ye kopyalandı`)
+    } catch (err) {
+      setKopyalaniyor(false)
+      toast.error('Kopyalama hatası: ' + (err as Error).message)
     }
-
-    // Snapshot'u temizle
-    localStorage.removeItem('uys_test_snapshot')
-    localStorage.removeItem('uys_test_snapshot_time')
-    localStorage.setItem('uys_test_mode', 'false')
-
-    setSiliniyor(false)
-    store.loadAll()
-    toast.success(`${deleted} test kaydı silindi — test modu kapatıldı`)
-    window.location.reload()
   }
 
-  function clearSnapshot() {
-    localStorage.removeItem('uys_test_snapshot')
-    localStorage.removeItem('uys_test_snapshot_time')
-    toast.success('Snapshot temizlendi')
-    window.location.reload()
-  }
+  // Test DB'deki tüm işlem verilerini sil
+  async function clearTestData() {
+    if (!hasTestDB) return
+    if (!await showConfirm('Test DB\'deki TÜM işlem verileri (sipariş, İE, log, stok...) silinecek.\nSabit veriler (malzeme, operasyon...) korunacak.\n\nDevam?')) return
+    setSiliniyor(true)
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const testClient = createClient(testUrl.trim(), testKey.trim())
+      let deleted = 0
 
-  const testRecords = snapshot ? getTestRecords() : { total: 0, byTable: {} }
+      for (const t of TEST_TABLES) {
+        const { data } = await testClient.from(t.table).select('id')
+        if (data?.length) {
+          await testClient.from(t.table).delete().neq('id', '__impossible__')
+          deleted += data.length
+        }
+      }
+
+      setSiliniyor(false)
+      if (isTestMode) store.loadAll()
+      toast.success(`${deleted} test kaydı silindi`)
+    } catch (err) {
+      setSiliniyor(false)
+      toast.error('Silme hatası: ' + (err as Error).message)
+    }
+  }
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Test DB Ayarları */}
+      <div className="mb-4">
+        <div className="text-[11px] text-zinc-400 mb-2 font-semibold">Test Supabase Projesi</div>
+        <p className="text-[10px] text-zinc-600 mb-2">
+          supabase.com'da ücretsiz yeni proje açın → aynı tabloları ve RLS policy'leri oluşturun → URL ve Anon Key'i buraya girin.
+        </p>
+        <div className="space-y-2">
+          <div>
+            <label className="text-[10px] text-zinc-500 block mb-0.5">Supabase URL</label>
+            <input value={testUrl} onChange={e => setTestUrl(e.target.value)} placeholder="https://xxxxx.supabase.co"
+              className="w-full px-3 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300 font-mono focus:outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="text-[10px] text-zinc-500 block mb-0.5">Anon Key</label>
+            <input value={testKey} onChange={e => setTestKey(e.target.value)} type="password" placeholder="eyJhbGc..."
+              className="w-full px-3 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300 font-mono focus:outline-none focus:border-accent" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveTestDB} className="px-3 py-1.5 bg-accent/15 border border-accent/30 text-accent rounded text-xs hover:bg-accent/25">Kaydet</button>
+            {hasTestDB && <button onClick={clearTestDB} className="px-3 py-1.5 bg-bg-3 border border-border text-zinc-500 rounded text-xs hover:text-red">Sil</button>}
+          </div>
+        </div>
+        {hasTestDB && <div className="mt-2 text-[10px] text-green">✓ Test DB ayarlanmış</div>}
+      </div>
+
+      {/* Test Modu Kontrolleri */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         {!isTestMode ? (
-          <button onClick={startTestMode} className="px-4 py-2 bg-amber/15 border border-amber/30 text-amber rounded-lg text-xs hover:bg-amber/25 font-semibold">
+          <button onClick={startTestMode} disabled={!hasTestDB}
+            className="px-4 py-2 bg-amber/15 border border-amber/30 text-amber rounded-lg text-xs hover:bg-amber/25 font-semibold disabled:opacity-30">
             🧪 Test Modunu Aç
           </button>
         ) : (
-          <button onClick={stopTestMode} className="px-4 py-2 bg-bg-3 border border-border text-zinc-400 rounded-lg text-xs hover:text-white">
-            ⏸ Test Modunu Kapat
+          <button onClick={stopTestMode} className="px-4 py-2 bg-green/15 border border-green/30 text-green rounded-lg text-xs hover:bg-green/25 font-semibold">
+            ✓ Canlıya Dön
           </button>
         )}
-        {snapshot && (
-          <button onClick={deleteTestData} disabled={siliniyor || testRecords.total === 0}
-            className="px-4 py-2 bg-red/15 border border-red/30 text-red rounded-lg text-xs hover:bg-red/25 font-semibold disabled:opacity-30">
-            {siliniyor ? '⏳ Siliniyor...' : `🗑 Test Verilerini Sil (${testRecords.total})`}
-          </button>
-        )}
-        {snapshot && !isTestMode && (
-          <button onClick={clearSnapshot} className="text-[10px] text-zinc-600 hover:text-zinc-400 underline">Snapshot'u temizle</button>
+        {hasTestDB && (
+          <>
+            <button onClick={copyMasterToTest} disabled={kopyalaniyor || isTestMode}
+              className="px-3 py-2 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs hover:bg-accent/20 disabled:opacity-30">
+              {kopyalaniyor ? '⏳ Kopyalanıyor...' : '📋 Sabit Verileri Kopyala'}
+            </button>
+            <button onClick={clearTestData} disabled={siliniyor}
+              className="px-3 py-2 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20 disabled:opacity-30">
+              {siliniyor ? '⏳ Siliniyor...' : '🗑 Test Verilerini Temizle'}
+            </button>
+          </>
         )}
       </div>
-      {snapshot && (
-        <div className="mt-3 p-2 bg-bg-1/50 border border-border/50 rounded-lg">
-          <div className="text-[10px] text-zinc-500 mb-1">📷 Snapshot: {snapshotTime}</div>
-          {testRecords.total > 0 ? (
-            <div className="space-y-0.5">
-              {Object.entries(testRecords.byTable).map(([key, ids]) => {
-                const t = TEST_TABLES.find(x => x.key === key)
-                return <div key={key} className="flex items-center gap-2 text-[11px]">
-                  <span className="text-zinc-400">{t?.label}</span>
-                  <span className="font-mono text-red font-semibold">+{ids.length}</span>
-                </div>
-              })}
-            </div>
-          ) : (
-            <div className="text-[10px] text-green">Test verisi yok — temiz ✓</div>
-          )}
+
+      {/* Durum bilgisi */}
+      {isTestMode && (
+        <div className="p-2 bg-amber/5 border border-amber/20 rounded-lg">
+          <div className="text-[11px] text-amber font-semibold">🧪 Test modundasınız — tüm okuma/yazma test DB'ye gidiyor</div>
+          <div className="text-[10px] text-zinc-500 mt-1">Canlı veriler etkilenmez. İşiniz bitince "Canlıya Dön" tuşuna basın.</div>
+        </div>
+      )}
+      {!isTestMode && !hasTestDB && (
+        <div className="p-2 bg-red/5 border border-red/20 rounded-lg">
+          <div className="text-[10px] text-red">Test DB ayarlanmadı. Test modunu açmak için önce Supabase bilgilerini girin.</div>
         </div>
       )}
     </div>

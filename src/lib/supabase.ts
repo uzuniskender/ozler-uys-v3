@@ -1,10 +1,40 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { toast } from 'sonner'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-const _supabase = createClient(supabaseUrl, supabaseKey)
+const _prodClient = createClient(supabaseUrl, supabaseKey)
+
+// ═══ TEST MODU — Ayrı Supabase projesi ═══
+function getTestClient(): SupabaseClient | null {
+  try {
+    if (localStorage.getItem('uys_test_mode') !== 'true') return null
+    const testUrl = localStorage.getItem('uys_test_sb_url')
+    const testKey = localStorage.getItem('uys_test_sb_key')
+    if (!testUrl || !testKey) return null
+    return createClient(testUrl, testKey)
+  } catch { return null }
+}
+
+let _testClient: SupabaseClient | null = null
+try {
+  _testClient = getTestClient()
+} catch { /* ignore */ }
+
+function getActiveClient(): SupabaseClient {
+  if (_testClient) return _testClient
+  return _prodClient
+}
+
+// Test modunu yeniden yükle (sayfa yenilemeden)
+export function reloadTestClient() {
+  _testClient = getTestClient()
+}
+
+export function isTestMode(): boolean {
+  return _testClient !== null
+}
 
 // Misafir modu — tüm yazma işlemlerini engelle
 let _guestMode = false
@@ -19,11 +49,12 @@ function guestBlock() {
 }
 
 // Proxy: from() çağrısını yakala, insert/update/delete/upsert'i engelle
-export const supabase = new Proxy(_supabase, {
-  get(target, prop) {
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getActiveClient()
     if (prop === 'from') {
       return (table: string) => {
-        const original = target.from(table)
+        const original = client.from(table)
         if (!_guestMode) return original
         return new Proxy(original, {
           get(t: any, p: string) {
@@ -33,7 +64,7 @@ export const supabase = new Proxy(_supabase, {
         })
       }
     }
-    const val = (target as any)[prop]
-    return typeof val === 'function' ? val.bind(target) : val
+    const val = (client as any)[prop]
+    return typeof val === 'function' ? val.bind(client) : val
   }
 })
