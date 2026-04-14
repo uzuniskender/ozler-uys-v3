@@ -216,28 +216,11 @@ export function DataManagement() {
         </button>
       </div>
 
-      {/* Test Modu */}
+      {/* Test Modu — Snapshot bazlı */}
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
         <div className="text-sm font-semibold text-zinc-300 mb-2">🧪 Test Ortamı</div>
-        <p className="text-xs text-zinc-500 mb-3">Açıldığında ekranın üstünde sarı "TEST ORTAMI" banner'ı görünür. Test verilerini ayırt etmek için kullanın.</p>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={localStorage.getItem('uys_test_mode') === 'true'}
-              onChange={e => { localStorage.setItem('uys_test_mode', String(e.target.checked)); window.location.reload() }}
-              className="accent-amber" />
-            <span className="text-xs text-zinc-300">Test Modu {localStorage.getItem('uys_test_mode') === 'true' ? '(Açık)' : '(Kapalı)'}</span>
-          </label>
-          {localStorage.getItem('uys_test_mode') === 'true' && (
-            <button onClick={async () => {
-              if (!await showConfirm('"TEST" içeren tüm sipariş ve iş emirleri silinecek. Devam?')) return
-              const { data: testOrders } = await supabase.from('uys_orders').select('id').ilike('siparis_no', '%TEST%')
-              if (testOrders) { for (const o of testOrders) { await supabase.from('uys_orders').delete().eq('id', o.id) } }
-              const { data: testWOs } = await supabase.from('uys_work_orders').select('id').ilike('ie_no', '%TEST%')
-              if (testWOs) { for (const w of testWOs) { await supabase.from('uys_work_orders').delete().eq('id', w.id) } }
-              store.loadAll(); toast.success('Test verileri temizlendi')
-            }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Test Verilerini Temizle</button>
-          )}
-        </div>
+        <p className="text-xs text-zinc-500 mb-3">Açıldığında mevcut verilerin anlık görüntüsü kaydedilir. Test sırasında eklenen tüm veriler tek tuşla silinir.</p>
+        <TestModuPanel />
       </div>
 
       {/* Admin Şifre */}
@@ -376,6 +359,180 @@ function SifirlamaSecimli() {
       <button onClick={sil} disabled={toplamSecili === 0 || siliniyor} className="w-full px-4 py-2.5 bg-red/20 border border-red/30 text-red rounded-lg text-xs hover:bg-red/30 font-semibold disabled:opacity-30">
         {siliniyor ? 'Siliniyor...' : `🗑 Seçili ${toplamSecili} Kaydı Sil`}
       </button>
+    </div>
+  )
+}
+
+// ═══ TEST MODU — SNAPSHOT BAZLI TEMİZLİK ═══
+const TEST_TABLES = [
+  { key: 'orders', table: 'uys_orders', label: 'Siparişler' },
+  { key: 'workOrders', table: 'uys_work_orders', label: 'İş Emirleri' },
+  { key: 'logs', table: 'uys_logs', label: 'Üretim Logları' },
+  { key: 'fireLogs', table: 'uys_fire_logs', label: 'Fire Logları' },
+  { key: 'stokHareketler', table: 'uys_stok_hareketler', label: 'Stok Hareketleri' },
+  { key: 'cuttingPlans', table: 'uys_kesim_planlari', label: 'Kesim Planları' },
+  { key: 'tedarikler', table: 'uys_tedarikler', label: 'Tedarikler' },
+  { key: 'sevkler', table: 'uys_sevkler', label: 'Sevkiyatlar' },
+  { key: 'operatorNotes', table: 'uys_operator_notes', label: 'Mesajlar' },
+  { key: 'activeWork', table: 'uys_active_work', label: 'Aktif Çalışmalar' },
+  { key: 'izinler', table: 'uys_izinler', label: 'İzinler' },
+  { key: 'checklist', table: 'uys_checklist', label: 'Checklist' },
+]
+
+function TestModuPanel() {
+  const store = useStore()
+  const [siliniyor, setSiliniyor] = useState(false)
+  const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
+  const snapshotRaw = localStorage.getItem('uys_test_snapshot')
+  const snapshot: Record<string, string[]> | null = snapshotRaw ? JSON.parse(snapshotRaw) : null
+  const snapshotTime = localStorage.getItem('uys_test_snapshot_time') || ''
+
+  // Test sırasında eklenen kayıtları bul
+  function getTestRecords() {
+    if (!snapshot) return { total: 0, byTable: {} as Record<string, string[]> }
+    const byTable: Record<string, string[]> = {}
+    let total = 0
+    for (const t of TEST_TABLES) {
+      const arr = (store as unknown as Record<string, { id: string }[]>)[t.key] || []
+      const snapIds = new Set(snapshot[t.key] || [])
+      const newIds = arr.filter(r => !snapIds.has(r.id)).map(r => r.id)
+      if (newIds.length) { byTable[t.key] = newIds; total += newIds.length }
+    }
+    return { total, byTable }
+  }
+
+  function startTestMode() {
+    // Snapshot al
+    const snap: Record<string, string[]> = {}
+    for (const t of TEST_TABLES) {
+      const arr = (store as unknown as Record<string, { id: string }[]>)[t.key] || []
+      snap[t.key] = arr.map(r => r.id)
+    }
+    localStorage.setItem('uys_test_snapshot', JSON.stringify(snap))
+    localStorage.setItem('uys_test_snapshot_time', new Date().toLocaleString('tr-TR'))
+    localStorage.setItem('uys_test_mode', 'true')
+    toast.success('Test modu açıldı — veri görüntüsü kaydedildi')
+    window.location.reload()
+  }
+
+  function stopTestMode() {
+    localStorage.setItem('uys_test_mode', 'false')
+    // Snapshot'u sakla — temizlik için lazım olabilir
+    toast.info('Test modu kapatıldı — snapshot korunuyor')
+    window.location.reload()
+  }
+
+  async function deleteTestData() {
+    const { total, byTable } = getTestRecords()
+    if (total === 0) { toast.info('Silinecek test verisi yok'); return }
+
+    const detay = Object.entries(byTable).map(([key, ids]) => {
+      const t = TEST_TABLES.find(x => x.key === key)
+      return `${t?.label || key}: ${ids.length}`
+    }).join('\n')
+
+    if (!await showConfirm(`🧪 TEST VERİLERİNİ SİL\n\nSnapshot: ${snapshotTime}\nToplam: ${total} kayıt\n\n${detay}\n\nDevam?`)) return
+
+    setSiliniyor(true)
+    let deleted = 0
+
+    // Sıralama önemli: önce bağımlı tablolar, sonra ana tablolar
+    const deleteOrder = ['activeWork', 'operatorNotes', 'izinler', 'checklist', 'fireLogs', 'stokHareketler', 'logs', 'sevkler', 'tedarikler', 'cuttingPlans', 'workOrders', 'orders']
+    for (const key of deleteOrder) {
+      const ids = byTable[key]
+      if (!ids?.length) continue
+      const t = TEST_TABLES.find(x => x.key === key)
+      if (!t) continue
+      // Log silinirken ilişkili stok hareketlerini de sil
+      if (key === 'logs') {
+        for (const id of ids) {
+          await supabase.from('uys_stok_hareketler').delete().eq('log_id', id)
+          await supabase.from('uys_fire_logs').delete().eq('log_id', id)
+        }
+      }
+      // İş emri silinirken ilişkili logları sil
+      if (key === 'workOrders') {
+        for (const id of ids) {
+          await supabase.from('uys_logs').delete().eq('wo_id', id)
+          await supabase.from('uys_stok_hareketler').delete().eq('wo_id', id)
+          await supabase.from('uys_fire_logs').delete().eq('wo_id', id)
+          await supabase.from('uys_active_work').delete().eq('wo_id', id)
+        }
+      }
+      // Sipariş silinirken ilişkili İE'leri sil
+      if (key === 'orders') {
+        for (const id of ids) {
+          await supabase.from('uys_work_orders').delete().eq('order_id', id)
+        }
+      }
+      // Batch delete (50'şer)
+      for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50)
+        await supabase.from(t.table).delete().in('id', batch)
+      }
+      deleted += ids.length
+    }
+
+    // Snapshot'u temizle
+    localStorage.removeItem('uys_test_snapshot')
+    localStorage.removeItem('uys_test_snapshot_time')
+    localStorage.setItem('uys_test_mode', 'false')
+
+    setSiliniyor(false)
+    store.loadAll()
+    toast.success(`${deleted} test kaydı silindi — test modu kapatıldı`)
+    window.location.reload()
+  }
+
+  function clearSnapshot() {
+    localStorage.removeItem('uys_test_snapshot')
+    localStorage.removeItem('uys_test_snapshot_time')
+    toast.success('Snapshot temizlendi')
+    window.location.reload()
+  }
+
+  const testRecords = snapshot ? getTestRecords() : { total: 0, byTable: {} }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3">
+        {!isTestMode ? (
+          <button onClick={startTestMode} className="px-4 py-2 bg-amber/15 border border-amber/30 text-amber rounded-lg text-xs hover:bg-amber/25 font-semibold">
+            🧪 Test Modunu Aç
+          </button>
+        ) : (
+          <button onClick={stopTestMode} className="px-4 py-2 bg-bg-3 border border-border text-zinc-400 rounded-lg text-xs hover:text-white">
+            ⏸ Test Modunu Kapat
+          </button>
+        )}
+        {snapshot && (
+          <button onClick={deleteTestData} disabled={siliniyor || testRecords.total === 0}
+            className="px-4 py-2 bg-red/15 border border-red/30 text-red rounded-lg text-xs hover:bg-red/25 font-semibold disabled:opacity-30">
+            {siliniyor ? '⏳ Siliniyor...' : `🗑 Test Verilerini Sil (${testRecords.total})`}
+          </button>
+        )}
+        {snapshot && !isTestMode && (
+          <button onClick={clearSnapshot} className="text-[10px] text-zinc-600 hover:text-zinc-400 underline">Snapshot'u temizle</button>
+        )}
+      </div>
+      {snapshot && (
+        <div className="mt-3 p-2 bg-bg-1/50 border border-border/50 rounded-lg">
+          <div className="text-[10px] text-zinc-500 mb-1">📷 Snapshot: {snapshotTime}</div>
+          {testRecords.total > 0 ? (
+            <div className="space-y-0.5">
+              {Object.entries(testRecords.byTable).map(([key, ids]) => {
+                const t = TEST_TABLES.find(x => x.key === key)
+                return <div key={key} className="flex items-center gap-2 text-[11px]">
+                  <span className="text-zinc-400">{t?.label}</span>
+                  <span className="font-mono text-red font-semibold">+{ids.length}</span>
+                </div>
+              })}
+            </div>
+          ) : (
+            <div className="text-[10px] text-green">Test verisi yok — temiz ✓</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
