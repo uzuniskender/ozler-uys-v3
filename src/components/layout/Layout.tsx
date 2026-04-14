@@ -15,7 +15,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
       <div className="flex-1 flex flex-col min-w-0">
         {isTestMode && (
           <div className="bg-amber text-black text-center text-xs font-semibold py-1 tracking-wider">
-            ⚠ TEST ORTAMI — {localStorage.getItem('uys_test_sb_url') ? '🔗 Test veritabanına bağlı' : '⚠ Test DB ayarlanmadı — canlı veriye yazılıyor!'}
+            ⚠ TEST ORTAMI — Veriler test amaçlıdır · Bitince Veri Yönetimi → Test Verilerini Sil
           </div>
         )}
         {isGuest && (
