@@ -217,10 +217,12 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   // ═══ STOK KONTROL ═══
   const rc = recipes.find(r => r.id === w?.rcId)
   const hmSatirlar = useMemo(() => {
-    // Önce wo.hm'den, yoksa reçeteden al
-    if (w?.hm?.length) return w.hm.map(h => ({ malkod: h.malkod, malad: h.malad, miktar: h.miktarTotal / (w.hedef || 1) }))
-    if (rc?.satirlar?.length) return rc.satirlar.filter((s: { tip: string }) => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
-      .map((s: { malkod?: string; kod?: string; malad?: string; ad?: string; miktar?: number }) => ({ malkod: s.malkod || s.kod || '', malad: s.malad || s.ad || '', miktar: s.miktar || 0 }))
+    const mamulKodlar = [w?.malkod, w?.mamulKod].filter(Boolean)
+    // Önce wo.hm'den, yoksa reçeteden al — mamulü filtrele
+    if (w?.hm?.length) return w.hm.filter(h => !mamulKodlar.includes(h.malkod)).map(h => ({ malkod: h.malkod, malad: h.malad, miktar: h.miktarTotal / (w.hedef || 1) }))
+    if (rc?.satirlar?.length) return rc.satirlar.filter((s: { tip: string; malkod?: string; kod?: string }) =>
+      (s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul') && !mamulKodlar.includes(s.malkod || s.kod || '')
+    ).map((s: { malkod?: string; kod?: string; malad?: string; ad?: string; miktar?: number }) => ({ malkod: s.malkod || s.kod || '', malad: s.malad || s.ad || '', miktar: s.miktar || 0 }))
     return []
   }, [w, rc])
 

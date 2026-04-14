@@ -684,7 +684,10 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   const editQtyDelta = editLog ? (parseInt(qty) || 0) - editLog.qty : 0
   const kalan = Math.max(0, w.hedef - prod + (editLog?.qty || 0)) // Düzenlemede mevcut qty'yi geri ekle
   const rc = recipes.find(r => r.id === w.receteId) || recipes.find(r => r.mamulKod === w.malkod)
-  const hmSatirlar = (rc?.satirlar || []).filter((s: any) => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
+  const hmSatirlar = (rc?.satirlar || []).filter((s: any) =>
+    (s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul') &&
+    (s.malkod || s.kod) !== w.malkod && (s.malkod || s.kod) !== w.mamulKod
+  )
 
   function stokNet(malkod: string) {
     return stokHareketler.filter(h => h.malkod === malkod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
