@@ -10,6 +10,7 @@ import { hesaplaMRP, type MRPRow } from '@/features/production/mrp'
 export function MRP() {
   const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, loadAll } = useStore()
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
+  const [selectedYMs, setSelectedYMs] = useState<Set<string>>(new Set())
   const [sonuc, setSonuc] = useState<MRPRow[]>([])
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
@@ -32,8 +33,9 @@ export function MRP() {
     [workOrders, logs])
 
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))) }
-  function selectNone() { setSelectedOrders(new Set()) }
+  function toggleYM(id: string) { setSelectedYMs(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))); setSelectedYMs(new Set(ymIEs.map(w => w.id))) }
+  function selectNone() { setSelectedOrders(new Set()); setSelectedYMs(new Set()) }
 
   // Tarih filtre: termini bu tarihe kadar olan siparişleri seç
   function filterByDate(tarih: string) {
@@ -64,16 +66,24 @@ export function MRP() {
     }).length
   }, [selectedOrders, workOrders, cuttingPlans])
 
-  function hesapla() {
-    if (!selectedOrders.size) { toast.error('Sipariş seçin'); return }
+  async function hesapla() {
+    if (!selectedOrders.size && !selectedYMs.size) { toast.error('Sipariş veya YM İE seçin'); return }
     const ordIds = [...selectedOrders]
     const cpMapped = cuttingPlans.map((p: any) => ({
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
+    const ymSet = selectedYMs.size > 0 ? selectedYMs : null
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet)
     setSonuc(result)
     setHesaplandi(true)
+
+    // Seçili siparişlerin mrp_durum'unu güncelle
+    for (const oid of ordIds) {
+      await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', oid)
+    }
+    if (ordIds.length) loadAll()
+
     toast.success(result.length + ' kalem hesaplandı · ' + result.filter(r => r.durum === 'eksik').length + ' eksik')
   }
 
@@ -170,19 +180,40 @@ export function MRP() {
           })}
         </div>
 
-        {/* YM İE bilgisi */}
-        {ymIEs.length > 0 && (
-          <div className="mt-2 text-[10px] text-amber px-2 py-1 bg-amber/5 border border-amber/15 rounded">
-            + {ymIEs.length} bağımsız YM İE dahil edilecek ({ymIEs.map(w => w.ieNo).slice(0, 5).join(', ')}{ymIEs.length > 5 ? '...' : ''})
+        {/* Bağımsız YM İş Emirleri */}
+        {ymIEs.length > 0 && (<>
+          <div className="text-xs font-semibold text-zinc-500 uppercase mt-3 mb-2 flex items-center gap-2">
+            Bağımsız YM İş Emirleri
+            <button onClick={() => setSelectedYMs(prev => prev.size === ymIEs.length ? new Set() : new Set(ymIEs.map(w => w.id)))} className="text-[10px] text-amber font-normal hover:text-white">
+              {selectedYMs.size === ymIEs.length ? 'Hiçbirini' : 'Tümünü Seç'}
+            </button>
           </div>
-        )}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto">
+            {ymIEs.map(w => {
+              const sel = selectedYMs.has(w.id)
+              const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+              const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
+              return (
+                <button key={w.id} onClick={() => toggleYM(w.id)}
+                  className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-amber/10 border border-amber/30' : 'bg-bg-3 border border-border'}`}>
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={sel} readOnly className="accent-amber" />
+                    <span className="font-mono font-medium text-amber">{w.ieNo}</span>
+                    <span className="text-zinc-500 ml-auto">{pct}%</span>
+                  </div>
+                  <div className="text-zinc-500 truncate mt-0.5">{w.malad} · {w.hedef - prod} kalan</div>
+                </button>
+              )
+            })}
+          </div>
+        </>)}
 
         <div className="flex items-center gap-3 mt-3">
-          <button onClick={hesapla} disabled={!selectedOrders.size}
+          <button onClick={hesapla} disabled={!selectedOrders.size && !selectedYMs.size}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             Hesapla →
           </button>
-          <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş seçili</span>
+          <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş{selectedYMs.size > 0 ? ` · ${selectedYMs.size} YM İE` : ''} seçili</span>
         </div>
       </div>
 

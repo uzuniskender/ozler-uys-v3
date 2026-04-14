@@ -8,7 +8,6 @@ import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag, CalendarX2, Bell } from 'lucide-react'
-import { hesaplaMRP } from '@/features/production/mrp'
 
 /* ── #2: Tıklanabilir Stat Card ── */
 function StatCard({ value, label, color, icon: Icon, onClick }: {
@@ -94,17 +93,15 @@ export function Dashboard() {
     return prod < wo.hedef
   })
 
-  // ═══ #1: MRP — MRP sayfasıyla aynı hesaplama ═══
+  // ═══ #1: MRP yapılmamış siparişler ═══
+  // Koşul: reçetesi bağlı + aktif + İE var + mrpDurum boş/bekliyor
   const mrpYapilmamis = useMemo(() => {
-    try {
-      const cpMapped = cuttingPlans.map(p => ({
-        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum,
-        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
-      }))
-      const result = hesaplaMRP(null, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
-      return result.filter(r => r.net > 0).length
-    } catch { return 0 }
-  }, [orders, workOrders, recipes, stokHareketler, tedarikler, cuttingPlans, materials])
+    return aktifOrders.filter(o =>
+      o.receteId &&
+      workOrders.some(w => w.orderId === o.id) &&
+      (!o.mrpDurum || o.mrpDurum === 'bekliyor')
+    ).length
+  }, [aktifOrders, workOrders])
 
   // ═══ #3: Giriş yapmayan operatörler ═══
   const bugunLogOprIds = new Set(
