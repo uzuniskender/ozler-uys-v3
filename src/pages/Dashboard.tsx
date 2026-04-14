@@ -6,7 +6,7 @@ import { showConfirm, showPrompt } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
-import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag } from 'lucide-react'
+import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag, CalendarX2, Bell } from 'lucide-react'
 
 /* ── #2: Tıklanabilir Stat Card ── */
 function StatCard({ value, label, color, icon: Icon, onClick }: {
@@ -56,7 +56,7 @@ export function Dashboard() {
   const {
     orders, workOrders, logs, operatorNotes, activeWork, operators,
     fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
-    operations, stations, sevkler, loadAll,
+    operations, stations, sevkler, izinler, loadAll,
   } = useStore()
   const { isGuest } = useAuth()
   const todayStr = today()
@@ -107,7 +107,14 @@ export function Dashboard() {
     )
   )
   const aktifOps = operators.filter(o => o.aktif !== false)
-  const girmeyenler = aktifOps.filter(o => !bugunLogOprIds.has(o.id))
+  // Bugün izinli/raporlu operatörler (onaylanmış)
+  const bugunIzinli = izinler.filter(iz =>
+    iz.durum === 'onaylandi' && iz.baslangic <= todayStr && iz.bitis >= todayStr
+  )
+  const izinliIds = new Set(bugunIzinli.map(iz => iz.opId))
+  const girmeyenler = aktifOps.filter(o => !bugunLogOprIds.has(o.id) && !izinliIds.has(o.id))
+  // Onay bekleyen izin talepleri
+  const bekleyenIzinler = izinler.filter(iz => iz.durum === 'bekliyor')
 
   // ═══ #4: Bugün duruş yaşayan istasyonlar ═══
   const durusIstSet = new Set<string>()
@@ -412,13 +419,62 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* ═══ İzinli / Raporlu Personel ═══ */}
+      {bugunIzinli.length > 0 && (
+        <div className="mb-4 bg-bg-2 border border-green/20 rounded-lg overflow-hidden">
+          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-green flex items-center gap-2 cursor-pointer" onClick={() => navigate('/operators')}>
+            <CalendarX2 size={14} />
+            Bugün İzinli / Raporlu
+            <span className="text-xs font-mono ml-1">{bugunIzinli.length}</span>
+          </div>
+          <div className="divide-y divide-border/30">
+            {bugunIzinli.map(iz => {
+              const tipColor = iz.tip === 'rapor' ? 'bg-red/10 text-red' : iz.tip === 'mesai' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-amber/10 text-amber'
+              return (
+                <div key={iz.id} className="flex items-center gap-3 px-4 py-2 text-xs">
+                  <span className="text-zinc-200 font-medium">{iz.opAd}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${tipColor}`}>{iz.tip}</span>
+                  {iz.saatBaslangic && iz.saatBitis ? (
+                    <span className="font-mono text-zinc-500">{iz.saatBaslangic}–{iz.saatBitis}</span>
+                  ) : (
+                    <span className="font-mono text-zinc-500">{iz.baslangic} — {iz.bitis}</span>
+                  )}
+                  <span className="ml-auto text-[10px] text-zinc-600">Onay: {iz.onaylayan || '—'}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Bekleyen İzin Talepleri */}
+      {bekleyenIzinler.length > 0 && (
+        <div className="mb-4 bg-bg-2 border border-amber/20 rounded-lg overflow-hidden">
+          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-amber flex items-center gap-2 cursor-pointer" onClick={() => navigate('/operators')}>
+            <Bell size={14} />
+            Onay Bekleyen İzin Talepleri
+            <span className="text-xs font-mono ml-1 bg-amber/20 px-1.5 rounded">{bekleyenIzinler.length}</span>
+          </div>
+          <div className="divide-y divide-border/30">
+            {bekleyenIzinler.map(iz => (
+              <div key={iz.id} className="flex items-center gap-3 px-4 py-2 text-xs cursor-pointer hover:bg-bg-3/30" onClick={() => navigate('/operators')}>
+                <span className="text-zinc-200 font-medium">{iz.opAd}</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber/10 text-amber">{iz.tip}</span>
+                <span className="font-mono text-zinc-500">{iz.baslangic} — {iz.bitis}</span>
+                <span className="ml-auto text-[10px] text-amber font-semibold">⏳ Onay Bekliyor</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ═══ #3: Giriş Yapmayan Operatörler ═══ */}
       {girmeyenler.length > 0 && (
         <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400 flex items-center gap-2 cursor-pointer" onClick={() => navigate('/operators')}>
             <UserX size={14} className="text-orange-400" />
             Bugün Giriş Yapmayan Operatörler
-            <span className="text-xs font-mono text-orange-400 ml-1">{girmeyenler.length}/{aktifOps.length}</span>
+            <span className="text-xs font-mono text-orange-400 ml-1">{girmeyenler.length}/{aktifOps.length - bugunIzinli.length}</span>
           </div>
           <div className="flex flex-wrap gap-1.5 p-3">
             {girmeyenler.slice(0, 30).map(o => (
@@ -428,9 +484,6 @@ export function Dashboard() {
               </span>
             ))}
             {girmeyenler.length > 30 && <span className="text-[11px] text-zinc-600">+{girmeyenler.length - 30} daha</span>}
-          </div>
-          <div className="px-3 pb-2">
-            <div className="text-[10px] text-zinc-600 italic">💡 İzinli / raporlu takibi için operatörlere durum alanı eklenebilir</div>
           </div>
         </div>
       )}

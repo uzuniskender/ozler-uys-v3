@@ -17,7 +17,7 @@ export function OperatorPanel() {
   const [oprId, setOprId] = useState('')
   const [sifre, setSifre] = useState('')
   const [loggedIn, setLoggedIn] = useState(false)
-  const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'>('isler')
+  const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'|'izin'>('isler')
 
   // Veri yükle
   useEffect(() => { loadAll() }, [])
@@ -156,9 +156,9 @@ export function OperatorPanel() {
 
 function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
-  tab: string; setTab: (t: 'isler'|'mesaj'|'ozet') => void; onLogout: () => void
+  tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; onLogout: () => void
 }) {
-  const { workOrders, logs, activeWork, operations, operators, durusKodlari, loadAll } = useStore()
+  const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, loadAll } = useStore()
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
 
   const acikWOs = useMemo(() => {
@@ -259,13 +259,16 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
-          <button onClick={() => setTab('isler')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'isler' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
-            📋 İşlerim ({acikWOs.length})
+          <button onClick={() => setTab('isler')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'isler' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+            📋 İşlerim
           </button>
-          <button onClick={() => setTab('mesaj')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'mesaj' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+          <button onClick={() => setTab('mesaj')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'mesaj' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
             💬 Mesajlar
           </button>
-          <button onClick={() => setTab('ozet')} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-colors ${tab === 'ozet' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+          <button onClick={() => setTab('izin')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'izin' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+            📅 İzin
+          </button>
+          <button onClick={() => setTab('ozet')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'ozet' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
             📊 Özet
           </button>
         </div>
@@ -390,6 +393,42 @@ function OperatorMain({ oprId, opr, tab, setTab, onLogout }: {
         )}
 
         {tab === 'mesaj' && <MesajForm oprId={oprId} oprAd={opr.ad} onSent={() => toast.success('Mesaj gönderildi')} />}
+
+        {tab === 'izin' && (() => {
+          const myIzinler = izinler.filter(iz => iz.opId === oprId).sort((a, b) => b.baslangic.localeCompare(a.baslangic))
+          return (
+            <div className="space-y-3">
+              {/* İzin Talep Formu */}
+              <IzinTalepForm oprId={oprId} oprAd={opr.ad} onSaved={() => { loadAll(); toast.success('İzin talebi gönderildi — onay bekleniyor') }} />
+              {/* Mevcut İzinlerim */}
+              {myIzinler.length > 0 && (
+                <div className="bg-bg-2 border border-border rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 border-b border-border text-[11px] font-semibold text-zinc-400">📅 İzin Geçmişim</div>
+                  <div className="divide-y divide-border/30">
+                    {myIzinler.slice(0, 10).map(iz => {
+                      const durumColor = iz.durum === 'onaylandi' ? 'text-green' : iz.durum === 'reddedildi' ? 'text-red' : 'text-amber'
+                      const durumIcon = iz.durum === 'onaylandi' ? '✅' : iz.durum === 'reddedildi' ? '❌' : '⏳'
+                      return (
+                        <div key={iz.id} className="px-3 py-2 text-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="px-1.5 py-0.5 rounded bg-amber/10 text-amber text-[10px]">{iz.tip}</span>
+                            <span className={`font-semibold ${durumColor}`}>{durumIcon} {iz.durum}</span>
+                          </div>
+                          <div className="font-mono text-zinc-500">
+                            {iz.baslangic}{iz.bitis !== iz.baslangic ? ' — ' + iz.bitis : ''}
+                            {iz.saatBaslangic && iz.saatBitis ? ` (${iz.saatBaslangic}–${iz.saatBitis})` : ''}
+                          </div>
+                          {iz.onaylayan && <div className="text-[10px] text-zinc-600 mt-0.5">Onaylayan: {iz.onaylayan} · {iz.onayTarihi}</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {!myIzinler.length && <div className="p-4 text-center text-zinc-600 text-xs">Henüz izin kaydınız yok</div>}
+            </div>
+          )
+        })()}
 
         {tab === 'ozet' && (() => {
           const bugunLogs = logs.filter(l => l.tarih === today() && l.operatorlar?.some((o: any) => o.id === oprId))
@@ -855,6 +894,77 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
           className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
         <button onClick={send} disabled={!mesaj.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
           <Send size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* İzin Talep Formu — Operatör Paneli */
+function IzinTalepForm({ oprId, oprAd, onSaved }: { oprId: string; oprAd: string; onSaved: () => void }) {
+  const [baslangic, setBaslangic] = useState(today())
+  const [bitis, setBitis] = useState(today())
+  const [tip, setTip] = useState('yıllık')
+  const [saatlik, setSaatlik] = useState(false)
+  const [saatBas, setSaatBas] = useState('')
+  const [saatBit, setSaatBit] = useState('')
+  const [not_, setNot] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  return (
+    <div className="bg-bg-2 border border-accent/20 rounded-xl p-4">
+      <div className="text-sm font-semibold text-accent mb-3">📝 İzin Talep Et</div>
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-zinc-500 mb-0.5 block">Başlangıç</label>
+            <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)}
+              className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="text-[10px] text-zinc-500 mb-0.5 block">Bitiş</label>
+            <input type="date" value={bitis} onChange={e => setBitis(e.target.value)}
+              className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="checkbox" checked={saatlik} onChange={e => setSaatlik(e.target.checked)} id="st" className="rounded" />
+          <label htmlFor="st" className="text-[10px] text-zinc-400">Saatlik izin</label>
+        </div>
+        {saatlik && (
+          <div className="grid grid-cols-2 gap-2">
+            <input type="time" value={saatBas} onChange={e => setSaatBas(e.target.value)} placeholder="Başlangıç"
+              className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+            <input type="time" value={saatBit} onChange={e => setSaatBit(e.target.value)} placeholder="Bitiş"
+              className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+        )}
+        <select value={tip} onChange={e => setTip(e.target.value)}
+          className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent">
+          <option value="yıllık">Yıllık İzin</option>
+          <option value="mazeret">Mazeret İzni</option>
+          <option value="rapor">Rapor</option>
+          <option value="ücretsiz">Ücretsiz İzin</option>
+        </select>
+        <input value={not_} onChange={e => setNot(e.target.value)} placeholder="Açıklama (opsiyonel)"
+          className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+        <button
+          disabled={saving}
+          onClick={async () => {
+            if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
+            setSaving(true)
+            await supabase.from('uys_izinler').insert({
+              id: uid(), op_id: oprId, op_ad: oprAd,
+              baslangic, bitis: bitis || baslangic, tip,
+              durum: 'bekliyor',
+              saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
+              onaylayan: '', onay_tarihi: '', not_: not_,
+            })
+            setSaving(false)
+            setNot(''); onSaved()
+          }}
+          className="w-full py-2 bg-accent/20 border border-accent/30 text-accent rounded-lg text-xs font-bold hover:bg-accent/30">
+          {saving ? 'Gönderiliyor...' : '📤 Talep Gönder (Onay Bekleyecek)'}
         </button>
       </div>
     </div>

@@ -331,3 +331,18 @@ export interface ChecklistItem {
   olusturan: string
   notlar: string
 }
+
+export interface Izin {
+  id: string
+  opId: string
+  opAd: string
+  baslangic: string
+  bitis: string
+  tip: string
+  durum: string
+  saatBaslangic: string
+  saatBitis: string
+  onaylayan: string
+  onayTarihi: string
+  not: string
+}
