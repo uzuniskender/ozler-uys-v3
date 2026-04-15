@@ -30,37 +30,17 @@ import { Checklist } from '@/pages/Checklist'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
 
-// Misafir erişim engeli — izinsiz sayfalarda Dashboard'a yönlendir
-function GuestGuard({ children }: { children: React.ReactNode }) {
-  const { isGuest } = useAuth()
-  if (isGuest) return <div className="p-8 text-center"><div className="text-xl text-red mb-2">🔒 Erişim Engeli</div><div className="text-sm text-zinc-400">Misafir hesabıyla bu sayfaya erişilemez.</div></div>
-  return <>{children}</>
-}
-
-function AppContent() {
-  const { signOut, isGuest, isOperator } = useAuth()
+// Admin sayfaları — auth kontrolü App seviyesinde, burada sadece rotalar
+function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
   const { loadAll } = useStore()
   useRealtime()
-
   useEffect(() => { loadAll() }, [loadAll])
-
-  // Operatör sadece /operator rotasına erişebilir
-  if (isOperator) {
-    return (
-      <HashRouter>
-        <Routes>
-          <Route path="/operator" element={<OperatorPanel />} />
-          <Route path="*" element={<Navigate to="/operator" replace />} />
-        </Routes>
-      </HashRouter>
-    )
-  }
 
   return (
     <HashRouter>
       <Routes>
         <Route path="/operator" element={<OperatorPanel />} />
-        <Route element={<Layout onSignOut={signOut} />}>
+        <Route element={<Layout onSignOut={onSignOut} />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/work-orders" element={<WorkOrders />} />
@@ -88,6 +68,34 @@ function AppContent() {
   )
 }
 
+// Operatör sayfası — admin rotası YOK, geri tuşu engellenmiş
+function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
+  const { loadAll } = useStore()
+  useRealtime()
+  useEffect(() => { loadAll() }, [loadAll])
+
+  // Geri tuşunu engelle — operatör asla admin sayfasına gidemez
+  useEffect(() => {
+    // Tarayıcı geçmişini temizle
+    window.history.replaceState(null, '', window.location.href)
+    function blockBack() {
+      window.history.pushState(null, '', window.location.href)
+    }
+    // İlk yüklemede geçmiş yığınına bir giriş ekle
+    window.history.pushState(null, '', window.location.href)
+    window.addEventListener('popstate', blockBack)
+    return () => window.removeEventListener('popstate', blockBack)
+  }, [])
+
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="*" element={<OperatorPanel />} />
+      </Routes>
+    </HashRouter>
+  )
+}
+
 export default function App() {
   const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator } = useAuth()
 
@@ -95,6 +103,7 @@ export default function App() {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
   }
 
+  // Oturum yok → Giriş sayfası
   if (!session) {
     return <Login onLogin={signIn} onGoogleLogin={signInWithGoogle} onGuest={guestLogin} onOperatorLogin={(oprId, oprAd) => {
       operatorLogin(oprId, oprAd)
@@ -102,6 +111,20 @@ export default function App() {
     }} />
   }
 
+  // ═══ OPERATÖR: Sadece OperatorPanel, admin rotası YOK ═══
+  if (isOperator) {
+    return (
+      <>
+        <Toaster theme="dark" position="bottom-right" richColors closeButton />
+        <div className="fixed top-0 left-0 right-0 z-50 bg-green/90 text-black text-center text-xs py-1 font-semibold">
+          🏭 OPERATÖR MODU — {session.username} · <button onClick={signOut} className="underline">Çıkış</button>
+        </div>
+        <OperatorRoutes onSignOut={signOut} />
+      </>
+    )
+  }
+
+  // ═══ ADMİN / MİSAFİR: Tüm sayfalar ═══
   return (
     <>
       <Toaster theme="dark" position="bottom-right" richColors closeButton />
@@ -110,12 +133,7 @@ export default function App() {
           👁 MİSAFİR MODU — Salt okunur · <button onClick={signOut} className="underline">Çıkış</button>
         </div>
       )}
-      {isOperator && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-green/90 text-black text-center text-xs py-1 font-semibold">
-          🏭 OPERATÖR MODU — {session.username} · <button onClick={signOut} className="underline">Çıkış</button>
-        </div>
-      )}
-      <AppContent />
+      <AdminRoutes onSignOut={signOut} />
     </>
   )
 }

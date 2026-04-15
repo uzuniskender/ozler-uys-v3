@@ -12,25 +12,20 @@ export function OperatorPanel() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, signOut } = useAuth()
+
+  // Auth'tan gelen operatör bilgisiyle BAŞLANGIÇ state — useEffect yerine direkt
+  const authOprId = user?.role === 'operator' ? user.oprId || '' : ''
   const [step, setStep] = useState<'bolum'|'operator'|'sifre'>('bolum')
   const [bolum, setBolum] = useState('')
-  const [oprId, setOprId] = useState('')
+  const [oprId, setOprId] = useState(authOprId)
   const [sifre, setSifre] = useState('')
-  const [loggedIn, setLoggedIn] = useState(false)
+  const [loggedIn, setLoggedIn] = useState(!!authOprId)
   const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'|'izin'>('isler')
 
   // Veri yükle
   useEffect(() => { loadAll() }, [])
 
-  // Auth'dan gelen operatör otomatik girişi
-  useEffect(() => {
-    if (user?.role === 'operator' && user.oprId && !loggedIn) {
-      setOprId(user.oprId)
-      setLoggedIn(true)
-    }
-  }, [user])
-
-  // Dashboard'dan oprId ile gelince auto-login
+  // Dashboard'dan oprId ile gelince auto-login (sadece admin)
   useEffect(() => {
     const urlOprId = searchParams.get('oprId')
     if (urlOprId && !loggedIn && operators.length > 0) {

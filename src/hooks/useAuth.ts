@@ -10,10 +10,15 @@ interface AuthUser {
 }
 
 const AUTH_KEY = 'uys_v3_auth'
+const OPR_KEY = 'uys_v3_opr' // sessionStorage — tab kapanınca silinir
 const ADMIN_EMAILS = ['uzuniskender@gmail.com']
 
 function getStored(): AuthUser | null {
   try {
+    // Önce sessionStorage'dan operatör kontrolü
+    const oprS = sessionStorage.getItem(OPR_KEY)
+    if (oprS) return JSON.parse(oprS)
+    // Sonra localStorage'dan admin/guest
     const s = localStorage.getItem(AUTH_KEY)
     return s ? JSON.parse(s) : null
   } catch { return null }
@@ -23,11 +28,6 @@ export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(() => {
     const stored = getStored()
     if (stored?.role === 'guest') setGuestMode(true)
-    // Operatör oturumu kalıcı değil — her açılışta şifre sorulsun
-    if (stored?.role === 'operator') {
-      localStorage.removeItem(AUTH_KEY)
-      return null
-    }
     return stored
   })
   const [loading, setLoading] = useState(true)
@@ -52,6 +52,7 @@ export function useAuth() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         localStorage.removeItem(AUTH_KEY)
+        sessionStorage.removeItem(OPR_KEY)
         setUser(null)
         setLoading(false)
         return
@@ -100,6 +101,7 @@ export function useAuth() {
   async function signOut() {
     try { await supabase.auth.signOut() } catch {}
     localStorage.removeItem(AUTH_KEY)
+    sessionStorage.removeItem(OPR_KEY)
     setUser(null)
     setGuestMode(false)
     window.location.reload()
@@ -114,7 +116,8 @@ export function useAuth() {
 
   function operatorLogin(oprId: string, oprAd: string) {
     const authUser: AuthUser = { role: 'operator', username: oprAd, loginTime: new Date().toISOString(), oprId }
-    localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
+    // sessionStorage: tab kapanınca silinir — operatör her açılışta şifre girer
+    sessionStorage.setItem(OPR_KEY, JSON.stringify(authUser))
     setUser(authUser)
   }
 
