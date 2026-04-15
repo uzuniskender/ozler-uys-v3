@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
-import { showConfirm } from '@/lib/prompt'
+import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { BomTree } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
@@ -51,6 +51,13 @@ export function BomTrees() {
       ad: (bt.ad || bt.mamulAd) + ' (Kopya)', rows: newRows,
     })
     loadAll(); toast.success('Ürün ağacı kopyalandı')
+  }
+
+  async function renameBom(bt: BomTree) {
+    const yeniAd = await showPrompt('Yeni ürün ağacı adı', 'Ürün adı', bt.ad || bt.mamulAd)
+    if (!yeniAd || yeniAd.trim() === (bt.ad || bt.mamulAd)) return
+    await supabase.from('uys_bom_trees').update({ ad: yeniAd.trim(), mamul_ad: yeniAd.trim() }).eq('id', bt.id)
+    loadAll(); toast.success('Ad güncellendi')
   }
 
   // #10: Excel Export
@@ -152,7 +159,7 @@ export function BomTrees() {
               <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent">{bt.mamulKod}</td>
-                <td className="px-4 py-2 text-zinc-300">{bt.ad || bt.mamulAd}</td>
+                <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameBom(bt)}>{bt.ad || bt.mamulAd} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => createRecipeFromBom(bt)} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20 mr-1">📋 Reçete Oluştur</button>

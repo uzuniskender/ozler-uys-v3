@@ -3,7 +3,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
-import { showConfirm } from '@/lib/prompt'
+import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
@@ -95,6 +95,13 @@ export function Recipes() {
     loadAll(); toast.success('Reçete kopyalandı')
   }
 
+  async function renameRecipe(r: Recipe) {
+    const yeniAd = await showPrompt('Yeni reçete adı', 'Reçete adı', r.ad)
+    if (!yeniAd || yeniAd.trim() === r.ad) return
+    await supabase.from('uys_recipes').update({ ad: yeniAd.trim() }).eq('id', r.id)
+    loadAll(); toast.success('Reçete adı güncellendi')
+  }
+
   // BOM'dan Reçete Oluştur — tüm ürün ağaçlarını reçeteye dönüştür
   async function bomDanReceteOlustur() {
     if (!bomTrees.length) { toast.error('Ürün ağacı bulunamadı'); return }
@@ -151,7 +158,7 @@ export function Recipes() {
                 <tr key={r.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(r.id) ? 'bg-accent/5' : ''}`}>
                   <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleCheck(r.id)} className="accent-accent" /></td>
                   <td className="px-4 py-2 font-mono text-accent">{r.rcKod || '—'}</td>
-                  <td className="px-4 py-2 text-zinc-300">{r.ad}</td>
+                  <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameRecipe(r)}>{r.ad} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
                   <td className="px-4 py-2 font-mono text-zinc-500">{r.mamulKod}</td>
                   <td className="px-4 py-2 text-right font-mono">{r.satirlar?.length || 0}</td>
                   <td className="px-4 py-2 text-right">
