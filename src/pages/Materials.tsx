@@ -26,16 +26,16 @@ export function Materials() {
   const hmTipler = useMemo(() => [...new Set(materials.map(m => m.hammaddeTipi).filter(Boolean))].sort(), [materials])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
-  // Ölçü eşleştirme: tamsayı → tamsayı kısmı eşleşir (60 → 60, 60.3, 60.5)
-  //                  ondalık → tam eşleşme (60.3 → sadece 60.3)
+  // Ölçü eşleştirme: string başlangıç eşleşmesi
+  // 60 → 60, 60.3, 600, 6000 ✓   160 ✗
+  // 48 → 48, 48.3, 480 ✓         148 ✗
+  // 60,3 → 60.3, 60.31 ✓         60, 600 ✗
   function dimMatch(value: number, searchStr: string): boolean {
     if (!searchStr) return true
     if (!value) return false
-    const s = searchStr.replace(',', '.')
-    const num = parseFloat(s)
-    if (isNaN(num)) return true
-    if (s.includes('.')) return value === num
-    return Math.floor(value) === num
+    const s = searchStr.replace(',', '.').trim()
+    if (!s) return true
+    return String(value).startsWith(s)
   }
 
   const filtered = useMemo(() => {
