@@ -449,7 +449,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
           ) : (
             <div className="p-4 text-center">
               {order.receteId ? (
-                {can('orders_mrp') && <button onClick={runMRP} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Calculator size={13} className="inline mr-1" /> MRP Hesapla</button>}
+                can('orders_mrp') && <button onClick={runMRP} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Calculator size={13} className="inline mr-1" /> MRP Hesapla</button>
               ) : (
                 <div className="text-zinc-600 text-xs">Bu siparişe reçete atanmamış — MRP hesaplanamaz</div>
               )}
