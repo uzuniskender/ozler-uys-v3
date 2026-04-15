@@ -46,6 +46,17 @@ export function OperatorPanel() {
 
   const isAdmin = user?.role === 'admin' || user?.email
 
+  // Admin uzaktan çıkış sinyali dinle
+  useEffect(() => {
+    if (!loggedIn || isAdmin) return
+    const ch = supabase.channel('uys-force-logout')
+    ch.on('broadcast', { event: 'logout' }, () => {
+      toast.error('Yönetici tarafından oturumunuz kapatıldı')
+      setTimeout(() => { signOut(); window.location.hash = '#/'; window.location.reload() }, 1500)
+    }).subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [loggedIn, isAdmin])
+
   // Bölüm listesi — operasyonlardan ve operatörlerden
   const bolumler = [...new Set([
     ...operations.map(o => o.bolum).filter(Boolean),

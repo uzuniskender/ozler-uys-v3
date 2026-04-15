@@ -59,6 +59,11 @@ export function Operators() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Operatörler</h1><p className="text-xs text-zinc-500">{operators.length} operatör · {operators.filter(o => o.aktif).length} aktif</p></div>
         <div className="flex gap-2">
+          <button onClick={async () => {
+            if (!await showConfirm('Tüm operatör oturumları kapatılacak. Devam?')) return
+            await supabase.channel('uys-force-logout').send({ type: 'broadcast', event: 'logout', payload: { ts: Date.now() } })
+            toast.success('Çıkış sinyali gönderildi — aktif operatörler çıkış yapacak')
+          }} className="px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs hover:bg-red/20">🚪 Tüm Oturumları Kapat</button>
           <button onClick={() => { import('xlsx').then(XLSX => {
             const rows = operators.map(o => ({ Kod: o.kod, Ad: o.ad, Bölüm: o.bolum, Aktif: o.aktif ? 'Evet' : 'Hayır' }))
             const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
