@@ -58,6 +58,9 @@ export function kesimPlanOlustur(
 
   const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
 
+  console.group('🔧 KESİM PLAN HESAPLAMA')
+  console.log('İE sayısı:', workOrders.length, '| Reçete:', recipes.length, '| Malzeme:', materials.length)
+
   // HM bazlı gruplama: hamMalkod → ihtiyaçlar
   const gruplar: Record<string, {
     hamMalkod: string; hamMalad: string; hamBoy: number; hamEn: number
@@ -74,35 +77,57 @@ export function kesimPlanOlustur(
     const wOpAd = (wOp?.ad || w.opAd || '').toUpperCase()
     if (!kesimOps.some(k => wOpAd.includes(k))) continue
 
+    console.group(`📋 ${w.ieNo} — ${w.malad}`)
+    console.log('Operasyon:', wOpAd, '| Hedef:', w.hedef, '| Kalan:', kalan)
+    console.log('malkod:', w.malkod, '| rcId:', w.rcId, '| kirno:', w.kirno)
+    console.log('w.hm:', w.hm)
+
     // HM bileşenlerini bul
     const hmSatirlar: { malkod: string; malad: string }[] = []
     if (w.hm?.length) {
       w.hm.forEach(h => hmSatirlar.push({ malkod: h.malkod, malad: h.malad }))
+      console.log('✅ HM w.hm dizisinden:', hmSatirlar.length, 'satır')
     } else {
+      console.log('⚠ w.hm boş — reçeteden aranıyor...')
       // BOM'dan bir seviye aşağı
       const rc = recipes.find(r => r.id === w.rcId) || recipes.find(r => r.mamulKod === w.malkod)
       if (rc?.satirlar) {
+        console.log('Reçete bulundu:', rc.ad, '| mamulKod:', rc.mamulKod, '| satirlar:', rc.satirlar.length)
         const woKirno = w.kirno || '1'
         const depth = woKirno.split('.').length
-        rc.satirlar.filter(s =>
+        const altlar = rc.satirlar.filter(s =>
           (s.tip === 'Hammadde' || s.tip === 'YarıMamul' || s.tip === 'Sarf') &&
           (s.kirno || '').startsWith(woKirno + '.') &&
           (s.kirno || '').split('.').length === depth + 1
-        ).forEach(s => hmSatirlar.push({ malkod: s.malkod || '', malad: s.malad || '' }))
+        )
+        console.log(`Kirno "${woKirno}" altındaki HM satırlar:`, altlar.map(s => `${s.kirno} ${s.malkod} ${s.malad} (${s.tip})`))
+        altlar.forEach(s => hmSatirlar.push({ malkod: s.malkod || '', malad: s.malad || '' }))
+      } else {
+        console.log('❌ Reçete bulunamadı! rcId:', w.rcId, '| malkod:', w.malkod)
       }
     }
 
+    if (!hmSatirlar.length) {
+      console.log('❌ SONUÇ: HM satır yok — bu İE için kesim planı oluşturulamaz')
+      console.groupEnd()
+      continue
+    }
+
     for (const hm of hmSatirlar) {
-      const hmalkod = hm.malkod; if (!hmalkod) continue
+      const hmalkod = hm.malkod; if (!hmalkod) { console.log('❌ HM malkod boş'); continue }
       const hmM = materials.find(m => m.kod === hmalkod)
-      if (!hmM) continue
+      if (!hmM) { console.log('❌ HM malzeme kartı bulunamadı:', hmalkod); continue }
       const hamBoy = getHamBoy(hmM)
       const hamEn = hmM.uzunluk > 0 ? 0 : Math.min(hmM.boy || 0, hmM.en || 0)
-      if (!hamBoy) continue // Boy bilgisi yoksa kesim yapılamaz
+      if (!hamBoy) { console.log('❌ HM boy bilgisi yok:', hmalkod, '| boy:', hmM.boy, '| en:', hmM.en, '| uzunluk:', hmM.uzunluk); continue }
 
       const parcaBoy = getParcaBoy(w.malkod, materials)
       const parcaEn = getParcaEn(w.malkod, materials)
       const kesimTip = parcaEn > 0 ? 'yuzey' : 'boy'
+
+      console.log(`✅ HM: ${hmalkod} (${hamBoy}mm) → Parça: ${w.malkod} (${parcaBoy}mm) | Tip: ${kesimTip}`)
+
+      if (!parcaBoy) { console.log('❌ Parça boy bilgisi yok! Malzeme kartında uzunluk/boy eksik:', w.malkod) }
 
       if (!gruplar[hmalkod]) {
         gruplar[hmalkod] = {
@@ -123,9 +148,12 @@ export function kesimPlanOlustur(
         })
       }
     }
+    console.groupEnd()
   }
 
-  if (!Object.keys(gruplar).length) return []
+  console.log('Toplam HM grubu:', Object.keys(gruplar).length)
+  if (!Object.keys(gruplar).length) { console.log('❌ Hiç grup oluşmadı — plan yok'); console.groupEnd(); return [] }
+  console.groupEnd()
 
   // Her grup için optimum kesim planı oluştur
   const sonuclar: KesimPlanSonuc[] = []
