@@ -35,7 +35,7 @@ export function Recipes() {
   function exportRecipes() {
     import('xlsx').then(XLSX => {
       const rows = recipes.flatMap(r => (r.satirlar || []).map(s => ({
-        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim, 'OpId': s.opId || '', 'İşlemSüre': s.islemSure || 0
+        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim, 'OpId': s.opId || '', 'HazırlıkSüre': s.hazirlikSure || 0, 'İşlemSüre': s.islemSure || 0, 'SüreBirim': s.sureBirim || 'dk'
       })))
       const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Reçeteler'); XLSX.writeFile(wb, 'receteler.xlsx')
@@ -60,7 +60,7 @@ export function Recipes() {
           id: uid(), kirno: r['Kırılım'] || r.Kirno || r.kirno || '1',
           malkod: r['Malzeme Kod'] || r.MalKod || r.malkod || '', malad: r['Malzeme'] || r.MalAd || r.malad || '',
           tip: (r.Tip || r.tip || 'Hammadde') as RecipeRow['tip'], miktar: parseFloat(r.Miktar || r.miktar) || 1, birim: r.Birim || r.birim || 'Adet',
-          opId: r.OpId || r.opId || '', istId: '', hazirlikSure: 0, islemSure: parseFloat(r['İşlemSüre'] || r.islemSure) || 0,
+          opId: r.OpId || r.opId || '', istId: '', hazirlikSure: parseFloat(r['HazırlıkSüre'] || r.hazirlikSure) || 0, islemSure: parseFloat(r['İşlemSüre'] || r.islemSure) || 0, sureBirim: r['SüreBirim'] || r.sureBirim || 'dk',
         })
       }
 
@@ -179,7 +179,7 @@ function NewRecipeModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni Reçete</h2>
         <div className="space-y-3">
@@ -358,7 +358,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     const children = rows.filter(r => r.kirno.startsWith(parentKirno + '.') && r.kirno.split('.').length === parentKirno.split('.').length + 1)
     const nextNum = children.length + 1
     const newKirno = parentKirno + '.' + nextNum
-    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: 'Yeni Bileşen', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0 }])
+    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: 'Yeni Bileşen', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk' }])
   }
 
   function deleteRow(idx: number) {
@@ -374,7 +374,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-5xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div className="flex-1 mr-4">
@@ -400,7 +400,9 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                 <th className="text-right px-2 py-2 w-16">Miktar</th>
                 <th className="text-left px-2 py-2 w-16">Birim</th>
                 <th className="text-left px-2 py-2">Operasyon</th>
-                <th className="text-right px-2 py-2 w-14">İşlem dk</th>
+                <th className="text-right px-2 py-2 w-28">Hazırlık</th>
+                <th className="text-right px-2 py-2 w-28">İşlem</th>
+                <th className="text-left px-2 py-2 w-14">Birim</th>
                 <th className="px-2 py-2 w-20"></th>
               </tr>
             </thead>
@@ -442,8 +444,21 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     </td>
                     <td className="px-2 py-1">
                       {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
+                        <input type="number" value={r.hazirlikSure || 0} onChange={e => updateRow(i, 'hazirlikSure', parseFloat(e.target.value) || 0)}
+                          className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" placeholder="0" />
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
                         <input type="number" value={r.islemSure || 0} onChange={e => updateRow(i, 'islemSure', parseFloat(e.target.value) || 0)}
-                          className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" />
+                          className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" placeholder="0" />
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
+                        <select value={r.sureBirim || 'dk'} onChange={e => updateRow(i, 'sureBirim', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
+                          <option value="dk">dk</option><option value="sn">sn</option>
+                        </select>
                       )}
                     </td>
                     <td className="px-2 py-1 text-right">
@@ -494,7 +509,7 @@ function DimFixModal({ items, onSave, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
       <div className="bg-bg-1 border border-amber/30 rounded-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-amber mb-1">⚠ Eksik Ölçüler</h2>
         <p className="text-xs text-zinc-500 mb-4">Aşağıdaki malzemelerin ölçüleri eksik. Adından tahmin edilenler dolduruldu — kontrol edip onaylayın.</p>

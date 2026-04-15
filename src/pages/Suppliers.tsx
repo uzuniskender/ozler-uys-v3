@@ -85,7 +85,7 @@ function SupplierFormModal({ initial, onClose, onSave }: {
   const [not_, setNot] = useState(initial?.not || '')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Tedarikçi Düzenle' : 'Yeni Tedarikçi'}</h2>
         <div className="space-y-3">

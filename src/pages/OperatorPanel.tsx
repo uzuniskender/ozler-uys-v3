@@ -866,7 +866,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={handleClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
       <div className="bg-bg-1 border border-border rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className={`${editLog ? 'bg-amber/10 border-b border-amber/20' : 'bg-accent/10 border-b border-accent/20'} p-4 rounded-t-xl`}>
           <div className="flex items-center justify-between">

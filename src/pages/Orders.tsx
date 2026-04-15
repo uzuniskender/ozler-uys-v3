@@ -274,7 +274,7 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Sipariş Düzenle' : 'Yeni Sipariş'}</h2>
         {error && <div className="mb-3 p-2 bg-red/10 border border-red/25 rounded text-xs text-red">{error}</div>}
@@ -335,7 +335,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div><h2 className="text-lg font-semibold">{order.siparisNo}</h2><p className="text-xs text-zinc-500">{order.musteri} · {order.tarih}</p></div>
@@ -497,7 +497,7 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={sonuc ? () => { setRunning(false); setSonuc(null) } : undefined}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-1">⚙ Sipariş Zinciri</h3>
         <div className="text-xs text-zinc-500 mb-4">{order.siparisNo} · {order.musteri}</div>

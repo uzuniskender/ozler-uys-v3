@@ -303,7 +303,7 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div>
@@ -476,7 +476,7 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   const COLORS = ['#4f9cf9', '#f97b4f', '#6fcf97', '#bb6bd9', '#f2c94c', '#56ccf2']
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <h2 className="text-lg font-semibold">Manuel Kesim Planı</h2>

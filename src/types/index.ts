@@ -158,6 +158,7 @@ export interface RecipeRow {
   istId: string
   hazirlikSure: number
   islemSure: number
+  sureBirim?: string // 'dk' | 'sn'
 }
 
 export interface BomTree {

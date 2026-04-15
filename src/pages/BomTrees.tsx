@@ -180,7 +180,7 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     onSaved()
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni Ürün Ağacı</h2>
         <div className="space-y-3">
@@ -375,7 +375,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div><h2 className="text-lg font-semibold">{bom.ad || bom.mamulAd}</h2><p className="text-xs text-zinc-500">{bom.mamulKod} · {rows.length} satır</p></div>
@@ -464,7 +464,7 @@ function DimFixModal({ items, onSave, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
       <div className="bg-bg-1 border border-amber/30 rounded-xl p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-amber mb-1">⚠ Eksik Ölçüler</h2>
         <p className="text-xs text-zinc-500 mb-4">Aşağıdaki malzemelerin ölçüleri eksik. Adından tahmin edilenler dolduruldu — kontrol edip onaylayın.</p>

@@ -139,7 +139,7 @@ function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | n
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Düzenle' : 'Yeni Görev/İstek'}</h2>
         <div className="space-y-3">
@@ -228,7 +228,7 @@ function CLDetailModal({ item, onClose, onUpdated }: { item: ChecklistItem; onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div>

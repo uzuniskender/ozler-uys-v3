@@ -225,7 +225,7 @@ function OprFormModal({ initial, bolumler, onClose, onSave }: {
   const [sifre, setSifre] = useState(initial?.sifre || '123456')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Operatör Düzenle' : 'Yeni Operatör'}</h2>
         <div className="space-y-3">
@@ -322,7 +322,7 @@ function IzinFormModal({ operators, editData, toplu, onClose, onSave }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{title}</h2>
         <div className="space-y-3">

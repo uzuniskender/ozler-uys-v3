@@ -71,7 +71,7 @@ export function Shipment() {
 
       {/* Sevkiyat Detay Modal */}
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setDetailId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between mb-4">
               <div><h2 className="text-lg font-semibold">{detail.siparisNo || 'Sevkiyat'}</h2><p className="text-xs text-zinc-500">{detail.musteri} · {detail.tarih}</p></div>
@@ -155,7 +155,7 @@ function SevkFormModal({ orders, workOrders, logs, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Truck size={18} className="text-accent" /> Yeni Sevkiyat</h2>
         <div className="space-y-3">

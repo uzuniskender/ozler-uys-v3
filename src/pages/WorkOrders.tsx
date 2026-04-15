@@ -414,7 +414,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
   const tahminiGun = gunlukOrt > 0 && kalan > 0 ? Math.ceil(kalan / gunlukOrt) : 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div>
@@ -596,7 +596,7 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni İş Emri</h2>
         <div className="space-y-3">
