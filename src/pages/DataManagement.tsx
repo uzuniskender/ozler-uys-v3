@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
 import { useState } from 'react'
 import { useStore } from '@/store'
@@ -245,6 +246,13 @@ export function DataManagement() {
         <div className="text-sm font-semibold text-zinc-300 mb-2">👥 Kullanıcı Yönetimi (RBAC)</div>
         <p className="text-xs text-zinc-500 mb-3">Sisteme giriş yapabilecek kullanıcıları ve rollerini yönetin.</p>
         <KullaniciPanel />
+      </div>}
+
+      {/* Yetki Matrisi — RBAC */}
+      {can('data_pass') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+        <div className="text-sm font-semibold text-zinc-300 mb-2">🔐 Yetki Matrisi</div>
+        <p className="text-xs text-zinc-500 mb-3">Her rol için hangi işlemlere izin verildiğini düzenleyin. Admin her zaman tam yetkilidir.</p>
+        <YetkiPanel />
       </div>}
 
       {/* #35: Sıfırlama İşlemleri — seçimli */}
@@ -686,6 +694,108 @@ function KullaniciPanel() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ═══ YETKİ MATRİSİ EDİTÖRÜ ═══
+function YetkiPanel() {
+  const { yetkiMap, loadAll } = useStore()
+  const [localMap, setLocalMap] = useState<Record<string, AdminRole[]>>({})
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+
+  // Başlangıçta DB veya varsayılanı yükle
+  useEffect(() => {
+    setLocalMap(yetkiMap && Object.keys(yetkiMap).length > 0 ? { ...yetkiMap } as Record<string, AdminRole[]> : { ...DEFAULTS })
+  }, [yetkiMap])
+
+  function isChecked(action: string, role: AdminRole): boolean {
+    const arr = localMap[action]
+    return arr ? arr.includes(role) : false
+  }
+
+  function toggle(action: string, role: AdminRole) {
+    setLocalMap(prev => {
+      const arr = prev[action] ? [...prev[action]] : []
+      const idx = arr.indexOf(role)
+      if (idx >= 0) arr.splice(idx, 1)
+      else arr.push(role)
+      return { ...prev, [action]: arr }
+    })
+    setDirty(true)
+  }
+
+  async function save() {
+    setSaving(true)
+    await supabase.from('uys_yetki_ayarlari').upsert({
+      id: 'rbac', data: localMap, updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+    await loadAll()
+    setSaving(false)
+    setDirty(false)
+    toast.success('Yetki matrisi kaydedildi')
+  }
+
+  async function resetToDefaults() {
+    if (!await showConfirm('Tüm yetkileri varsayılana döndürmek istediğinize emin misiniz?')) return
+    await supabase.from('uys_yetki_ayarlari').delete().eq('id', 'rbac')
+    setLocalMap({ ...DEFAULTS })
+    await loadAll()
+    setDirty(false)
+    toast.success('Varsayılan yetkiler yüklendi')
+  }
+
+  // Fark kontrolü — varsayılandan farklı mı?
+  function isDiff(action: string, role: AdminRole): boolean {
+    const def = (DEFAULTS[action] || []).includes(role)
+    const cur = isChecked(action, role)
+    return def !== cur
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left px-2 py-2 text-zinc-500 font-normal w-[180px]">Aksiyon</th>
+              {ROLE_LIST.map(r => (
+                <th key={r.key} className="text-center px-3 py-2 text-zinc-400 font-semibold min-w-[80px]">{r.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ACTION_GROUPS.map(g => (
+              <>
+                <tr key={'g-' + g.group}><td colSpan={4} className="px-2 pt-3 pb-1 text-[10px] font-bold text-accent uppercase tracking-wider">{g.group}</td></tr>
+                {g.actions.map(a => (
+                  <tr key={a.key} className="border-b border-border/15 hover:bg-bg-3/20">
+                    <td className="px-2 py-1.5 text-zinc-300">{a.label}</td>
+                    {ROLE_LIST.map(r => (
+                      <td key={r.key} className="text-center px-3 py-1.5">
+                        <label className="inline-flex items-center justify-center cursor-pointer">
+                          <input type="checkbox" checked={isChecked(a.key, r.key)} onChange={() => toggle(a.key, r.key)}
+                            className={`accent-accent w-3.5 h-3.5 ${isDiff(a.key, r.key) ? 'ring-2 ring-amber/50 ring-offset-1 ring-offset-bg-1' : ''}`} />
+                        </label>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
+        <button onClick={resetToDefaults} className="px-3 py-1.5 bg-bg-3 text-zinc-500 rounded-lg text-xs hover:text-white">↺ Varsayılana Dön</button>
+        <div className="flex items-center gap-3">
+          {dirty && <span className="text-[10px] text-amber">● Kaydedilmemiş değişiklik</span>}
+          <button onClick={save} disabled={saving || !dirty} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+            {saving ? 'Kaydediliyor...' : '💾 Kaydet'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
