@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
-import { useState, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
