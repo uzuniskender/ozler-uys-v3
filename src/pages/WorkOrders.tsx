@@ -13,7 +13,7 @@ import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, loadAll } = useStore()
+  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, materials, loadAll } = useStore()
   const { isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
@@ -76,7 +76,7 @@ export function WorkOrders() {
   const getStokDurum = useCallback((w: any) => {
     const kalan = Math.max(0, w.hedef - wProd(w.id))
     if (kalan <= 0) return null
-    try { return stokKontrolWO(w, kalan, stokHareketler, tedarikler) } catch { return null }
+    try { return stokKontrolWO(w, kalan, stokHareketler, tedarikler, materials) } catch { return null }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stokHareketler, tedarikler, logs])
 

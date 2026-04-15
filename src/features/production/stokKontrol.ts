@@ -1,4 +1,4 @@
-import type { WorkOrder, StokHareket, Tedarik } from '@/types'
+import type { WorkOrder, StokHareket, Tedarik, Material } from '@/types'
 
 export interface StokKontrolSatir {
   malkod: string
@@ -25,7 +25,8 @@ export function stokKontrolWO(
   wo: WorkOrder,
   kalan: number,
   stokHareketler: StokHareket[],
-  tedarikler: Tedarik[]
+  tedarikler: Tedarik[],
+  materials?: Material[]
 ): StokKontrolSonuc {
   if (kalan <= 0) return { durum: 'OK', satirlar: [], maxYapilabilir: 0 }
 
@@ -42,6 +43,12 @@ export function stokKontrolWO(
   let minYapilabilir = kalan
 
   for (const hm of wo.hm) {
+    // Ürünün kendisini ve YarıMamulleri atla — sadece gerçek hammaddeler
+    if (hm.malkod === wo.malkod || hm.malkod === wo.mamulKod) continue
+    if (materials?.length) {
+      const mat = materials.find(m => m.kod === hm.malkod)
+      if (mat?.tip === 'YarıMamul') continue
+    }
     const stok = Math.floor(stokHareketler
       .filter(h => h.malkod === hm.malkod)
       .reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0))
