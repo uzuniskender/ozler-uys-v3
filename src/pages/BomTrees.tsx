@@ -5,7 +5,7 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { BomTree } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload, Search } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function BomTrees() {
@@ -42,6 +42,15 @@ export function BomTrees() {
     if (!await showConfirm('Bu ürün ağacını silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_bom_trees').delete().eq('id', id)
     loadAll(); toast.success('Ürün ağacı silindi')
+  }
+
+  async function copyBom(bt: BomTree) {
+    const newRows = (bt.rows || []).map(r => ({ ...r, id: uid() }))
+    await supabase.from('uys_bom_trees').insert({
+      id: uid(), mamul_kod: bt.mamulKod + '-KOPYA', mamul_ad: (bt.mamulAd || bt.ad) + ' (Kopya)',
+      ad: (bt.ad || bt.mamulAd) + ' (Kopya)', rows: newRows,
+    })
+    loadAll(); toast.success('Ürün ağacı kopyalandı')
   }
 
   // #10: Excel Export
@@ -147,6 +156,7 @@ export function BomTrees() {
                 <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => createRecipeFromBom(bt)} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20 mr-1">📋 Reçete Oluştur</button>
+                  <button onClick={() => copyBom(bt)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>
                   <button onClick={() => setSelected(bt)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>
                   <button onClick={() => deleteBom(bt.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
                 </td>

@@ -5,7 +5,7 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload, Search } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Recipes() {
@@ -85,6 +85,16 @@ export function Recipes() {
     loadAll(); toast.success('Reçete silindi')
   }
 
+  async function copyRecipe(r: Recipe) {
+    const newSatirlar = (r.satirlar || []).map(s => ({ ...s, id: uid() }))
+    await supabase.from('uys_recipes').insert({
+      id: uid(), rc_kod: (r.rcKod || '') + '-KOPYA', ad: r.ad + ' (Kopya)',
+      mamul_kod: r.mamulKod + '-KOPYA', mamul_ad: (r.mamulAd || r.ad) + ' (Kopya)',
+      bom_id: null, satirlar: newSatirlar,
+    })
+    loadAll(); toast.success('Reçete kopyalandı')
+  }
+
   // BOM'dan Reçete Oluştur — tüm ürün ağaçlarını reçeteye dönüştür
   async function bomDanReceteOlustur() {
     if (!bomTrees.length) { toast.error('Ürün ağacı bulunamadı'); return }
@@ -145,6 +155,7 @@ export function Recipes() {
                   <td className="px-4 py-2 font-mono text-zinc-500">{r.mamulKod}</td>
                   <td className="px-4 py-2 text-right font-mono">{r.satirlar?.length || 0}</td>
                   <td className="px-4 py-2 text-right">
+                    <button onClick={() => copyRecipe(r)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>
                     <button onClick={() => setSelected(r)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>
                     <button onClick={() => deleteRecipe(r.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
                   </td>

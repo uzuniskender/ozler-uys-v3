@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Search, Download, Plus, Pencil, Trash2, Upload } from 'lucide-react'
+import { Search, Download, Plus, Pencil, Trash2, Upload, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
 
@@ -157,6 +157,12 @@ export function Materials() {
                     <td className="px-4 py-1.5 text-right font-mono text-amber">{m.uzunluk || '—'}</td>
                     <td className="px-4 py-1.5 text-zinc-500 text-[11px]">{op?.ad || '—'}</td>
                     <td className="px-4 py-1.5 text-right">
+                      <button onClick={async () => {
+                        const newId = uid()
+                        const row = { id: newId, kod: m.kod + '-KOPYA', ad: m.ad + ' (Kopya)', tip: m.tip, hammadde_tipi: m.hammaddeTipi, birim: m.birim, boy: m.boy, en: m.en, kalinlik: m.kalinlik, uzunluk: m.uzunluk, cap: m.cap, min_stok: m.minStok, op_id: m.opId || null, op_kod: m.opKod || null }
+                        await supabase.from('uys_malzemeler').insert(row)
+                        loadAll(); toast.success('Malzeme kopyalandı')
+                      }} className="p-1 text-zinc-500 hover:text-amber" title="Kopyala"><Copy size={12} /></button>
                       <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
                       <button onClick={() => deleteMat(m.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
                     </td>
