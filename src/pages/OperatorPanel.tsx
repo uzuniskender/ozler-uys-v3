@@ -334,10 +334,12 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                         <div className="text-xs text-zinc-300">{a.woAd?.slice(0, 35)}</div>
                         <div className="text-[10px] text-zinc-500 flex items-center gap-1">
                           Başlangıç:
-                          <input type="time" value={a.baslangic || ''} onChange={async (e) => {
-                            await supabase.from('uys_active_work').update({ baslangic: e.target.value }).eq('id', a.id)
-                            loadAll()
-                          }} className="px-1 py-0.5 bg-bg-3 border border-border rounded text-[10px] text-zinc-200 focus:outline-none focus:border-accent" />
+                          <input type="time" defaultValue={a.baslangic || ''} onBlur={async (e) => {
+                            if (e.target.value && e.target.value !== a.baslangic) {
+                              await supabase.from('uys_active_work').update({ baslangic: e.target.value }).eq('id', a.id)
+                              loadAll(); toast.success('Başlangıç saati güncellendi: ' + e.target.value)
+                            }
+                          }} className="px-1 py-0.5 bg-bg-3 border border-border rounded text-[10px] text-zinc-200 focus:outline-none focus:border-accent w-20" />
                         </div>
                       </div>
                       <div className="flex gap-2">

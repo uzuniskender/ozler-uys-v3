@@ -8,7 +8,7 @@ export function showPrompt(label: string, placeholder?: string, defaultValue?: s
     overlay.className = 'fixed inset-0 z-[999] flex items-center justify-center'
     overlay.style.background = 'rgba(0,0,0,0.6)'
     overlay.innerHTML = `
-      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:380px;font-family:system-ui">
+      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:600px;font-family:system-ui">
         <div style="font-size:14px;font-weight:600;color:#e4e4e7;margin-bottom:12px">${label}</div>
         <input id="_prompt_input" type="text" placeholder="${placeholder || ''}" value="${defaultValue || ''}"
           style="width:100%;padding:10px 12px;background:#1a1a2e;border:1px solid #2a2a3e;border-radius:8px;color:#e4e4e7;font-size:13px;outline:none;box-sizing:border-box" />
@@ -31,7 +31,6 @@ export function showPrompt(label: string, placeholder?: string, defaultValue?: s
     document.getElementById('_prompt_cancel')!.onclick = () => close(null)
     document.getElementById('_prompt_ok')!.onclick = () => close(input.value)
     input.onkeydown = (e) => { if (e.key === 'Enter') close(input.value); if (e.key === 'Escape') close(null) }
-    overlay.onclick = (e) => { if (e.target === overlay) close(null) }
   })
 }
 
@@ -53,7 +52,7 @@ export function showMultiPrompt(title: string, fields: { label: string; key: str
     `).join('')
 
     overlay.innerHTML = `
-      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:400px;font-family:system-ui">
+      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:600px;font-family:system-ui">
         <div style="font-size:14px;font-weight:600;color:#e4e4e7;margin-bottom:16px">${title}</div>
         ${fieldsHtml}
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
@@ -80,7 +79,6 @@ export function showMultiPrompt(title: string, fields: { label: string; key: str
 
     document.getElementById('_mp_cancel')!.onclick = () => close(false)
     document.getElementById('_mp_ok')!.onclick = () => close(true)
-    overlay.onclick = (e) => { if (e.target === overlay) close(false) }
   })
 }
 
@@ -93,7 +91,7 @@ export function showConfirm(message: string, title?: string): Promise<boolean> {
     overlay.className = 'fixed inset-0 z-[999] flex items-center justify-center'
     overlay.style.background = 'rgba(0,0,0,0.6)'
     overlay.innerHTML = `
-      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:380px;font-family:system-ui">
+      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:500px;font-family:system-ui">
         ${title ? `<div style="font-size:14px;font-weight:600;color:#e4e4e7;margin-bottom:8px">${title}</div>` : ''}
         <div style="font-size:13px;color:#a1a1aa;margin-bottom:20px;white-space:pre-line;line-height:1.5">${message}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -110,7 +108,6 @@ export function showConfirm(message: string, title?: string): Promise<boolean> {
 
     document.getElementById('_confirm_no')!.onclick = () => close(false)
     document.getElementById('_confirm_yes')!.onclick = () => close(true)
-    overlay.onclick = (e) => { if (e.target === overlay) close(false) }
     document.addEventListener('keydown', function handler(e) {
       if (e.key === 'Escape') { close(false); document.removeEventListener('keydown', handler) }
       if (e.key === 'Enter') { close(true); document.removeEventListener('keydown', handler) }
@@ -127,7 +124,7 @@ export function showAlert(message: string, title?: string): Promise<void> {
     overlay.className = 'fixed inset-0 z-[999] flex items-center justify-center'
     overlay.style.background = 'rgba(0,0,0,0.6)'
     overlay.innerHTML = `
-      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:420px;max-height:70vh;font-family:system-ui;display:flex;flex-direction:column">
+      <div style="background:#12121e;border:1px solid #2a2a3e;border-radius:12px;padding:24px;width:90%;max-width:600px;max-height:70vh;font-family:system-ui;display:flex;flex-direction:column">
         ${title ? `<div style="font-size:14px;font-weight:600;color:#e4e4e7;margin-bottom:8px">${title}</div>` : ''}
         <div style="font-size:12px;color:#a1a1aa;margin-bottom:20px;white-space:pre-line;line-height:1.6;overflow-y:auto;flex:1">${message}</div>
         <div style="display:flex;justify-content:flex-end">
@@ -139,7 +136,6 @@ export function showAlert(message: string, title?: string): Promise<void> {
     function close() { document.body.removeChild(overlay); resolve() }
 
     document.getElementById('_alert_ok')!.onclick = close
-    overlay.onclick = (e) => { if (e.target === overlay) close() }
     document.addEventListener('keydown', function handler(e) {
       if (e.key === 'Enter' || e.key === 'Escape') { close(); document.removeEventListener('keydown', handler) }
     })
