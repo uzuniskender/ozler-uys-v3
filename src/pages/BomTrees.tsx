@@ -158,7 +158,10 @@ export function BomTrees() {
             {filtered.map(bt => (
               <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
-                <td className="px-4 py-2 font-mono text-accent">{bt.mamulKod}</td>
+                <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
+                  const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', bt.mamulKod)
+                  if (yeni && yeni.trim() !== bt.mamulKod) { await supabase.from('uys_bom_trees').update({ mamul_kod: yeni.trim() }).eq('id', bt.id); loadAll(); toast.success('Kod güncellendi') }
+                }}>{bt.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameBom(bt)}>{bt.ad || bt.mamulAd} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
                 <td className="px-4 py-2 text-right">

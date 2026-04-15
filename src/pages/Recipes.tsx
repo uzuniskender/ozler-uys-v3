@@ -157,9 +157,15 @@ export function Recipes() {
               {filtered.map(r => (
                 <tr key={r.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(r.id) ? 'bg-accent/5' : ''}`}>
                   <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleCheck(r.id)} className="accent-accent" /></td>
-                  <td className="px-4 py-2 font-mono text-accent">{r.rcKod || '—'}</td>
+                  <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
+                    const yeni = await showPrompt('Reçete kodu değiştir', 'Yeni kod', r.rcKod)
+                    if (yeni && yeni.trim() !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Kod güncellendi') }
+                  }}>{r.rcKod || '—'} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                   <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameRecipe(r)}>{r.ad} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
-                  <td className="px-4 py-2 font-mono text-zinc-500">{r.mamulKod}</td>
+                  <td className="px-4 py-2 font-mono text-zinc-500 cursor-pointer hover:text-accent group" onClick={async () => {
+                    const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', r.mamulKod)
+                    if (yeni && yeni.trim() !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Mamul kodu güncellendi') }
+                  }}>{r.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                   <td className="px-4 py-2 text-right font-mono">{r.satirlar?.length || 0}</td>
                   <td className="px-4 py-2 text-right">
                     <button onClick={() => copyRecipe(r)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>

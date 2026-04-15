@@ -4,7 +4,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { showConfirm } from '@/lib/prompt'
+import { showConfirm, showPrompt } from '@/lib/prompt'
 import { Search, Download, Plus, Pencil, Trash2, Upload, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
@@ -140,8 +140,14 @@ export function Materials() {
                 const op = operations.find(o => o.id === m.opId)
                 return (
                   <tr key={m.id} className="border-b border-border/30 hover:bg-bg-3/30">
-                    <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{m.kod}</td>
-                    <td className="px-4 py-1.5 text-zinc-300">{m.ad}</td>
+                    <td className="px-4 py-1.5 font-mono text-accent text-[11px] cursor-pointer hover:text-white group" onClick={async () => {
+                      const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
+                      if (yeni && yeni.trim() !== m.kod) { await supabase.from('uys_malzemeler').update({ kod: yeni.trim() }).eq('id', m.id); loadAll(); toast.success('Kod güncellendi') }
+                    }}>{m.kod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
+                    <td className="px-4 py-1.5 text-zinc-300 cursor-pointer hover:text-accent group" onClick={async () => {
+                      const yeni = await showPrompt('Malzeme adı değiştir', 'Yeni ad', m.ad)
+                      if (yeni && yeni.trim() !== m.ad) { await supabase.from('uys_malzemeler').update({ ad: yeni.trim() }).eq('id', m.id); loadAll(); toast.success('Ad güncellendi') }
+                    }}>{m.ad} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                     <td className="px-4 py-1.5">
                       <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span>
                       {m.tip === 'YarıMamul' && (
