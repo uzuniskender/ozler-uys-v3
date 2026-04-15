@@ -14,22 +14,31 @@ export function Materials() {
   const { can, isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
+  const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
+  const [dimSearch, setDimSearch] = useState('')
   const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
 
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
+  const hmTipler = useMemo(() => [...new Set(materials.map(m => m.hammaddeTipi).filter(Boolean))].sort(), [materials])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   const filtered = useMemo(() => {
+    const dimVal = parseFloat(dimSearch) || 0
     return materials.filter(m => {
-      if (tipFilter.size > 0 && !tipFilter.has(m.tip) && !tipFilter.has(m.hammaddeTipi)) return false
+      if (tipFilter.size > 0 && !tipFilter.has(m.tip)) return false
+      if (hmTipFilter.size > 0 && !hmTipFilter.has(m.hammaddeTipi || '')) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
       if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
-      if (search) return (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())
+      if (dimVal > 0) {
+        const match = [m.boy, m.en, m.kalinlik, m.uzunluk, m.cap].some(v => v === dimVal)
+        if (!match) return false
+      }
+      if (search) return (m.kod + ' ' + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
-  }, [materials, search, tipFilter, receteFilter, receteKodSet])
+  }, [materials, search, tipFilter, hmTipFilter, dimSearch, receteFilter, receteKodSet])
 
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
@@ -109,19 +118,31 @@ export function Materials() {
           {can('mat_add') && <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>}
         </div>
       </div>
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Kod veya ad ara..."
             className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
         <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
+        {hmTipler.length > 0 && <MultiCheckDropdown label="HM Tipi" options={hmTipler} selected={hmTipFilter} onChange={setHmTipFilter} />}
+        <div className="relative w-28">
+          <input value={dimSearch} onChange={e => setDimSearch(e.target.value)} placeholder="Ölçü ara..." type="number"
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
+        </div>
         <select value={receteFilter} onChange={e => setReceteFilter(e.target.value)}
           className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-accent">
-          <option value="">Yarı Mamul Reçete</option>
-          <option value="var">✅ Reçetesi Var</option>
-          <option value="yok">⚠ Reçetesi Yok</option>
+          <option value="">YM Reçete</option>
+          <option value="var">✅ Var</option>
+          <option value="yok">⚠ Yok</option>
         </select>
+        {(tipFilter.size > 0 || hmTipFilter.size > 0 || dimSearch || receteFilter) && (
+          <button onClick={() => { setTipFilter(new Set()); setHmTipFilter(new Set()); setDimSearch(''); setReceteFilter('') }}
+            className="px-2 py-2 text-zinc-500 hover:text-red text-[10px]">✕ Temizle</button>
+        )}
+      </div>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[10px] text-zinc-600">{filtered.length} / {materials.length} malzeme gösteriliyor</p>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
