@@ -87,9 +87,7 @@ export function OperatorPanel() {
   if (!loggedIn) {
     return (
       <div className="max-w-sm mx-auto mt-12 p-6 bg-bg-1 border border-border rounded-xl">
-        {isAdmin && (
-          <button onClick={() => navigate('/')} className="mb-3 text-xs text-accent hover:text-white flex items-center gap-1">← Yönetime Dön</button>
-        )}
+        <button onClick={() => navigate('/')} className="mb-3 text-xs text-accent hover:text-white flex items-center gap-1">← Yönetime Dön</button>
         <h1 className="text-xl font-bold text-accent text-center mb-1">OPERATÖR GİRİŞİ</h1>
         <div className="flex gap-1 justify-center mb-6">
           {['bolum', 'operator', 'sifre'].map((s, i) => (
