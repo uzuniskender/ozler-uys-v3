@@ -19,6 +19,7 @@ export function Materials() {
   const [dimCap, setDimCap] = useState('')
   const [dimKalinlik, setDimKalinlik] = useState('')
   const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
+  const [showPasif, setShowPasif] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
 
@@ -40,6 +41,7 @@ export function Materials() {
 
   const filtered = useMemo(() => {
     return materials.filter(m => {
+      if (!showPasif && m.aktif === false) return false
       if (tipFilter.size > 0 && !tipFilter.has(m.tip)) return false
       if (hmTipFilter.size > 0 && !hmTipFilter.has(m.hammaddeTipi || '')) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
@@ -50,7 +52,7 @@ export function Materials() {
       if (search) return (m.kod + ' ' + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
-  }, [materials, search, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet])
+  }, [materials, search, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet, showPasif])
 
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
@@ -245,7 +247,7 @@ export function Materials() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Malzeme Listesi</h1><p className="text-xs text-zinc-500">{materials.length} malzeme</p></div>
+        <div><h1 className="text-xl font-semibold">Malzeme Listesi</h1><p className="text-xs text-zinc-500">{materials.filter(m => m.aktif !== false).length} aktif malzeme{materials.some(m => m.aktif === false) ? ` · ${materials.filter(m => m.aktif === false).length} pasif` : ''}</p></div>
         <div className="flex gap-2">
           {can('mat_excel') && <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
@@ -282,6 +284,12 @@ export function Materials() {
           <button onClick={() => { setTipFilter(new Set()); setHmTipFilter(new Set()); setDimBoyUz(''); setDimCap(''); setDimKalinlik(''); setReceteFilter('') }}
             className="px-2 py-2 text-zinc-500 hover:text-red text-[10px]">✕ Temizle</button>
         )}
+        {materials.some(m => m.aktif === false) && (
+          <button onClick={() => setShowPasif(!showPasif)}
+            className={`px-2 py-2 text-[10px] ${showPasif ? 'text-amber' : 'text-zinc-600 hover:text-zinc-400'}`}>
+            {showPasif ? '📋 Pasifler gösteriliyor' : '📋 Pasifleri göster'}
+          </button>
+        )}
       </div>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[10px] text-zinc-600">{filtered.length} / {materials.length} malzeme gösteriliyor</p>
@@ -302,12 +310,14 @@ export function Materials() {
               {filtered.slice(0, 300).map(m => {
                 const op = operations.find(o => o.id === m.opId)
                 return (
-                  <tr key={m.id} className="border-b border-border/20 hover:bg-bg-3/30 group/row">
+                  <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
                     <td className="px-3 py-[5px] cursor-pointer" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni) await recodeMaterial(m, yeni)
                     }}>
                       <span className="font-mono text-accent text-[10px] leading-tight break-all">{m.kod}</span>
+                      {m.revizyon > 0 && <span className="ml-1 px-1 py-0.5 bg-purple-500/15 text-purple-400 rounded text-[8px] font-mono">R{m.revizyon}</span>}
+                      {m.aktif === false && <span className="ml-1 px-1 py-0.5 bg-zinc-600/20 text-zinc-500 rounded text-[8px]">PASİF</span>}
                     </td>
                     <td className="px-2 py-[5px] text-zinc-300 cursor-pointer hover:text-accent truncate max-w-0" onClick={async () => {
                       const yeni = await showPrompt('Malzeme adı değiştir', 'Yeni ad', m.ad)
@@ -369,7 +379,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
 
   // #34: Boy/En Tahmin — benzer malzemelerden öner
-  const { materials: allMaterials } = useStore()
+  const { materials: allMaterials, bomTrees, recipes, workOrders } = useStore()
   function tahminEt() {
     if (!kod) return
     const prefix = kod.replace(/\d{2,}$/, '') // Son rakamları kaldır
@@ -391,17 +401,156 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
     if (!kod.trim() || !ad.trim()) { toast.error('Kod ve Ad zorunlu'); return }
     setSaving(true)
     const op = operations.find(o => o.id === opId)
-    const row = {
+    const row: Record<string, unknown> = {
       kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? hammaddeTipi : '', birim, boy: parseFloat(boy) || 0,
       en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
     }
-    if (initial?.id) {
-      await supabase.from('uys_malzemeler').update(row).eq('id', initial.id)
-    } else {
-      await supabase.from('uys_malzemeler').insert({ id: uid(), ...row })
+
+    // ═══ YENİ MALZEME ═══
+    if (!initial?.id) {
+      await supabase.from('uys_malzemeler').insert({ id: uid(), ...row, revizyon: 0, aktif: true })
+      setSaving(false); onSaved(); return
     }
+
+    // ═══ MEVCUT MALZEME DÜZENLEME ═══
+    const eskiKod = initial.kod
+    const yeniKod = kod.trim()
+    const yeniAd = ad.trim()
+    const adChanged = yeniAd !== initial.ad
+    const kodChanged = yeniKod !== eskiKod
+    const dimChanged = (
+      (parseFloat(boy) || 0) !== (initial.boy || 0) || (parseFloat(en) || 0) !== (initial.en || 0) ||
+      (parseFloat(kalinlik) || 0) !== (initial.kalinlik || 0) || (parseFloat(uzunluk) || 0) !== (initial.uzunluk || 0) ||
+      (parseFloat(cap) || 0) !== (initial.cap || 0)
+    )
+    const anyMeaningfulChange = adChanged || kodChanged || dimChanged
+
+    // Değişiklik yoksa sadece kaydet
+    if (!anyMeaningfulChange) {
+      await supabase.from('uys_malzemeler').update(row).eq('id', initial.id)
+      setSaving(false); onSaved(); return
+    }
+
+    // ═══ REVİZYON SEÇİMİ ═══
+    const tumunuGuncelle = await showConfirm(
+      'Değişiklik algılandı.\n\n' +
+      '✅ EVET → Tümünü Güncelle\nGeçmiş kayıtlar dahil tüm BOM, reçete ve iş emirlerini günceller.\n\n' +
+      '❌ HAYIR → Yeni Revizyon\nGeçmiş kayıtlara dokunmaz. Yeni malzeme kartı oluşturur, sadece aktif referansları günceller.'
+    )
+
+    if (tumunuGuncelle) {
+      // ═══ TÜMÜNÜ GÜNCELLE — mevcut ID, tüm zincir ═══
+      await supabase.from('uys_malzemeler').update(row).eq('id', initial.id)
+      await cascadeAdKod(eskiKod, yeniKod, yeniAd, adChanged, kodChanged, null) // null = tüm İE'ler
+      if (dimChanged) await cascadeKesim(eskiKod, kodChanged ? yeniKod : eskiKod)
+
+    } else {
+      // ═══ YENİ REVİZYON — eski kalır, yeni oluşur ═══
+      const newId = uid()
+      const yeniRevizyon = (initial.revizyon || 0) + 1
+
+      // Eski malzemeyi pasif yap
+      await supabase.from('uys_malzemeler').update({ aktif: false }).eq('id', initial.id)
+
+      // Yeni malzeme oluştur
+      await supabase.from('uys_malzemeler').insert({
+        id: newId, ...row, revizyon: yeniRevizyon, revizyon_tarihi: today(),
+        onceki_id: initial.id, aktif: true,
+      })
+
+      // Şablonları güncelle (BOM + Reçete → her zaman güncel olmalı)
+      await cascadeAdKod(eskiKod, yeniKod, yeniAd, adChanged, kodChanged, 'sadece_acik')
+      if (dimChanged) await cascadeKesim(eskiKod, kodChanged ? yeniKod : eskiKod)
+
+      toast.success(`Yeni revizyon oluşturuldu (Rev ${yeniRevizyon}). Geçmiş kayıtlar korundu.`)
+    }
+
     setSaving(false); onSaved()
+  }
+
+  // ── Zincirleme ad/kod güncelleme ──
+  async function cascadeAdKod(eskiKod: string, yeniKod: string, yeniAd: string, adChanged: boolean, kodChanged: boolean, mode: 'sadece_acik' | null) {
+    if (!adChanged && !kodChanged) return
+    let bomC = 0, rcC = 0, woC = 0
+
+    // BOM'lar — her zaman güncelle (şablon)
+    for (const bt of bomTrees) {
+      let changed = false
+      const newRows = (bt.rows || []).map(r => {
+        if (r.malkod === eskiKod) { changed = true; return { ...r, malkod: kodChanged ? yeniKod : r.malkod, malad: adChanged ? yeniAd : r.malad } }
+        return r
+      })
+      const updates: Record<string, unknown> = {}
+      if (changed) updates.rows = newRows
+      if (bt.mamulKod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) { updates.ad = yeniAd; updates.mamul_ad = yeniAd } }
+      if (Object.keys(updates).length > 0) { await supabase.from('uys_bom_trees').update(updates).eq('id', bt.id); bomC++ }
+    }
+
+    // Reçeteler — her zaman güncelle (şablon)
+    for (const rc of recipes) {
+      let changed = false
+      const newSatirlar = (rc.satirlar || []).map(r => {
+        if (r.malkod === eskiKod) { changed = true; return { ...r, malkod: kodChanged ? yeniKod : r.malkod, malad: adChanged ? yeniAd : r.malad } }
+        return r
+      })
+      const updates: Record<string, unknown> = {}
+      if (changed) updates.satirlar = newSatirlar
+      if (rc.mamulKod === eskiKod) { if (kodChanged) { updates.mamul_kod = yeniKod; updates.rc_kod = 'RC-' + yeniKod }; if (adChanged) { updates.ad = yeniAd; updates.mamul_ad = yeniAd } }
+      if (Object.keys(updates).length > 0) { await supabase.from('uys_recipes').update(updates).eq('id', rc.id); rcC++ }
+    }
+
+    // İş emirleri
+    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod)
+    for (const wo of linkedWOs) {
+      // Yeni revizyon modunda sadece açık İE'leri güncelle
+      if (mode === 'sadece_acik' && (wo.durum === 'tamamlandi' || wo.durum === 'iptal')) continue
+      const updates: Record<string, string> = {}
+      if (wo.malkod === eskiKod) { if (kodChanged) updates.malkod = yeniKod; if (adChanged) updates.malad = yeniAd }
+      if (wo.mamulKod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) updates.mamul_ad = yeniAd }
+      if (Object.keys(updates).length > 0) { await supabase.from('uys_work_orders').update(updates).eq('id', wo.id); woC++ }
+    }
+    const extras = [bomC && `${bomC} ürün ağacı`, rcC && `${rcC} reçete`, woC && `${woC} iş emri`].filter(Boolean).join(' + ')
+    if (extras) toast.info(extras + ' güncellendi')
+  }
+
+  // ── Zincirleme kesim hesaplama ──
+  async function cascadeKesim(eskiKod: string, matKod: string) {
+    const updatedMat = { ...(initial!), kod: matKod, boy: parseFloat(boy) || 0, en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0 }
+    const mats = allMaterials.map(m => m.id === initial!.id ? updatedMat : m)
+    function isKesimRow(r: { malad: string; opId?: string }) {
+      const a = (r.malad || '').toUpperCase()
+      if (a.includes('KESİM') || a.includes('KESME')) return true
+      if (r.opId) { const o = operations.find(x => x.id === r.opId); if (o && ((o.ad || '').toUpperCase().includes('KESME') || (o.ad || '').toUpperCase().includes('KESİM'))) return true }
+      return false
+    }
+    let kesimRC = 0
+    for (const rc of recipes) {
+      if (!(rc.satirlar || []).some(r => r.malkod === matKod || r.malkod === eskiKod)) continue
+      let changed = false
+      const newSatirlar = (rc.satirlar || []).map(r => {
+        if ((r.tip !== 'Hammadde' && r.tip !== 'YarıMamul') || r.kirno === '1') return r
+        const parts = (r.kirno || '').split('.'); const parentKirno = parts.slice(0, -1).join('.')
+        const parentRow = (rc.satirlar || []).find(pr => pr.kirno === parentKirno)
+        if (!parentRow || !isKesimRow(parentRow)) return r
+        const parentMat = mats.find(m => m.kod === parentRow.malkod); if (!parentMat) return r
+        const urunParBoy = (parentMat.uzunluk || 0) > 0 ? parentMat.uzunluk : Math.max(parentMat.boy || 0, parentMat.en || 0)
+        if (!urunParBoy) return r
+        const hmMat = mats.find(m => m.kod === r.malkod); if (!hmMat) return r
+        const hB = hmMat.boy || 0; const hE = hmMat.en || 0; const hUz = hmMat.uzunluk || 0
+        let adetPer = 0
+        if (hUz > 0 && hUz > urunParBoy) adetPer = Math.floor(hUz / urunParBoy)
+        else if (hE > 0 && hB > 0 && (parentMat.en || 0) > 0 && (parentMat.boy || 0) > 0) {
+          const hmB = Math.max(hB, hE); const hmE = Math.min(hB, hE)
+          const uB = Math.min(parentMat.boy || 0, parentMat.en || 0); const uE = Math.max(parentMat.boy || 0, parentMat.en || 0)
+          adetPer = Math.max(Math.floor(hmB / uE) * Math.floor(hmE / uB), Math.floor(hmB / uB) * Math.floor(hmE / uE))
+        } else { const hmB = Math.max(hB, hE); if (hmB > urunParBoy) adetPer = Math.floor(hmB / urunParBoy) }
+        if (adetPer > 0) { const ym = Math.round((1 / adetPer) * 10000) / 10000; if (ym !== r.miktar) { changed = true; return { ...r, miktar: ym } } }
+        return r
+      })
+      if (changed) { await supabase.from('uys_recipes').update({ satirlar: newSatirlar }).eq('id', rc.id); kesimRC++ }
+    }
+    if (kesimRC > 0) toast.info(`${kesimRC} reçetede kesim miktarları yeniden hesaplandı`)
   }
 
   return (

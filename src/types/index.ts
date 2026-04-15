@@ -108,6 +108,10 @@ export interface Material {
   minStok: number
   opId: string
   opKod: string
+  revizyon: number
+  revizyonTarihi: string
+  oncekiId: string
+  aktif: boolean
 }
 
 export interface Operation {
