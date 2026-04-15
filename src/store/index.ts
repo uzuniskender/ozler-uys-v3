@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { setYetkiOverrides } from '@/lib/permissions'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
@@ -164,6 +165,7 @@ interface UYSStore {
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
   izinler: Izin[]; kullanicilar: Kullanici[]
   loading: boolean; synced: boolean
+  yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
   setOrders: (orders: Order[]) => void
   setWorkOrders: (wos: WorkOrder[]) => void
@@ -199,7 +201,7 @@ export const useStore = create<UYSStore>((set) => ({
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
   customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [],
-  loading: true, synced: false,
+  loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {
     set({ loading: true })
@@ -215,6 +217,14 @@ export const useStore = create<UYSStore>((set) => ({
         }
       })
       if (ok >= 5) {
+        // Yetki haritasını yükle
+        try {
+          const { data: yaData } = await supabase.from('uys_yetki_ayarlari').select('*').eq('id', 'rbac').limit(1)
+          if (yaData?.[0]?.data) {
+            updates.yetkiMap = yaData[0].data
+            setYetkiOverrides(yaData[0].data)
+          }
+        } catch { /* tablo yoksa varsayılan kullanılır */ }
         set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
         console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)
       } else {

@@ -55,10 +55,17 @@ export function BomTrees() {
   }
 
   async function copyBom(bt: BomTree) {
-    const newRows = (bt.rows || []).map(r => ({ ...r, id: uid() }))
+    const newMamulKod = bt.mamulKod + '-KOPYA'
+    const newAd = (bt.ad || bt.mamulAd) + ' (Kopya)'
+    const newRows = (bt.rows || []).map((r, idx) => {
+      const row = { ...r, id: uid() }
+      // İlk satırın (kırılım 1) malzeme kodu ve adını güncelle
+      if (idx === 0 || r.kirno === '1') { row.malkod = newMamulKod; row.malad = newAd }
+      return row
+    })
     await supabase.from('uys_bom_trees').insert({
-      id: uid(), mamul_kod: bt.mamulKod + '-KOPYA', mamul_ad: (bt.mamulAd || bt.ad) + ' (Kopya)',
-      ad: (bt.ad || bt.mamulAd) + ' (Kopya)', rows: newRows,
+      id: uid(), mamul_kod: newMamulKod, mamul_ad: newAd,
+      ad: newAd, rows: newRows,
     })
     loadAll(); toast.success('Ürün ağacı kopyalandı')
   }
@@ -66,7 +73,12 @@ export function BomTrees() {
   async function renameBom(bt: BomTree) {
     const yeniAd = await showPrompt('Yeni ürün ağacı adı', 'Ürün adı', bt.ad || bt.mamulAd)
     if (!yeniAd || yeniAd.trim() === (bt.ad || bt.mamulAd)) return
-    await supabase.from('uys_bom_trees').update({ ad: yeniAd.trim(), mamul_ad: yeniAd.trim() }).eq('id', bt.id)
+    // rows[0].malad'ı da güncelle — iş emrinde eski isim kalmasın
+    const rows = [...(bt.rows || [])]
+    if (rows.length > 0 && rows[0].kirno === '1') {
+      rows[0] = { ...rows[0], malad: yeniAd.trim() }
+    }
+    await supabase.from('uys_bom_trees').update({ ad: yeniAd.trim(), mamul_ad: yeniAd.trim(), rows }).eq('id', bt.id)
     loadAll(); toast.success('Ad güncellendi')
   }
 

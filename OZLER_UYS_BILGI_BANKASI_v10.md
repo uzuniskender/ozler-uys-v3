@@ -1,5 +1,5 @@
-# ÖZLER UYS v3 — Bilgi Bankası v9
-> Son güncelleme: 2026-04-15 (RBAC Yetki Sistemi + Bug Fix'ler + BOM Reçete Filtresi)
+# ÖZLER UYS v3 — Bilgi Bankası v10
+> Son güncelleme: 2026-04-15 (Part 8: Login + Malzeme + Reçete + BOM düzeltmeleri)
 
 ## Proje Bilgileri
 - **Repo:** https://github.com/uzuniskender/ozler-uys-v3
@@ -10,7 +10,8 @@
   - Part 1–4: `/mnt/transcripts/` altında mevcut
   - Part 5: Dashboard + İzin Sistemi + Operatör İyileştirmeleri
   - Part 6: Güvenlik + MRP + Kesim + UI İyileştirmeleri
-  - Part 7 (bu chat): RBAC Yetki Sistemi + Bug Fix'ler + BOM Reçete Filtresi
+  - Part 7: RBAC Yetki Sistemi + Bug Fix'ler + BOM Reçete Filtresi
+  - Part 8: Login standardizasyonu + Malzeme kompakt + Reçete UX + BOM kopya fix
 
 ---
 
@@ -63,7 +64,7 @@
 
 | # | Madde |
 |---|-------|
-| D | **Görsel tasarım iyileştirmeleri** — Modal genişlikleri, SearchSelect dropdown pozisyonu, kolon dengeleri, BomEditor "Düzenle" butonu kafa karışıklığı |
+| D | **Görsel tasarım iyileştirmeleri** — Modal genişlikleri, SearchSelect dropdown pozisyonu (kısmen çözüldü Part 8), Dashboard yeniden tasarım |
 | B1 | Kesim planı birleştirme (yeni sipariş → mevcut plan güncelle) |
 | B2 | Realtime sync |
 | B3 | Operatör mesajları paneli |
@@ -91,7 +92,8 @@ src/
 │   └── Sidebar.tsx — NAV items with guest flag
 ├── components/ui/
 │   ├── SearchSelect.tsx — inputClassName prop
-│   └── MultiCheckDropdown.tsx
+│   ├── MultiCheckDropdown.tsx
+│   └── SearchSelect.tsx — displayValue prop (Part 8)
 ├── features/production/
 │   ├── cutting.ts — YM filtresi, konsol debug logları
 │   ├── mrp.ts — bomPatlaNet
@@ -189,3 +191,60 @@ LOOP
   EXECUTE format('GRANT ALL ON %I TO anon, authenticated', t);
 END LOOP; END $$;
 ```
+
+### Part 8 Değişiklikler (2026-04-15)
+
+#### Madde 1 — Login Buton Standardizasyonu
+- Tüm butonlar aynı boyut: `py-3`, `rounded-xl`, `font-bold`
+- Google / Misafir / Operatör butonları hepsi `w-full` ve aynı yükseklik
+- Logo ikonu eklendi (mavi "Ö" harfi, `rounded-2xl` kutu içinde)
+- Alt bilgi: "Özler Kalıp ve İskele Sistemleri A.Ş."
+- Şifre girişi ayırıcı çizgiyle ayrıldı (`border-t`), `▸/▾` ile toggle
+
+#### Madde 2 — Operatör Geri Dön Butonu
+- Operatör girişi artık **ayrı tam sayfa ekran** (login → operatör ekranı)
+- Altta `← Giriş Ekranına Dön` butonu (border + hover efekti)
+- Operatör girişi kendi ikonlu başlığa sahip (🏭 yeşil kutu)
+
+#### Madde 4–5 — Malzeme Listesi Kompakt Görsel
+- Satır yüksekliği: `py-1.5` → `py-[5px]` (yaklaşık %40 daha kompakt)
+- Tablo max yükseklik: `65vh` → `calc(100vh-160px)` (ekranı dolduruyor)
+- Görüntülenen satır limiti: 200 → 300
+- Header: `text-[10px] uppercase tracking-wider` (daha profesyonel)
+- Padding: `px-4` → `px-2/px-3` (alan kazanımı)
+- Aksiyon butonları: `opacity-0 → group-hover/row:opacity-100` (sadece hover'da görünür)
+- Kod sütunu: `break-all` ile uzun kodlar taşmaz
+- Ad sütunu: `truncate` ile taşma engeli
+
+#### Madde 6–7 — Reçete Hazırlık/İşlem Sütun Genişliği
+- `w-28` → `w-16` (her iki sütun yarıya indi)
+- Birim sütunu: `w-14` → `w-12`
+
+#### Madde 8 — Hazırlık/İşlem Varsayılan Değer
+- `value={r.hazirlikSure || 0}` → `value={r.hazirlikSure || ''}` (boş gelir)
+- `value={r.islemSure || 0}` → `value={r.islemSure || ''}` (boş gelir)
+- `onFocus={e => e.target.select()}` eklendi (tıklayınca tümünü seçer)
+- `focus:bg-bg-2` eklendi (aktif hücre belirgin)
+- `placeholder="—"` eklendi
+
+#### Madde 9 — Operasyon Malzeme Kartından Otomatik
+- `onMalkodChange`: `if (mat.opId && !r.opId) updated.opId = mat.opId` eklendi
+- `bomDanReceteOlustur`: materials store'dan opId çekilerek pre-fill yapılıyor
+- Recipes.tsx: `materials` store'a eklendi (destructuring güncellendi)
+
+#### Madde 10 — Malzeme Kodu Hücresi Sadece Kod
+- `SearchSelect` bileşenine `displayValue` prop eklendi
+- Kapalıyken: sadece `r.malkod` gösteriliyor (font-mono, accent rengi)
+- Açıkken (dropdown): tam `kod — ad` label ile arama yapılıyor
+
+#### Madde 11 — BOM Kopya İsim Hatası
+- `copyBom`: İlk satırın (kirno='1') `malkod` ve `malad` değerleri yeni isimle güncelleniyor
+- `renameBom`: `rows[0].malad` da güncelleniyor → iş emrinde eski isim kalmaz
+- Her iki fonksiyonda `rows` spread ile immutable güncelleme
+
+### Değişen Dosyalar (Part 8)
+- `src/pages/Login.tsx` — Tam yeniden yazıldı
+- `src/pages/Materials.tsx` — Tablo kompaktlaştırıldı
+- `src/pages/Recipes.tsx` — 5 düzeltme (sütun genişliği, default değer, opId otomatik, malkod display)
+- `src/pages/BomTrees.tsx` — copyBom + renameBom rows[0] düzeltmesi
+- `src/components/ui/SearchSelect.tsx` — displayValue prop eklendi

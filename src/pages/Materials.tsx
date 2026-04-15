@@ -124,60 +124,62 @@ export function Materials() {
         </select>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        <div className="max-h-[65vh] overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-2">
-              <tr className="border-b border-border text-zinc-500">
-                <th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme Adı</th>
-                <th className="text-left px-4 py-2.5">Tip</th><th className="text-left px-4 py-2.5">Birim</th>
-                <th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">En</th>
-                <th className="text-right px-4 py-2.5">Kalınlık</th><th className="text-right px-4 py-2.5 text-amber">Uzunluk</th>
-                <th className="text-left px-4 py-2.5">Operasyon</th><th className="px-4 py-2.5"></th>
+        <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
+          <table className="w-full text-[11px]">
+            <thead className="sticky top-0 bg-bg-2 z-10">
+              <tr className="border-b border-border text-zinc-500 text-[10px] uppercase tracking-wider">
+                <th className="text-left px-3 py-2 w-[130px]">Kod</th><th className="text-left px-2 py-2">Malzeme Adı</th>
+                <th className="text-left px-2 py-2 w-[110px]">Tip</th><th className="text-center px-2 py-2 w-[50px]">Birim</th>
+                <th className="text-right px-2 py-2 w-[55px]">Boy</th><th className="text-right px-2 py-2 w-[45px]">En</th>
+                <th className="text-right px-2 py-2 w-[50px]">Kalınlık</th><th className="text-right px-2 py-2 w-[60px] text-amber">Uzunluk</th>
+                <th className="text-left px-2 py-2 w-[120px]">Operasyon</th><th className="px-1 py-2 w-[80px]"></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 200).map(m => {
+              {filtered.slice(0, 300).map(m => {
                 const op = operations.find(o => o.id === m.opId)
                 return (
-                  <tr key={m.id} className="border-b border-border/30 hover:bg-bg-3/30">
-                    <td className="px-4 py-1.5 font-mono text-accent text-[11px] cursor-pointer hover:text-white group" onClick={async () => {
+                  <tr key={m.id} className="border-b border-border/20 hover:bg-bg-3/30 group/row">
+                    <td className="px-3 py-[5px] cursor-pointer" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni && yeni.trim() !== m.kod) { await supabase.from('uys_malzemeler').update({ kod: yeni.trim() }).eq('id', m.id); loadAll(); toast.success('Kod güncellendi') }
-                    }}>{m.kod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
-                    <td className="px-4 py-1.5 text-zinc-300 cursor-pointer hover:text-accent group" onClick={async () => {
+                    }}>
+                      <span className="font-mono text-accent text-[10px] leading-tight break-all">{m.kod}</span>
+                    </td>
+                    <td className="px-2 py-[5px] text-zinc-300 cursor-pointer hover:text-accent truncate max-w-0" onClick={async () => {
                       const yeni = await showPrompt('Malzeme adı değiştir', 'Yeni ad', m.ad)
                       if (yeni && yeni.trim() !== m.ad) { await supabase.from('uys_malzemeler').update({ ad: yeni.trim() }).eq('id', m.id); loadAll(); toast.success('Ad güncellendi') }
-                    }}>{m.ad} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
-                    <td className="px-4 py-1.5">
-                      <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span>
+                    }}><span className="truncate block">{m.ad}</span></td>
+                    <td className="px-2 py-[5px]">
+                      <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400 whitespace-nowrap">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span>
                       {m.tip === 'YarıMamul' && (
                         receteKodSet.has(m.kod)
                           ? <span className="ml-1 px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">RC ✓</span>
                           : <span className="ml-1 px-1 py-0.5 bg-amber/10 text-amber rounded text-[9px]">RC ✗</span>
                       )}
                     </td>
-                    <td className="px-4 py-1.5 text-zinc-500">{m.birim}</td>
-                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.boy || '—'}</td>
-                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.en || '—'}</td>
-                    <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{m.kalinlik || '—'}</td>
-                    <td className="px-4 py-1.5 text-right font-mono text-amber">{m.uzunluk || '—'}</td>
-                    <td className="px-4 py-1.5 text-zinc-500 text-[11px]">{op?.ad || '—'}</td>
-                    <td className="px-4 py-1.5 text-right">
+                    <td className="px-2 py-[5px] text-zinc-500 text-center">{m.birim}</td>
+                    <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.boy || '—'}</td>
+                    <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.en || '—'}</td>
+                    <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.kalinlik || '—'}</td>
+                    <td className="px-2 py-[5px] text-right font-mono text-amber">{m.uzunluk || '—'}</td>
+                    <td className="px-2 py-[5px] text-zinc-500 text-[10px] truncate">{op?.ad || '—'}</td>
+                    <td className="px-1 py-[5px] text-right whitespace-nowrap opacity-0 group-hover/row:opacity-100 transition-opacity">
                       {can('mat_add') && <button onClick={async () => {
                         const newId = uid()
                         const row = { id: newId, kod: m.kod + '-KOPYA', ad: m.ad + ' (Kopya)', tip: m.tip, hammadde_tipi: m.hammaddeTipi, birim: m.birim, boy: m.boy, en: m.en, kalinlik: m.kalinlik, uzunluk: m.uzunluk, cap: m.cap, min_stok: m.minStok, op_id: m.opId || null, op_kod: m.opKod || null }
                         await supabase.from('uys_malzemeler').insert(row)
                         loadAll(); toast.success('Malzeme kopyalandı')
-                      }} className="p-1 text-zinc-500 hover:text-amber" title="Kopyala"><Copy size={12} /></button>}
-                      {can('mat_edit') && <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>}
-                      {can('mat_delete') && <button onClick={() => deleteMat(m.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
+                      }} className="p-0.5 text-zinc-600 hover:text-amber" title="Kopyala"><Copy size={11} /></button>}
+                      {can('mat_edit') && <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-0.5 text-zinc-600 hover:text-accent"><Pencil size={11} /></button>}
+                      {can('mat_delete') && <button onClick={() => deleteMat(m.id)} className="p-0.5 text-zinc-600 hover:text-red"><Trash2 size={11} /></button>}
                     </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          {filtered.length > 200 && <div className="p-2 text-center text-zinc-600 text-xs">+{filtered.length - 200} daha</div>}
+          {filtered.length > 300 && <div className="p-2 text-center text-zinc-600 text-[10px]">+{filtered.length - 300} daha</div>}
         </div>
       </div>
       {showForm && <MatFormModal initial={editItem} operations={operations} tipler={tipler} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAll(); toast.success(editItem ? 'Güncellendi' : 'Eklendi') }} />}

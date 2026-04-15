@@ -1,11 +1,10 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
-import { setYetkiOverrides } from '@/lib/permissions'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -46,7 +45,6 @@ const M = {
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     tip: (r.tip || '') as string, hammaddeTipi: (r.hammadde_tipi || '') as string, birim: (r.birim || 'Adet') as string,
     boy: (r.boy as number) || 0, en: (r.en as number) || 0, kalinlik: (r.kalinlik as number) || 0,
-    uzunluk: (r.uzunluk as number) || 0,
     cap: (r.cap as number) || 0, icCap: (r.ic_cap as number) || 0, minStok: (r.min_stok as number) || 0,
     opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string,
   }),
@@ -140,19 +138,6 @@ const M = {
     tamamlanma: (r.tamamlanma || '') as string, olusturan: (r.olusturan || '') as string,
     notlar: (r.notlar || '') as string,
   }),
-  izin: (r: Record<string, unknown>): Izin => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, bitis: (r.bitis || '') as string,
-    tip: (r.tip || 'yıllık') as string, durum: (r.durum || 'bekliyor') as string,
-    saatBaslangic: (r.saat_baslangic || '') as string, saatBitis: (r.saat_bitis || '') as string,
-    onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
-    not: (r.not_ || '') as string, olusturan: (r.olusturan || 'admin') as string,
-  }),
-  kullanici: (r: Record<string, unknown>): Kullanici => ({
-    id: r.id as string, ad: (r.ad || '') as string,
-    kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
-    rol: (r.rol || 'planlama') as Kullanici['rol'], aktif: r.aktif !== false,
-  }),
 }
 
 interface UYSStore {
@@ -163,9 +148,7 @@ interface UYSStore {
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
-  izinler: Izin[]; kullanicilar: Kullanici[]
   loading: boolean; synced: boolean
-  yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
   setOrders: (orders: Order[]) => void
   setWorkOrders: (wos: WorkOrder[]) => void
@@ -192,16 +175,14 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
   { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
   { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
   { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
-  { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
-  { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
 ]
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [],
-  loading: true, synced: false, yetkiMap: null,
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
+  loading: true, synced: false,
 
   loadAll: async () => {
     set({ loading: true })
@@ -217,14 +198,6 @@ export const useStore = create<UYSStore>((set) => ({
         }
       })
       if (ok >= 5) {
-        // Yetki haritasını yükle
-        try {
-          const { data: yaData } = await supabase.from('uys_yetki_ayarlari').select('*').eq('id', 'rbac').limit(1)
-          if (yaData?.[0]?.data) {
-            updates.yetkiMap = yaData[0].data
-            setYetkiOverrides(yaData[0].data)
-          }
-        } catch { /* tablo yoksa varsayılan kullanılır */ }
         set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
         console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)
       } else {

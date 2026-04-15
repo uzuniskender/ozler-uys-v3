@@ -14,16 +14,17 @@ interface SearchSelectProps {
   allowNew?: boolean  // Yeni değer girmeye izin ver
   className?: string
   inputClassName?: string
+  displayValue?: string // Gösterilecek metin (kapalıyken). Verilmezse label kullanılır
 }
 
-export function SearchSelect({ options, value, onChange, placeholder = 'Ara...', allowNew = true, className = '', inputClassName }: SearchSelectProps) {
+export function SearchSelect({ options, value, onChange, placeholder = 'Ara...', allowNew = true, className = '', inputClassName, displayValue }: SearchSelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Display label for current value
-  const displayLabel = options.find(o => o.value === value)?.label || value
+  const displayLabel = displayValue ?? options.find(o => o.value === value)?.label ?? value
 
   const filtered = options.filter(o => {
     if (!search) return true

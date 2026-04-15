@@ -10,7 +10,7 @@ import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-rea
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Recipes() {
-  const { recipes, operations, bomTrees, loadAll } = useStore()
+  const { recipes, operations, bomTrees, materials, loadAll } = useStore()
   const { can } = useAuth()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -114,11 +114,14 @@ export function Recipes() {
 
     let count = 0
     for (const bom of yeniler) {
-      const satirlar = (bom.rows || []).map(r => ({
-        id: r.id || uid(), kirno: r.kirno, malkod: r.malkod, malad: r.malad,
-        tip: r.tip, miktar: r.miktar, birim: r.birim,
-        opId: '', istId: '', hazirlikSure: 0, islemSure: 0,
-      }))
+      const satirlar = (bom.rows || []).map(r => {
+        const mat = materials.find(m => m.kod === r.malkod)
+        return {
+          id: r.id || uid(), kirno: r.kirno, malkod: r.malkod, malad: r.malad,
+          tip: r.tip, miktar: r.miktar, birim: r.birim,
+          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0,
+        }
+      })
       await supabase.from('uys_recipes').insert({
         id: uid(), rc_kod: 'RC-' + bom.mamulKod, ad: bom.ad || bom.mamulAd || bom.mamulKod,
         bom_id: bom.id, mamul_kod: bom.mamulKod, mamul_ad: bom.mamulAd || bom.ad,
@@ -252,6 +255,8 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         updated.malad = mat.ad
         if (mat.tip) updated.tip = mat.tip as RecipeRow['tip']
         if (mat.birim) updated.birim = mat.birim
+        // Operasyon malzeme kartından otomatik gelsin
+        if (mat.opId && !r.opId) updated.opId = mat.opId
       }
       return updated
     }))
@@ -427,9 +432,9 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                 <th className="text-right px-2 py-2 w-16">Miktar</th>
                 <th className="text-left px-2 py-2 w-16">Birim</th>
                 <th className="text-left px-2 py-2">Operasyon</th>
-                <th className="text-right px-2 py-2 w-28">Hazırlık</th>
-                <th className="text-right px-2 py-2 w-28">İşlem</th>
-                <th className="text-left px-2 py-2 w-14">Birim</th>
+                <th className="text-right px-2 py-2 w-16">Hazırlık</th>
+                <th className="text-right px-2 py-2 w-16">İşlem</th>
+                <th className="text-left px-2 py-2 w-12">Birim</th>
                 <th className="px-2 py-2 w-20"></th>
               </tr>
             </thead>
@@ -440,7 +445,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                   <tr key={r.id || i} className="border-b border-border/20 hover:bg-bg-3/20">
                     <td className="px-2 py-1"><span className="font-mono text-zinc-500">{r.kirno}</span></td>
                     <td className="px-2 py-1">
-                      <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
+                      <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
                     </td>
                     <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
@@ -471,14 +476,16 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     </td>
                     <td className="px-2 py-1">
                       {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
-                        <input type="number" value={r.hazirlikSure || 0} onChange={e => updateRow(i, 'hazirlikSure', parseFloat(e.target.value) || 0)}
-                          className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" placeholder="0" />
+                        <input type="number" value={r.hazirlikSure || ''} onChange={e => updateRow(i, 'hazirlikSure', parseFloat(e.target.value) || 0)}
+                          onFocus={e => e.target.select()}
+                          className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none focus:border-accent focus:bg-bg-2" placeholder="—" />
                       )}
                     </td>
                     <td className="px-2 py-1">
                       {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
-                        <input type="number" value={r.islemSure || 0} onChange={e => updateRow(i, 'islemSure', parseFloat(e.target.value) || 0)}
-                          className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" placeholder="0" />
+                        <input type="number" value={r.islemSure || ''} onChange={e => updateRow(i, 'islemSure', parseFloat(e.target.value) || 0)}
+                          onFocus={e => e.target.select()}
+                          className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none focus:border-accent focus:bg-bg-2" placeholder="—" />
                       )}
                     </td>
                     <td className="px-2 py-1">
