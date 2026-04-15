@@ -15,7 +15,9 @@ export function Materials() {
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
-  const [dimSearch, setDimSearch] = useState('')
+  const [dimBoyUz, setDimBoyUz] = useState('')
+  const [dimCap, setDimCap] = useState('')
+  const [dimKalinlik, setDimKalinlik] = useState('')
   const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
@@ -25,20 +27,21 @@ export function Materials() {
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   const filtered = useMemo(() => {
-    const dimVal = parseFloat(dimSearch) || 0
+    const vBoyUz = parseFloat(dimBoyUz) || 0
+    const vCap = parseFloat(dimCap) || 0
+    const vKal = parseFloat(dimKalinlik) || 0
     return materials.filter(m => {
       if (tipFilter.size > 0 && !tipFilter.has(m.tip)) return false
       if (hmTipFilter.size > 0 && !hmTipFilter.has(m.hammaddeTipi || '')) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
       if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
-      if (dimVal > 0) {
-        const match = [m.boy, m.en, m.kalinlik, m.uzunluk, m.cap].some(v => v === dimVal)
-        if (!match) return false
-      }
+      if (vBoyUz > 0 && m.boy !== vBoyUz && m.uzunluk !== vBoyUz && m.en !== vBoyUz) return false
+      if (vCap > 0 && m.cap !== vCap) return false
+      if (vKal > 0 && m.kalinlik !== vKal) return false
       if (search) return (m.kod + ' ' + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
-  }, [materials, search, tipFilter, hmTipFilter, dimSearch, receteFilter, receteKodSet])
+  }, [materials, search, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet])
 
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
@@ -126,9 +129,17 @@ export function Materials() {
         </div>
         <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
         {hmTipler.length > 0 && <MultiCheckDropdown label="HM Tipi" options={hmTipler} selected={hmTipFilter} onChange={setHmTipFilter} />}
-        <div className="relative w-28">
-          <input value={dimSearch} onChange={e => setDimSearch(e.target.value)} placeholder="Ölçü ara..." type="number"
-            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
+        <div className="relative w-24">
+          <input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="Boy/Uz" type="number"
+            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" title="Boy / Uzunluk / En" />
+        </div>
+        <div className="relative w-20">
+          <input value={dimCap} onChange={e => setDimCap(e.target.value)} placeholder="Çap" type="number"
+            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
+        </div>
+        <div className="relative w-20">
+          <input value={dimKalinlik} onChange={e => setDimKalinlik(e.target.value)} placeholder="Kalınlık" type="number"
+            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
         </div>
         <select value={receteFilter} onChange={e => setReceteFilter(e.target.value)}
           className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-accent">
@@ -136,8 +147,8 @@ export function Materials() {
           <option value="var">✅ Var</option>
           <option value="yok">⚠ Yok</option>
         </select>
-        {(tipFilter.size > 0 || hmTipFilter.size > 0 || dimSearch || receteFilter) && (
-          <button onClick={() => { setTipFilter(new Set()); setHmTipFilter(new Set()); setDimSearch(''); setReceteFilter('') }}
+        {(tipFilter.size > 0 || hmTipFilter.size > 0 || dimBoyUz || dimCap || dimKalinlik || receteFilter) && (
+          <button onClick={() => { setTipFilter(new Set()); setHmTipFilter(new Set()); setDimBoyUz(''); setDimCap(''); setDimKalinlik(''); setReceteFilter('') }}
             className="px-2 py-2 text-zinc-500 hover:text-red text-[10px]">✕ Temizle</button>
         )}
       </div>
