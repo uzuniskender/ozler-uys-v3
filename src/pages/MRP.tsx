@@ -16,6 +16,12 @@ export function MRP() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
   const [showTamamlanan, setShowTamamlanan] = useState(false)
+  const [showYMTamamlanan, setShowYMTamamlanan] = useState(false)
+
+  // MRP tamamlanmış YM İE'leri (localStorage'da tutuluyor)
+  const mrpDoneYMs = useMemo(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[]) } catch { return new Set<string>() }
+  }, [sonuc]) // sonuc değişince yeniden oku
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
@@ -36,10 +42,21 @@ export function MRP() {
     orders.filter(o => o.mrpDurum === 'tamamlandi' && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
   , [orders])
 
-  // Bağımsız YM İE'leri
+  // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
   const ymIEs = useMemo(() =>
-    workOrders.filter(w => w.bagimsiz && w.durum !== 'iptal' && logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef),
-    [workOrders, logs])
+    workOrders.filter(w => {
+      if (!w.bagimsiz || w.durum === 'iptal') return false
+      if (logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) >= w.hedef) return false
+      if (!showYMTamamlanan && mrpDoneYMs.has(w.id)) return false
+      return true
+    }),
+    [workOrders, logs, showYMTamamlanan, mrpDoneYMs])
+
+  const ymTamamSayisi = useMemo(() =>
+    workOrders.filter(w => w.bagimsiz && w.durum !== 'iptal' && mrpDoneYMs.has(w.id) &&
+      logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef
+    ).length
+  , [workOrders, logs, mrpDoneYMs])
 
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   function toggleYM(id: string) { setSelectedYMs(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
@@ -90,6 +107,12 @@ export function MRP() {
     // Seçili siparişlerin mrp_durum'unu güncelle
     for (const oid of ordIds) {
       await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', oid)
+    }
+    // Seçili YM İE'leri MRP tamamlandı olarak işaretle
+    if (selectedYMs.size > 0) {
+      const prev = new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[])
+      selectedYMs.forEach(id => prev.add(id))
+      localStorage.setItem('uys_mrp_done_ym', JSON.stringify([...prev]))
     }
     if (ordIds.length) loadAll()
 
@@ -201,13 +224,20 @@ export function MRP() {
         )}
 
         {/* Bağımsız YM İş Emirleri */}
-        {ymIEs.length > 0 && (<>
+        {(ymIEs.length > 0 || ymTamamSayisi > 0) && (<>
           <div className="text-xs font-semibold text-zinc-500 uppercase mt-3 mb-2 flex items-center gap-2">
             Bağımsız YM İş Emirleri
             <button onClick={() => setSelectedYMs(prev => prev.size === ymIEs.length ? new Set() : new Set(ymIEs.map(w => w.id)))} className="text-[10px] text-amber font-normal hover:text-white">
-              {selectedYMs.size === ymIEs.length ? 'Hiçbirini' : 'Tümünü Seç'}
+              {selectedYMs.size === ymIEs.length && ymIEs.length > 0 ? 'Hiçbirini' : 'Tümünü Seç'}
             </button>
+            {ymTamamSayisi > 0 && (
+              <button onClick={() => setShowYMTamamlanan(!showYMTamamlanan)}
+                className={`text-[10px] font-normal ${showYMTamamlanan ? 'text-green' : 'text-zinc-500 hover:text-white'}`}>
+                {showYMTamamlanan ? `✓ Tamamlananlar (${ymTamamSayisi})` : `+ Tamamlananlar (${ymTamamSayisi})`}
+              </button>
+            )}
           </div>
+          {ymIEs.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto">
             {ymIEs.map(w => {
               const sel = selectedYMs.has(w.id)
@@ -215,10 +245,11 @@ export function MRP() {
               const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
               return (
                 <button key={w.id} onClick={() => toggleYM(w.id)}
-                  className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-amber/10 border border-amber/30' : 'bg-bg-3 border border-border'}`}>
+                  className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-amber/10 border border-amber/30' : mrpDoneYMs.has(w.id) ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
                   <div className="flex items-center gap-2">
                     <input type="checkbox" checked={sel} readOnly className="accent-amber" />
                     <span className="font-mono font-medium text-amber">{w.ieNo}</span>
+                    {mrpDoneYMs.has(w.id) && <span className="px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">MRP ✓</span>}
                     <span className="text-zinc-500 ml-auto">{pct}%</span>
                   </div>
                   <div className="text-zinc-500 truncate mt-0.5">{w.malad} · {w.hedef - prod} kalan</div>
@@ -226,6 +257,9 @@ export function MRP() {
               )
             })}
           </div>
+          ) : (
+            <div className="p-2 text-center text-xs text-green">✓ Tüm YM İE'lerin MRP hesabı yapıldı.</div>
+          )}
         </>)}
 
         <div className="flex items-center gap-3 mt-3">
