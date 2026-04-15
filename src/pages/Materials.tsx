@@ -26,18 +26,27 @@ export function Materials() {
   const hmTipler = useMemo(() => [...new Set(materials.map(m => m.hammaddeTipi).filter(Boolean))].sort(), [materials])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
+  // Ölçü eşleştirme: tamsayı → tamsayı kısmı eşleşir (60 → 60, 60.3, 60.5)
+  //                  ondalık → tam eşleşme (60.3 → sadece 60.3)
+  function dimMatch(value: number, searchStr: string): boolean {
+    if (!searchStr) return true
+    if (!value) return false
+    const s = searchStr.replace(',', '.')
+    const num = parseFloat(s)
+    if (isNaN(num)) return true
+    if (s.includes('.')) return value === num
+    return Math.floor(value) === num
+  }
+
   const filtered = useMemo(() => {
-    const vBoyUz = parseFloat(dimBoyUz) || 0
-    const vCap = parseFloat(dimCap) || 0
-    const vKal = parseFloat(dimKalinlik) || 0
     return materials.filter(m => {
       if (tipFilter.size > 0 && !tipFilter.has(m.tip)) return false
       if (hmTipFilter.size > 0 && !hmTipFilter.has(m.hammaddeTipi || '')) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
       if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
-      if (vBoyUz > 0 && m.boy !== vBoyUz && m.uzunluk !== vBoyUz && m.en !== vBoyUz) return false
-      if (vCap > 0 && m.cap !== vCap) return false
-      if (vKal > 0 && m.kalinlik !== vKal) return false
+      if (dimBoyUz && !dimMatch(m.boy, dimBoyUz) && !dimMatch(m.uzunluk, dimBoyUz) && !dimMatch(m.en, dimBoyUz)) return false
+      if (dimCap && !dimMatch(m.cap, dimCap)) return false
+      if (dimKalinlik && !dimMatch(m.kalinlik, dimKalinlik)) return false
       if (search) return (m.kod + ' ' + m.ad).toLowerCase().includes(search.toLowerCase())
       return true
     })
@@ -130,15 +139,15 @@ export function Materials() {
         <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
         {hmTipler.length > 0 && <MultiCheckDropdown label="HM Tipi" options={hmTipler} selected={hmTipFilter} onChange={setHmTipFilter} />}
         <div className="relative w-24">
-          <input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="Boy/Uz" type="number"
+          <input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="Boy/Uz" inputMode="decimal"
             className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" title="Boy / Uzunluk / En" />
         </div>
         <div className="relative w-20">
-          <input value={dimCap} onChange={e => setDimCap(e.target.value)} placeholder="Çap" type="number"
+          <input value={dimCap} onChange={e => setDimCap(e.target.value)} placeholder="Çap" inputMode="decimal"
             className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
         </div>
         <div className="relative w-20">
-          <input value={dimKalinlik} onChange={e => setDimKalinlik(e.target.value)} placeholder="Kalınlık" type="number"
+          <input value={dimKalinlik} onChange={e => setDimKalinlik(e.target.value)} placeholder="Kalınlık" inputMode="decimal"
             className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
         </div>
         <select value={receteFilter} onChange={e => setReceteFilter(e.target.value)}
