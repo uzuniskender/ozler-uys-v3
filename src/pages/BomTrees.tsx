@@ -16,13 +16,21 @@ export function BomTrees() {
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  const [receteFiltre, setReceteFiltre] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
+
   const filtered = useMemo(() => {
-    if (!search) return bomTrees
-    const q = search.toLowerCase()
-    return bomTrees.filter(bt => (bt.mamulKod + ' ' + (bt.ad || bt.mamulAd)).toLowerCase().includes(q))
-  }, [bomTrees, search])
+    let list = bomTrees
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(bt => (bt.mamulKod + ' ' + (bt.ad || bt.mamulAd)).toLowerCase().includes(q))
+    }
+    if (receteFiltre === 'var') list = list.filter(bt => receteKodSet.has(bt.mamulKod))
+    if (receteFiltre === 'yok') list = list.filter(bt => !receteKodSet.has(bt.mamulKod))
+    return list
+  }, [bomTrees, search, receteFiltre, receteKodSet])
 
   function toggleCheck(id: string) {
     setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -135,7 +143,7 @@ export function BomTrees() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Ürün Ağaçları</h1><p className="text-xs text-zinc-500">{bomTrees.length} ağaç{search ? ` · ${filtered.length} gösterilen` : ''}</p></div>
+        <div><h1 className="text-xl font-semibold">Ürün Ağaçları</h1><p className="text-xs text-zinc-500">{bomTrees.length} ağaç{receteFiltre === 'yok' ? ` · ⚠ ${filtered.length} reçetesiz` : search || receteFiltre ? ` · ${filtered.length} gösterilen` : ''}</p></div>
         <div className="flex gap-2">
           {can('bom_delete') && checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
           <button onClick={exportExcel} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={12} /> Excel İndir</button>
@@ -150,6 +158,12 @@ export function BomTrees() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Mamul kodu veya ad ara..."
             className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
         </div>
+        <select value={receteFiltre} onChange={e => setReceteFiltre(e.target.value)}
+          className={`px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs ${receteFiltre === 'yok' ? 'text-red border-red/30' : receteFiltre === 'var' ? 'text-green border-green/30' : 'text-zinc-300'}`}>
+          <option value="">Reçete: Hepsi</option>
+          <option value="var">✅ Reçete Var</option>
+          <option value="yok">⚠ Reçete Yok</option>
+        </select>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
@@ -165,9 +179,17 @@ export function BomTrees() {
                   if (yeni && yeni.trim() !== bt.mamulKod) { await supabase.from('uys_bom_trees').update({ mamul_kod: yeni.trim() }).eq('id', bt.id); loadAll(); toast.success('Kod güncellendi') }
                 }}>{bt.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameBom(bt)}>{bt.ad || bt.mamulAd} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
-                <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
+                <td className="px-4 py-2 text-right font-mono">
+                  {bt.rows?.length || 0}
+                  {receteKodSet.has(bt.mamulKod)
+                    ? <span className="ml-2 px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">RC ✓</span>
+                    : <span className="ml-2 px-1 py-0.5 bg-red/10 text-red rounded text-[9px]">RC ✗</span>
+                  }
+                </td>
                 <td className="px-4 py-2 text-right">
-                  <button onClick={() => createRecipeFromBom(bt)} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20 mr-1">📋 Reçete Oluştur</button>
+                  <button onClick={() => createRecipeFromBom(bt)} className={`px-2 py-0.5 rounded text-[10px] mr-1 ${receteKodSet.has(bt.mamulKod) ? 'bg-green/10 text-green hover:bg-green/20' : 'bg-red/10 text-red hover:bg-red/20 font-semibold'}`}>
+                    {receteKodSet.has(bt.mamulKod) ? '📋 Reçete Güncelle' : '⚠ Reçete Oluştur'}
+                  </button>
                   {can('bom_add') && <button onClick={() => copyBom(bt)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>}
                   {can('bom_edit') && <button onClick={() => setSelected(bt)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>}
                   {can('bom_delete') && <button onClick={() => deleteBom(bt.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
