@@ -10,7 +10,7 @@ import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-rea
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function BomTrees() {
-  const { bomTrees, recipes, loadAll } = useStore()
+  const { bomTrees, recipes, workOrders, loadAll } = useStore()
   const { can } = useAuth()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -73,13 +73,39 @@ export function BomTrees() {
   async function renameBom(bt: BomTree) {
     const yeniAd = await showPrompt('Yeni ürün ağacı adı', 'Ürün adı', bt.ad || bt.mamulAd)
     if (!yeniAd || yeniAd.trim() === (bt.ad || bt.mamulAd)) return
-    // rows[0].malad'ı da güncelle — iş emrinde eski isim kalmasın
+    const ad = yeniAd.trim()
+
+    // 1. BOM güncelle — rows[0].malad dahil
     const rows = [...(bt.rows || [])]
     if (rows.length > 0 && rows[0].kirno === '1') {
-      rows[0] = { ...rows[0], malad: yeniAd.trim() }
+      rows[0] = { ...rows[0], malad: ad }
     }
-    await supabase.from('uys_bom_trees').update({ ad: yeniAd.trim(), mamul_ad: yeniAd.trim(), rows }).eq('id', bt.id)
-    loadAll(); toast.success('Ad güncellendi')
+    await supabase.from('uys_bom_trees').update({ ad, mamul_ad: ad, rows }).eq('id', bt.id)
+
+    // 2. Reçete güncelle — aynı mamulKod'a sahip reçeteler
+    const linkedRecipes = recipes.filter(r => r.mamulKod === bt.mamulKod)
+    for (const rc of linkedRecipes) {
+      const rcRows = [...(rc.satirlar || [])]
+      if (rcRows.length > 0 && rcRows[0].kirno === '1') {
+        rcRows[0] = { ...rcRows[0], malad: ad }
+      }
+      await supabase.from('uys_recipes').update({ ad, mamul_ad: ad, satirlar: rcRows }).eq('id', rc.id)
+    }
+
+    // 3. İş emirleri güncelle — aynı mamulKod'a sahip olanlar
+    const linkedWOs = workOrders.filter(w => w.mamulKod === bt.mamulKod)
+    if (linkedWOs.length > 0) {
+      for (const wo of linkedWOs) {
+        const updates: Record<string, string> = { mamul_ad: ad }
+        // Kök iş emri (malzeme kodu = mamul kodu) ise malad da güncelle
+        if (wo.malkod === bt.mamulKod) updates.malad = ad
+        await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
+      }
+    }
+
+    loadAll()
+    const toplam = linkedRecipes.length + linkedWOs.length
+    toast.success(`Ad güncellendi${toplam > 0 ? ` · ${linkedRecipes.length} reçete + ${linkedWOs.length} iş emri güncellendi` : ''}`)
   }
 
   // #10: Excel Export

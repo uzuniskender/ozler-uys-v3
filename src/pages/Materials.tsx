@@ -10,7 +10,7 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
 
 export function Materials() {
-  const { materials, operations, recipes, loadAll } = useStore()
+  const { materials, operations, recipes, bomTrees, workOrders, loadAll } = useStore()
   const { can, isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
@@ -56,6 +56,128 @@ export function Materials() {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_malzemeler').delete().eq('id', id)
     loadAll(); toast.success('Malzeme silindi')
+  }
+
+  // Malzeme adı değişince BOM, reçete ve iş emirlerini de güncelle
+  async function renameMaterial(m: Material, yeniAd: string) {
+    const ad = yeniAd.trim()
+    if (!ad || ad === m.ad) return
+
+    // 1. Malzeme kartını güncelle
+    await supabase.from('uys_malzemeler').update({ ad }).eq('id', m.id)
+
+    let bomCount = 0, rcCount = 0, woCount = 0
+
+    // 2. Ürün ağaçlarında — rows içinde malkod eşleşen satırları güncelle
+    for (const bt of bomTrees) {
+      const rows = bt.rows || []
+      let changed = false
+      const newRows = rows.map(r => {
+        if (r.malkod === m.kod && r.malad !== ad) { changed = true; return { ...r, malad: ad } }
+        return r
+      })
+      if (changed) {
+        // mamulKod eşleşiyorsa BOM başlığını da güncelle
+        const updates: Record<string, unknown> = { rows: newRows }
+        if (bt.mamulKod === m.kod) { updates.ad = ad; updates.mamul_ad = ad }
+        await supabase.from('uys_bom_trees').update(updates).eq('id', bt.id)
+        bomCount++
+      }
+    }
+
+    // 3. Reçetelerde — satirlar içinde malkod eşleşen satırları güncelle
+    for (const rc of recipes) {
+      const satirlar = rc.satirlar || []
+      let changed = false
+      const newSatirlar = satirlar.map(r => {
+        if (r.malkod === m.kod && r.malad !== ad) { changed = true; return { ...r, malad: ad } }
+        return r
+      })
+      if (changed) {
+        const updates: Record<string, unknown> = { satirlar: newSatirlar }
+        if (rc.mamulKod === m.kod) { updates.ad = ad; updates.mamul_ad = ad }
+        await supabase.from('uys_recipes').update(updates).eq('id', rc.id)
+        rcCount++
+      }
+    }
+
+    // 4. İş emirlerinde — malkod eşleşen satırları güncelle
+    const linkedWOs = workOrders.filter(w => w.malkod === m.kod || w.mamulKod === m.kod)
+    for (const wo of linkedWOs) {
+      const updates: Record<string, string> = {}
+      if (wo.malkod === m.kod && wo.malad !== ad) updates.malad = ad
+      if (wo.mamulKod === m.kod && wo.mamulAd !== ad) updates.mamul_ad = ad
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
+        woCount++
+      }
+    }
+
+    loadAll()
+    const extras = [bomCount && `${bomCount} ürün ağacı`, rcCount && `${rcCount} reçete`, woCount && `${woCount} iş emri`].filter(Boolean).join(' + ')
+    toast.success(`Ad güncellendi${extras ? ' · ' + extras + ' güncellendi' : ''}`)
+  }
+
+  // Malzeme kodu değişince BOM, reçete ve iş emirlerindeki referansları da güncelle
+  async function recodeMaterial(m: Material, yeniKod: string) {
+    const kod = yeniKod.trim()
+    if (!kod || kod === m.kod) return
+    const eskiKod = m.kod
+
+    // 1. Malzeme kartını güncelle
+    await supabase.from('uys_malzemeler').update({ kod }).eq('id', m.id)
+
+    let bomCount = 0, rcCount = 0, woCount = 0
+
+    // 2. Ürün ağaçlarında — rows içinde malkod eşleşen satırları güncelle
+    for (const bt of bomTrees) {
+      const rows = bt.rows || []
+      let changed = false
+      const newRows = rows.map(r => {
+        if (r.malkod === eskiKod) { changed = true; return { ...r, malkod: kod } }
+        return r
+      })
+      if (changed || bt.mamulKod === eskiKod) {
+        const updates: Record<string, unknown> = {}
+        if (changed) updates.rows = newRows
+        if (bt.mamulKod === eskiKod) updates.mamul_kod = kod
+        await supabase.from('uys_bom_trees').update(updates).eq('id', bt.id)
+        bomCount++
+      }
+    }
+
+    // 3. Reçetelerde — satirlar içinde malkod eşleşen satırları güncelle
+    for (const rc of recipes) {
+      const satirlar = rc.satirlar || []
+      let changed = false
+      const newSatirlar = satirlar.map(r => {
+        if (r.malkod === eskiKod) { changed = true; return { ...r, malkod: kod } }
+        return r
+      })
+      if (changed || rc.mamulKod === eskiKod) {
+        const updates: Record<string, unknown> = {}
+        if (changed) updates.satirlar = newSatirlar
+        if (rc.mamulKod === eskiKod) { updates.mamul_kod = kod; updates.rc_kod = 'RC-' + kod }
+        await supabase.from('uys_recipes').update(updates).eq('id', rc.id)
+        rcCount++
+      }
+    }
+
+    // 4. İş emirlerinde — malkod ve mamulKod eşleşenleri güncelle
+    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod)
+    for (const wo of linkedWOs) {
+      const updates: Record<string, string> = {}
+      if (wo.malkod === eskiKod) updates.malkod = kod
+      if (wo.mamulKod === eskiKod) updates.mamul_kod = kod
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
+        woCount++
+      }
+    }
+
+    loadAll()
+    const extras = [bomCount && `${bomCount} ürün ağacı`, rcCount && `${rcCount} reçete`, woCount && `${woCount} iş emri`].filter(Boolean).join(' + ')
+    toast.success(`Kod güncellendi${extras ? ' · ' + extras + ' güncellendi' : ''}`)
   }
 
   // #27: Malzeme Excel Import
@@ -183,13 +305,13 @@ export function Materials() {
                   <tr key={m.id} className="border-b border-border/20 hover:bg-bg-3/30 group/row">
                     <td className="px-3 py-[5px] cursor-pointer" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
-                      if (yeni && yeni.trim() !== m.kod) { await supabase.from('uys_malzemeler').update({ kod: yeni.trim() }).eq('id', m.id); loadAll(); toast.success('Kod güncellendi') }
+                      if (yeni) await recodeMaterial(m, yeni)
                     }}>
                       <span className="font-mono text-accent text-[10px] leading-tight break-all">{m.kod}</span>
                     </td>
                     <td className="px-2 py-[5px] text-zinc-300 cursor-pointer hover:text-accent truncate max-w-0" onClick={async () => {
                       const yeni = await showPrompt('Malzeme adı değiştir', 'Yeni ad', m.ad)
-                      if (yeni && yeni.trim() !== m.ad) { await supabase.from('uys_malzemeler').update({ ad: yeni.trim() }).eq('id', m.id); loadAll(); toast.success('Ad güncellendi') }
+                      if (yeni) await renameMaterial(m, yeni)
                     }}><span className="truncate block">{m.ad}</span></td>
                     <td className="px-2 py-[5px]">
                       <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400 whitespace-nowrap">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span>
