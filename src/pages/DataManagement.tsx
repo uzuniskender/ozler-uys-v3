@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
@@ -767,8 +767,8 @@ function YetkiPanel() {
           </thead>
           <tbody>
             {ACTION_GROUPS.map(g => (
-              <>
-                <tr key={'g-' + g.group}><td colSpan={4} className="px-2 pt-3 pb-1 text-[10px] font-bold text-accent uppercase tracking-wider">{g.group}</td></tr>
+              <Fragment key={g.group}>
+                <tr><td colSpan={4} className="px-2 pt-3 pb-1 text-[10px] font-bold text-accent uppercase tracking-wider">{g.group}</td></tr>
                 {g.actions.map(a => (
                   <tr key={a.key} className="border-b border-border/15 hover:bg-bg-3/20">
                     <td className="px-2 py-1.5 text-zinc-300">{a.label}</td>
@@ -782,7 +782,7 @@ function YetkiPanel() {
                     ))}
                   </tr>
                 ))}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

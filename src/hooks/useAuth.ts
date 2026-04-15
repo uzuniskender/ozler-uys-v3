@@ -143,8 +143,10 @@ export function useAuth() {
   }
 
   const role = (user?.role || 'guest') as UserRole
-  const yetkiMap = useStore(s => s.yetkiMap)
-  const can = useCallback((action: string) => canCheck(role, action, yetkiMap), [role, yetkiMap])
+  const can = useCallback((action: string) => {
+    const ym = useStore.getState().yetkiMap
+    return canCheck(role, action, ym)
+  }, [role])
   const isAdminLevel = role === 'admin' || role === 'uretim_sor' || role === 'planlama' || role === 'depocu'
 
   return {
