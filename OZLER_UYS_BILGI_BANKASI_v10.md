@@ -248,3 +248,10 @@ END LOOP; END $$;
 - `src/pages/Recipes.tsx` — 5 düzeltme (sütun genişliği, default değer, opId otomatik, malkod display)
 - `src/pages/BomTrees.tsx` — copyBom + renameBom rows[0] düzeltmesi
 - `src/components/ui/SearchSelect.tsx` — displayValue prop eklendi
+
+#### Madde 3 — Checklist İstek Giriş Hatası (Bug Fix)
+- **Sorun:** `CLFormModal` ayrı fonksiyon olmasına rağmen `checklist` değişkenine erişmeye çalışıyordu → `ReferenceError`
+- **Çözüm:** `const { checklist } = useStore()` eklendi (satır 124)
+- `showPrompt` import eklendi (`showConfirm` yanına)
+- "Atanan" dropdown'da `_yeni` seçilince `showPrompt` ile yeni kişi adı alınıyor
+- `src/pages/Checklist.tsx` güncellendi

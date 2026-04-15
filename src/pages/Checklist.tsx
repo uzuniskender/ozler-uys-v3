@@ -4,7 +4,7 @@ import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { showConfirm } from '@/lib/prompt'
+import { showConfirm, showPrompt } from '@/lib/prompt'
 import { Plus, Search, Pencil, Trash2, Camera, CheckCircle, Clock, AlertTriangle } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { ChecklistItem } from '@/types'
@@ -121,6 +121,7 @@ export function Checklist() {
 }
 
 function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | null; onClose: () => void; onSaved: () => void }) {
+  const { checklist } = useStore()
   const [tip, setTip] = useState<string>(initial?.tip || 'gorev')
   const [baslik, setBaslik] = useState(initial?.baslik || '')
   const [aciklama, setAciklama] = useState(initial?.aciklama || '')
@@ -161,7 +162,12 @@ function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | n
           <textarea value={aciklama} onChange={e => setAciklama(e.target.value)} rows={3} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 resize-none focus:outline-none focus:border-accent" /></div>
           <div className="grid grid-cols-3 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Atanan</label>
-            <select value={atanan} onChange={e => setAtanan(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <select value={atanan} onChange={async e => {
+              if (e.target.value === '_yeni') {
+                const yeni = await showPrompt('Yeni kişi ekle', 'İsim')
+                if (yeni) setAtanan(yeni.trim())
+              } else setAtanan(e.target.value)
+            }} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>
               {[...new Set(checklist.map(c => c.atanan).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>)}
               <option value="_yeni">+ Yeni kişi...</option>
