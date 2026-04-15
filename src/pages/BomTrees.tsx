@@ -1,11 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { BomTree } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function BomTrees() {
@@ -13,14 +13,21 @@ export function BomTrees() {
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const filtered = useMemo(() => {
+    if (!search) return bomTrees
+    const q = search.toLowerCase()
+    return bomTrees.filter(bt => (bt.mamulKod + ' ' + (bt.ad || bt.mamulAd)).toLowerCase().includes(q))
+  }, [bomTrees, search])
 
   function toggleCheck(id: string) {
     setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   function toggleAll() {
-    if (checkedIds.size === bomTrees.length) setCheckedIds(new Set())
-    else setCheckedIds(new Set(bomTrees.map(b => b.id)))
+    if (checkedIds.size === filtered.length) setCheckedIds(new Set())
+    else setCheckedIds(new Set(filtered.map(b => b.id)))
   }
 
   async function deleteSelected() {
@@ -110,7 +117,7 @@ export function BomTrees() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Ürün Ağaçları</h1><p className="text-xs text-zinc-500">{bomTrees.length} ağaç</p></div>
+        <div><h1 className="text-xl font-semibold">Ürün Ağaçları</h1><p className="text-xs text-zinc-500">{bomTrees.length} ağaç{search ? ` · ${filtered.length} gösterilen` : ''}</p></div>
         <div className="flex gap-2">
           {checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
           <button onClick={exportExcel} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={12} /> Excel İndir</button>
@@ -119,13 +126,20 @@ export function BomTrees() {
           <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
         </div>
       </div>
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Mamul kodu veya ad ara..."
+            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+        </div>
+      </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        {bomTrees.length ? (
+        {filtered.length ? (
           <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500">
-            <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === bomTrees.length && bomTrees.length > 0} onChange={toggleAll} className="accent-accent" /></th>
+            <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === filtered.length && filtered.length > 0} onChange={toggleAll} className="accent-accent" /></th>
             <th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-left px-4 py-2.5">Ürün Adı</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
-            {bomTrees.map(bt => (
+            {filtered.map(bt => (
               <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent">{bt.mamulKod}</td>
@@ -139,7 +153,7 @@ export function BomTrees() {
               </tr>
             ))}
           </tbody></table>
-        ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz ürün ağacı yok</div>}
+        ) : <div className="p-8 text-center text-zinc-600 text-sm">{search ? 'Aramayla eşleşen ürün ağacı yok' : 'Henüz ürün ağacı yok'}</div>}
       </div>
       {selected && <BomEditor bom={selected} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Ürün ağacı güncellendi') }} />}
       {showNew && <NewBomModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Ürün ağacı oluşturuldu') }} />}

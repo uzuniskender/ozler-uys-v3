@@ -1,11 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Recipes() {
@@ -13,10 +13,17 @@ export function Recipes() {
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const filtered = useMemo(() => {
+    if (!search) return recipes
+    const q = search.toLowerCase()
+    return recipes.filter(r => (r.rcKod + ' ' + r.ad + ' ' + r.mamulKod).toLowerCase().includes(q))
+  }, [recipes, search])
+
   function toggleCheck(id: string) { setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  function toggleAll() { checkedIds.size === recipes.length ? setCheckedIds(new Set()) : setCheckedIds(new Set(recipes.map(r => r.id))) }
+  function toggleAll() { checkedIds.size === filtered.length ? setCheckedIds(new Set()) : setCheckedIds(new Set(filtered.map(r => r.id))) }
 
   async function deleteSelected() {
     if (!checkedIds.size) return
@@ -106,7 +113,7 @@ export function Recipes() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete</p></div>
+        <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete{search ? ` · ${filtered.length} gösterilen` : ''}</p></div>
         <div className="flex gap-2">
           {checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
           {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan ({bomTrees.length})</button>}
@@ -116,14 +123,21 @@ export function Recipes() {
           <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
         </div>
       </div>
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Kod, ad veya mamul kodu ara..."
+            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+        </div>
+      </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        {recipes.length ? (
+        {filtered.length ? (
           <table className="w-full text-xs">
             <thead><tr className="border-b border-border text-zinc-500">
-              <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === recipes.length && recipes.length > 0} onChange={toggleAll} className="accent-accent" /></th>
+              <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === filtered.length && filtered.length > 0} onChange={toggleAll} className="accent-accent" /></th>
               <th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Reçete Adı</th><th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
             <tbody>
-              {recipes.map(r => (
+              {filtered.map(r => (
                 <tr key={r.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(r.id) ? 'bg-accent/5' : ''}`}>
                   <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleCheck(r.id)} className="accent-accent" /></td>
                   <td className="px-4 py-2 font-mono text-accent">{r.rcKod || '—'}</td>
@@ -139,8 +153,8 @@ export function Recipes() {
             </tbody>
           </table>
         ) : <div className="p-8 text-center">
-          <div className="text-zinc-600 text-sm mb-3">Henüz reçete yok</div>
-          {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="px-4 py-2 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 {bomTrees.length} Ürün Ağacından Reçete Oluştur</button>}
+          <div className="text-zinc-600 text-sm mb-3">{search ? 'Aramayla eşleşen reçete yok' : 'Henüz reçete yok'}</div>
+          {!search && bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="px-4 py-2 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 {bomTrees.length} Ürün Ağacından Reçete Oluştur</button>}
         </div>}
       </div>
       {selected && <RecipeEditor recipe={selected} operations={operations} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Reçete güncellendi') }} />}
