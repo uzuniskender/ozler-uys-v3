@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { setYetkiOverrides } from '@/lib/permissions'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
@@ -219,7 +220,10 @@ export const useStore = create<UYSStore>((set) => ({
         // Yetki haritasını yükle
         try {
           const { data: yaData } = await supabase.from('uys_yetki_ayarlari').select('*').eq('id', 'rbac').limit(1)
-          if (yaData?.[0]?.data) updates.yetkiMap = yaData[0].data
+          if (yaData?.[0]?.data) {
+            updates.yetkiMap = yaData[0].data
+            setYetkiOverrides(yaData[0].data)
+          }
         } catch { /* tablo yoksa varsayılan kullanılır */ }
         set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
         console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)

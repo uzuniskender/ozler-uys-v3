@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, setGuestMode } from '@/lib/supabase'
 import { can as canCheck, type UserRole } from '@/lib/permissions'
-import { useStore } from '@/store'
 
 interface AuthUser {
   role: UserRole
@@ -143,10 +142,7 @@ export function useAuth() {
   }
 
   const role = (user?.role || 'guest') as UserRole
-  const can = useCallback((action: string) => {
-    const ym = useStore.getState().yetkiMap
-    return canCheck(role, action, ym)
-  }, [role])
+  const can = useCallback((action: string) => canCheck(role, action), [role])
   const isAdminLevel = role === 'admin' || role === 'uretim_sor' || role === 'planlama' || role === 'depocu'
 
   return {

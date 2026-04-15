@@ -2,6 +2,11 @@
 export type AdminRole = 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
 export type UserRole = AdminRole | 'guest' | 'operator'
 
+// Modül seviyesinde override — store loadAll'dan set edilir
+let _overrides: Record<string, AdminRole[]> | null = null
+export function setYetkiOverrides(o: Record<string, AdminRole[]> | null) { _overrides = o }
+export function getYetkiOverrides() { return _overrides }
+
 export const ACTION_GROUPS: { group: string; actions: { key: string; label: string }[] }[] = [
   { group: 'Siparişler', actions: [
     { key: 'orders_add', label: 'Sipariş ekleme' }, { key: 'orders_edit', label: 'Sipariş düzenleme' },
@@ -113,10 +118,10 @@ export const ROLE_LIST: { key: AdminRole; label: string }[] = [
   { key: 'depocu', label: 'Depocu' },
 ]
 
-export function can(role: UserRole, action: string, overrides?: Record<string, AdminRole[]> | null): boolean {
+export function can(role: UserRole, action: string): boolean {
   if (role === 'admin') return true
   if (role === 'guest' || role === 'operator') return false
-  const map = overrides && Object.keys(overrides).length > 0 ? overrides : DEFAULTS
+  const map = _overrides && Object.keys(_overrides).length > 0 ? _overrides : DEFAULTS
   const allowed = map[action]
   if (!allowed) return false
   return allowed.includes(role as AdminRole)
