@@ -82,11 +82,18 @@ export function kesimPlanOlustur(
     console.log('malkod:', w.malkod, '| rcId:', w.rcId, '| kirno:', w.kirno)
     console.log('w.hm:', w.hm)
 
-    // HM bileşenlerini bul
+    // HM bileşenlerini bul — sadece gerçek hammaddeler (YarıMamul ve ürünün kendisi hariç)
     const hmSatirlar: { malkod: string; malad: string }[] = []
     if (w.hm?.length) {
-      w.hm.forEach(h => hmSatirlar.push({ malkod: h.malkod, malad: h.malad }))
-      console.log('✅ HM w.hm dizisinden:', hmSatirlar.length, 'satır')
+      w.hm.forEach(h => {
+        // Ürünün kendisini atla
+        if (h.malkod === w.malkod || h.malkod === w.mamulKod) { console.log('⏩ Ürünün kendisi atlandı:', h.malkod); return }
+        const mat = materials.find(m => m.kod === h.malkod)
+        // YarıMamul ise kesim planına dahil etme
+        if (mat?.tip === 'YarıMamul') { console.log('⏩ YM atlandı:', h.malkod, h.malad); return }
+        hmSatirlar.push({ malkod: h.malkod, malad: h.malad })
+      })
+      console.log('✅ HM w.hm dizisinden (filtrelenmiş):', hmSatirlar.length, 'satır')
     } else {
       console.log('⚠ w.hm boş — reçeteden aranıyor...')
       // BOM'dan bir seviye aşağı
@@ -96,7 +103,7 @@ export function kesimPlanOlustur(
         const woKirno = w.kirno || '1'
         const depth = woKirno.split('.').length
         const altlar = rc.satirlar.filter(s =>
-          (s.tip === 'Hammadde' || s.tip === 'YarıMamul' || s.tip === 'Sarf') &&
+          (s.tip === 'Hammadde' || s.tip === 'Sarf') &&
           (s.kirno || '').startsWith(woKirno + '.') &&
           (s.kirno || '').split('.').length === depth + 1
         )
