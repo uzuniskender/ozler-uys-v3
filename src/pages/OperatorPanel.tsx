@@ -800,10 +800,11 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     if (toplamCalisma > 0 && toplamDurusDk > toplamCalisma) { toast.error('Duruş (' + toplamDurusDk + 'dk) çalışmayı (' + toplamCalisma + 'dk) aşamaz'); return }
 
     setSaving(true)
+    const logId = editLogId || uid()
     if (editLog && editLogId) {
       // DÜZENLEME MODU — mevcut logu güncelle
       await supabase.from('uys_logs').update({
-        qty: q, fire: f, not_: aciklama,
+        qty: q, fire: f, not_: aciklama, tarih,
         operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
         duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
       }).eq('id', editLogId)
@@ -826,9 +827,15 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           }
         }
       }
+      // Fire log güncelle
+      await supabase.from('uys_fire_logs').delete().eq('log_id', editLogId)
+      if (f > 0) {
+        await supabase.from('uys_fire_logs').insert({
+          id: uid(), log_id: editLogId, wo_id: woId, tarih, miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
+        })
+      }
     } else {
       // YENİ KAYIT MODU
-      const logId = uid()
       await supabase.from('uys_logs').insert({
         id: logId, wo_id: woId, tarih, qty: q, fire: f,
         operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
@@ -851,11 +858,11 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           }
         }
       }
-    }
-    if (f > 0 && !editLog) {
-      await supabase.from('uys_fire_logs').insert({
-        id: uid(), wo_id: woId, tarih, miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
-      })
+      if (f > 0) {
+        await supabase.from('uys_fire_logs').insert({
+          id: uid(), log_id: logId, wo_id: woId, tarih, miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
+        })
+      }
     }
     // ═══ AUTO-CLOSE: İE tamamlandı mı? ═══
     const q_ = parseInt(qty) || 0

@@ -14,7 +14,7 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Orders() {
   const { orders, workOrders, logs, recipes, cuttingPlans, materials, loadAll } = useStore()
-  const { isGuest } = useAuth()
+  const { can, isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
@@ -168,10 +168,10 @@ export function Orders() {
         <div><h1 className="text-xl font-semibold">Siparişler</h1><p className="text-xs text-zinc-500">{orders.length} sipariş{isGuest ? ' (salt okunur)' : ''}</p></div>
         <div className="flex gap-2">
           <button onClick={downloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white" title="Şablon indir"><Download size={13} /> Şablon</button>
-          <button onClick={topluSiparisYukle} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
-          <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>
+          {can('orders_add') && <button onClick={topluSiparisYukle} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
+          {can('orders_mrp') && <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>}
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={async () => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>
+          {can('orders_add') && <button onClick={async () => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>}
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -185,7 +185,7 @@ export function Orders() {
       {selIds.size > 0 && (
         <div className="mb-3 p-2 bg-accent/5 border border-accent/20 rounded-lg flex items-center gap-2">
           <span className="text-xs font-semibold text-accent">{selIds.size} seçili</span>
-          <button onClick={selDeleteAll} className="px-2 py-1 bg-red/10 text-red rounded text-[10px]">Toplu Sil</button>
+          {can('orders_delete') && <button onClick={selDeleteAll} className="px-2 py-1 bg-red/10 text-red rounded text-[10px]">Toplu Sil</button>}
           <span className="flex-1" />
           <button onClick={() => setSelIds(new Set(filtered.map(o => o.id)))} className="text-[10px] text-zinc-500 hover:text-white">Tümü</button>
           <button onClick={() => setSelIds(new Set())} className="text-[10px] text-zinc-500 hover:text-white">Temizle</button>
@@ -213,18 +213,18 @@ export function Orders() {
                   <td className="px-2 py-2.5 text-center">{woCount > 0 && <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${mrpBadge.bg} ${mrpBadge.color}`}>{mrpBadge.label}</span>}</td>
                   <td className="px-4 py-2.5 text-right"><div className="flex gap-1 justify-end">
                     <button onClick={() => setSelectedOrder(o)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={13} /></button>
-                    <button onClick={() => oncelikDegistir(o.id, 1)} className="p-1 text-zinc-500 hover:text-amber" title="Öncelik artır"><ArrowUp size={11} /></button>
-                    <button onClick={() => oncelikDegistir(o.id, -1)} className="p-1 text-zinc-500 hover:text-zinc-300" title="Öncelik azalt"><ArrowDown size={11} /></button>
-                    <button onClick={() => copyOrder(o)} className="p-1 text-zinc-500 hover:text-green" title="Kopyala"><Copy size={13} /></button>
-                    <button onClick={async () => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>
-                    <button onClick={async () => {
+                    {can('orders_edit') && <button onClick={() => oncelikDegistir(o.id, 1)} className="p-1 text-zinc-500 hover:text-amber" title="Öncelik artır"><ArrowUp size={11} /></button>}
+                    {can('orders_edit') && <button onClick={() => oncelikDegistir(o.id, -1)} className="p-1 text-zinc-500 hover:text-zinc-300" title="Öncelik azalt"><ArrowDown size={11} /></button>}
+                    {can('orders_add') && <button onClick={() => copyOrder(o)} className="p-1 text-zinc-500 hover:text-green" title="Kopyala"><Copy size={13} /></button>}
+                    {can('orders_edit') && <button onClick={async () => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>}
+                    {can('orders_edit') && <button onClick={async () => {
                       const yeniDurum = o.durum === 'kapalı' ? '' : 'kapalı'
                       await supabase.from('uys_orders').update({ durum: yeniDurum }).eq('id', o.id)
                       loadAll(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))
                     }} className={`p-1 ${o.durum === 'kapalı' ? 'text-green hover:text-green' : 'text-zinc-500 hover:text-amber'}`} title={o.durum === 'kapalı' ? 'Aç' : 'Kapat'}>
                       {o.durum === 'kapalı' ? '🔓' : '🔒'}
-                    </button>
-                    <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>
+                    </button>}
+                    {can('orders_delete') && <button onClick={() => deleteOrder(o.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={13} /></button>}
                   </div></td>
                 </tr>
               )
@@ -449,7 +449,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
           ) : (
             <div className="p-4 text-center">
               {order.receteId ? (
-                <button onClick={runMRP} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Calculator size={13} className="inline mr-1" /> MRP Hesapla</button>
+                {can('orders_mrp') && <button onClick={runMRP} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Calculator size={13} className="inline mr-1" /> MRP Hesapla</button>}
               ) : (
                 <div className="text-zinc-600 text-xs">Bu siparişe reçete atanmamış — MRP hesaplanamaz</div>
               )}

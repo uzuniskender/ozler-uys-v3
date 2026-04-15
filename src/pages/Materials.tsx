@@ -11,7 +11,7 @@ import type { Material } from '@/types'
 
 export function Materials() {
   const { materials, operations, recipes, loadAll } = useStore()
-  const { isGuest } = useAuth()
+  const { can, isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
@@ -104,9 +104,9 @@ export function Materials() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Malzeme Listesi</h1><p className="text-xs text-zinc-500">{materials.length} malzeme</p></div>
         <div className="flex gap-2">
-          <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
+          {can('mat_excel') && <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>
+          {can('mat_add') && <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Malzeme</button>}
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -163,14 +163,14 @@ export function Materials() {
                     <td className="px-4 py-1.5 text-right font-mono text-amber">{m.uzunluk || '—'}</td>
                     <td className="px-4 py-1.5 text-zinc-500 text-[11px]">{op?.ad || '—'}</td>
                     <td className="px-4 py-1.5 text-right">
-                      <button onClick={async () => {
+                      {can('mat_add') && <button onClick={async () => {
                         const newId = uid()
                         const row = { id: newId, kod: m.kod + '-KOPYA', ad: m.ad + ' (Kopya)', tip: m.tip, hammadde_tipi: m.hammaddeTipi, birim: m.birim, boy: m.boy, en: m.en, kalinlik: m.kalinlik, uzunluk: m.uzunluk, cap: m.cap, min_stok: m.minStok, op_id: m.opId || null, op_kod: m.opKod || null }
                         await supabase.from('uys_malzemeler').insert(row)
                         loadAll(); toast.success('Malzeme kopyalandı')
-                      }} className="p-1 text-zinc-500 hover:text-amber" title="Kopyala"><Copy size={12} /></button>
-                      <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
-                      <button onClick={() => deleteMat(m.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                      }} className="p-1 text-zinc-500 hover:text-amber" title="Kopyala"><Copy size={12} /></button>}
+                      {can('mat_edit') && <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>}
+                      {can('mat_delete') && <button onClick={() => deleteMat(m.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
                     </td>
                   </tr>
                 )

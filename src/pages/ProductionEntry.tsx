@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle, fireIEOlustur } from '@/features/production/stokTuketim'
 import { useState, useMemo, useEffect, useRef } from 'react'
@@ -10,6 +11,7 @@ import { Search, Play, CheckCircle, ScanBarcode } from 'lucide-react'
 
 export function ProductionEntry() {
   const { workOrders, logs, operators, operations, loadAll } = useStore()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState('')
   const [selectedOpr, setSelectedOpr] = useState<string | null>(null)
@@ -80,7 +82,7 @@ export function ProductionEntry() {
           <button onClick={() => setBarkodAktif(!barkodAktif)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${barkodAktif ? 'bg-green/20 text-green border border-green/30' : 'bg-bg-2 border border-border text-zinc-400'}`}>
             <ScanBarcode size={13} /> {barkodAktif ? 'Barkod Açık' : 'Barkod'}
           </button>
-          <button onClick={() => setShowToplu(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><CheckCircle size={13} /> Toplu Giriş</button>
+          {can('prod_bulk') && <button onClick={() => setShowToplu(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><CheckCircle size={13} /> Toplu Giriş</button>}
         </div>
       </div>
 
@@ -207,6 +209,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const { workOrders, logs, durusKodlari, stokHareketler, recipes } = useStore()
+  const { can } = useAuth()
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
@@ -531,7 +534,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
 
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
-          <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+          <button onClick={save} disabled={saving || !can('prod_entry')} className="flex items-center gap-1.5 px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             <CheckCircle size={13} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
@@ -547,6 +550,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const { workOrders, recipes } = useStore()
+  const { can } = useAuth()
   const [rows, setRows] = useState<{ woId: string; qty: string; fire: string }[]>(
     acikWOs.slice(0, 20).map(w => ({ woId: w.id, qty: '', fire: '' }))
   )

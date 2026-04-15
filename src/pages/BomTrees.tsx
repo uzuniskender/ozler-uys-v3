@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useRef, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +11,7 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function BomTrees() {
   const { bomTrees, recipes, loadAll } = useStore()
+  const { can } = useAuth()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
@@ -135,11 +137,11 @@ export function BomTrees() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Ürün Ağaçları</h1><p className="text-xs text-zinc-500">{bomTrees.length} ağaç{search ? ` · ${filtered.length} gösterilen` : ''}</p></div>
         <div className="flex gap-2">
-          {checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
+          {can('bom_delete') && checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
           <button onClick={exportExcel} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={12} /> Excel İndir</button>
-          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={12} /> Excel Yükle</button>
+          {can('bom_excel') && <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={12} /> Excel Yükle</button>}
           <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { if (e.target.files?.[0]) importExcel(e.target.files[0]); e.target.value = '' }} />
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+          {can('bom_add') && <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>}
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -166,9 +168,9 @@ export function BomTrees() {
                 <td className="px-4 py-2 text-right font-mono">{bt.rows?.length || 0}</td>
                 <td className="px-4 py-2 text-right">
                   <button onClick={() => createRecipeFromBom(bt)} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20 mr-1">📋 Reçete Oluştur</button>
-                  <button onClick={() => copyBom(bt)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>
-                  <button onClick={() => setSelected(bt)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>
-                  <button onClick={() => deleteBom(bt.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                  {can('bom_add') && <button onClick={() => copyBom(bt)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>}
+                  {can('bom_edit') && <button onClick={() => setSelected(bt)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>}
+                  {can('bom_delete') && <button onClick={() => deleteBom(bt.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
                 </td>
               </tr>
             ))}
@@ -183,6 +185,7 @@ export function BomTrees() {
 
 function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const { materials } = useStore()
+  const { can } = useAuth()
   const [mamulKod, setMamulKod] = useState('')
   const [ad, setAd] = useState('')
 
@@ -221,6 +224,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
   const [rows, setRows] = useState(bom.rows || [])
   const [viewMode, setViewMode] = useState<'edit'|'tree'>('edit')
   const { materials, loadAll: storeLoadAll } = useStore()
+  const { can } = useAuth()
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
 

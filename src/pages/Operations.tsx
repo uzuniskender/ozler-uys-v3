@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { showConfirm } from '@/lib/prompt'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
@@ -8,6 +9,7 @@ import { toast } from 'sonner'
 
 export function Operations() {
   const { operations, loadAll } = useStore()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<{ id: string; kod: string; ad: string } | null>(null)
@@ -50,7 +52,7 @@ export function Operations() {
             const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
             XLSX.utils.book_append_sheet(wb, ws, 'Operasyonlar'); XLSX.writeFile(wb, 'operasyonlar.xlsx')
           })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
-          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+          {can('op_add') && <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>}
         </div>
       </div>
       <div className="relative max-w-xs mb-4">
@@ -67,8 +69,8 @@ export function Operations() {
                 <td className="px-4 py-2 text-zinc-300">{o.ad}</td>
                 <td className="px-4 py-2 text-zinc-500 text-[11px]">{o.bolum || '—'}</td>
                 <td className="px-4 py-2 text-right">
-                  <button onClick={async () => { setEditItem(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1">Düzenle</button>
-                  <button onClick={() => del(o.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                  {can('op_edit') && <button onClick={async () => { setEditItem(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1">Düzenle</button>}
+                  {can('op_delete') && <button onClick={() => del(o.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
                 </td>
               </tr>
             ))}
@@ -82,6 +84,7 @@ export function Operations() {
 
 function SimpleFormModal({ title, initial, onClose, onSave }: { title: string; initial: { id: string; kod: string; ad: string; bolum?: string } | null; onClose: () => void; onSave: (kod: string, ad: string, bolum: string, id?: string) => void }) {
   const { operations } = useStore()
+  const { can } = useAuth()
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')
   const [bolum, setBolum] = useState(initial?.bolum || '')

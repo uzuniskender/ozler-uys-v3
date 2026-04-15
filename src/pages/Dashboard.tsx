@@ -59,7 +59,7 @@ export function Dashboard() {
     fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
     operations, stations, sevkler, izinler, recipes, loadAll,
   } = useStore()
-  const { isGuest } = useAuth()
+  const { can, isGuest } = useAuth()
   const todayStr = today()
 
   // ═══ TEMEL HESAPLAMALAR ═══

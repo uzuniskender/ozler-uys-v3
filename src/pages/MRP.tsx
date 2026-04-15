@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -9,6 +10,7 @@ import { hesaplaMRP, type MRPRow } from '@/features/production/mrp'
 
 export function MRP() {
   const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, loadAll } = useStore()
+  const { can } = useAuth()
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
   const [selectedYMs, setSelectedYMs] = useState<Set<string>>(new Set())
   const [sonuc, setSonuc] = useState<MRPRow[]>([])
@@ -263,7 +265,7 @@ export function MRP() {
         </>)}
 
         <div className="flex items-center gap-3 mt-3">
-          <button onClick={hesapla} disabled={!selectedOrders.size && !selectedYMs.size}
+          <button onClick={hesapla} disabled={!can('mrp_calc') || (!selectedOrders.size && !selectedYMs.size)}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             Hesapla →
           </button>

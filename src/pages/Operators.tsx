@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -9,6 +10,7 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 
 export function Operators() {
   const { operators, izinler, loadAll } = useStore()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
@@ -69,7 +71,7 @@ export function Operators() {
             const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
             XLSX.utils.book_append_sheet(wb, ws, 'Operatörler'); XLSX.writeFile(wb, 'operatorler.xlsx')
           })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
-          <button onClick={async () => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>
+          {can('opr_add') && <button onClick={async () => { setEditOpr(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Operatör</button>}
         </div>
       </div>
 
@@ -103,11 +105,11 @@ export function Operators() {
                 <span className="font-mono text-[11px] text-accent w-20">{o.kod}</span>
                 <span className="flex-1 text-xs font-medium">{o.ad}</span>
                 <div className="flex gap-1">
-                  <button onClick={async () => { setEditOpr(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Düzenle</button>
+                  {can('opr_edit') && <button onClick={async () => { setEditOpr(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Düzenle</button>}
                   <button onClick={() => toggleAktif(o.id, !o.aktif)} className="p-1 text-zinc-500 hover:text-amber" title={o.aktif ? 'Pasife al' : 'Aktifleştir'}>
                     {o.aktif ? <UserX size={12} /> : <UserCheck size={12} />}
                   </button>
-                  <button onClick={() => deleteOpr(o.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                  {can('opr_delete') && <button onClick={() => deleteOpr(o.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
                 </div>
               </div>
             ))}

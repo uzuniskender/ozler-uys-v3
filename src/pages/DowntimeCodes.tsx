@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { useState, useMemo } from 'react'
@@ -8,6 +9,7 @@ import { Plus } from 'lucide-react'
 
 export function DowntimeCodes() {
   const { durusKodlari, loadAll } = useStore()
+  const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
 
   const grouped = useMemo(() => {
@@ -56,7 +58,7 @@ export function DowntimeCodes() {
             }
             input.click()
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📤 Yükle</button>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+          {can('durus_add') && <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>}
         </div>
       </div>
       {grouped.map(([kat, codes]) => (
@@ -67,7 +69,7 @@ export function DowntimeCodes() {
               <div key={d.id} className="flex items-center gap-3 px-3 py-2 hover:bg-bg-3/30">
                 <span className="font-mono text-[11px] text-accent w-16">{d.kod}</span>
                 <span className="flex-1 text-xs">{d.ad}</span>
-                <button onClick={() => del(d.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                {can('durus_delete') && <button onClick={() => del(d.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
               </div>
             ))}
           </div>

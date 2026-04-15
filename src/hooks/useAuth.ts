@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase, setGuestMode } from '@/lib/supabase'
+import { can as canCheck, type UserRole } from '@/lib/permissions'
 
 interface AuthUser {
-  role: 'admin' | 'guest' | 'operator'
+  role: UserRole
   username: string
   email?: string
   loginTime: string
@@ -87,6 +88,25 @@ export function useAuth() {
   }
 
   async function signIn(username: string, password: string) {
+    // 1) Önce uys_kullanicilar tablosundan kontrol
+    try {
+      const { data } = await supabase.from('uys_kullanicilar')
+        .select('*')
+        .eq('kullanici_ad', username)
+        .eq('sifre', password)
+        .eq('aktif', true)
+        .limit(1)
+      if (data && data.length > 0) {
+        const k = data[0]
+        const rol = (k.rol || 'planlama') as UserRole
+        const authUser: AuthUser = { role: rol, username: k.ad || username, loginTime: new Date().toISOString() }
+        localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
+        setUser(authUser)
+        return { error: null }
+      }
+    } catch { /* tablo yoksa veya hata → admin şifreyi dene */ }
+
+    // 2) Eski admin şifre kontrolü (geriye uyumluluk)
     const ADMIN_PASS = 'admin123'
     const customPass = localStorage.getItem('uys_admin_pass')
     if (password === ADMIN_PASS || (customPass && password === customPass)) {
@@ -121,8 +141,14 @@ export function useAuth() {
     setUser(authUser)
   }
 
+  const role = (user?.role || 'guest') as UserRole
+  const can = useCallback((action: string) => canCheck(role, action), [role])
+  const isAdminLevel = role === 'admin' || role === 'uretim_sor' || role === 'planlama' || role === 'depocu'
+
   return {
     session: user, user, loading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin,
-    isAuthenticated: !!user, isGuest: user?.role === 'guest', isAdmin: user?.role === 'admin', isOperator: user?.role === 'operator',
+    isAuthenticated: !!user, isGuest: user?.role === 'guest', isAdmin: user?.role === 'admin',
+    isAdminLevel, isOperator: user?.role === 'operator',
+    role, can,
   }
 }

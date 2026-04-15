@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -14,6 +15,7 @@ const DURUM_ICON: Record<string, typeof Clock> = { bekliyor: Clock, devam: Alert
 
 export function Checklist() {
   const { checklist, loadAll } = useStore()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [durumFilterSet, setDurumFilterSet] = useState<Set<string>>(new Set(['bekliyor', 'devam']))
@@ -58,7 +60,7 @@ export function Checklist() {
             const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
             XLSX.utils.book_append_sheet(wb, ws, 'Checklist'); XLSX.writeFile(wb, 'checklist.xlsx')
           })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
-          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ekle</button>
+          {can('check_add') && <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Ekle</button>}
         </div>
       </div>
 
@@ -102,8 +104,8 @@ export function Checklist() {
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => setDetailItem(c)} className="p-1 text-zinc-500 hover:text-accent"><Camera size={13} /></button>
-                  <button onClick={async () => { setEditItem(c); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber"><Pencil size={13} /></button>
-                  <button onClick={() => deleteCL(c.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={13} /></button>
+                  {can('check_edit') && <button onClick={async () => { setEditItem(c); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber"><Pencil size={13} /></button>}
+                  {can('check_delete') && <button onClick={() => deleteCL(c.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={13} /></button>}
                 </div>
               </div>
             </div>

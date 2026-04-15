@@ -348,3 +348,12 @@ export interface Izin {
   not: string
   olusturan: string
 }
+
+export interface Kullanici {
+  id: string
+  ad: string
+  kullaniciAd: string
+  sifre: string
+  rol: 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
+  aktif: boolean
+}

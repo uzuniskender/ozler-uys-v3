@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
 import { useState } from 'react'
 import { useStore } from '@/store'
@@ -9,6 +10,7 @@ import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 
 export function DataManagement() {
   const store = useStore()
+  const { can } = useAuth()
   
   const tables = [
     { label: 'Siparişler', key: 'orders', table: 'uys_orders' },
@@ -237,6 +239,13 @@ export function DataManagement() {
           }} className="px-3 py-2 bg-accent text-white rounded-lg text-xs">Kaydet</button>
         </div>
       </div>
+
+      {/* Kullanıcı Yönetimi — RBAC */}
+      {can('data_pass') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+        <div className="text-sm font-semibold text-zinc-300 mb-2">👥 Kullanıcı Yönetimi (RBAC)</div>
+        <p className="text-xs text-zinc-500 mb-3">Sisteme giriş yapabilecek kullanıcıları ve rollerini yönetin.</p>
+        <KullaniciPanel />
+      </div>}
 
       {/* #35: Sıfırlama İşlemleri — seçimli */}
       <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
@@ -551,6 +560,131 @@ function TestModuPanel() {
 
       {!snapshot && !isTestMode && (
         <div className="text-[10px] text-zinc-600">Test modunu açtığınızda mevcut verilerin anlık görüntüsü kaydedilir. Test sırasında eklenen her şey sonra tek tuşla silinir.</div>
+      )}
+    </div>
+  )
+}
+
+// ═══ KULLANICI YÖNETİMİ — RBAC ═══
+const ROL_LABELS: Record<string, string> = { admin: 'Admin', uretim_sor: 'Üretim Sorumlusu', planlama: 'Planlama', depocu: 'Depocu' }
+const ROL_COLORS: Record<string, string> = { admin: 'text-red', uretim_sor: 'text-amber', planlama: 'text-accent', depocu: 'text-green' }
+
+function KullaniciPanel() {
+  const { kullanicilar, loadAll } = useStore()
+  const [showForm, setShowForm] = useState(false)
+  const [editItem, setEditItem] = useState<any>(null)
+  const [ad, setAd] = useState('')
+  const [kullaniciAd, setKullaniciAd] = useState('')
+  const [sifre, setSifre] = useState('')
+  const [rol, setRol] = useState<string>('planlama')
+
+  function openNew() { setEditItem(null); setAd(''); setKullaniciAd(''); setSifre(''); setRol('planlama'); setShowForm(true) }
+  function openEdit(k: any) { setEditItem(k); setAd(k.ad); setKullaniciAd(k.kullaniciAd); setSifre(k.sifre); setRol(k.rol); setShowForm(true) }
+
+  async function save() {
+    if (!ad.trim() || !kullaniciAd.trim() || !sifre.trim()) { toast.error('Tüm alanlar zorunlu'); return }
+    if (editItem) {
+      await supabase.from('uys_kullanicilar').update({
+        ad: ad.trim(), kullanici_ad: kullaniciAd.trim(), sifre: sifre.trim(), rol,
+      }).eq('id', editItem.id)
+      toast.success('Kullanıcı güncellendi')
+    } else {
+      // Aynı kullanıcı adı var mı kontrol
+      const existing = kullanicilar.find(k => k.kullaniciAd === kullaniciAd.trim())
+      if (existing) { toast.error('Bu kullanıcı adı zaten kullanılıyor'); return }
+      await supabase.from('uys_kullanicilar').insert({
+        id: uid(), ad: ad.trim(), kullanici_ad: kullaniciAd.trim(), sifre: sifre.trim(), rol, aktif: true,
+      })
+      toast.success('Kullanıcı eklendi')
+    }
+    setShowForm(false); loadAll()
+  }
+
+  async function toggleAktif(k: any) {
+    await supabase.from('uys_kullanicilar').update({ aktif: !k.aktif }).eq('id', k.id)
+    loadAll(); toast.success(k.ad + (k.aktif ? ' devre dışı bırakıldı' : ' aktifleştirildi'))
+  }
+
+  async function deleteUser(k: any) {
+    if (!await showConfirm(`"${k.ad}" kullanıcısını silmek istediğinize emin misiniz?`)) return
+    await supabase.from('uys_kullanicilar').delete().eq('id', k.id)
+    loadAll(); toast.success('Kullanıcı silindi')
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-zinc-500">{kullanicilar.length} kullanıcı</span>
+        <button onClick={openNew} className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">+ Yeni Kullanıcı</button>
+      </div>
+
+      {kullanicilar.length > 0 ? (
+        <div className="space-y-1.5">
+          {kullanicilar.map(k => (
+            <div key={k.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${k.aktif ? 'bg-bg-1 border-border/50' : 'bg-bg-1/50 border-border/20 opacity-60'}`}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-zinc-200">{k.ad}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${ROL_COLORS[k.rol] || 'text-zinc-400'} bg-bg-3`}>{ROL_LABELS[k.rol] || k.rol}</span>
+                  {!k.aktif && <span className="text-[9px] px-1 py-0.5 bg-red/10 text-red rounded">Pasif</span>}
+                </div>
+                <div className="text-[10px] text-zinc-500 font-mono">{k.kullaniciAd}</div>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => openEdit(k)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Düzenle</button>
+                <button onClick={() => toggleAktif(k)} className={`px-2 py-0.5 bg-bg-3 rounded text-[10px] ${k.aktif ? 'text-amber hover:text-amber' : 'text-green hover:text-green'}`}>
+                  {k.aktif ? 'Devre Dışı' : 'Aktifleştir'}
+                </button>
+                <button onClick={() => deleteUser(k)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-zinc-600 bg-bg-1 rounded-lg p-4 text-center">
+          Henüz kullanıcı eklenmedi. Eski admin şifresi ile giriş çalışmaya devam eder.
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold mb-4">{editItem ? 'Kullanıcı Düzenle' : 'Yeni Kullanıcı'}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Ad Soyad</label>
+                <input value={ad} onChange={e => setAd(e.target.value)} placeholder="Örn: Ahmet Yılmaz"
+                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Kullanıcı Adı (giriş için)</label>
+                <input value={kullaniciAd} onChange={e => setKullaniciAd(e.target.value)} placeholder="Örn: ahmet"
+                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 font-mono focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Şifre</label>
+                <input value={sifre} onChange={e => setSifre(e.target.value)} placeholder="Şifre"
+                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 font-mono focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Rol</label>
+                <select value={rol} onChange={e => setRol(e.target.value)}
+                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent">
+                  <option value="admin">Admin — Tam yetki</option>
+                  <option value="uretim_sor">Üretim Sorumlusu — İE + üretim girişi</option>
+                  <option value="planlama">Planlama — Sipariş, MRP, kesim, reçete</option>
+                  <option value="depocu">Depocu — Stok, tedarik, sevkiyat</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+              <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">
+                {editItem ? 'Güncelle' : 'Ekle'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

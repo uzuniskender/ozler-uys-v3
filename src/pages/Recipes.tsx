@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useRef, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +11,7 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function Recipes() {
   const { recipes, operations, bomTrees, loadAll } = useStore()
+  const { can } = useAuth()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
@@ -132,12 +134,12 @@ export function Recipes() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete{search ? ` · ${filtered.length} gösterilen` : ''}</p></div>
         <div className="flex gap-2">
-          {checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
-          {bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan ({bomTrees.length})</button>}
+          {can('recipe_delete') && checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
+          {can('recipe_add') && bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan ({bomTrees.length})</button>}
           <button onClick={exportRecipes} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> İndir</button>
-          <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Yükle</button>
+          {can('recipe_excel') && <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Yükle</button>}
           <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { if (e.target.files?.[0]) importExcel(e.target.files[0]); e.target.value = '' }} />
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>
+          {can('recipe_add') && <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>}
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -168,9 +170,9 @@ export function Recipes() {
                   }}>{r.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                   <td className="px-4 py-2 text-right font-mono">{r.satirlar?.length || 0}</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => copyRecipe(r)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>
-                    <button onClick={() => setSelected(r)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>
-                    <button onClick={() => deleteRecipe(r.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                    {can('recipe_add') && <button onClick={() => copyRecipe(r)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>}
+                    {can('recipe_edit') && <button onClick={() => setSelected(r)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>}
+                    {can('recipe_delete') && <button onClick={() => deleteRecipe(r.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
                   </td>
                 </tr>
               ))}
@@ -232,6 +234,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   const [ad, setAd] = useState(recipe.ad || '')
   const [rcKod, setRcKod] = useState(recipe.rcKod || '')
   const { materials, loadAll: storeLoadAll } = useStore()
+  const { can } = useAuth()
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
 

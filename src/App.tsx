@@ -97,7 +97,7 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 }
 
 export default function App() {
-  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator } = useAuth()
+  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role } = useAuth()
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
@@ -124,13 +124,24 @@ export default function App() {
     )
   }
 
-  // ═══ ADMİN / MİSAFİR: Tüm sayfalar ═══
+  const ROLE_LABELS: Record<string, string> = {
+    uretim_sor: '🔧 ÜRETİM SORUMLUSU',
+    planlama: '📋 PLANLAMA',
+    depocu: '📦 DEPOCU',
+  }
+
+  // ═══ ADMİN / MİSAFİR / RBAC ROLLER: Tüm sayfalar ═══
   return (
     <>
       <Toaster theme="dark" position="bottom-right" richColors closeButton />
       {isGuest && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-amber/90 text-black text-center text-xs py-1 font-semibold">
           👁 MİSAFİR MODU — Salt okunur · <button onClick={signOut} className="underline">Çıkış</button>
+        </div>
+      )}
+      {ROLE_LABELS[role] && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-accent/90 text-white text-center text-xs py-1 font-semibold">
+          {ROLE_LABELS[role]} — {session.username} · <button onClick={signOut} className="underline">Çıkış</button>
         </div>
       )}
       <AdminRoutes onSignOut={signOut} />

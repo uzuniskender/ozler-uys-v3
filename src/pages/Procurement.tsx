@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
@@ -9,6 +10,7 @@ import { Search, Plus, Pencil, Trash2, Check, Download, Upload } from 'lucide-re
 
 export function Procurement() {
   const { tedarikler, tedarikciler, orders, loadAll } = useStore()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [durumFilter, setDurumFilter] = useState('bekliyor')
   const [showForm, setShowForm] = useState(false)
@@ -104,7 +106,7 @@ export function Procurement() {
         <div className="flex gap-2">
           <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarik</button>
+          {can('ted_add') && <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarik</button>}
         </div>
       </div>
 
@@ -144,9 +146,9 @@ export function Procurement() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex gap-1 justify-end">
-                      {!t.geldi && <button onClick={() => markGeldi(t.id)} className="p-1 text-zinc-500 hover:text-green" title="Geldi işaretle"><Check size={12} /></button>}
-                      <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
-                      <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                      {can('ted_geldi') && !t.geldi && <button onClick={() => markGeldi(t.id)} className="p-1 text-zinc-500 hover:text-green" title="Geldi işaretle"><Check size={12} /></button>}
+                      {can('ted_edit') && <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>}
+                      {can('ted_delete') && <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
                     </div>
                   </td>
                 </tr>
@@ -176,6 +178,7 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
   const [teslim, setTeslim] = useState((initial as Record<string, unknown>)?.teslimTarihi as string || '')
   const [not_, setNot] = useState((initial as Record<string, unknown>)?.not as string || '')
   const { materials } = useStore()
+  const { can } = useAuth()
 
   const ted = tedarikciler.find(t => t.id === tedarikcId)
   const ord = orders.find(o => o.id === orderId)

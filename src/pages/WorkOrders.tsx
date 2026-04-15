@@ -14,7 +14,7 @@ import { OprEntryModal } from '@/pages/OperatorPanel'
 
 export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, materials, loadAll } = useStore()
-  const { isGuest } = useAuth()
+  const { can, isGuest } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['siparis', 'ym']))
@@ -214,7 +214,7 @@ export function WorkOrders() {
             }
             if (count > 0) { loadAll(); toast.success(count + ' İE durumu güncellendi') } else toast.info('Tüm durumlar güncel')
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">🔄 Durumları Güncelle</button>
-          <button onClick={() => setShowNewIE(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>
+          {can('wo_add') && <button onClick={() => setShowNewIE(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>}
         </div>
       </div>
 
@@ -247,9 +247,9 @@ export function WorkOrders() {
           <button onClick={() => topluDurumGuncelle('uretimde')} className="px-2 py-1 bg-accent/20 text-accent rounded text-[10px] hover:bg-accent/30">→ Üretimde</button>
           <button onClick={() => topluDurumGuncelle('tamamlandi')} className="px-2 py-1 bg-green/20 text-green rounded text-[10px] hover:bg-green/30">→ Tamamlandı</button>
           <button onClick={() => topluDurumGuncelle('beklemede')} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-[10px] hover:bg-purple-500/30">→ Beklemede</button>
-          <button onClick={() => topluDurumGuncelle('iptal')} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">→ İptal</button>
-          <button onClick={topluKopyala} className="px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded text-[10px] hover:bg-cyan-500/20 flex items-center gap-1"><Copy size={10} /> Kopyala</button>
-          <button onClick={topluSil} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">🗑 Sil</button>
+          {can('wo_status') && <button onClick={() => topluDurumGuncelle('iptal')} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">→ İptal</button>}
+          {can('wo_copy') && <button onClick={topluKopyala} className="px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded text-[10px] hover:bg-cyan-500/20 flex items-center gap-1"><Copy size={10} /> Kopyala</button>}
+          {can('wo_delete') && <button onClick={topluSil} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">🗑 Sil</button>}
           <span className="flex-1" />
           <button onClick={selectAll} className="text-[10px] text-zinc-500 hover:text-white">Tümünü Seç</button>
           <button onClick={selectNone} className="text-[10px] text-zinc-500 hover:text-white">Seçimi Kaldır</button>
@@ -304,7 +304,7 @@ export function WorkOrders() {
                         <td className="px-3 py-1.5 text-right font-mono"><b>{prod}</b><span className="text-zinc-600">/{w.hedef}</span></td>
                         <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : pct > 0 ? 'bg-accent' : 'bg-zinc-700'}`} style={{ width: `${Math.max(2, pct)}%` }} /></div><span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span></div></td>
                         <td className="px-3 py-1.5">
-                          <select value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
+                          <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
                             <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                           </select>
                         </td>
@@ -328,6 +328,7 @@ export function WorkOrders() {
 
 function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, loadAll }: any) {
   const { durusKodlari } = useStore()
+  const { can } = useAuth()
   const [adminEntryWO, setAdminEntryWO] = useState<string | null>(null)
   const prod = wProd(wo.id); const pct = wPct(wo); const kalan = Math.max(0, wo.hedef - prod)
 
@@ -429,7 +430,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
         {wo.whAlloc > 0 && <div className="mb-3 text-[10px] px-2 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/15 inline-block">Depodan kullanılan: {wo.whAlloc} adet</div>}
 
         <div className="grid grid-cols-4 gap-3 mb-4">
-          <div className="bg-bg-2 border border-border rounded-lg p-3 text-center"><div className="text-[10px] text-zinc-500 font-mono mb-1">HEDEF</div><div className="text-xl font-mono font-bold cursor-pointer hover:text-accent" onClick={() => updateHedef(wo.id)}>{wo.hedef}</div></div>
+          <div className="bg-bg-2 border border-border rounded-lg p-3 text-center"><div className="text-[10px] text-zinc-500 font-mono mb-1">HEDEF</div><div className={`text-xl font-mono font-bold ${can('wo_edit') ? 'cursor-pointer hover:text-accent' : ''}`} onClick={() => can('wo_edit') && updateHedef(wo.id)}>{wo.hedef}</div></div>
           <div className="bg-bg-2 border border-border rounded-lg p-3 text-center"><div className="text-[10px] text-zinc-500 font-mono mb-1">GERÇEKLEŞEN</div><div className={`text-xl font-mono font-bold ${pctColor(pct)}`}>{prod}</div></div>
           <div className="bg-bg-2 border border-border rounded-lg p-3 text-center"><div className="text-[10px] text-zinc-500 font-mono mb-1">KALAN</div><div className="text-xl font-mono font-bold">{kalan}</div></div>
           <div className="bg-bg-2 border border-border rounded-lg p-3 text-center"><div className="text-[10px] text-zinc-500 font-mono mb-1">TAHMİNİ</div><div className="text-sm font-mono text-accent">{kalan <= 0 ? '✅' : tahminiGun > 0 ? `${tahminiGun} gün` : '—'}</div></div>
@@ -445,10 +446,10 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
         </div>
 
         <div className="flex gap-2 mb-4 flex-wrap">
-          {(wo.durum === 'beklemede' || wo.durum === 'tamamlandi') && <button onClick={() => { setDurum(wo.id, 'uretimde'); onClose() }} className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">▶ {wo.durum === 'tamamlandi' ? 'Devam Ettir' : 'Devam Et'}</button>}
-          {wo.durum !== 'beklemede' && wo.durum !== 'tamamlandi' && wo.durum !== 'iptal' && <button onClick={() => { setDurum(wo.id, 'beklemede'); onClose() }} className="px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs hover:bg-purple-500/20">⏸ Beklet</button>}
-          {wo.durum !== 'tamamlandi' && wo.durum !== 'iptal' && prod > 0 && <button onClick={() => { setDurum(wo.id, 'tamamlandi'); onClose() }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">✓ Tamamla</button>}
-          {wo.durum !== 'iptal' && wo.durum !== 'tamamlandi' && (prod === 0 ? <button onClick={() => { deleteWO(wo.id); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button> : <button onClick={() => { setDurum(wo.id, 'iptal'); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>)}
+          {can('wo_status') && (wo.durum === 'beklemede' || wo.durum === 'tamamlandi') && <button onClick={() => { setDurum(wo.id, 'uretimde'); onClose() }} className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">▶ {wo.durum === 'tamamlandi' ? 'Devam Ettir' : 'Devam Et'}</button>}
+          {can('wo_status') && wo.durum !== 'beklemede' && wo.durum !== 'tamamlandi' && wo.durum !== 'iptal' && <button onClick={() => { setDurum(wo.id, 'beklemede'); onClose() }} className="px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs hover:bg-purple-500/20">⏸ Beklet</button>}
+          {can('wo_status') && wo.durum !== 'tamamlandi' && wo.durum !== 'iptal' && prod > 0 && <button onClick={() => { setDurum(wo.id, 'tamamlandi'); onClose() }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">✓ Tamamla</button>}
+          {wo.durum !== 'iptal' && wo.durum !== 'tamamlandi' && (prod === 0 ? (can('wo_delete') && <button onClick={() => { deleteWO(wo.id); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button>) : (can('wo_status') && <button onClick={() => { setDurum(wo.id, 'iptal'); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>))}
         </div>
 
         {(() => {
@@ -484,7 +485,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
 
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold">Hareket Geçmişi ({woLogs.length} kayıt)</h3>
-          <button onClick={() => setAdminEntryWO(wo.id)} className="px-3 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-semibold hover:bg-green/20">+ Kayıt Ekle</button>
+          {can('wo_entry') && <button onClick={() => setAdminEntryWO(wo.id)} className="px-3 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-xs font-semibold hover:bg-green/20">+ Kayıt Ekle</button>}
         </div>
         {woLogs.length > 0 ? (
           <div className="overflow-x-auto mb-4"><table className="w-full text-xs min-w-[500px]"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-right px-3 py-2">Adet</th><th className="text-left px-3 py-2">Operatör / Duruş</th><th className="text-left px-3 py-2">Not</th><th className="px-3 py-2"></th></tr></thead><tbody>

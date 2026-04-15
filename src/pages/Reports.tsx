@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { today } from '@/lib/utils'
@@ -8,6 +9,7 @@ const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899'
 
 export function Reports() {
   const { workOrders, logs, operators, fireLogs, orders, operations } = useStore()
+  const { can } = useAuth()
   const [tab, setTab] = useState('ozet')
 
   // Detaylı Rapor filtreleri

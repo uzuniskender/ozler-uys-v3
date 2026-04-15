@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -8,6 +9,7 @@ import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
 
 export function Suppliers() {
   const { tedarikciler, loadAll } = useStore()
+  const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<typeof tedarikciler[0] | null>(null)
@@ -41,7 +43,7 @@ export function Suppliers() {
             const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
             XLSX.utils.book_append_sheet(wb, ws, 'Tedarikçiler'); XLSX.writeFile(wb, 'tedarikciler.xlsx')
           })}} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
-          <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarikçi</button>
+          {can('tedci_add') && <button onClick={async () => { setEditItem(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Tedarikçi</button>}
         </div>
       </div>
       <div className="relative max-w-xs mb-4"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -59,8 +61,8 @@ export function Suppliers() {
                   <td className="px-4 py-2 text-zinc-500">{t.email || '—'}</td>
                   <td className="px-4 py-2 text-zinc-600 max-w-[150px] truncate">{t.not || '—'}</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>
-                    <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>
+                    {can('tedci_edit') && <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>}
+                    {can('tedci_delete') && <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
                   </td>
                 </tr>
               ))}

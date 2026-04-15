@@ -4,7 +4,7 @@ import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -147,6 +147,11 @@ const M = {
     onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
     not: (r.not_ || '') as string, olusturan: (r.olusturan || 'admin') as string,
   }),
+  kullanici: (r: Record<string, unknown>): Kullanici => ({
+    id: r.id as string, ad: (r.ad || '') as string,
+    kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
+    rol: (r.rol || 'planlama') as Kullanici['rol'], aktif: r.aktif !== false,
+  }),
 }
 
 interface UYSStore {
@@ -157,7 +162,7 @@ interface UYSStore {
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
-  izinler: Izin[]
+  izinler: Izin[]; kullanicilar: Kullanici[]
   loading: boolean; synced: boolean
   loadAll: () => Promise<void>
   setOrders: (orders: Order[]) => void
@@ -186,13 +191,14 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
   { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
   { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
   { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
+  { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
 ]
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [],
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [],
   loading: true, synced: false,
 
   loadAll: async () => {

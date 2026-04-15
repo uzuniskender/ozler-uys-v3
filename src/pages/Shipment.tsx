@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -8,6 +9,7 @@ import { Plus, Truck, Download, Eye } from 'lucide-react'
 
 export function Shipment() {
   const { sevkler, orders, workOrders, logs, stokHareketler, loadAll } = useStore()
+  const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
 
@@ -40,7 +42,7 @@ export function Shipment() {
         <div><h1 className="text-xl font-semibold">Sevkiyat</h1><p className="text-xs text-zinc-500">{sevkler.length} sevkiyat</p></div>
         <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sevkiyat</button>
+          {can('sevk_add') && <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sevkiyat</button>}
         </div>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
@@ -60,7 +62,7 @@ export function Shipment() {
                   <td className="px-4 py-2 text-zinc-500 max-w-[200px] truncate">{s.not || '—'}</td>
                   <td className="px-4 py-2 text-right flex gap-1 justify-end">
                     <button onClick={() => setDetailId(s.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={12} /></button>
-                    <button onClick={() => deleteSevk(s.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                    {can('sevk_delete') && <button onClick={() => deleteSevk(s.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
                   </td>
                 </tr>)
               })}

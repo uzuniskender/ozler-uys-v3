@@ -6,11 +6,12 @@ import { useAuth } from '@/hooks/useAuth'
 
 export function Layout({ onSignOut }: { onSignOut: () => void }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { isGuest } = useAuth()
+  const { isGuest, role } = useAuth()
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
+  const hasTopBanner = isGuest || role === 'uretim_sor' || role === 'planlama' || role === 'depocu'
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className={`flex h-screen overflow-hidden ${hasTopBanner ? 'pt-7' : ''}`}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
         {isTestMode && (
