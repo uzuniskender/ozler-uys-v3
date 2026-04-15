@@ -211,6 +211,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   const [qty, setQty] = useState('')
   const [fire, setFire] = useState('')
   const [not, setNot] = useState('')
+  const [tarih, setTarih] = useState(today())
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
 
@@ -324,7 +325,6 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     setSaving(true)
 
     const logId = uid()
-    const tarih = today()
 
     // Üretim logu
     await supabase.from('uys_logs').insert({
@@ -450,6 +450,12 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
         )}
 
         <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-zinc-500">Kayıt Tarihi</label>
+            <input type="date" value={tarih} onChange={e => setTarih(e.target.value)}
+              className="px-2 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+            {tarih !== today() && <span className="text-[10px] text-amber font-semibold">⚠ Farklı tarih</span>}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-zinc-500 mb-1 block">Üretim Adedi *</label>
@@ -545,6 +551,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
     acikWOs.slice(0, 20).map(w => ({ woId: w.id, qty: '', fire: '' }))
   )
   const [oprId, setOprId] = useState('')
+  const [tarih, setTarih] = useState(today())
   const [saving, setSaving] = useState(false)
 
   function updateRow(i: number, field: string, value: string) {
@@ -557,7 +564,6 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
     setSaving(true)
 
     const opr = operators.find(o => o.id === oprId)
-    const tarih = today()
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
 
@@ -614,12 +620,20 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
         </div>
 
-        <div className="mb-4">
-          <label className="text-[11px] text-zinc-500 mb-1 block">Operatör (tümü için)</label>
-          <select value={oprId} onChange={e => setOprId(e.target.value)} className="w-full max-w-xs px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
-            <option value="">— Seçin —</option>
-            {aktifOprs.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
-          </select>
+        <div className="mb-4 flex items-end gap-4">
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Operatör (tümü için)</label>
+            <select value={oprId} onChange={e => setOprId(e.target.value)} className="w-full max-w-xs px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+              <option value="">— Seçin —</option>
+              {aktifOprs.map(o => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Kayıt Tarihi</label>
+            <input type="date" value={tarih} onChange={e => setTarih(e.target.value)}
+              className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+          {tarih !== today() && <span className="text-[10px] text-amber font-semibold pb-2">⚠ Farklı tarih</span>}
         </div>
 
         <table className="w-full text-xs">

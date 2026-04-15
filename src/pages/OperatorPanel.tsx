@@ -658,6 +658,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   const [qty, setQty] = useState(editLog ? String(editLog.qty) : draft?.qty || '')
   const [fire, setFire] = useState(editLog ? String(editLog.fire || 0) : draft?.fire || '')
   const [aciklama, setAciklama] = useState(editLog?.not || draft?.aciklama || '')
+  const [tarih, setTarih] = useState(editLog?.tarih || today())
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>(
     editLog?.duruslar
@@ -812,7 +813,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
           tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
-          tarih: today(), log_id: editLogId, wo_id: woId,
+          tarih, log_id: editLogId, wo_id: woId,
         })
         for (const hm of hmSatirlar) {
           const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
@@ -820,7 +821,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
             await supabase.from('uys_stok_hareketler').insert({
               id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
               tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim (düzenlendi)',
-              tarih: today(), log_id: editLogId, wo_id: woId,
+              tarih, log_id: editLogId, wo_id: woId,
             })
           }
         }
@@ -829,7 +830,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       // YENİ KAYIT MODU
       const logId = uid()
       await supabase.from('uys_logs').insert({
-        id: logId, wo_id: woId, tarih: today(), qty: q, fire: f,
+        id: logId, wo_id: woId, tarih, qty: q, fire: f,
         operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
         not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
       })
@@ -837,7 +838,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
           tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
-          tarih: today(), log_id: logId, wo_id: woId,
+          tarih, log_id: logId, wo_id: woId,
         })
         for (const hm of hmSatirlar) {
           const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
@@ -845,7 +846,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
             await supabase.from('uys_stok_hareketler').insert({
               id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
               tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
-              tarih: today(), log_id: logId, wo_id: woId,
+              tarih, log_id: logId, wo_id: woId,
             })
           }
         }
@@ -853,7 +854,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     }
     if (f > 0 && !editLog) {
       await supabase.from('uys_fire_logs').insert({
-        id: uid(), wo_id: woId, tarih: today(), miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
+        id: uid(), wo_id: woId, tarih, miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
       })
     }
     // ═══ AUTO-CLOSE: İE tamamlandı mı? ═══
@@ -895,6 +896,13 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
             <div className="bg-bg-2 rounded-lg p-2"><div className="text-[10px] text-zinc-500">Hedef</div><div className="text-sm font-bold">{w.hedef}</div></div>
             <div className="bg-bg-2 rounded-lg p-2"><div className="text-[10px] text-green">Yapılan</div><div className="text-sm font-bold text-green">{prod}</div></div>
             <div className="bg-bg-2 rounded-lg p-2"><div className="text-[10px] text-amber">Kalan</div><div className="text-sm font-bold text-amber">{kalan}</div></div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] text-zinc-500">Kayıt Tarihi</label>
+            <input type="date" value={tarih} onChange={e => setTarih(e.target.value)}
+              className="px-2 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+            {tarih !== today() && <span className="text-[10px] text-amber font-semibold">⚠ Farklı tarih</span>}
           </div>
 
           {hmSatirlar.length > 0 && (
