@@ -92,8 +92,8 @@ export function DataManagement() {
         <div><h1 className="text-xl font-semibold">Veri Yönetimi</h1></div>
         <div className="flex gap-2">
           <button onClick={() => store.loadAll()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><RefreshCw size={13} /> Yenile</button>
-          <button onClick={importJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20"><Upload size={13} /> JSON Geri Yükle</button>
-          <button onClick={() => {
+          {can('data_import') && <button onClick={importJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20"><Upload size={13} /> JSON Geri Yükle</button>}
+          {can('data_export') && <button onClick={() => {
             import('xlsx').then(XLSX => {
               const wb = XLSX.utils.book_new()
               tables.forEach(t => {
@@ -105,8 +105,8 @@ export function DataManagement() {
               XLSX.writeFile(wb, `uys_tum_veriler_${today()}.xlsx`)
               toast.success('Tüm veriler Excel\'e aktarıldı')
             })
-          }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel Aktar</button>
-          <button onClick={exportJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Download size={13} /> JSON Yedek</button>
+          }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel Aktar</button>}
+          {can('data_backup') && <button onClick={exportJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Download size={13} /> JSON Yedek</button>}
         </div>
       </div>
 
@@ -172,7 +172,7 @@ export function DataManagement() {
       </div>
 
       {/* #24: Sistem Testi */}
-      <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+      {can('data_syscheck') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
         <div className="text-sm font-semibold mb-2">🔍 Sistem Testi</div>
         <button onClick={async () => {
           const sorunlar: string[] = []
@@ -216,17 +216,17 @@ export function DataManagement() {
         }} className="px-4 py-2 bg-accent/10 border border-accent/25 text-accent rounded-lg text-xs hover:bg-accent/20">
           Sistem Testi Çalıştır
         </button>
-      </div>
+      </div>}
 
       {/* Test Modu — Snapshot bazlı */}
-      <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
+      {can('data_test') && <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
         <div className="text-sm font-semibold text-zinc-300 mb-2">🧪 Test Ortamı</div>
         <p className="text-xs text-zinc-500 mb-3">Açıldığında mevcut verilerin anlık görüntüsü kaydedilir. Test sırasında eklenen tüm veriler tek tuşla silinir.</p>
         <TestModuPanel />
-      </div>
+      </div>}
 
       {/* Admin Şifre */}
-      <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+      {can('data_pass') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
         <div className="text-sm font-semibold text-zinc-300 mb-2">🔐 Admin Şifre (Silme Koruması)</div>
         <p className="text-xs text-zinc-500 mb-3">Ayarlanırsa İE silme/iptal işlemlerinde şifre sorulur.</p>
         <div className="flex gap-2">
@@ -238,7 +238,7 @@ export function DataManagement() {
             else { localStorage.removeItem('uys_admin_pass'); toast.success('Admin şifre kaldırıldı') }
           }} className="px-3 py-2 bg-accent text-white rounded-lg text-xs">Kaydet</button>
         </div>
-      </div>
+      </div>}
 
       {/* Kullanıcı Yönetimi — RBAC */}
       {can('data_pass') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
@@ -248,10 +248,10 @@ export function DataManagement() {
       </div>}
 
       {/* #35: Sıfırlama İşlemleri — seçimli */}
-      <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
+      {can('data_reset') && <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
         <div className="text-sm font-semibold text-red mb-3">⚠ Sıfırlama İşlemleri — Silinecek kalemleri seçin</div>
         <SifirlamaSecimli />
-      </div>
+      </div>}
     </div>
   )
 }
