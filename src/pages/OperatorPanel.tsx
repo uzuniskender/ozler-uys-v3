@@ -332,7 +332,13 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                       <div>
                         <span className="font-mono text-accent text-xs font-bold">{aw?.ieNo || '—'}</span>
                         <div className="text-xs text-zinc-300">{a.woAd?.slice(0, 35)}</div>
-                        <div className="text-[10px] text-zinc-500">Başlangıç: {a.baslangic}</div>
+                        <div className="text-[10px] text-zinc-500 flex items-center gap-1">
+                          Başlangıç:
+                          <input type="time" value={a.baslangic || ''} onChange={async (e) => {
+                            await supabase.from('uys_active_work').update({ baslangic: e.target.value }).eq('id', a.id)
+                            loadAll()
+                          }} className="px-1 py-0.5 bg-bg-3 border border-border rounded text-[10px] text-zinc-200 focus:outline-none focus:border-accent" />
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => aw && setEntryWO({ woId: aw.id })} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-[11px] font-semibold hover:bg-accent/30">
