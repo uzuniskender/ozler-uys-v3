@@ -58,7 +58,7 @@ export function Materials() {
       if (hmTipFilter.size > 0 && !hmTipFilter.has((m.hammaddeTipi || '').toLocaleUpperCase('tr-TR'))) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
       if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
-      if (dimBoyUz && !dimMatch(m.boy, dimBoyUz) && !dimMatch(m.uzunluk, dimBoyUz) && !dimMatch(m.en, dimBoyUz)) return false
+      if (dimBoyUz && !dimMatch(m.boy, dimBoyUz)) return false
       if (dimCap && !dimMatch(m.cap, dimCap)) return false
       if (dimKalinlik && !dimMatch(m.kalinlik, dimKalinlik)) return false
       // Sütun başı filtreleri
