@@ -33,9 +33,11 @@ export function Materials() {
 
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
   const hmTipler = useMemo(() => {
-    // Sabit liste kullan (4 seçenek — kullanıcı isteği)
-    return ['BORU', 'PROFİL', 'LEVHA', 'SAC']
-  }, [])
+    // Sabit liste + DB'deki mevcut değerler (kullanıcı ekleyebilsin)
+    const sabit = ['BORU', 'PROFİL', 'LEVHA', 'SAC', 'ÇUBUK', 'NPU']
+    const dbValues = materials.map(m => (m.hammaddeTipi || '').toLocaleUpperCase('tr-TR')).filter(Boolean)
+    return [...new Set([...sabit, ...dbValues])].sort()
+  }, [materials])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   // Ölçü eşleştirme: string başlangıç eşleşmesi
@@ -384,14 +386,14 @@ export function Materials() {
           {filtered.length > 300 && <div className="p-2 text-center text-zinc-600 text-[10px]">+{filtered.length - 300} daha</div>}
         </div>
       </div>
-      {showForm && <MatFormModal initial={editItem} operations={operations} tipler={tipler} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAll(); toast.success(editItem ? 'Güncellendi' : 'Eklendi') }} />}
+      {showForm && <MatFormModal initial={editItem} operations={operations} tipler={tipler} hmTipler={hmTipler} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAll(); toast.success(editItem ? 'Güncellendi' : 'Eklendi') }} />}
     </div>
   )
 }
 
-function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
+function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved }: {
   initial: Material | null; operations: { id: string; kod: string; ad: string }[]
-  tipler: string[]; onClose: () => void; onSaved: () => void
+  tipler: string[]; hmTipler: string[]; onClose: () => void; onSaved: () => void
 }) {
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')
@@ -609,12 +611,18 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
             </select></div>
           </div>
           {tip === 'Hammadde' && (
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
-            <select value={(hammaddeTipi || '').toLocaleUpperCase('tr-TR')} onChange={e => setHammaddeTipi(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-              <option value="">— Seçin —</option>
-              <option value="BORU">BORU</option><option value="PROFİL">PROFİL</option>
-              <option value="LEVHA">LEVHA</option><option value="SAC">SAC</option>
-            </select></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi <span className="text-zinc-600 text-[9px]">(seçin veya yazın)</span></label>
+            <input
+              list="hm-tipler-datalist"
+              value={hammaddeTipi}
+              onChange={e => setHammaddeTipi(e.target.value.toLocaleUpperCase('tr-TR'))}
+              placeholder="BORU, PROFİL, LEVHA, SAC, ÇUBUK, NPU..."
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
+            />
+            <datalist id="hm-tipler-datalist">
+              {hmTipler.map(t => <option key={t} value={t} />)}
+            </datalist>
+            </div>
           )}
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
           <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
