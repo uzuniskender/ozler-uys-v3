@@ -103,12 +103,15 @@ export function Materials() {
       }
     }
 
-    // 4. İş emirlerinde — malkod eşleşen satırları güncelle
-    const linkedWOs = workOrders.filter(w => w.malkod === m.kod || w.mamulKod === m.kod)
+    // 4. İş emirlerinde — malkod eşleşen satırları + hm array güncelle
+    const linkedWOs = workOrders.filter(w => w.malkod === m.kod || w.mamulKod === m.kod || (w.hm || []).some(h => h.malkod === m.kod))
     for (const wo of linkedWOs) {
-      const updates: Record<string, string> = {}
+      const updates: Record<string, unknown> = {}
       if (wo.malkod === m.kod && wo.malad !== ad) updates.malad = ad
       if (wo.mamulKod === m.kod && wo.mamulAd !== ad) updates.mamul_ad = ad
+      if ((wo.hm || []).some(h => h.malkod === m.kod)) {
+        updates.hm = (wo.hm || []).map(h => h.malkod === m.kod ? { ...h, malad: ad } : h)
+      }
       if (Object.keys(updates).length > 0) {
         await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
         woCount++
@@ -165,12 +168,15 @@ export function Materials() {
       }
     }
 
-    // 4. İş emirlerinde — malkod ve mamulKod eşleşenleri güncelle
-    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod)
+    // 4. İş emirlerinde — malkod ve mamulKod eşleşenleri + hm array güncelle
+    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod || (w.hm || []).some(h => h.malkod === eskiKod))
     for (const wo of linkedWOs) {
-      const updates: Record<string, string> = {}
+      const updates: Record<string, unknown> = {}
       if (wo.malkod === eskiKod) updates.malkod = kod
       if (wo.mamulKod === eskiKod) updates.mamul_kod = kod
+      if ((wo.hm || []).some(h => h.malkod === eskiKod)) {
+        updates.hm = (wo.hm || []).map(h => h.malkod === eskiKod ? { ...h, malkod: kod } : h)
+      }
       if (Object.keys(updates).length > 0) {
         await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
         woCount++
@@ -500,14 +506,17 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
       if (Object.keys(updates).length > 0) { await supabase.from('uys_recipes').update(updates).eq('id', rc.id); rcC++ }
     }
 
-    // İş emirleri
-    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod)
+    // İş emirleri — hm array dahil
+    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod || (w.hm || []).some(h => h.malkod === eskiKod))
     for (const wo of linkedWOs) {
-      // Yeni revizyon modunda sadece açık İE'leri güncelle
       if (mode === 'sadece_acik' && (wo.durum === 'tamamlandi' || wo.durum === 'iptal')) continue
-      const updates: Record<string, string> = {}
+      const updates: Record<string, unknown> = {}
       if (wo.malkod === eskiKod) { if (kodChanged) updates.malkod = yeniKod; if (adChanged) updates.malad = yeniAd }
       if (wo.mamulKod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) updates.mamul_ad = yeniAd }
+      // hm array içindeki referansları güncelle
+      if ((wo.hm || []).some(h => h.malkod === eskiKod)) {
+        updates.hm = (wo.hm || []).map(h => h.malkod === eskiKod ? { ...h, malkod: kodChanged ? yeniKod : h.malkod, malad: adChanged ? yeniAd : h.malad } : h)
+      }
       if (Object.keys(updates).length > 0) { await supabase.from('uys_work_orders').update(updates).eq('id', wo.id); woC++ }
     }
     const extras = [bomC && `${bomC} ürün ağacı`, rcC && `${rcC} reçete`, woC && `${woC} iş emri`].filter(Boolean).join(' + ')

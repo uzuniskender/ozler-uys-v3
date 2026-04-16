@@ -92,20 +92,23 @@ export function BomTrees() {
       await supabase.from('uys_recipes').update({ ad, mamul_ad: ad, satirlar: rcRows }).eq('id', rc.id)
     }
 
-    // 3. İş emirleri güncelle — aynı mamulKod'a sahip olanlar
-    const linkedWOs = workOrders.filter(w => w.mamulKod === bt.mamulKod)
-    if (linkedWOs.length > 0) {
-      for (const wo of linkedWOs) {
-        const updates: Record<string, string> = { mamul_ad: ad }
-        // Kök iş emri (malzeme kodu = mamul kodu) ise malad da güncelle
-        if (wo.malkod === bt.mamulKod) updates.malad = ad
-        await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
+    // 3. İş emirleri güncelle — aynı mamulKod'a sahip olanlar + hm array
+    const linkedWOs = workOrders.filter(w => w.mamulKod === bt.mamulKod || (w.hm || []).some(h => h.malkod === bt.mamulKod))
+    let woCount = 0
+    for (const wo of linkedWOs) {
+      if (wo.durum === 'tamamlandi' || wo.durum === 'iptal') continue
+      const updates: Record<string, unknown> = { mamul_ad: ad }
+      if (wo.malkod === bt.mamulKod) updates.malad = ad
+      if ((wo.hm || []).some(h => h.malkod === bt.mamulKod)) {
+        updates.hm = (wo.hm || []).map(h => h.malkod === bt.mamulKod ? { ...h, malad: ad } : h)
       }
+      await supabase.from('uys_work_orders').update(updates).eq('id', wo.id)
+      woCount++
     }
 
     loadAll()
-    const toplam = linkedRecipes.length + linkedWOs.length
-    toast.success(`Ad güncellendi${toplam > 0 ? ` · ${linkedRecipes.length} reçete + ${linkedWOs.length} iş emri güncellendi` : ''}`)
+    const toplam = linkedRecipes.length + woCount
+    toast.success(`Ad güncellendi${toplam > 0 ? ` · ${linkedRecipes.length} reçete + ${woCount} iş emri güncellendi` : ''}`)
   }
 
   // #10: Excel Export

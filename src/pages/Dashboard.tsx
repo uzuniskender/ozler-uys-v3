@@ -9,6 +9,65 @@ import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag, CalendarX2, Bell } from 'lucide-react'
 
+/* ── Akış Kartı ── */
+const FLOW_COLORS: Record<string, { text: string; border: string; borderHover: string; bg: string; ring: string }> = {
+  accent:      { text: 'text-accent',      border: 'border-accent/20',      borderHover: 'hover:border-accent/50',      bg: 'bg-accent/20',      ring: 'border-accent/50 ring-accent/30' },
+  cyan:        { text: 'text-cyan',        border: 'border-cyan/20',        borderHover: 'hover:border-cyan/50',        bg: 'bg-cyan/20',        ring: 'border-cyan/50 ring-cyan/30' },
+  amber:       { text: 'text-amber',       border: 'border-amber/20',       borderHover: 'hover:border-amber/50',       bg: 'bg-amber/20',       ring: 'border-amber/50 ring-amber/30' },
+  green:       { text: 'text-green',       border: 'border-green/20',       borderHover: 'hover:border-green/50',       bg: 'bg-green/20',       ring: 'border-green/50 ring-green/30' },
+  red:         { text: 'text-red',         border: 'border-red/20',         borderHover: 'hover:border-red/50',         bg: 'bg-red/20',         ring: 'border-red/50 ring-red/30' },
+  'zinc-300':  { text: 'text-zinc-300',    border: 'border-zinc-600/30',    borderHover: 'hover:border-zinc-500/50',    bg: 'bg-zinc-600/20',    ring: 'border-zinc-500/50 ring-zinc-500/30' },
+  'zinc-500':  { text: 'text-zinc-500',    border: 'border-zinc-700/30',    borderHover: 'hover:border-zinc-600/50',    bg: 'bg-zinc-700/20',    ring: 'border-zinc-600/50 ring-zinc-600/30' },
+  'blue-400':  { text: 'text-blue-400',    border: 'border-blue-400/20',    borderHover: 'hover:border-blue-400/50',    bg: 'bg-blue-400/20',    ring: 'border-blue-400/50 ring-blue-400/30' },
+  'cyan-400':  { text: 'text-cyan-400',    border: 'border-cyan-400/20',    borderHover: 'hover:border-cyan-400/50',    bg: 'bg-cyan-400/20',    ring: 'border-cyan-400/50 ring-cyan-400/30' },
+  'purple-400':{ text: 'text-purple-400',  border: 'border-purple-400/20',  borderHover: 'hover:border-purple-400/50',  bg: 'bg-purple-400/20',  ring: 'border-purple-400/50 ring-purple-400/30' },
+}
+function flowColor(c: string) { return FLOW_COLORS[c] || FLOW_COLORS.accent }
+
+function FlowCard({ icon, label, count, sublabel, warning, color, onClick }: {
+  icon: string; label: string; count: number; sublabel: string; warning?: boolean; color: string; onClick: () => void
+}) {
+  const c = flowColor(color)
+  return (
+    <button
+      onClick={onClick}
+      className={`relative bg-bg-2 border rounded-lg p-3 text-left transition-all hover:scale-[1.02] active:scale-[0.98] ${
+        warning ? `${c.ring} ring-1` : `${c.border} ${c.borderHover}`
+      }`}
+      style={warning ? { animation: 'wfPulse 1.5s ease-in-out infinite' } : undefined}
+    >
+      <div className="flex items-start justify-between mb-1">
+        <span className="text-2xl leading-none">{icon}</span>
+        {warning && <span className={`text-[9px] ${c.bg} ${c.text} px-1.5 py-0.5 rounded font-bold`}>!</span>}
+      </div>
+      <div className={`text-xl font-bold font-mono ${c.text} mt-1`}>{count}</div>
+      <div className={`text-[11px] font-semibold ${c.text}`}>{label}</div>
+      <div className="text-[9px] text-zinc-500 truncate mt-0.5">{sublabel}</div>
+    </button>
+  )
+}
+
+/* ── Akış Oku ── */
+function FlowArrow() {
+  return (
+    <div className="flex items-center justify-center text-zinc-600">
+      <ArrowRight size={20} />
+    </div>
+  )
+}
+
+/* ── Hızlı Erişim Kartı ── */
+function QuickCard({ icon, label, sub, color, onClick }: { icon: string; label: string; sub: string; color: string; onClick: () => void }) {
+  const c = flowColor(color)
+  return (
+    <button onClick={onClick} className={`bg-bg-2 border ${c.border} ${c.borderHover} rounded-xl p-3 text-left transition-all hover:scale-[1.02] active:scale-[0.98]`}>
+      <div className="text-2xl mb-1">{icon}</div>
+      <div className={`text-xs font-bold ${c.text} mb-0.5`}>{label}</div>
+      <div className="text-[10px] text-zinc-500 truncate">{sub}</div>
+    </button>
+  )
+}
+
 /* ── #2: Tıklanabilir Stat Card ── */
 function StatCard({ value, label, color, icon: Icon, onClick }: {
   value: number | string; label: string; color: string; icon: React.ElementType; onClick?: () => void
@@ -59,7 +118,7 @@ export function Dashboard() {
     fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
     operations, stations, sevkler, izinler, recipes, loadAll,
   } = useStore()
-  const { can, isGuest } = useAuth()
+  const { can, isGuest, role } = useAuth()
   const todayStr = today()
 
   // ═══ TEMEL HESAPLAMALAR ═══
@@ -171,6 +230,17 @@ export function Dashboard() {
     return stok < m.minStok
   })
 
+  // ═══ Üretim Akış Şeması verileri ═══
+  const siparisCount = aktifOrders.length
+  const recetesizCount = orders.filter(o => !o.receteId && aktifOrders.some(a => a.id === o.id)).length
+  const ieBekleyenCount = orders.filter(o => o.receteId && !workOrders.some(w => w.orderId === o.id) && aktifOrders.some(a => a.id === o.id)).length
+  const uretimCount = gercekAktif.length
+  const sevkBekleyenCount = buHaftaSevk.length
+  const tamamlananIE = workOrders.filter(w => {
+    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    return w.hedef > 0 && prod >= w.hedef && w.durum !== 'iptal'
+  }).length
+
   return (
     <div>
       <style>{`@keyframes wfPulse { 0%,100% { opacity:1; box-shadow:0 0 4px rgba(250,204,21,0.1) } 50% { opacity:.82; box-shadow:0 0 20px rgba(250,204,21,0.25) } }`}</style>
@@ -185,6 +255,112 @@ export function Dashboard() {
           {okunmamis.length > 0 && <div className="px-3 py-1.5 bg-amber/10 border border-amber/20 rounded-lg text-[11px] text-amber font-semibold">💬 {okunmamis.length} yeni mesaj</div>}
         </div>
       </div>
+
+      {/* ═══ ÜRETİM AKIŞ ŞEMASI ═══ */}
+      <div className="mb-6">
+        <div className="text-[10px] text-zinc-500 font-semibold mb-3 uppercase tracking-wider flex items-center gap-2">
+          <ArrowRight size={10} /> Üretim Akışı
+        </div>
+        <div className="bg-bg-1 border border-border rounded-xl p-4">
+          {/* İlk Satır: Sipariş → Reçete → İş Emri → Kesim Planı */}
+          <div className="grid grid-cols-7 gap-2 items-stretch">
+            <FlowCard
+              icon="📋" label="Sipariş" count={siparisCount}
+              sublabel={recetesizCount > 0 ? `${recetesizCount} reçetesiz` : 'Hepsi hazır'}
+              warning={recetesizCount > 0}
+              color="accent"
+              onClick={() => navigate('/orders')}
+            />
+            <FlowArrow />
+            <FlowCard
+              icon="📑" label="Reçete" count={recipes.length}
+              sublabel={recetesizCount > 0 ? `${recetesizCount} bağlanmadı` : 'Tamam'}
+              warning={recetesizCount > 0}
+              color="purple-400"
+              onClick={() => navigate('/recipes')}
+            />
+            <FlowArrow />
+            <FlowCard
+              icon="⚙" label="İş Emri" count={acikWOs.length}
+              sublabel={ieBekleyenCount > 0 ? `${ieBekleyenCount} oluşmadı` : `${tamamlananIE} tamamlandı`}
+              warning={ieBekleyenCount > 0}
+              color="zinc-300"
+              onClick={() => navigate('/work-orders')}
+            />
+            <FlowArrow />
+            <FlowCard
+              icon="✂️" label="Kesim Planı" count={kesimEksik + bekleyenKP}
+              sublabel={kesimEksik > 0 ? `${kesimEksik} planlanmadı` : `${bekleyenKP} bekliyor`}
+              warning={kesimEksik > 0}
+              color="amber"
+              onClick={() => navigate('/cutting')}
+            />
+          </div>
+          {/* İkinci Satır: MRP → Üretim → Sevk */}
+          <div className="grid grid-cols-5 gap-2 items-stretch mt-2">
+            <FlowCard
+              icon="📊" label="MRP" count={mrpYapilmamis}
+              sublabel={mrpYapilmamis > 0 ? 'Kesim sonrası hesapla' : 'Güncel'}
+              warning={mrpYapilmamis > 0}
+              color="cyan"
+              onClick={() => navigate('/mrp')}
+            />
+            <FlowArrow />
+            <FlowCard
+              icon="🔧" label="Üretim" count={uretimCount}
+              sublabel={uretimCount > 0 ? 'Aktif çalışma' : 'Bekliyor'}
+              color={uretimCount > 0 ? 'green' : 'zinc-500'}
+              onClick={() => navigate('/production')}
+            />
+            <FlowArrow />
+            <FlowCard
+              icon="🚚" label="Sevk" count={sevkBekleyenCount}
+              sublabel="Bu hafta"
+              color="blue-400"
+              onClick={() => navigate('/shipment')}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ ROL BAZLI HIZLI ERİŞİM ═══ */}
+      {role !== 'guest' && role !== 'operator' && (
+        <div className="mb-6">
+          <div className="text-[10px] text-zinc-500 font-semibold mb-3 uppercase tracking-wider flex items-center gap-2">
+            <ArrowRight size={10} /> Hızlı Erişim {role !== 'admin' && `— ${role === 'uretim_sor' ? 'Üretim Sorumlusu' : role === 'planlama' ? 'Planlama' : 'Depocu'}`}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {(() => {
+              const cards: { icon: string; label: string; sub: string; link: string; color: string }[] = []
+              if (role === 'admin' || role === 'planlama') {
+                cards.push({ icon: '📋', label: 'Siparişler', sub: `${aktifOrders.length} aktif`, link: '/orders', color: 'accent' })
+                cards.push({ icon: '📊', label: 'MRP', sub: mrpYapilmamis > 0 ? `${mrpYapilmamis} bekliyor` : 'Güncel', link: '/mrp', color: 'cyan' })
+                cards.push({ icon: '✂️', label: 'Kesim Planı', sub: `${bekleyenKP} plan`, link: '/cutting', color: 'amber' })
+                cards.push({ icon: '🌳', label: 'Ürün Ağacı', sub: 'BOM', link: '/bom', color: 'green' })
+                cards.push({ icon: '📑', label: 'Reçeteler', sub: `${recipes.length}`, link: '/recipes', color: 'purple-400' })
+              }
+              if (role === 'admin' || role === 'uretim_sor') {
+                cards.push({ icon: '⚙', label: 'İş Emirleri', sub: `${acikWOs.length} açık`, link: '/work-orders', color: 'zinc-300' })
+                cards.push({ icon: '🔧', label: 'Üretim', sub: `${uretimCount} aktif`, link: '/production', color: 'green' })
+                cards.push({ icon: '📈', label: 'Raporlar', sub: 'Analiz', link: '/reports', color: 'blue-400' })
+              }
+              if (role === 'admin' || role === 'depocu') {
+                cards.push({ icon: '📦', label: 'Stok / Depo', sub: `${materials.length} malzeme`, link: '/warehouse', color: 'amber' })
+                cards.push({ icon: '🚚', label: 'Tedarik', sub: bekleyenTed.length > 0 ? `${bekleyenTed.length} bekliyor` : 'Tamam', link: '/procurement', color: 'purple-400' })
+                cards.push({ icon: '📋', label: 'Malzemeler', sub: 'Katalog', link: '/materials', color: 'accent' })
+                cards.push({ icon: '🚢', label: 'Sevkiyat', sub: `${sevkBekleyenCount} bu hafta`, link: '/shipment', color: 'blue-400' })
+              }
+              if (role === 'admin') {
+                cards.push({ icon: '✅', label: 'Checklist', sub: 'Görev/İstek', link: '/checklist', color: 'purple-400' })
+                cards.push({ icon: '⚙️', label: 'Veri Yönetimi', sub: 'Ayarlar', link: '/data', color: 'zinc-300' })
+              }
+              const uniq = cards.filter((c, i, arr) => arr.findIndex(x => x.link === c.link) === i)
+              return uniq.slice(0, 12).map(c => (<QuickCard key={c.link} {...c} onClick={() => navigate(c.link)} />))
+            })()}
+          </div>
+        </div>
+      )}
+
 
       {/* ═══ #2: Tıklanabilir Stat Kartları ═══ */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
