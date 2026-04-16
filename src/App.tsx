@@ -27,6 +27,7 @@ import { DataManagement } from '@/pages/DataManagement'
 import { Procurement } from '@/pages/Procurement'
 import { OperatorPanel } from '@/pages/OperatorPanel'
 import { Checklist } from '@/pages/Checklist'
+import { Messages } from '@/pages/Messages'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
 
@@ -61,6 +62,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/data" element={<DataManagement />} />
           <Route path="/procurement" element={<Procurement />} />
           <Route path="/checklist" element={<Checklist />} />
+          <Route path="/messages" element={<Messages />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

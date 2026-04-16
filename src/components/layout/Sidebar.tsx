@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -14,6 +14,7 @@ const GUEST_PATHS = new Set(['/', '/orders', '/work-orders', '/cutting', '/mrp',
 const NAV = [
   { label: 'GENEL', items: [
     { path: '/', label: 'Genel Bakış', icon: LayoutDashboard, badge: 'dash', guest: true },
+    { path: '/messages', label: 'Mesajlar', icon: MessageSquare, badge: 'messages', guest: false },
   ]},
   { label: 'ÜRETİM', items: [
     { path: '/orders', label: 'Siparişler', icon: ClipboardList, badge: 'orders', guest: true },
@@ -67,6 +68,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     }
     if (key === 'dash') {
       const okunmamis = store.operatorNotes.filter(n => !n.okundu).length
+      return okunmamis > 0 ? String(okunmamis) : ''
+    }
+    if (key === 'messages') {
+      // Sadece operatörden gelen (yönetim dışı) ve okunmamış
+      const okunmamis = store.operatorNotes.filter(n => !n.okundu && !(n.opAd || '').includes('Yönetim')).length
       return okunmamis > 0 ? String(okunmamis) : ''
     }
     if (key === 'tedarikler') {
