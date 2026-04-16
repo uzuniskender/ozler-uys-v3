@@ -259,7 +259,7 @@ export function Dashboard() {
         </div>
         <div className="flex gap-2">
           {terminGecen.length > 0 && <div className="px-3 py-1.5 bg-red/10 border border-red/20 rounded-lg text-[11px] text-red font-semibold animate-pulse">⚠ {terminGecen.length} termin geçmiş</div>}
-          {okunmamis.length > 0 && <div className="px-3 py-1.5 bg-amber/10 border border-amber/20 rounded-lg text-[11px] text-amber font-semibold">💬 {okunmamis.length} yeni mesaj</div>}
+          {okunmamis.length > 0 && <button onClick={() => navigate('/messages')} className="px-3 py-1.5 bg-amber/10 border border-amber/20 rounded-lg text-[11px] text-amber font-semibold hover:bg-amber/20 transition">💬 {okunmamis.length} yeni mesaj</button>}
         </div>
       </div>
 
@@ -415,7 +415,7 @@ export function Dashboard() {
         <StatCard value={terminGecen.length} label="Termin Geçmiş" color="red" icon={AlertTriangle} onClick={() => navigate('/orders')} />
         <StatCard value={acikWOs.length} label="Açık İş Emri" color="zinc-300" icon={Clock} onClick={() => navigate('/work-orders')} />
         <StatCard value={toplamFire || '—'} label="Bugün Fire" color={toplamFire > 0 ? 'red' : 'zinc-500'} icon={Flame} onClick={() => navigate('/reports')} />
-        <StatCard value={okunmamis.length} label="Yeni Mesaj" color={okunmamis.length > 0 ? 'amber' : 'zinc-500'} icon={MessageSquare} />
+        <StatCard value={okunmamis.length} label="Yeni Mesaj" color={okunmamis.length > 0 ? 'amber' : 'zinc-500'} icon={MessageSquare} onClick={() => navigate('/messages')} />
         <StatCard value={gercekAktif.length} label="Aktif Çalışma" color={gercekAktif.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} onClick={() => navigate('/production')} />
       </div>
 
