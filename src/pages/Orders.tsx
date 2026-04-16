@@ -21,6 +21,7 @@ export function Orders() {
   const [editOrder, setEditOrder] = useState<Order | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
+  const [showBulkImport, setShowBulkImport] = useState(false)
 
   function selToggle(id: string) { setSelIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
 
@@ -72,49 +73,7 @@ export function Orders() {
     loadAll(); toast.success('Sipariş silindi')
   }
 
-  // #11: Toplu Sipariş Excel Import
-  async function topluSiparisYukle() {
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = '.xlsx,.xls'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      const XLSX = await import('xlsx')
-      const data = await file.arrayBuffer()
-      const wb = XLSX.read(data)
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
-      if (!rows.length) { toast.error('Excel boş'); return }
-
-      const { recipes: fullRecipes } = useStore.getState()
-      let created = 0, woTotal = 0
-      for (const row of rows) {
-        const sipNo = String(row['Sipariş No'] || row['SiparisNo'] || row['siparis_no'] || '').trim()
-        if (!sipNo) continue
-        const must = String(row['Müşteri'] || row['musteri'] || '').trim()
-        const term = String(row['Termin'] || row['termin'] || '').trim()
-        const adet = parseInt(String(row['Adet'] || row['adet'] || '1')) || 1
-        const mamulKod = String(row['Mamul Kod'] || row['mamulKod'] || row['mamul_kod'] || '').trim()
-        const mamulAd = String(row['Mamul Ad'] || row['mamulAd'] || row['mamul_ad'] || '').trim()
-
-        // Reçete eşleme
-        const rc = fullRecipes.find(r => r.mamulKod === mamulKod || r.ad === mamulAd)
-
-        const newId = uid()
-        await supabase.from('uys_orders').insert({
-          id: newId, siparis_no: sipNo, musteri: must, tarih: today(), termin: term,
-          mamul_kod: mamulKod || rc?.mamulKod || '', mamul_ad: mamulAd || rc?.mamulAd || '',
-          adet, recete_id: rc?.id || '', mrp_durum: 'bekliyor', olusturma: today(),
-          urunler: rc ? [{ rcId: rc.id, mamulKod: rc.mamulKod, mamulAd: rc.mamulAd, adet }] : [],
-        })
-        created++
-        if (rc) { woTotal += await buildWorkOrders(newId, sipNo, rc.id, adet, fullRecipes) }
-      }
-      loadAll()
-      toast.success(`${created} sipariş oluşturuldu, ${woTotal} İE üretildi`)
-    }
-    input.click()
-  }
+  // #11: Toplu Sipariş Excel Import → önizlemeli modal (BulkOrderImportModal)
 
   // Toplu MRP — seçili veya tüm açık siparişler
   async function topluMRP() {
@@ -168,7 +127,7 @@ export function Orders() {
         <div><h1 className="text-xl font-semibold">Siparişler</h1><p className="text-xs text-zinc-500">{orders.length} sipariş{isGuest ? ' (salt okunur)' : ''}</p></div>
         <div className="flex gap-2">
           <button onClick={downloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white" title="Şablon indir"><Download size={13} /> Şablon</button>
-          {can('orders_add') && <button onClick={topluSiparisYukle} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
+          {can('orders_add') && <button onClick={() => setShowBulkImport(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
           {can('orders_mrp') && <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>}
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           {can('orders_add') && <button onClick={async () => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>}
@@ -233,6 +192,7 @@ export function Orders() {
         ) : <div className="p-8 text-center text-zinc-600 text-sm">{search ? 'Arama sonucu bulunamadı' : 'Henüz sipariş yok'}</div>}
       </div>
       {showForm && <OrderFormModal initial={editOrder} recipes={recipes} onClose={() => { setShowForm(false); setEditOrder(null) }} onSaved={() => { setShowForm(false); setEditOrder(null); loadAll(); toast.success(editOrder ? 'Güncellendi' : 'Oluşturuldu') }} />}
+      {showBulkImport && <BulkOrderImportModal existingOrders={orders} recipes={recipes} onClose={() => setShowBulkImport(false)} onComplete={() => { setShowBulkImport(false); loadAll() }} />}
       {selectedOrder && <OrderDetailModal order={selectedOrder} workOrders={workOrders.filter(w => w.orderId === selectedOrder.id)} logs={logs} onClose={() => setSelectedOrder(null)} />}
     </div>
   )
@@ -538,6 +498,316 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
           </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ═══ Toplu Sipariş Excel Import — önizlemeli ═══
+type BulkRow = {
+  satir: number
+  siparisNo: string
+  musteri: string
+  termin: string
+  adet: number
+  mamulKod: string
+  mamulAd: string
+  not: string
+  receteId: string
+  receteAd: string
+  durum: 'ok' | 'warn' | 'error' | 'skip'
+  mesaj: string
+}
+
+function parseTarih(s: unknown): string | null {
+  if (!s) return null
+  // Excel serial number (number)
+  if (typeof s === 'number') {
+    if (s > 10000 && s < 100000) {
+      const d = new Date((s - 25569) * 86400 * 1000)
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    }
+    return null
+  }
+  const str = String(s).trim()
+  if (!str) return null
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(str); return !isNaN(d.getTime()) ? str : null
+  }
+  // DD.MM.YYYY / DD/MM/YYYY / DD-MM-YYYY
+  const m = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/)
+  if (m) {
+    const [, dd, mm, yyyy] = m
+    const iso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+    const d = new Date(iso); return !isNaN(d.getTime()) ? iso : null
+  }
+  // Son çare: JS Date parser dene
+  const d = new Date(str)
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  return null
+}
+
+function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: {
+  existingOrders: Order[]
+  recipes: { id: string; mamulKod: string; mamulAd: string; ad: string }[]
+  onClose: () => void
+  onComplete: () => void
+}) {
+  const [rows, setRows] = useState<BulkRow[]>([])
+  const [fileName, setFileName] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [progress, setProgress] = useState({ cur: 0, total: 0 })
+
+  async function handleFile(file: File) {
+    setParsing(true)
+    setFileName(file.name)
+    try {
+      const XLSX = await import('xlsx')
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data, { cellDates: false })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { raw: true, defval: '' })
+      if (!raw.length) { toast.error('Excel boş'); setParsing(false); return }
+
+      const existingSipNoSet = new Set(existingOrders.map(o => o.siparisNo))
+      const excelSipNoSeen = new Set<string>()
+
+      const parsed: BulkRow[] = raw.map((r, i) => {
+        const siparisNo = String(r['Sipariş No'] || r['SiparisNo'] || r['siparis_no'] || '').trim()
+        const musteri = String(r['Müşteri'] || r['musteri'] || '').trim()
+        const terminRaw = r['Termin'] ?? r['termin'] ?? ''
+        const adetRaw = r['Adet'] ?? r['adet'] ?? 1
+        const mamulKod = String(r['Mamul Kod'] || r['Mamul Kodu'] || r['mamulKod'] || r['mamul_kod'] || '').trim()
+        const mamulAd = String(r['Mamul Ad'] || r['Mamul Adı'] || r['mamulAd'] || r['mamul_ad'] || '').trim()
+        const not = String(r['Not'] || r['not'] || r['not_'] || '').trim()
+
+        const termin = parseTarih(terminRaw) || ''
+        const adet = typeof adetRaw === 'number' ? adetRaw : parseInt(String(adetRaw)) || 0
+
+        // Reçete eşleme: önce kod, sonra ad
+        const rc = mamulKod
+          ? recipes.find(x => x.mamulKod === mamulKod)
+          : mamulAd ? recipes.find(x => x.mamulAd === mamulAd || x.ad === mamulAd) : null
+
+        const out: BulkRow = {
+          satir: i + 2, siparisNo, musteri, termin, adet,
+          mamulKod: mamulKod || rc?.mamulKod || '',
+          mamulAd: mamulAd || rc?.mamulAd || '',
+          not,
+          receteId: rc?.id || '',
+          receteAd: rc ? (rc.mamulAd || rc.ad) : '',
+          durum: 'ok', mesaj: '',
+        }
+
+        // Validation sırası — ilk hatada dur
+        if (!siparisNo) { out.durum = 'error'; out.mesaj = 'Sipariş No boş'; return out }
+        if (excelSipNoSeen.has(siparisNo)) { out.durum = 'error'; out.mesaj = 'Excel içinde tekrar eden sipariş no'; return out }
+        excelSipNoSeen.add(siparisNo)
+        if (existingSipNoSet.has(siparisNo)) { out.durum = 'skip'; out.mesaj = 'Bu sipariş no zaten var — atlanacak'; return out }
+        if (!termin) { out.durum = 'error'; out.mesaj = 'Termin tarihi geçersiz'; return out }
+        if (!adet || adet < 1) { out.durum = 'error'; out.mesaj = 'Adet 1\'den küçük'; return out }
+        if (!mamulKod && !mamulAd) { out.durum = 'warn'; out.mesaj = 'Ürün bilgisi yok — İE oluşmaz'; return out }
+        if (!rc) { out.durum = 'warn'; out.mesaj = 'Reçete bulunamadı — sipariş oluşur ama İE oluşmaz' }
+        return out
+      })
+
+      setRows(parsed)
+    } catch (err) {
+      toast.error('Excel okuma hatası: ' + (err as Error).message)
+    }
+    setParsing(false)
+  }
+
+  async function executeImport() {
+    const kabul = rows.filter(r => r.durum === 'ok' || r.durum === 'warn')
+    if (!kabul.length) { toast.error('İçeri alınacak geçerli satır yok'); return }
+
+    setImporting(true)
+    setProgress({ cur: 0, total: kabul.length })
+
+    const { recipes: fullRecipes } = useStore.getState()
+
+    // Toplu insert — tek çağrıda tüm siparişler
+    const insertRows = kabul.map(r => ({
+      id: uid(),
+      siparis_no: r.siparisNo, musteri: r.musteri, tarih: today(), termin: r.termin,
+      mamul_kod: r.mamulKod, mamul_ad: r.mamulAd, adet: r.adet,
+      recete_id: r.receteId, not_: r.not,
+      mrp_durum: 'bekliyor', olusturma: today(),
+      urunler: r.receteId ? [{ rcId: r.receteId, mamulKod: r.mamulKod, mamulAd: r.mamulAd, adet: r.adet }] : [],
+    }))
+
+    const { error } = await supabase.from('uys_orders').insert(insertRows)
+    if (error) {
+      toast.error('DB hatası: ' + error.message); setImporting(false); return
+    }
+
+    // Her reçeteli sipariş için İE oluştur
+    let woTotal = 0
+    for (let i = 0; i < kabul.length; i++) {
+      const r = kabul[i]
+      const ins = insertRows[i]
+      if (r.receteId) {
+        woTotal += await buildWorkOrders(ins.id, r.siparisNo, r.receteId, r.adet, fullRecipes)
+      }
+      setProgress({ cur: i + 1, total: kabul.length })
+      // Activity log
+      try { logAction('Sipariş oluşturuldu (toplu)', r.siparisNo) } catch { /* log opsiyonel */ }
+    }
+
+    toast.success(`${kabul.length} sipariş oluşturuldu · ${woTotal} İE üretildi`)
+    setImporting(false)
+    onComplete()
+  }
+
+  const okCount = rows.filter(r => r.durum === 'ok').length
+  const warnCount = rows.filter(r => r.durum === 'warn').length
+  const errorCount = rows.filter(r => r.durum === 'error').length
+  const skipCount = rows.filter(r => r.durum === 'skip').length
+
+  function renkSinif(d: BulkRow['durum']) {
+    if (d === 'ok') return 'bg-green/5 border-l-2 border-green'
+    if (d === 'warn') return 'bg-amber/5 border-l-2 border-amber'
+    if (d === 'skip') return 'bg-zinc-700/20 border-l-2 border-zinc-600 opacity-60'
+    return 'bg-red/5 border-l-2 border-red'
+  }
+
+  function renkIkon(d: BulkRow['durum']) {
+    if (d === 'ok') return <span className="text-green">✓</span>
+    if (d === 'warn') return <span className="text-amber">⚠</span>
+    if (d === 'skip') return <span className="text-zinc-500">⏩</span>
+    return <span className="text-red">✗</span>
+  }
+
+  function sablonIndir() {
+    import('xlsx').then(XLSX => {
+      const ornekler = [
+        { 'Sipariş No': 'SIP-2026-001', 'Müşteri': 'ABC İnşaat', 'Termin': '2026-05-15', 'Adet': 100, 'Mamul Kod': '', 'Mamul Ad': '', 'Not': 'Örnek satır' },
+        { 'Sipariş No': 'SIP-2026-002', 'Müşteri': 'XYZ Ltd', 'Termin': '2026-06-01', 'Adet': 50, 'Mamul Kod': '', 'Mamul Ad': '', 'Not': '' },
+      ]
+      const ws = XLSX.utils.json_to_sheet(ornekler)
+      ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 15 }, { wch: 25 }, { wch: 30 }]
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Siparişler')
+      XLSX.writeFile(wb, 'siparis_sablonu.xlsx')
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Başlık */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+          <div>
+            <h2 className="text-base font-semibold">Toplu Sipariş Yükle</h2>
+            <p className="text-[11px] text-zinc-500">Excel dosyası seç · Önizlemeden sonra İçeri Al</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        {/* Dosya seçimi */}
+        <div className="p-5 border-b border-border">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={sablonIndir}
+              className="flex items-center gap-1.5 px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"
+            >
+              <Download size={13} /> Şablonu İndir
+            </button>
+            <button
+              onClick={() => {
+                const input = document.createElement('input')
+                input.type = 'file'; input.accept = '.xlsx,.xls'
+                input.onchange = (e) => {
+                  const f = (e.target as HTMLInputElement).files?.[0]
+                  if (f) handleFile(f)
+                }
+                input.click()
+              }}
+              disabled={parsing}
+              className="flex items-center gap-1.5 px-3 py-2 bg-accent/10 border border-accent/25 text-accent rounded-lg text-xs hover:bg-accent/20 disabled:opacity-40"
+            >
+              <Upload size={13} /> {parsing ? 'Okunuyor...' : fileName ? 'Başka Dosya Seç' : 'Excel Dosyası Seç'}
+            </button>
+            {fileName && <span className="text-[11px] text-zinc-500 truncate">📄 {fileName}</span>}
+          </div>
+          <div className="text-[10px] text-zinc-600 mt-2">
+            Beklenen kolonlar: <span className="font-mono text-zinc-400">Sipariş No, Müşteri, Termin, Adet, Mamul Kod, Mamul Ad, Not</span>
+          </div>
+        </div>
+
+        {/* Özet + Tablo */}
+        {rows.length > 0 && (
+          <>
+            <div className="px-5 py-2 border-b border-border flex items-center gap-3 text-xs flex-wrap">
+              <span className="text-zinc-500">{rows.length} satır okundu:</span>
+              {okCount > 0 && <span className="px-2 py-0.5 bg-green/10 text-green rounded">✓ {okCount} hazır</span>}
+              {warnCount > 0 && <span className="px-2 py-0.5 bg-amber/10 text-amber rounded">⚠ {warnCount} uyarı</span>}
+              {skipCount > 0 && <span className="px-2 py-0.5 bg-zinc-700/30 text-zinc-400 rounded">⏩ {skipCount} atlanacak</span>}
+              {errorCount > 0 && <span className="px-2 py-0.5 bg-red/10 text-red rounded">✗ {errorCount} hata</span>}
+            </div>
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-bg-1 border-b border-border z-10">
+                  <tr className="text-zinc-500">
+                    <th className="px-2 py-2 w-8"></th>
+                    <th className="px-2 py-2 w-10 text-right">#</th>
+                    <th className="text-left px-2 py-2">Sipariş No</th>
+                    <th className="text-left px-2 py-2">Müşteri</th>
+                    <th className="text-left px-2 py-2">Termin</th>
+                    <th className="text-right px-2 py-2">Adet</th>
+                    <th className="text-left px-2 py-2">Mamul / Reçete</th>
+                    <th className="text-left px-2 py-2">Durum / Mesaj</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.satir} className={`border-b border-border/30 ${renkSinif(r.durum)}`}>
+                      <td className="px-2 py-1.5 text-center">{renkIkon(r.durum)}</td>
+                      <td className="px-2 py-1.5 text-right text-zinc-600 font-mono">{r.satir}</td>
+                      <td className="px-2 py-1.5 font-mono text-accent">{r.siparisNo || <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-2 py-1.5 text-zinc-300 truncate max-w-[150px]">{r.musteri || <span className="text-zinc-600">—</span>}</td>
+                      <td className="px-2 py-1.5 font-mono text-zinc-400">{r.termin || <span className="text-red">—</span>}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{r.adet || <span className="text-red">—</span>}</td>
+                      <td className="px-2 py-1.5 text-zinc-400 truncate max-w-[200px]">
+                        {r.mamulKod && <span className="font-mono text-accent">{r.mamulKod}</span>}
+                        {r.mamulKod && r.receteAd && ' · '}
+                        {r.receteAd || r.mamulAd || <span className="text-zinc-600">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-[11px]">
+                        {r.mesaj || <span className="text-green">Hazır</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* İlerleme + Butonlar */}
+        <div className="px-5 py-3 border-t border-border flex items-center gap-3">
+          {importing && (
+            <div className="flex-1">
+              <div className="text-[11px] text-zinc-400 mb-1">İE oluşturuluyor · {progress.cur}/{progress.total}</div>
+              <div className="h-1.5 bg-bg-2 rounded-full overflow-hidden">
+                <div className="h-full bg-accent rounded-full transition-all" style={{ width: progress.total ? (progress.cur / progress.total * 100) + '%' : '0%' }} />
+              </div>
+            </div>
+          )}
+          {!importing && <div className="flex-1" />}
+          <button onClick={onClose} disabled={importing} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white disabled:opacity-40">
+            İptal
+          </button>
+          <button
+            onClick={executeImport}
+            disabled={importing || (okCount + warnCount) === 0}
+            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold"
+          >
+            {importing ? 'İçeri alınıyor...' : `${okCount + warnCount} sipariş İçeri Al`}
+          </button>
+        </div>
       </div>
     </div>
   )
