@@ -24,7 +24,7 @@ export function Materials() {
   const [editItem, setEditItem] = useState<Material | null>(null)
 
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
-  const hmTipler = useMemo(() => [...new Set(materials.map(m => m.hammaddeTipi).filter(Boolean))].sort(), [materials])
+  const hmTipler = useMemo(() => [...new Set(materials.map(m => (m.hammaddeTipi || '').toUpperCase()).filter(Boolean))].sort(), [materials])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   // Ölçü eşleştirme: string başlangıç eşleşmesi
@@ -43,7 +43,7 @@ export function Materials() {
     return materials.filter(m => {
       if (!showPasif && m.aktif === false) return false
       if (tipFilter.size > 0 && !tipFilter.has(m.tip)) return false
-      if (hmTipFilter.size > 0 && !hmTipFilter.has(m.hammaddeTipi || '')) return false
+      if (hmTipFilter.size > 0 && !hmTipFilter.has((m.hammaddeTipi || '').toUpperCase())) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
       if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
       if (dimBoyUz && !dimMatch(m.boy, dimBoyUz) && !dimMatch(m.uzunluk, dimBoyUz) && !dimMatch(m.en, dimBoyUz)) return false
@@ -211,7 +211,7 @@ export function Materials() {
         const dataRow: Record<string, unknown> = {
           kod, ad,
           tip: String(row['Tip'] || row['tip'] || 'Hammadde'),
-          hammadde_tipi: String(row['HM Tipi'] || row['Hammadde Tipi'] || row['hammadde_tipi'] || ''),
+          hammadde_tipi: String(row['HM Tipi'] || row['Hammadde Tipi'] || row['hammadde_tipi'] || '').toUpperCase(),
           birim: String(row['Birim'] || row['birim'] || 'Adet'),
           boy: parseFloat(String(row['Boy'] || row['boy'] || 0)) || 0,
           en: parseFloat(String(row['En'] || row['en'] || 0)) || 0,
@@ -269,8 +269,8 @@ export function Materials() {
         <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
         {hmTipler.length > 0 && <MultiCheckDropdown label="HM Tipi" options={hmTipler} selected={hmTipFilter} onChange={setHmTipFilter} />}
         <div className="relative w-24">
-          <input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="Boy/Uz" inputMode="decimal"
-            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" title="Boy / Uzunluk / En" />
+          <input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="Uzun K./Uz" inputMode="decimal"
+            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" title="Uzun Kenar / Uzunluk" />
         </div>
         <div className="relative w-20">
           <input value={dimCap} onChange={e => setDimCap(e.target.value)} placeholder="Çap" inputMode="decimal"
@@ -307,8 +307,9 @@ export function Materials() {
               <tr className="border-b border-border text-zinc-500 text-[10px] uppercase tracking-wider">
                 <th className="text-left px-3 py-2 w-[130px]">Kod</th><th className="text-left px-2 py-2">Malzeme Adı</th>
                 <th className="text-left px-2 py-2 w-[110px]">Tip</th><th className="text-center px-2 py-2 w-[50px]">Birim</th>
-                <th className="text-right px-2 py-2 w-[55px]">Boy</th><th className="text-right px-2 py-2 w-[45px]">En</th>
-                <th className="text-right px-2 py-2 w-[50px]">Kalınlık</th><th className="text-right px-2 py-2 w-[60px] text-amber">Uzunluk</th>
+                <th className="text-right px-2 py-2 w-[65px]">Uzun K.</th><th className="text-right px-2 py-2 w-[60px]">Kısa K.</th>
+                <th className="text-right px-2 py-2 w-[50px]">Kalınlık</th><th className="text-right px-2 py-2 w-[45px]">Çap</th>
+                <th className="text-right px-2 py-2 w-[60px] text-amber">Uzunluk</th>
                 <th className="text-left px-2 py-2 w-[120px]">Operasyon</th><th className="px-1 py-2 w-[80px]"></th>
               </tr>
             </thead>
@@ -341,6 +342,7 @@ export function Materials() {
                     <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.boy || '—'}</td>
                     <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.en || '—'}</td>
                     <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.kalinlik || '—'}</td>
+                    <td className="px-2 py-[5px] text-right font-mono text-zinc-500">{m.cap || '—'}</td>
                     <td className="px-2 py-[5px] text-right font-mono text-amber">{m.uzunluk || '—'}</td>
                     <td className="px-2 py-[5px] text-zinc-500 text-[10px] truncate">{op?.ad || '—'}</td>
                     <td className="px-1 py-[5px] text-right whitespace-nowrap opacity-0 group-hover/row:opacity-100 transition-opacity">
@@ -392,13 +394,15 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
     const benzerler = allMaterials.filter(m => m.kod.startsWith(prefix) && m.kod !== kod && m.boy > 0)
     if (benzerler.length) {
       const avg = { boy: Math.round(benzerler.reduce((a, m) => a + m.boy, 0) / benzerler.length), en: Math.round(benzerler.reduce((a, m) => a + (m.en || 0), 0) / benzerler.length) }
+      // Uzun > kısa garanti et
+      if (avg.en > avg.boy) { const t = avg.boy; avg.boy = avg.en; avg.en = t }
       if (!boy || boy === '0') setBoy(String(avg.boy))
       if ((!en || en === '0') && avg.en > 0) setEn(String(avg.en))
-      toast.info(`${benzerler.length} benzer malzemeden tahmin: Boy=${avg.boy}, En=${avg.en}`)
+      toast.info(`${benzerler.length} benzer malzemeden tahmin: Uzun K=${avg.boy}, Kısa K=${avg.en}`)
     } else {
       // Ad'dan rakam çıkarmayı dene
       const nums = ad.match(/(\d{3,})/g)
-      if (nums && nums.length >= 1) { setBoy(nums[0]); toast.info('Ad\'dan tahmin: Boy=' + nums[0]) }
+      if (nums && nums.length >= 1) { setBoy(nums[0]); toast.info('Ad\'dan tahmin: Uzun K=' + nums[0]) }
       else toast.info('Tahmin yapılamadı — benzer malzeme yok')
     }
   }
@@ -407,9 +411,16 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
     if (!kod.trim() || !ad.trim()) { toast.error('Kod ve Ad zorunlu'); return }
     setSaving(true)
     const op = operations.find(o => o.id === opId)
+    let boyNum = parseFloat(boy) || 0
+    let enNum = parseFloat(en) || 0
+    // Uzun kenar > Kısa kenar garanti et — swap gerekirse
+    if (enNum > boyNum && boyNum > 0) {
+      [boyNum, enNum] = [enNum, boyNum]
+      toast.info('Uzun kenar / Kısa kenar otomatik düzeltildi')
+    }
     const row: Record<string, unknown> = {
-      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? hammaddeTipi : '', birim, boy: parseFloat(boy) || 0,
-      en: parseFloat(en) || 0, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0,
+      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? (hammaddeTipi || '').toUpperCase() : '', birim, boy: boyNum,
+      en: enNum, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
     }
 
@@ -578,12 +589,12 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
           </div>
           {tip === 'Hammadde' && (
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
-            <select value={hammaddeTipi} onChange={e => setHammaddeTipi(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <select value={(hammaddeTipi || '').toUpperCase()} onChange={e => setHammaddeTipi(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>
-              <option value="Boru">Boru</option><option value="Profil">Profil</option>
-              <option value="Levha">Levha</option><option value="Sac">Sac</option>
-              <option value="Çubuk">Çubuk</option><option value="Lama">Lama</option>
-              <option value="Diğer">Diğer</option>
+              <option value="BORU">BORU</option><option value="PROFİL">PROFİL</option>
+              <option value="LEVHA">LEVHA</option><option value="SAC">SAC</option>
+              <option value="ÇUBUK">ÇUBUK</option><option value="LAMA">LAMA</option>
+              <option value="DİĞER">DİĞER</option>
             </select></div>
           )}
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
@@ -601,20 +612,23 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
           {/* Ölçü alanları — profil/boru/levha/sac */}
           <div className="p-3 bg-bg-3/30 border border-border/50 rounded-lg">
             <div className="text-[10px] text-zinc-500 mb-2">
-              {['Profil','Boru','Çubuk','Lama'].includes(hammaddeTipi) ? '📐 Kesit: Genişlik × Yükseklik × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
+              {['PROFİL','BORU','ÇUBUK','LAMA'].includes((hammaddeTipi || '').toUpperCase()) ? '📐 Kesit: Uzun Kenar × Kısa Kenar × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
             </div>
             <div className="grid grid-cols-4 gap-3">
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['Profil','Boru','Çubuk','Lama'].includes(hammaddeTipi) ? 'Genişlik (mm)' : 'Boy (mm)'}</label>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Uzun Kenar (mm)</label>
               <input type="number" value={boy} onChange={e => setBoy(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['Profil','Boru','Çubuk','Lama'].includes(hammaddeTipi) ? 'Yükseklik (mm)' : 'En (mm)'}</label>
-              <input type="number" value={en} onChange={e => setEn(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['Profil','Boru'].includes(hammaddeTipi) ? 'Et Kalınlığı (mm)' : 'Kalınlık (mm)'}</label>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Kısa Kenar (mm)</label>
+              <input type="number" value={en} onChange={e => setEn(e.target.value)} className={`w-full px-3 py-2 bg-bg-2 border rounded-lg text-sm text-zinc-200 focus:outline-none ${parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 ? 'border-red focus:border-red' : 'border-border focus:border-accent'}`} /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['PROFİL','BORU'].includes((hammaddeTipi || '').toUpperCase()) ? 'Et Kalınlığı (mm)' : 'Kalınlık (mm)'}</label>
               <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
               <div><label className="text-[11px] text-amber mb-1 block font-semibold">Uzunluk (mm)</label>
               <input type="number" value={uzunluk} onChange={e => setUzunluk(e.target.value)} placeholder="ör: 6000" className="w-full px-3 py-2 bg-bg-2 border border-amber/30 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-amber" /></div>
             </div>
+            {parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 && (
+              <div className="text-[10px] text-red mt-2">⚠ Kısa kenar, uzun kenardan büyük olamaz. Kaydetme sırasında otomatik düzeltilecek.</div>
+            )}
           </div>
-          <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden boy/en tahmin et</button>
+          <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden uzun/kısa kenar tahmin et</button>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
             <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>

@@ -310,7 +310,10 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
   async function save() {
     if (!ad.trim()) { toast.error('Ürün adı zorunlu'); return }
-    await supabase.from('uys_bom_trees').insert({ id: uid(), mamul_kod: mamulKod.trim(), mamul_ad: ad.trim(), ad: ad.trim(), rows: [{ id: uid(), kirno: '1', malkod: mamulKod.trim(), malad: ad.trim(), tip: 'Mamul', miktar: 1, birim: 'Adet' }] })
+    const mat = materials.find(m => m.kod === mamulKod.trim())
+    const kokTip = mat?.tip || 'Mamul'  // Malzeme kartından tip al, yoksa Mamul
+    const kokBirim = mat?.birim || 'Adet'
+    await supabase.from('uys_bom_trees').insert({ id: uid(), mamul_kod: mamulKod.trim(), mamul_ad: ad.trim(), ad: ad.trim(), rows: [{ id: uid(), kirno: '1', malkod: mamulKod.trim(), malad: ad.trim(), tip: kokTip, miktar: 1, birim: kokBirim }] })
     onSaved()
   }
   return (
