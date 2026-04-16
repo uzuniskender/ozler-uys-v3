@@ -5,14 +5,13 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
-import { Search, Download, Plus, Pencil, Trash2, Upload, Copy } from 'lucide-react'
+import { Download, Plus, Pencil, Trash2, Upload, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
 
 export function Materials() {
   const { materials, operations, recipes, bomTrees, workOrders, loadAll } = useStore()
   const { can, isGuest } = useAuth()
-  const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
   const [dimBoyUz, setDimBoyUz] = useState('')
@@ -23,8 +22,20 @@ export function Materials() {
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
 
+  // ═══ Sütun başı filtreleri ═══
+  const [fKod, setFKod] = useState('')
+  const [fAd, setFAd] = useState('')
+  const [fTip, setFTip] = useState('')
+  const [fBirim, setFBirim] = useState('')
+  const [fKisa, setFKisa] = useState('')
+  const [fUzunluk, setFUzunluk] = useState('')
+  const [fOp, setFOp] = useState('')
+
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
-  const hmTipler = useMemo(() => [...new Set(materials.map(m => (m.hammaddeTipi || '').toUpperCase()).filter(Boolean))].sort(), [materials])
+  const hmTipler = useMemo(() => {
+    // Sabit liste kullan (4 seçenek — kullanıcı isteği)
+    return ['BORU', 'PROFİL', 'LEVHA', 'SAC']
+  }, [])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   // Ölçü eşleştirme: string başlangıç eşleşmesi
@@ -43,16 +54,26 @@ export function Materials() {
     return materials.filter(m => {
       if (!showPasif && m.aktif === false) return false
       if (tipFilter.size > 0 && !tipFilter.has(m.tip)) return false
-      if (hmTipFilter.size > 0 && !hmTipFilter.has((m.hammaddeTipi || '').toUpperCase())) return false
+      if (hmTipFilter.size > 0 && !hmTipFilter.has((m.hammaddeTipi || '').toLocaleUpperCase('tr-TR'))) return false
       if (receteFilter === 'var' && (m.tip !== 'YarıMamul' || !receteKodSet.has(m.kod))) return false
       if (receteFilter === 'yok' && (m.tip !== 'YarıMamul' || receteKodSet.has(m.kod))) return false
       if (dimBoyUz && !dimMatch(m.boy, dimBoyUz) && !dimMatch(m.uzunluk, dimBoyUz) && !dimMatch(m.en, dimBoyUz)) return false
       if (dimCap && !dimMatch(m.cap, dimCap)) return false
       if (dimKalinlik && !dimMatch(m.kalinlik, dimKalinlik)) return false
-      if (search) return (m.kod + ' ' + m.ad).toLowerCase().includes(search.toLowerCase())
+      // Sütun başı filtreleri
+      if (fKod && !m.kod.toLowerCase().includes(fKod.toLowerCase())) return false
+      if (fAd && !m.ad.toLowerCase().includes(fAd.toLowerCase())) return false
+      if (fTip && !m.tip.toLowerCase().includes(fTip.toLowerCase())) return false
+      if (fBirim && !(m.birim || '').toLowerCase().includes(fBirim.toLowerCase())) return false
+      if (fKisa && !dimMatch(m.en, fKisa)) return false
+      if (fUzunluk && !dimMatch(m.uzunluk, fUzunluk)) return false
+      if (fOp) {
+        const op = operations.find(o => o.id === m.opId)
+        if (!op || !(op.ad || '').toLowerCase().includes(fOp.toLowerCase())) return false
+      }
       return true
     })
-  }, [materials, search, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet, showPasif])
+  }, [materials, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet, showPasif, fKod, fAd, fTip, fBirim, fKisa, fUzunluk, fOp, operations])
 
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
@@ -211,7 +232,7 @@ export function Materials() {
         const dataRow: Record<string, unknown> = {
           kod, ad,
           tip: String(row['Tip'] || row['tip'] || 'Hammadde'),
-          hammadde_tipi: String(row['HM Tipi'] || row['Hammadde Tipi'] || row['hammadde_tipi'] || '').toUpperCase(),
+          hammadde_tipi: String(row['HM Tipi'] || row['Hammadde Tipi'] || row['hammadde_tipi'] || '').toLocaleUpperCase('tr-TR'),
           birim: String(row['Birim'] || row['birim'] || 'Adet'),
           boy: parseFloat(String(row['Boy'] || row['boy'] || 0)) || 0,
           en: parseFloat(String(row['En'] || row['en'] || 0)) || 0,
@@ -261,34 +282,20 @@ export function Materials() {
         </div>
       </div>
       <div className="flex gap-2 mb-4 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Kod veya ad ara..."
-            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
-        </div>
         <MultiCheckDropdown label="Malzeme Tipi" options={tipler} selected={tipFilter} onChange={setTipFilter} />
         {hmTipler.length > 0 && <MultiCheckDropdown label="HM Tipi" options={hmTipler} selected={hmTipFilter} onChange={setHmTipFilter} />}
-        <div className="relative w-24">
-          <input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="Uzun K./Uz" inputMode="decimal"
-            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" title="Uzun Kenar / Uzunluk" />
-        </div>
-        <div className="relative w-20">
-          <input value={dimCap} onChange={e => setDimCap(e.target.value)} placeholder="Çap" inputMode="decimal"
-            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
-        </div>
-        <div className="relative w-20">
-          <input value={dimKalinlik} onChange={e => setDimKalinlik(e.target.value)} placeholder="Kalınlık" inputMode="decimal"
-            className="w-full px-2 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber" />
-        </div>
         <select value={receteFilter} onChange={e => setReceteFilter(e.target.value)}
           className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-accent">
           <option value="">YM Reçete</option>
           <option value="var">✅ Var</option>
           <option value="yok">⚠ Yok</option>
         </select>
-        {(tipFilter.size > 0 || hmTipFilter.size > 0 || dimBoyUz || dimCap || dimKalinlik || receteFilter) && (
-          <button onClick={() => { setTipFilter(new Set()); setHmTipFilter(new Set()); setDimBoyUz(''); setDimCap(''); setDimKalinlik(''); setReceteFilter('') }}
-            className="px-2 py-2 text-zinc-500 hover:text-red text-[10px]">✕ Temizle</button>
+        {(tipFilter.size > 0 || hmTipFilter.size > 0 || receteFilter || fKod || fAd || fTip || fBirim || fKisa || fUzunluk || fOp || dimBoyUz || dimCap || dimKalinlik) && (
+          <button onClick={() => {
+            setTipFilter(new Set()); setHmTipFilter(new Set()); setReceteFilter('')
+            setFKod(''); setFAd(''); setFTip(''); setFBirim(''); setFKisa(''); setFUzunluk(''); setFOp('')
+            setDimBoyUz(''); setDimCap(''); setDimKalinlik('')
+          }} className="px-2 py-2 text-zinc-500 hover:text-red text-[10px]">✕ Tüm filtreleri temizle</button>
         )}
         {materials.some(m => m.aktif === false) && (
           <button onClick={() => setShowPasif(!showPasif)}
@@ -311,6 +318,20 @@ export function Materials() {
                 <th className="text-right px-2 py-2 w-[50px]">Kalınlık</th><th className="text-right px-2 py-2 w-[45px]">Çap</th>
                 <th className="text-right px-2 py-2 w-[60px] text-amber">Uzunluk</th>
                 <th className="text-left px-2 py-2 w-[120px]">Operasyon</th><th className="px-1 py-2 w-[80px]"></th>
+              </tr>
+              {/* ═══ SÜTUN BAŞI FİLTRELERİ ═══ */}
+              <tr className="border-b border-border/50 bg-bg-3/20">
+                <th className="px-2 py-1"><input value={fKod} onChange={e => setFKod(e.target.value)} placeholder="Ara..." className="w-full px-1.5 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent font-mono" /></th>
+                <th className="px-2 py-1"><input value={fAd} onChange={e => setFAd(e.target.value)} placeholder="Ara..." className="w-full px-1.5 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></th>
+                <th className="px-2 py-1"><input value={fTip} onChange={e => setFTip(e.target.value)} placeholder="Ara..." className="w-full px-1.5 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></th>
+                <th className="px-2 py-1"><input value={fBirim} onChange={e => setFBirim(e.target.value)} placeholder="..." className="w-full px-1 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent text-center" /></th>
+                <th className="px-2 py-1"><input value={dimBoyUz} onChange={e => setDimBoyUz(e.target.value)} placeholder="..." inputMode="decimal" className="w-full px-1 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent text-right font-mono" /></th>
+                <th className="px-2 py-1"><input value={fKisa} onChange={e => setFKisa(e.target.value)} placeholder="..." inputMode="decimal" className="w-full px-1 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent text-right font-mono" /></th>
+                <th className="px-2 py-1"><input value={dimKalinlik} onChange={e => setDimKalinlik(e.target.value)} placeholder="..." inputMode="decimal" className="w-full px-1 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent text-right font-mono" /></th>
+                <th className="px-2 py-1"><input value={dimCap} onChange={e => setDimCap(e.target.value)} placeholder="..." inputMode="decimal" className="w-full px-1 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent text-right font-mono" /></th>
+                <th className="px-2 py-1"><input value={fUzunluk} onChange={e => setFUzunluk(e.target.value)} placeholder="..." inputMode="decimal" className="w-full px-1 py-1 bg-bg-2 border border-amber/30 rounded text-[10px] text-amber placeholder:text-zinc-600 focus:outline-none focus:border-amber text-right font-mono" /></th>
+                <th className="px-2 py-1"><input value={fOp} onChange={e => setFOp(e.target.value)} placeholder="Ara..." className="w-full px-1.5 py-1 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></th>
+                <th className="px-1 py-1"></th>
               </tr>
             </thead>
             <tbody>
@@ -419,7 +440,7 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
       toast.info('Uzun kenar / Kısa kenar otomatik düzeltildi')
     }
     const row: Record<string, unknown> = {
-      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? (hammaddeTipi || '').toUpperCase() : '', birim, boy: boyNum,
+      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? (hammaddeTipi || '').toLocaleUpperCase('tr-TR') : '', birim, boy: boyNum,
       en: enNum, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
     }
@@ -589,12 +610,10 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
           </div>
           {tip === 'Hammadde' && (
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
-            <select value={(hammaddeTipi || '').toUpperCase()} onChange={e => setHammaddeTipi(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+            <select value={(hammaddeTipi || '').toLocaleUpperCase('tr-TR')} onChange={e => setHammaddeTipi(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>
               <option value="BORU">BORU</option><option value="PROFİL">PROFİL</option>
               <option value="LEVHA">LEVHA</option><option value="SAC">SAC</option>
-              <option value="ÇUBUK">ÇUBUK</option><option value="LAMA">LAMA</option>
-              <option value="DİĞER">DİĞER</option>
             </select></div>
           )}
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
@@ -612,14 +631,14 @@ function MatFormModal({ initial, operations, tipler, onClose, onSaved }: {
           {/* Ölçü alanları — profil/boru/levha/sac */}
           <div className="p-3 bg-bg-3/30 border border-border/50 rounded-lg">
             <div className="text-[10px] text-zinc-500 mb-2">
-              {['PROFİL','BORU','ÇUBUK','LAMA'].includes((hammaddeTipi || '').toUpperCase()) ? '📐 Kesit: Uzun Kenar × Kısa Kenar × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
+              {['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? '📐 Kesit: Uzun Kenar × Kısa Kenar × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
             </div>
             <div className="grid grid-cols-4 gap-3">
               <div><label className="text-[11px] text-zinc-500 mb-1 block">Uzun Kenar (mm)</label>
               <input type="number" value={boy} onChange={e => setBoy(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
               <div><label className="text-[11px] text-zinc-500 mb-1 block">Kısa Kenar (mm)</label>
               <input type="number" value={en} onChange={e => setEn(e.target.value)} className={`w-full px-3 py-2 bg-bg-2 border rounded-lg text-sm text-zinc-200 focus:outline-none ${parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 ? 'border-red focus:border-red' : 'border-border focus:border-accent'}`} /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['PROFİL','BORU'].includes((hammaddeTipi || '').toUpperCase()) ? 'Et Kalınlığı (mm)' : 'Kalınlık (mm)'}</label>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? 'Et Kalınlığı (mm)' : 'Kalınlık (mm)'}</label>
               <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
               <div><label className="text-[11px] text-amber mb-1 block font-semibold">Uzunluk (mm)</label>
               <input type="number" value={uzunluk} onChange={e => setUzunluk(e.target.value)} placeholder="ör: 6000" className="w-full px-3 py-2 bg-bg-2 border border-amber/30 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-amber" /></div>
