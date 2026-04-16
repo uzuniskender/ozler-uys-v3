@@ -67,7 +67,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       return active > 0 ? String(active) : ''
     }
     if (key === 'dash') {
-      const okunmamis = store.operatorNotes.filter(n => !n.okundu).length
+      const okunmamis = store.operatorNotes.filter(n => !n.okundu && !(n.opAd || '').includes('Yönetim')).length
       return okunmamis > 0 ? String(okunmamis) : ''
     }
     if (key === 'messages') {

@@ -165,8 +165,13 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
-  const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, loadAll } = useStore()
+  const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll } = useStore()
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
+
+  // Bu operatöre yönetimden gelen okunmamış mesaj sayısı
+  const okunmamisYonetim = operatorNotes.filter(n =>
+    n.opId === oprId && !n.okundu && (n.opAd || '').includes('Yönetim')
+  ).length
 
   const acikWOs = useMemo(() => {
     const bolumUpper = (opr.bolum || '').trim().toUpperCase()
@@ -306,8 +311,20 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
           <button onClick={() => setTab('isler')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'isler' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
             📋 İşlerim
           </button>
-          <button onClick={() => setTab('mesaj')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'mesaj' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
+          <button onClick={() => setTab('mesaj')} className={`relative flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${
+            tab === 'mesaj'
+              ? 'bg-accent text-white shadow-lg shadow-accent/30'
+              : okunmamisYonetim > 0
+                ? 'bg-amber/25 text-amber border-2 border-amber animate-pulse shadow-lg shadow-amber/40'
+                : 'bg-bg-2 text-zinc-500 border border-border'
+          }`}>
             💬 Mesajlar
+            {okunmamisYonetim > 0 && tab !== 'mesaj' && (
+              <>
+                <span className="absolute -top-1.5 -right-1.5 bg-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-mono min-w-[18px] text-center border-2 border-bg-0 shadow-lg">{okunmamisYonetim}</span>
+                <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-red animate-ping opacity-60"></span>
+              </>
+            )}
           </button>
           <button onClick={() => setTab('izin')} className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl transition-colors ${tab === 'izin' ? 'bg-accent text-white shadow-lg shadow-accent/30' : 'bg-bg-2 text-zinc-500 border border-border'}`}>
             📅 İzin
@@ -1023,6 +1040,16 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
   const myNotes = operatorNotes.filter(n => n.opId === oprId).sort((a, b) => (a.tarih + a.saat).localeCompare(b.tarih + b.saat))
 
   const isAdmin = (n: typeof myNotes[0]) => (n.opAd || '').includes('Yönetim')
+
+  // Tab açılınca yönetimden gelen okunmamış mesajları okundu işaretle
+  useEffect(() => {
+    const unreadFromAdmin = operatorNotes.filter(n => n.opId === oprId && isAdmin(n) && !n.okundu)
+    if (unreadFromAdmin.length === 0) return
+    Promise.all(unreadFromAdmin.map(n =>
+      supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)
+    )).then(() => loadAll())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oprId])
 
   async function send() {
     if (!mesaj.trim()) return

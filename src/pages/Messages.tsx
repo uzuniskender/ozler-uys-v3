@@ -105,7 +105,7 @@ export function Messages() {
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
     const { error } = await supabase.from('uys_operator_notes').insert({
       id: uid(), op_id: selectedOprId, op_ad: '📋 Yönetim',
-      tarih: today(), saat, mesaj: mesaj.trim(), okundu: true,
+      tarih: today(), saat, mesaj: mesaj.trim(), okundu: false,
     })
     setSending(false)
     if (error) { toast.error('Gönderilemedi: ' + error.message); return }

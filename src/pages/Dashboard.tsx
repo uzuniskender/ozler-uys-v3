@@ -149,7 +149,7 @@ export function Dashboard() {
 
   const bugunFire = fireLogs.filter(f => f.tarih === todayStr)
   const toplamFire = bugunFire.reduce((a, f) => a + f.qty, 0)
-  const okunmamis = operatorNotes.filter(n => !n.okundu)
+  const okunmamis = operatorNotes.filter(n => !n.okundu && !(n.opAd || '').includes('Yönetim'))
 
   // Tamamlanmış İE'lerin aktif çalışma hayaletlerini filtrele
   const gercekAktif = activeWork.filter(a => {
@@ -698,7 +698,7 @@ export function Dashboard() {
                     const saat = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
                     await supabase.from('uys_operator_notes').insert({
                       id: uid(), op_id: n.opId, op_ad: '📋 Yönetim', tarih: today(), saat,
-                      mesaj: cevap.trim(), okundu: true,
+                      mesaj: cevap.trim(), okundu: false,
                     })
                     if (!n.okundu) await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)
                     loadAll(); toast.success('Cevap gönderildi — operatör görecek')
