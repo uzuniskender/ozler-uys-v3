@@ -571,9 +571,12 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
     return stations.filter(s => (s.opIds || []).includes(opId))
   }, [stations, opId])
 
-  // Seçili reçetenin HM satırları
+  // Seçili reçetenin HM satırları — kök satır (kirno=1) ve seçilen malkod hariç
   const selectedRc = recipes.find(r => r.id === rcId)
-  const hmSatirlar = selectedRc?.satirlar?.filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul') || []
+  const hmSatirlar = (selectedRc?.satirlar || [])
+    .filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
+    .filter(s => s.kirno !== '1')  // Kök satır değil
+    .filter(s => s.malkod !== malkod)  // Kendi kendine referans değil
 
   async function save() {
     if (!malad.trim() || !hedef) { toast.error('Malzeme adı ve hedef zorunlu'); return }

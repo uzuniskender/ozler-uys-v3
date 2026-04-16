@@ -17,21 +17,27 @@ const M = {
     receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
     durum: (r.durum || '') as string, oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
   }),
-  wo: (r: Record<string, unknown>): WorkOrder => ({
-    id: r.id as string, orderId: (r.order_id || '') as string, rcId: (r.rc_id || '') as string,
-    sira: (r.sira as number) || 0, kirno: (r.kirno || '') as string,
-    opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string, opAd: (r.op_ad || '') as string,
-    istId: (r.ist_id || '') as string, istKod: (r.ist_kod || '') as string, istAd: (r.ist_ad || '') as string,
-    malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    hedef: (r.hedef as number) || 0, mpm: (r.mpm as number) || 1,
-    hm: (r.hm || []) as WorkOrder['hm'], ieNo: (r.ie_no || '') as string,
-    whAlloc: (r.wh_alloc as number) || 0, hazirlikSure: (r.hazirlik_sure as number) || 0,
-    islemSure: (r.islem_sure as number) || 0, durum: (r.durum || '') as string,
-    bagimsiz: !!r.bagimsiz, siparisDisi: !!r.siparis_disi,
-    mamulKod: (r.mamul_kod || '') as string, mamulAd: (r.mamul_ad || '') as string,
-    mamulAuto: !!r.mamul_auto, operatorId: (r.operator_id || null) as string | null,
-    not: (r.not_ || '') as string, olusturma: (r.olusturma || '') as string,
-  }),
+  wo: (r: Record<string, unknown>): WorkOrder => {
+    const malkod = (r.malkod || '') as string
+    // hm'den kendi kendine referansı temizle (veri bütünlüğü)
+    const rawHm = (r.hm || []) as WorkOrder['hm']
+    const hm = malkod ? rawHm.filter(h => h.malkod !== malkod) : rawHm
+    return {
+      id: r.id as string, orderId: (r.order_id || '') as string, rcId: (r.rc_id || '') as string,
+      sira: (r.sira as number) || 0, kirno: (r.kirno || '') as string,
+      opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string, opAd: (r.op_ad || '') as string,
+      istId: (r.ist_id || '') as string, istKod: (r.ist_kod || '') as string, istAd: (r.ist_ad || '') as string,
+      malkod, malad: (r.malad || '') as string,
+      hedef: (r.hedef as number) || 0, mpm: (r.mpm as number) || 1,
+      hm, ieNo: (r.ie_no || '') as string,
+      whAlloc: (r.wh_alloc as number) || 0, hazirlikSure: (r.hazirlik_sure as number) || 0,
+      islemSure: (r.islem_sure as number) || 0, durum: (r.durum || '') as string,
+      bagimsiz: !!r.bagimsiz, siparisDisi: !!r.siparis_disi,
+      mamulKod: (r.mamul_kod || '') as string, mamulAd: (r.mamul_ad || '') as string,
+      mamulAuto: !!r.mamul_auto, operatorId: (r.operator_id || null) as string | null,
+      not: (r.not_ || '') as string, olusturma: (r.olusturma || '') as string,
+    }
+  },
   log: (r: Record<string, unknown>): ProductionLog => ({
     id: r.id as string, woId: (r.wo_id || '') as string, tarih: (r.tarih || '') as string,
     qty: (r.qty as number) || 0, fire: (r.fire as number) || 0,
