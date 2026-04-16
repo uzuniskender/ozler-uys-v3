@@ -6,8 +6,9 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { analizReceteTumSatirlar, donusturBirim } from '@/features/production/sureAnaliz'
 
 export function Recipes() {
   const { recipes, operations, bomTrees, materials, loadAll } = useStore()
@@ -236,10 +237,52 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   const [rows, setRows] = useState<RecipeRow[]>(recipe.satirlar || [])
   const [ad, setAd] = useState(recipe.ad || '')
   const [rcKod, setRcKod] = useState(recipe.rcKod || '')
-  const { materials, loadAll: storeLoadAll } = useStore()
+  const { materials, workOrders, logs, loadAll: storeLoadAll } = useStore()
   const { can } = useAuth()
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
+
+  // Gerçek üretim verilerinden süre analizi: kirno → analiz
+  const sureAnalizMap = useMemo(
+    () => analizReceteTumSatirlar(recipe, workOrders, logs),
+    [recipe, workOrders, logs],
+  )
+
+  // Satırı analiz değerine göre güncelle
+  function uygulaSure(idx: number, row: RecipeRow) {
+    const a = sureAnalizMap[row.kirno]
+    if (!a || a.logSayisi === 0) return
+    const yeniDeger = Math.round(donusturBirim(a.ortDkPerAdet, row.sureBirim) * 100) / 100
+    updateRow(idx, 'islemSure', yeniDeger)
+    toast.success(`İşlem süresi güncellendi: ${yeniDeger} ${row.sureBirim || 'dk'} (${a.logSayisi} log, ${a.toplamAdet} adet)`)
+  }
+
+  // Tüm satırları güncel veriden önerilen değerlerle güncelle
+  async function tumSureyiGuncelle() {
+    const uygulaLazim = rows.filter(r =>
+      (r.tip === 'Mamul' || r.tip === 'YarıMamul') &&
+      sureAnalizMap[r.kirno] && sureAnalizMap[r.kirno].logSayisi > 0,
+    )
+    if (uygulaLazim.length === 0) { toast.info('Üretim verisi olan satır yok'); return }
+    const ok = await showConfirm(
+      `${uygulaLazim.length} satırın işlem süresi gerçek üretim verisiyle güncellenecek.\n\n` +
+      uygulaLazim.map(r => {
+        const a = sureAnalizMap[r.kirno]
+        const yeni = Math.round(donusturBirim(a.ortDkPerAdet, r.sureBirim) * 100) / 100
+        return `• ${r.kirno} ${r.malad?.slice(0, 30)}: ${r.islemSure || 0} → ${yeni} ${r.sureBirim || 'dk'} (${a.logSayisi} log)`
+      }).slice(0, 10).join('\n') +
+      (uygulaLazim.length > 10 ? `\n… ve ${uygulaLazim.length - 10} daha` : '') +
+      '\n\nDevam edilsin mi?'
+    )
+    if (!ok) return
+    setRows(prev => prev.map(r => {
+      const a = sureAnalizMap[r.kirno]
+      if (!a || a.logSayisi === 0) return r
+      if (r.tip !== 'Mamul' && r.tip !== 'YarıMamul') return r
+      return { ...r, islemSure: Math.round(donusturBirim(a.ortDkPerAdet, r.sureBirim) * 100) / 100 }
+    }))
+    toast.success(`${uygulaLazim.length} satır güncellendi — Kaydet'e basmayı unutma`)
+  }
 
   function updateRow(idx: number, field: keyof RecipeRow, value: string | number) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
@@ -418,7 +461,18 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
             </div>
             <p className="text-xs text-zinc-500">{recipe.mamulKod} · {rows.length} satır</p>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+          <div className="flex items-start gap-2">
+            {Object.keys(sureAnalizMap).length > 0 && can('recipe_edit') && (
+              <button
+                onClick={tumSureyiGuncelle}
+                title="İşlem sürelerini gerçek üretim kayıtlarıyla güncelle"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-amber/10 border border-amber/25 text-amber rounded text-[11px] hover:bg-amber/20"
+              >
+                <Clock size={11} /> Süreleri Üretimden Güncelle ({Object.keys(sureAnalizMap).length})
+              </button>
+            )}
+            <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -483,9 +537,28 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     </td>
                     <td className="px-2 py-1">
                       {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
-                        <input type="number" value={r.islemSure || ''} onChange={e => updateRow(i, 'islemSure', parseFloat(e.target.value) || 0)}
-                          onFocus={e => e.target.select()}
-                          className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none focus:border-accent focus:bg-bg-2" placeholder="—" />
+                        <div className="flex items-center gap-1">
+                          <input type="number" value={r.islemSure || ''} onChange={e => updateRow(i, 'islemSure', parseFloat(e.target.value) || 0)}
+                            onFocus={e => e.target.select()}
+                            className="flex-1 px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none focus:border-accent focus:bg-bg-2" placeholder="—" />
+                          {(() => {
+                            const a = sureAnalizMap[r.kirno]
+                            if (!a || a.logSayisi === 0) return null
+                            const yeni = Math.round(donusturBirim(a.ortDkPerAdet, r.sureBirim) * 100) / 100
+                            const fark = Math.abs(yeni - (r.islemSure || 0))
+                            const uyarı = r.islemSure > 0 && fark / r.islemSure > 0.3
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => uygulaSure(i, r)}
+                                title={`Gerçek ort: ${yeni} ${r.sureBirim || 'dk'}\nÖrnek: ${a.logSayisi} log, ${a.toplamAdet} adet\nTıkla uygula`}
+                                className={`px-1 py-0.5 rounded text-[9px] font-mono whitespace-nowrap ${uyarı ? 'bg-amber/20 text-amber hover:bg-amber/30' : 'bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25'}`}
+                              >
+                                Ö:{yeni}
+                              </button>
+                            )
+                          })()}
+                        </div>
                       )}
                     </td>
                     <td className="px-2 py-1">
