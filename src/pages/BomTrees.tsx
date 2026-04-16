@@ -10,7 +10,7 @@ import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-rea
 import { SearchSelect } from '@/components/ui/SearchSelect'
 
 export function BomTrees() {
-  const { bomTrees, recipes, workOrders, loadAll } = useStore()
+  const { bomTrees, recipes, workOrders, materials, loadAll } = useStore()
   const { can } = useAuth()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -164,21 +164,69 @@ export function BomTrees() {
 
   async function createRecipeFromBom(bt: BomTree) {
     const existing = recipes.find(r => r.mamulKod === bt.mamulKod)
-    if (existing && !await showConfirm(`"${bt.mamulKod}" için reçete zaten var. Üzerine yazılsın mı?`)) return
-    const satirlar = (bt.rows || []).map(row => ({
-      id: uid(), kirno: row.kirno || '1', malkod: row.malkod, malad: row.malad,
-      tip: row.tip || 'Hammadde', miktar: row.miktar || 1, birim: row.birim || 'Adet',
-      opId: '', istId: '', hazirlikSure: 0, islemSure: 0,
-    }))
-    if (existing) {
-      await supabase.from('uys_recipes').update({ satirlar, bom_id: bt.id }).eq('id', existing.id)
-    } else {
+    const bomRows = bt.rows || []
+
+    if (!existing) {
+      // Yeni reçete — malzeme kartından opId pre-fill
+      const satirlar = bomRows.map(row => {
+        const mat = materials.find(m => m.kod === row.malkod)
+        return {
+          id: uid(), kirno: row.kirno || '1', malkod: row.malkod, malad: row.malad,
+          tip: row.tip || 'Hammadde', miktar: row.miktar || 1, birim: row.birim || 'Adet',
+          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk',
+        }
+      })
       await supabase.from('uys_recipes').insert({
         id: uid(), rc_kod: 'RC-' + bt.mamulKod, ad: bt.ad || bt.mamulAd,
         bom_id: bt.id, mamul_kod: bt.mamulKod, mamul_ad: bt.mamulAd || bt.ad, satirlar,
       })
+      loadAll(); toast.success(`"${bt.mamulKod}" reçetesi oluşturuldu — ${satirlar.length} satır`)
+      return
     }
-    loadAll(); toast.success(`"${bt.mamulKod}" reçetesi ${existing ? 'güncellendi' : 'oluşturuldu'} — ${satirlar.length} satır`)
+
+    // AKILLI SENKRON — operasyon + süreleri KORU, sadece BOM yapısını güncelle
+    const mevcutSatirlar = existing.satirlar || []
+    const yeniSatirlar: typeof mevcutSatirlar = []
+    let eklenen = 0, guncellenen = 0, silinen = 0
+
+    for (const bomRow of bomRows) {
+      // Aynı kirno + malkod ile eşleştir
+      const match = mevcutSatirlar.find(s => s.kirno === bomRow.kirno && s.malkod === bomRow.malkod)
+      if (match) {
+        // Eşleşen: malzeme bilgilerini güncelle, operasyon + süreleri KORU
+        yeniSatirlar.push({
+          ...match,
+          malad: bomRow.malad,
+          tip: bomRow.tip || match.tip,
+          miktar: bomRow.miktar || match.miktar,
+          birim: bomRow.birim || match.birim,
+        })
+        if (match.malad !== bomRow.malad || match.miktar !== bomRow.miktar || match.tip !== bomRow.tip) guncellenen++
+      } else {
+        // Yeni satır — malzeme kartından opId pre-fill
+        const mat = materials.find(m => m.kod === bomRow.malkod)
+        yeniSatirlar.push({
+          id: uid(), kirno: bomRow.kirno || '1', malkod: bomRow.malkod, malad: bomRow.malad,
+          tip: bomRow.tip || 'Hammadde', miktar: bomRow.miktar || 1, birim: bomRow.birim || 'Adet',
+          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk',
+        })
+        eklenen++
+      }
+    }
+    // Reçetede olup BOM'da olmayan satırlar → silinecek
+    silinen = mevcutSatirlar.length - (yeniSatirlar.length - eklenen)
+
+    await supabase.from('uys_recipes').update({ satirlar: yeniSatirlar, bom_id: bt.id }).eq('id', existing.id)
+    loadAll()
+
+    const parts = [
+      eklenen > 0 && `+${eklenen} eklendi`,
+      guncellenen > 0 && `${guncellenen} güncellendi`,
+      silinen > 0 && `-${silinen} silindi`,
+    ].filter(Boolean)
+    toast.success(parts.length > 0
+      ? `"${bt.mamulKod}" reçetesi senkronize edildi — ${parts.join(', ')} · Operasyon ve süreler korundu`
+      : `"${bt.mamulKod}" reçetesi zaten güncel`)
   }
 
   return (
