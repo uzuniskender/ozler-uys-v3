@@ -295,7 +295,11 @@ export function WorkOrders() {
                         <td className="px-3 py-1.5 min-w-[280px]">
                           <div className="text-[11px] text-zinc-300 leading-snug">{w.malad}</div>
                           <div className="text-[9px] text-zinc-600 font-mono">{w.malkod}</div>
-                          {w.hm && w.hm.length > 0 && <div className="mt-0.5 flex flex-wrap gap-0.5">{w.hm.slice(0, 3).map((h, i) => <span key={i} className="text-[8px] px-1 rounded bg-cyan-500/8 text-cyan-400/80 border border-cyan-500/15" title={h.malad || ''}>{h.malad || ''}</span>)}{w.hm.length > 3 && <span className="text-[8px] text-zinc-600">+{w.hm.length - 3}</span>}</div>}
+                          {(() => {
+                            const gercekHm = (w.hm || []).filter(h => h.malkod !== w.malkod)
+                            if (gercekHm.length === 0) return null
+                            return <div className="mt-0.5 flex flex-wrap gap-0.5">{gercekHm.slice(0, 3).map((h, i) => <span key={i} className="text-[8px] px-1 rounded bg-cyan-500/8 text-cyan-400/80 border border-cyan-500/15" title={h.malad || ''}>{h.malad || ''}</span>)}{gercekHm.length > 3 && <span className="text-[8px] text-zinc-600">+{gercekHm.length - 3}</span>}</div>
+                          })()}
                           {w.whAlloc > 0 && <div className="text-[8px] mt-0.5"><span className="px-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/15">Depo: {w.whAlloc}</span></div>}
                           {stokBadgeEl(w)}
                         </td>
