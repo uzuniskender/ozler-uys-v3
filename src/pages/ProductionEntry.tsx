@@ -345,7 +345,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       aciklama: 'Üretim — ' + w.ieNo,
     })
 
-    // Fire logu
+    // Fire logu (fire mamul stoğuna girmediği için çıkış kaydı yok — HM tüketimi aşağıda q+f üzerinden hesaplanır)
     if (f > 0) {
       await supabase.from('uys_fire_logs').insert({
         id: uid(), log_id: logId, wo_id: woId, tarih,
@@ -354,24 +354,19 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
         operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
         not_: not,
       })
-      // Fire stok çıkışı
-      await supabase.from('uys_stok_hareketler').insert({
-        id: uid(), tarih, malkod: w.malkod, malad: w.malad,
-        miktar: f, tip: 'cikis', log_id: logId, wo_id: woId,
-        aciklama: 'Fire — ' + w.ieNo,
-      })
     }
 
-    // HM stok tüketimi — wo.hm veya reçeteden
-    if (q > 0 && hmSatirlar.length > 0) {
+    // HM stok tüketimi — sağlam + fire = toplam harcanan malzeme
+    const toplamTuketilen = q + f
+    if (toplamTuketilen > 0 && hmSatirlar.length > 0) {
       for (const hm of hmSatirlar) {
-        const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+        const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * toplamTuketilen
         if (hmMiktar > 0) {
           await supabase.from('uys_stok_hareketler').insert({
             id: uid(), tarih, malkod: hm.malkod, malad: hm.malad,
             miktar: Math.round(hmMiktar * 100) / 100, tip: 'cikis',
             log_id: logId, wo_id: woId,
-            aciklama: 'HM tüketim — ' + w.ieNo,
+            aciklama: `HM tüketim — ${w.ieNo} (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''})`,
           })
         }
       }
@@ -599,8 +594,8 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
         aciklama: 'Toplu üretim — ' + wo.ieNo,
       })
 
-      // HM tüketim
-      await stokTuketimIsle(r.woId, q, logId, workOrders, recipes)
+      // HM tüketim — sağlam + fire (fire da hammadde harcar)
+      await stokTuketimIsle(r.woId, q + f, logId, workOrders, recipes)
 
       if (f > 0) {
         await supabase.from('uys_fire_logs').insert({

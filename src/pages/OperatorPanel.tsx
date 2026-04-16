@@ -825,18 +825,24 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       }).eq('id', editLogId)
       // Stok hareketlerini yeniden oluştur
       await supabase.from('uys_stok_hareketler').delete().eq('log_id', editLogId)
+      // Mamul stok girişi — sadece sağlam adet
       if (q > 0) {
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
           tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
           tarih, log_id: editLogId, wo_id: woId,
         })
+      }
+      // HM tüketim — sağlam + fire = toplam harcanan
+      const editToplam = q + f
+      if (editToplam > 0) {
         for (const hm of hmSatirlar) {
-          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * editToplam
           if (hmMiktar > 0) {
             await supabase.from('uys_stok_hareketler').insert({
               id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-              tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim (düzenlendi)',
+              tip: 'cikis', kaynak: 'uretim-hm',
+              aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''}) - düzenlendi`,
               tarih, log_id: editLogId, wo_id: woId,
             })
           }
@@ -860,18 +866,24 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
         not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
       })
+      // Mamul stok girişi — sadece sağlam adet
       if (q > 0) {
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
           tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
           tarih, log_id: logId, wo_id: woId,
         })
+      }
+      // HM tüketim — sağlam + fire = toplam harcanan
+      const yeniToplam2 = q + f
+      if (yeniToplam2 > 0) {
         for (const hm of hmSatirlar) {
-          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * q
+          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * yeniToplam2
           if (hmMiktar > 0) {
             await supabase.from('uys_stok_hareketler').insert({
               id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-              tip: 'cikis', kaynak: 'uretim-hm', aciklama: w.ieNo + ' HM tüketim',
+              tip: 'cikis', kaynak: 'uretim-hm',
+              aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''})`,
               tarih, log_id: logId, wo_id: woId,
             })
           }
