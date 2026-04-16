@@ -389,11 +389,11 @@ export function Materials() {
                 const op = operations.find(o => o.id === m.opId)
                 return (
                   <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
-                    <td className="px-3 py-[5px] cursor-pointer" onClick={async () => {
+                    <td className="px-3 py-[5px] cursor-pointer whitespace-nowrap" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni) await recodeMaterial(m, yeni)
                     }}>
-                      <span className="font-mono text-accent text-[10px] leading-tight break-all">{m.kod}</span>
+                      <span className="font-mono text-accent text-[10px] leading-tight">{m.kod}</span>
                       {m.revizyon > 0 && <span className="ml-1 px-1 py-0.5 bg-purple-500/15 text-purple-400 rounded text-[8px] font-mono">R{m.revizyon}</span>}
                       {m.aktif === false && <span className="ml-1 px-1 py-0.5 bg-zinc-600/20 text-zinc-500 rounded text-[8px]">PASİF</span>}
                     </td>
@@ -401,7 +401,7 @@ export function Materials() {
                       const yeni = await showPrompt('Malzeme adı değiştir', 'Yeni ad', m.ad)
                       if (yeni) await renameMaterial(m, yeni)
                     }}><span className="truncate block">{m.ad}</span></td>
-                    <td className="px-2 py-[5px]">
+                    <td className="px-2 py-[5px] whitespace-nowrap">
                       <span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px] text-zinc-400 whitespace-nowrap">{m.tip || '—'}{m.hammaddeTipi && ` · ${m.hammaddeTipi}`}</span>
                       {m.tip === 'YarıMamul' && (
                         receteKodSet.has(m.kod)
