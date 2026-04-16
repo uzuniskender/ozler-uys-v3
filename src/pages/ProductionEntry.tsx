@@ -316,14 +316,15 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       toast.error(`Hedef aşılamaz! Hedef: ${w.hedef}, mevcut üretim: ${freshProd}, kalan: ${freshKalan}`)
       return
     }
-    // Stok uyarısı — admin override olabilir
-    if (q > 0 && hmSatirlar.length > 0 && q > maxUretim) {
+    // Stok uyarısı — admin override olabilir (fire dahil toplam tüketim)
+    const gercekToplam = q + f
+    if (gercekToplam > 0 && hmSatirlar.length > 0 && gercekToplam > maxUretim) {
       const eksikler = hmSatirlar.filter(hm => {
         const mevcut = Math.round(stokNet(hm.malkod))
-        const ihtiyac = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q)
+        const ihtiyac = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * gercekToplam)
         return mevcut < ihtiyac
-      }).map(hm => `${hm.malad || hm.malkod}: mevcut ${Math.round(stokNet(hm.malkod))}, gerekli ${Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q)}`).join('\n')
-      if (!await showConfirm(`⚠️ STOK YETERSİZ!\nMax yapılabilir: ${maxUretim} adet\n\n${eksikler}\n\nEksi stok oluşacak. Yine de devam edilsin mi?`)) return
+      }).map(hm => `${hm.malad || hm.malkod}: mevcut ${Math.round(stokNet(hm.malkod))}, gerekli ${Math.ceil((hm.miktar || 0) * (w.mpm || 1) * gercekToplam)}`).join('\n')
+      if (!await showConfirm(`⚠️ STOK YETERSİZ!\nToplam tüketim: ${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''} = ${gercekToplam}\nMax yapılabilir: ${maxUretim} adet\n\n${eksikler}\n\nEksi stok oluşacak. Yine de devam edilsin mi?`)) return
     }
     setSaving(true)
 

@@ -792,8 +792,13 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
     const freshKalan = Math.max(0, w.hedef - freshProd + (editLog?.qty || 0))
     if (q > freshKalan) { toast.error('Hedeften fazla üretilemez! Kalan: ' + freshKalan); return }
-    if (q > 0 && maxUretim <= 0 && hmSatirlar.length > 0) { toast.error('Stok yetersiz — üretim yapılamaz'); return }
-    if (q > 0 && q > maxUretim && hmSatirlar.length > 0) { toast.error('Stok yetersiz! En fazla ' + maxUretim + ' adet'); return }
+    // Stok kontrolü — sağlam + fire toplamı için
+    const opToplam = q + f
+    if (opToplam > 0 && maxUretim <= 0 && hmSatirlar.length > 0) { toast.error('Stok yetersiz — üretim yapılamaz'); return }
+    if (opToplam > 0 && opToplam > maxUretim && hmSatirlar.length > 0) {
+      toast.error(`Stok yetersiz! ${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''} = ${opToplam} gerekli, max ${maxUretim}`)
+      return
+    }
     if (!oprList.length) { toast.error('En az bir operatör eklenmeli'); return }
     for (const o of oprList) {
       if (o.bas && o.bit && o.bit < o.bas) { toast.error(o.ad + ': Bitiş başlamadan önce olamaz'); return }
