@@ -353,22 +353,56 @@ function SifirlamaSecimli() {
 
   async function sil() {
     if (toplamSecili === 0) { toast.error('Silinecek kayıt seçin'); return }
-    if (!await showConfirm(`${toplamSecili} kayıt silinecek. Devam?`)) return
+    if (!await showConfirm(`${toplamSecili} kayıt silinecek. Bağlı kayıtlar da otomatik silinecek. Devam?`)) return
     setSiliniyor(true)
     let deleted = 0
-    for (const [key, ids] of Object.entries(seciliIds)) {
+    // Bağımlı tablolar önce, ana tablolar sonra silinecek şekilde sırala
+    const silmeSirasi = ['activeWork', 'operatorNotes', 'fireLogs', 'stokHareketler', 'logs', 'sevkler', 'tedarikler', 'cuttingPlans', 'workOrders', 'orders']
+    const sortedEntries = Object.entries(seciliIds).sort(
+      (a, b) => silmeSirasi.indexOf(a[0]) - silmeSirasi.indexOf(b[0])
+    )
+    for (const [key, ids] of sortedEntries) {
       if (!ids.size) continue
       const kat = kategoriler.find(k => k.key === key)
       if (!kat) continue
       for (const id of ids) {
+        // Cascade — bağlı tabloları önce sil
+        if (key === 'logs') {
+          await supabase.from('uys_stok_hareketler').delete().eq('log_id', id)
+          await supabase.from('uys_fire_logs').delete().eq('log_id', id)
+        } else if (key === 'workOrders') {
+          await supabase.from('uys_logs').delete().eq('wo_id', id)
+          await supabase.from('uys_stok_hareketler').delete().eq('wo_id', id)
+          await supabase.from('uys_fire_logs').delete().eq('wo_id', id)
+          await supabase.from('uys_active_work').delete().eq('wo_id', id)
+        } else if (key === 'orders') {
+          // Önce bu siparişin iş emirlerini bul ve onların cascade'ini çalıştır
+          const woRows = store.workOrders.filter(w => w.orderId === id)
+          for (const w of woRows) {
+            await supabase.from('uys_logs').delete().eq('wo_id', w.id)
+            await supabase.from('uys_stok_hareketler').delete().eq('wo_id', w.id)
+            await supabase.from('uys_fire_logs').delete().eq('wo_id', w.id)
+            await supabase.from('uys_active_work').delete().eq('wo_id', w.id)
+          }
+          await supabase.from('uys_work_orders').delete().eq('order_id', id)
+        } else if (key === 'fireLogs') {
+          // Fire silinince telafi İE'si varsa onu da işaretle/sil
+          const fire = store.fireLogs.find(f => f.id === id)
+          if (fire?.telafiWoId) {
+            // Sadece telafi henüz üretilmediyse sil (logs yoksa)
+            const telafiLogs = store.logs.filter(l => l.woId === fire.telafiWoId)
+            if (telafiLogs.length === 0) {
+              await supabase.from('uys_work_orders').delete().eq('id', fire.telafiWoId)
+            }
+          }
+        }
+        // Ana kaydı sil
         await supabase.from(kat.tablo).delete().eq('id', id)
-        // İlişkili stok hareketlerini de sil (log silinince)
-        if (key === 'logs') await supabase.from('uys_stok_hareketler').delete().eq('log_id', id)
       }
       deleted += ids.size
     }
     setSeciliIds({}); setSiliniyor(false); loadAll()
-    toast.success(deleted + ' kayıt silindi')
+    toast.success(deleted + ' kayıt silindi (bağlılar dahil)')
   }
 
   return (
