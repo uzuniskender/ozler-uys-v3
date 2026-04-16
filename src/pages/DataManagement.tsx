@@ -11,6 +11,7 @@ import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 
 export function DataManagement() {
   const store = useStore()
+  const { loadAll } = store
   const { can } = useAuth()
   
   const tables = [
@@ -216,6 +217,32 @@ export function DataManagement() {
           }
         }} className="px-4 py-2 bg-accent/10 border border-accent/25 text-accent rounded-lg text-xs hover:bg-accent/20">
           Sistem Testi Çalıştır
+        </button>
+        <button onClick={async () => {
+          if (!await showConfirm('Silinmiş ana kayıtların bağlıları (orphan) temizlenecek:\n• İE silinmiş fire logları\n• İE silinmiş stok hareketleri\n• Log silinmiş fire/stok hareketleri\n• Fire silinmiş telafi İE\'leri\n\nDevam?')) return
+          let silinen = 0
+          // Fire logları — İE'si silinmiş
+          const woIds = new Set(store.workOrders.map(w => w.id))
+          const orfanFireWo = store.fireLogs.filter(f => f.woId && !woIds.has(f.woId))
+          for (const f of orfanFireWo) { await supabase.from('uys_fire_logs').delete().eq('id', f.id); silinen++ }
+          // Fire logları — Log'u silinmiş
+          const logIds = new Set(store.logs.map(l => l.id))
+          const orfanFireLog = store.fireLogs.filter(f => f.logId && !logIds.has(f.logId))
+          for (const f of orfanFireLog) { await supabase.from('uys_fire_logs').delete().eq('id', f.id); silinen++ }
+          // Stok hareketleri — Log'u silinmiş
+          const orfanStokLog = store.stokHareketler.filter(h => h.logId && !logIds.has(h.logId))
+          for (const h of orfanStokLog) { await supabase.from('uys_stok_hareketler').delete().eq('id', h.id); silinen++ }
+          // Stok hareketleri — İE'si silinmiş (wo_id varsa)
+          const orfanStokWo = store.stokHareketler.filter(h => h.woId && !woIds.has(h.woId))
+          for (const h of orfanStokWo) { await supabase.from('uys_stok_hareketler').delete().eq('id', h.id); silinen++ }
+          // Telafi İE'leri — Fire log'u silinmiş olanlar
+          const fireTelafiIds = new Set(store.fireLogs.map(f => f.telafiWoId).filter(Boolean))
+          const orfanTelafi = store.workOrders.filter(w => (w.ieNo || '').startsWith('FIRE-') && !fireTelafiIds.has(w.id))
+          for (const w of orfanTelafi) { await supabase.from('uys_work_orders').delete().eq('id', w.id); silinen++ }
+          toast.success(`✓ ${silinen} orphan kayıt silindi`)
+          await loadAll()
+        }} className="ml-2 px-4 py-2 bg-red/10 border border-red/25 text-red rounded-lg text-xs hover:bg-red/20">
+          🗑 Orphan Temizle
         </button>
       </div>}
 
