@@ -224,7 +224,13 @@ export function Materials() {
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws)
       if (!rows.length) { toast.error('Excel boş'); return }
 
-      let created = 0; let updated = 0; let errors = 0
+      let created = 0; let updated = 0; let errors = 0; let cascadeBom = 0; let cascadeRc = 0; let cascadeWo = 0
+      // Fresh data çek — state stale olabilir
+      const [{ data: freshBom }, { data: freshRc }, { data: freshWo }] = await Promise.all([
+        supabase.from('uys_bom_trees').select('*'),
+        supabase.from('uys_recipes').select('*'),
+        supabase.from('uys_work_orders').select('*'),
+      ])
       for (const row of rows) {
         const kod = String(row['Kod'] || row['kod'] || row['Malzeme Kodu'] || '').trim()
         const ad = String(row['Ad'] || row['ad'] || row['Malzeme Adı'] || row['Malzeme'] || '').trim()
@@ -248,7 +254,49 @@ export function Materials() {
           // GÜNCELLE
           const { error } = await supabase.from('uys_malzemeler').update(dataRow).eq('id', existing.id)
           if (error) { errors++; if (errors === 1) console.error('Update hatası:', error.message) }
-          else updated++
+          else {
+            updated++
+            // CASCADE — ad veya kod değiştiyse BOM/Recipe/WO'larda da güncelle
+            const adChanged = existing.ad !== ad
+            if (adChanged) {
+              // BOM'lar
+              for (const bt of (freshBom || [])) {
+                const btRows = bt.rows || []
+                let changed = false
+                const newRows = btRows.map((r: any) => {
+                  if (r.malkod === kod) { changed = true; return { ...r, malad: ad } }
+                  return r
+                })
+                const updates: Record<string, unknown> = {}
+                if (changed) updates.rows = newRows
+                if (bt.mamul_kod === kod) { updates.ad = ad; updates.mamul_ad = ad }
+                if (Object.keys(updates).length > 0) { await supabase.from('uys_bom_trees').update(updates).eq('id', bt.id); cascadeBom++ }
+              }
+              // Reçeteler
+              for (const rc of (freshRc || [])) {
+                const rcRows = rc.satirlar || []
+                let changed = false
+                const newSatirlar = rcRows.map((r: any) => {
+                  if (r.malkod === kod) { changed = true; return { ...r, malad: ad } }
+                  return r
+                })
+                const updates: Record<string, unknown> = {}
+                if (changed) updates.satirlar = newSatirlar
+                if (rc.mamul_kod === kod) { updates.ad = ad; updates.mamul_ad = ad }
+                if (Object.keys(updates).length > 0) { await supabase.from('uys_recipes').update(updates).eq('id', rc.id); cascadeRc++ }
+              }
+              // İş Emirleri (hm array dahil)
+              for (const wo of (freshWo || [])) {
+                const updates: Record<string, unknown> = {}
+                if (wo.malkod === kod) updates.malad = ad
+                if (wo.mamul_kod === kod) updates.mamul_ad = ad
+                if ((wo.hm || []).some((h: any) => h.malkod === kod)) {
+                  updates.hm = (wo.hm || []).map((h: any) => h.malkod === kod ? { ...h, malad: ad } : h)
+                }
+                if (Object.keys(updates).length > 0) { await supabase.from('uys_work_orders').update(updates).eq('id', wo.id); cascadeWo++ }
+              }
+            }
+          }
         } else {
           // YENİ EKLE
           const { error } = await supabase.from('uys_malzemeler').insert({ id: uid(), ...dataRow })
@@ -257,7 +305,8 @@ export function Materials() {
         }
       }
       loadAll()
-      toast.success(`${created} yeni eklendi · ${updated} güncellendi` + (errors > 0 ? ` · ${errors} hata` : ''))
+      const cascadeInfo = (cascadeBom || cascadeRc || cascadeWo) ? ` · Bağlı: ${cascadeBom} BOM, ${cascadeRc} reçete, ${cascadeWo} İE` : ''
+      toast.success(`${created} yeni · ${updated} güncellendi${cascadeInfo}` + (errors > 0 ? ` · ${errors} hata` : ''))
     }
     input.click()
   }
@@ -513,42 +562,50 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
     if (!adChanged && !kodChanged) return
     let bomC = 0, rcC = 0, woC = 0
 
+    // Fresh data — state stale olabilir
+    const [{ data: freshBom }, { data: freshRc }, { data: freshWo }] = await Promise.all([
+      supabase.from('uys_bom_trees').select('*'),
+      supabase.from('uys_recipes').select('*'),
+      supabase.from('uys_work_orders').select('*'),
+    ])
+
     // BOM'lar — her zaman güncelle (şablon)
-    for (const bt of bomTrees) {
+    for (const bt of (freshBom || [])) {
+      const btRows = bt.rows || []
       let changed = false
-      const newRows = (bt.rows || []).map(r => {
+      const newRows = btRows.map((r: any) => {
         if (r.malkod === eskiKod) { changed = true; return { ...r, malkod: kodChanged ? yeniKod : r.malkod, malad: adChanged ? yeniAd : r.malad } }
         return r
       })
       const updates: Record<string, unknown> = {}
       if (changed) updates.rows = newRows
-      if (bt.mamulKod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) { updates.ad = yeniAd; updates.mamul_ad = yeniAd } }
+      if (bt.mamul_kod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) { updates.ad = yeniAd; updates.mamul_ad = yeniAd } }
       if (Object.keys(updates).length > 0) { await supabase.from('uys_bom_trees').update(updates).eq('id', bt.id); bomC++ }
     }
 
     // Reçeteler — her zaman güncelle (şablon)
-    for (const rc of recipes) {
+    for (const rc of (freshRc || [])) {
+      const rcRows = rc.satirlar || []
       let changed = false
-      const newSatirlar = (rc.satirlar || []).map(r => {
+      const newSatirlar = rcRows.map((r: any) => {
         if (r.malkod === eskiKod) { changed = true; return { ...r, malkod: kodChanged ? yeniKod : r.malkod, malad: adChanged ? yeniAd : r.malad } }
         return r
       })
       const updates: Record<string, unknown> = {}
       if (changed) updates.satirlar = newSatirlar
-      if (rc.mamulKod === eskiKod) { if (kodChanged) { updates.mamul_kod = yeniKod; updates.rc_kod = 'RC-' + yeniKod }; if (adChanged) { updates.ad = yeniAd; updates.mamul_ad = yeniAd } }
+      if (rc.mamul_kod === eskiKod) { if (kodChanged) { updates.mamul_kod = yeniKod; updates.rc_kod = 'RC-' + yeniKod }; if (adChanged) { updates.ad = yeniAd; updates.mamul_ad = yeniAd } }
       if (Object.keys(updates).length > 0) { await supabase.from('uys_recipes').update(updates).eq('id', rc.id); rcC++ }
     }
 
     // İş emirleri — hm array dahil
-    const linkedWOs = workOrders.filter(w => w.malkod === eskiKod || w.mamulKod === eskiKod || (w.hm || []).some(h => h.malkod === eskiKod))
+    const linkedWOs = (freshWo || []).filter((w: any) => w.malkod === eskiKod || w.mamul_kod === eskiKod || (w.hm || []).some((h: any) => h.malkod === eskiKod))
     for (const wo of linkedWOs) {
       if (mode === 'sadece_acik' && (wo.durum === 'tamamlandi' || wo.durum === 'iptal')) continue
       const updates: Record<string, unknown> = {}
       if (wo.malkod === eskiKod) { if (kodChanged) updates.malkod = yeniKod; if (adChanged) updates.malad = yeniAd }
-      if (wo.mamulKod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) updates.mamul_ad = yeniAd }
-      // hm array içindeki referansları güncelle
-      if ((wo.hm || []).some(h => h.malkod === eskiKod)) {
-        updates.hm = (wo.hm || []).map(h => h.malkod === eskiKod ? { ...h, malkod: kodChanged ? yeniKod : h.malkod, malad: adChanged ? yeniAd : h.malad } : h)
+      if (wo.mamul_kod === eskiKod) { if (kodChanged) updates.mamul_kod = yeniKod; if (adChanged) updates.mamul_ad = yeniAd }
+      if ((wo.hm || []).some((h: any) => h.malkod === eskiKod)) {
+        updates.hm = (wo.hm || []).map((h: any) => h.malkod === eskiKod ? { ...h, malkod: kodChanged ? yeniKod : h.malkod, malad: adChanged ? yeniAd : h.malad } : h)
       }
       if (Object.keys(updates).length > 0) { await supabase.from('uys_work_orders').update(updates).eq('id', wo.id); woC++ }
     }
