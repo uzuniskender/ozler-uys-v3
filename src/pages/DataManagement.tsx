@@ -244,6 +244,107 @@ export function DataManagement() {
         }} className="ml-2 px-4 py-2 bg-red/10 border border-red/25 text-red rounded-lg text-xs hover:bg-red/20">
           🗑 Orphan Temizle
         </button>
+        <button onClick={async () => {
+          // Duplicate malzeme birleştirme — case-insensitive
+          const { data: mats } = await supabase.from('uys_malzemeler').select('*')
+          const groups: Record<string, any[]> = {}
+          for (const m of (mats || [])) {
+            const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
+            if (!norm) continue
+            if (!groups[norm]) groups[norm] = []
+            groups[norm].push(m)
+          }
+          const duplicates = Object.entries(groups).filter(([, arr]) => arr.length > 1)
+          if (duplicates.length === 0) { toast.info('Duplicate malzeme bulunamadı'); return }
+          if (!await showConfirm(
+            `${duplicates.length} duplicate grup bulundu.\n\nHer grupta EN ESKİ kayıt tutulacak, diğerleri silinecek.\nBOM/Reçete/İE/Stok hareketlerindeki referanslar otomatik büyük harfe çevrilecek.\n\nDevam?`
+          )) return
+          const [{ data: bomFresh }, { data: rcFresh }, { data: woFresh }, { data: stokFresh }, { data: kesimFresh }] = await Promise.all([
+            supabase.from('uys_bom_trees').select('*'),
+            supabase.from('uys_recipes').select('*'),
+            supabase.from('uys_work_orders').select('*'),
+            supabase.from('uys_stok_hareketler').select('*'),
+            supabase.from('uys_kesim_planlari').select('*'),
+          ])
+          let merged = 0, updBom = 0, updRc = 0, updWo = 0, updStok = 0, updKesim = 0
+          for (const [normKod, arr] of duplicates) {
+            // En eski ID'yi tut
+            const sorted = [...arr].sort((a, b) => (a.id || '').localeCompare(b.id || ''))
+            const keep = sorted[0]
+            const dels = sorted.slice(1)
+            const newKod = (keep.kod || '').toLocaleUpperCase('tr-TR').trim()
+            const newAd = (keep.ad || '').toLocaleUpperCase('tr-TR')
+            // Tutulan kayıtı normalize et
+            if (newKod !== keep.kod || newAd !== keep.ad) {
+              await supabase.from('uys_malzemeler').update({ kod: newKod, ad: newAd }).eq('id', keep.id)
+            }
+            // Yardımcı: kod eşleşmesi (case-insensitive)
+            const kodMatch = (k: string | null | undefined) => (k || '').toLocaleUpperCase('tr-TR').trim() === normKod
+            const upAd = (a: string | null | undefined) => (a || '').toLocaleUpperCase('tr-TR')
+            // BOM cascade
+            for (const bt of (bomFresh || [])) {
+              let changed = false
+              const newRows = (bt.rows || []).map((r: any) => {
+                if (kodMatch(r.malkod)) { changed = true; return { ...r, malkod: newKod, malad: upAd(r.malad) } }
+                return r
+              })
+              const upd: Record<string, unknown> = {}
+              if (changed) upd.rows = newRows
+              if (kodMatch(bt.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(bt.mamul_ad); upd.ad = upAd(bt.ad) }
+              if (Object.keys(upd).length > 0) { await supabase.from('uys_bom_trees').update(upd).eq('id', bt.id); updBom++ }
+            }
+            // Recipe cascade
+            for (const rc of (rcFresh || [])) {
+              let changed = false
+              const newSat = (rc.satirlar || []).map((r: any) => {
+                if (kodMatch(r.malkod)) { changed = true; return { ...r, malkod: newKod, malad: upAd(r.malad) } }
+                return r
+              })
+              const upd: Record<string, unknown> = {}
+              if (changed) upd.satirlar = newSat
+              if (kodMatch(rc.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(rc.mamul_ad); upd.ad = upAd(rc.ad) }
+              if (Object.keys(upd).length > 0) { await supabase.from('uys_recipes').update(upd).eq('id', rc.id); updRc++ }
+            }
+            // İş Emirleri (hm dahil)
+            for (const wo of (woFresh || [])) {
+              const upd: Record<string, unknown> = {}
+              if (kodMatch(wo.malkod)) { upd.malkod = newKod; upd.malad = upAd(wo.malad) }
+              if (kodMatch(wo.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(wo.mamul_ad) }
+              const hmOld = wo.hm || []
+              const hmNew = hmOld.map((h: any) => kodMatch(h.malkod) ? { ...h, malkod: newKod, malad: upAd(h.malad) } : h)
+              if (JSON.stringify(hmOld) !== JSON.stringify(hmNew)) upd.hm = hmNew
+              if (Object.keys(upd).length > 0) { await supabase.from('uys_work_orders').update(upd).eq('id', wo.id); updWo++ }
+            }
+            // Stok hareketleri
+            for (const h of (stokFresh || [])) {
+              if (kodMatch(h.malkod)) {
+                await supabase.from('uys_stok_hareketler').update({ malkod: newKod, malad: upAd(h.malad) }).eq('id', h.id)
+                updStok++
+              }
+            }
+            // Kesim planları (satırlar içinde kesimler[].malkod olabilir)
+            for (const p of (kesimFresh || [])) {
+              let changed = false
+              const newSat = (p.satirlar || []).map((s: any) => {
+                const newKes = (s.kesimler || []).map((k: any) => {
+                  if (kodMatch(k.malkod)) { changed = true; return { ...k, malkod: newKod, malad: upAd(k.malad) } }
+                  return k
+                })
+                return { ...s, kesimler: newKes }
+              })
+              if (changed) { await supabase.from('uys_kesim_planlari').update({ satirlar: newSat }).eq('id', p.id); updKesim++ }
+            }
+            // Duplicate sil
+            for (const d of dels) {
+              await supabase.from('uys_malzemeler').delete().eq('id', d.id)
+              merged++
+            }
+          }
+          toast.success(`✓ ${merged} duplicate silindi · ${updBom} BOM, ${updRc} reçete, ${updWo} İE, ${updStok} stok, ${updKesim} kesim güncellendi`)
+          await loadAll()
+        }} className="ml-2 px-4 py-2 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20">
+          🔀 Duplicate Malzeme Birleştir
+        </button>
       </div>}
 
       {/* Test Modu — Snapshot bazlı */}

@@ -249,7 +249,7 @@ export function Materials() {
           min_stok: parseFloat(String(row['Min Stok'] || row['min_stok'] || 0)) || 0,
         }
 
-        const existing = materials.find(m => m.kod === kod)
+        const existing = materials.find(m => (m.kod || '').toLocaleUpperCase('tr-TR').trim() === kod.toLocaleUpperCase('tr-TR').trim())
         if (existing) {
           // GÜNCELLE
           const { error } = await supabase.from('uys_malzemeler').update(dataRow).eq('id', existing.id)
