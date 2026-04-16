@@ -327,6 +327,7 @@ export interface FireLog {
   opAd: string
   operatorlar: LogOperator[]
   not: string
+  telafiWoId?: string
 }
 
 export interface ChecklistItem {

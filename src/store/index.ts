@@ -134,6 +134,7 @@ const M = {
     tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
     qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
     operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
+    telafiWoId: (r.telafi_wo_id || '') as string,
   }),
   checklist: (r: Record<string, unknown>): ChecklistItem => ({
     id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],

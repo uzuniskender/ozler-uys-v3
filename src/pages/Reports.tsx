@@ -3,14 +3,17 @@ import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { showConfirm } from '@/lib/prompt'
+import { topluFireTelafi, fireTelafiIeOlustur } from '@/features/production/fireTelafi'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts'
 
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export function Reports() {
-  const { workOrders, logs, operators, fireLogs, orders, operations } = useStore()
+  const { workOrders, logs, operators, fireLogs, orders, operations, loadAll } = useStore()
   const { can } = useAuth()
   const [tab, setTab] = useState('ozet')
+  const [telafiRunning, setTelafiRunning] = useState(false)
 
   // Detaylı Rapor filtreleri
   const [dBaslangic, setDBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
@@ -421,10 +424,86 @@ export function Reports() {
             ) : <div className="p-8 text-center text-zinc-600">Fire verisi yok</div>}
           </div>
           <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">Fire Detay</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">Fire Detay</h3>
+              {(() => {
+                const telafisiz = fireLogs.filter(f => f.qty > 0 && !f.telafiWoId).length
+                if (telafisiz === 0 || !can('reports_view')) return null
+                return (
+                  <button
+                    disabled={telafiRunning}
+                    onClick={async () => {
+                      const ok = await showConfirm(
+                        `${telafisiz} fire için sipariş dışı (telafi) İE oluşturulacak. \n\n` +
+                        `Her fire → yeni İE (aynı ürün, aynı operasyon, aynı hammadde ihtiyacı)\n` +
+                        `İE No formatı: ORİJİNAL-F1234\n` +
+                        `Sipariş bağlantısı yok, bağımsız üretim.\n\nDevam?`
+                      )
+                      if (!ok) return
+                      setTelafiRunning(true)
+                      const sonuc = await topluFireTelafi(fireLogs, workOrders)
+                      setTelafiRunning(false)
+                      if (sonuc.basarili > 0) toast.success(`${sonuc.basarili} telafi İE oluşturuldu`)
+                      if (sonuc.hata > 0) toast.error(`${sonuc.hata} hata — konsol kontrol et`)
+                      if (sonuc.hatalar.length) console.warn('Fire telafi hataları:', sonuc.hatalar)
+                      loadAll()
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-amber/10 border border-amber/25 text-amber rounded text-[11px] hover:bg-amber/20 disabled:opacity-40"
+                  >
+                    {telafiRunning ? 'İşleniyor...' : `🔁 ${telafisiz} telafisi İE Oluştur`}
+                  </button>
+                )
+              })()}
+            </div>
             {fireLogs.length ? (
-              <div className="max-h-[300px] overflow-y-auto"><table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-left px-3 py-2">İE</th><th className="text-left px-3 py-2">Malzeme</th><th className="text-right px-3 py-2">Adet</th></tr></thead>
-              <tbody>{[...fireLogs].sort((a, b) => b.tarih.localeCompare(a.tarih)).map(f => (<tr key={f.id} className="border-b border-border/30"><td className="px-3 py-1 font-mono text-zinc-500">{f.tarih}</td><td className="px-3 py-1 font-mono text-accent">{f.ieNo}</td><td className="px-3 py-1 text-zinc-300">{f.malad}</td><td className="px-3 py-1 text-right font-mono text-red">{f.qty}</td></tr>))}</tbody></table></div>
+              <div className="max-h-[400px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-bg-2 z-10">
+                    <tr className="border-b border-border text-zinc-500">
+                      <th className="text-left px-3 py-2">Tarih</th>
+                      <th className="text-left px-3 py-2">İE</th>
+                      <th className="text-left px-3 py-2">Malzeme</th>
+                      <th className="text-right px-3 py-2">Adet</th>
+                      <th className="text-left px-3 py-2 w-32">Telafi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...fireLogs].sort((a, b) => b.tarih.localeCompare(a.tarih)).map(f => {
+                      const telafiWo = f.telafiWoId ? workOrders.find(w => w.id === f.telafiWoId) : null
+                      return (
+                        <tr key={f.id} className="border-b border-border/30">
+                          <td className="px-3 py-1 font-mono text-zinc-500">{f.tarih}</td>
+                          <td className="px-3 py-1 font-mono text-accent">{f.ieNo}</td>
+                          <td className="px-3 py-1 text-zinc-300">{f.malad}</td>
+                          <td className="px-3 py-1 text-right font-mono text-red">{f.qty}</td>
+                          <td className="px-3 py-1">
+                            {telafiWo ? (
+                              <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-mono" title="Telafi İE oluşturuldu">
+                                ✓ {telafiWo.ieNo}
+                              </span>
+                            ) : f.telafiWoId ? (
+                              <span className="text-[10px] text-zinc-600">İE silinmiş</span>
+                            ) : f.qty > 0 ? (
+                              <button
+                                onClick={async () => {
+                                  const wo = workOrders.find(w => w.id === f.woId)
+                                  if (!wo) { toast.error('Orijinal İE bulunamadı'); return }
+                                  const r = await fireTelafiIeOlustur(f, wo)
+                                  if (r) { toast.success(`Telafi İE oluşturuldu: ${r.ieNo}`); loadAll() }
+                                  else toast.error('Oluşturulamadı')
+                                }}
+                                className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20"
+                              >
+                                🔁 Aç
+                              </button>
+                            ) : <span className="text-zinc-600">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : <div className="p-8 text-center text-zinc-600">Fire kaydı yok</div>}
           </div>
         </div>
