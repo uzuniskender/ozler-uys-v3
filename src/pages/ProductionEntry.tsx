@@ -307,25 +307,24 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
     if (q <= 0 && !hasDurus) { toast.error('Miktar veya duruş girmelisiniz'); return }
-    // #2: Fazla üretim kontrolü — HARD BLOCK
-    // Güncel üretimi Supabase'den çek (stale data riski)
-    const { data: freshLogs } = await supabase.from('uys_logs').select('qty').eq('wo_id', woId)
+    // #2: Fazla üretim kontrolü — HARD BLOCK (fire dahil)
+    // Güncel üretim + fire'ı Supabase'den çek (stale data riski)
+    const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
     const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
-    const freshKalan = Math.max(0, w.hedef - freshProd)
-    if (q > 0 && q > freshKalan) {
-      toast.error(`Hedef aşılamaz! Hedef: ${w.hedef}, mevcut üretim: ${freshProd}, kalan: ${freshKalan}`)
+    const freshFire = (freshLogs || []).reduce((a: number, l: any) => a + (l.fire || 0), 0)
+    const freshKapasite = Math.max(0, w.hedef - freshProd - freshFire)
+    const toplamYeni = q + f
+    if (toplamYeni > freshKapasite) {
+      toast.error(
+        `İE kapasitesi aşılamaz! Hedef: ${w.hedef}\n` +
+        `Mevcut: ${freshProd} sağlam + ${freshFire} fire = ${freshProd + freshFire}\n` +
+        `Kalan kapasite: ${freshKapasite}\n` +
+        `Girmek istediğin: ${q} sağlam + ${f} fire = ${toplamYeni}\n\n` +
+        `Hat kenarına gelen hammadde tükenmiştir. Fire varsa yeni İE açılacak.`
+      )
       return
     }
-    // Stok uyarısı — admin override olabilir (fire dahil toplam tüketim)
-    const gercekToplam = q + f
-    if (gercekToplam > 0 && hmSatirlar.length > 0 && gercekToplam > maxUretim) {
-      const eksikler = hmSatirlar.filter(hm => {
-        const mevcut = Math.round(stokNet(hm.malkod))
-        const ihtiyac = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * gercekToplam)
-        return mevcut < ihtiyac
-      }).map(hm => `${hm.malad || hm.malkod}: mevcut ${Math.round(stokNet(hm.malkod))}, gerekli ${Math.ceil((hm.miktar || 0) * (w.mpm || 1) * gercekToplam)}`).join('\n')
-      if (!await showConfirm(`⚠️ STOK YETERSİZ!\nToplam tüketim: ${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''} = ${gercekToplam}\nMax yapılabilir: ${maxUretim} adet\n\n${eksikler}\n\nEksi stok oluşacak. Yine de devam edilsin mi?`)) return
-    }
+    // Stok kontrolü kaldırıldı — İE hedefi zaten hammadde tahsisi demek, İE oluşturma anında kontrol edildi
     setSaving(true)
 
     const logId = uid()
@@ -373,20 +372,22 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       }
     }
 
-    // Fire → sipariş dışı İE teklifi (#6)
-    if (f > 0 && f >= 5) {
-      const createFireIE = await showConfirm(`${f} adet fire oluştu. Telafi için yeni İE oluşturulsun mu?`)
-      if (createFireIE) {
-        const ieNo = await fireIEOlustur(woId, f, workOrders)
-        if (ieNo) toast.info('Fire İE oluşturuldu: ' + ieNo)
-      }
+    // Fire → otomatik telafi İE (her fire için, onay yok)
+    if (f > 0) {
+      const ieNo = await fireIEOlustur(woId, f, workOrders)
+      if (ieNo) toast.info(`🔁 Fire telafisi: ${f} adet için yeni İE oluşturuldu: ${ieNo}`)
     }
 
-    // #1: %100 olduğunda otomatik tamamlandı
-    const yeniToplam = prod + q
-    if (yeniToplam >= w.hedef && w.durum !== 'tamamlandi') {
+    // Auto-close: İE kapasitesi doldu mu? (q + fire >= hedef)
+    const yeniProdToplam = freshProd + q
+    const yeniFireToplam = freshFire + f
+    const yeniKapasite = yeniProdToplam + yeniFireToplam
+    if (yeniKapasite >= w.hedef && w.durum !== 'tamamlandi') {
       await supabase.from('uys_work_orders').update({ durum: 'tamamlandi', tamamlanma_tarih: today() }).eq('id', woId)
-    } else if (prod === 0 && w.durum !== 'uretimde') {
+      if (yeniProdToplam < w.hedef) {
+        toast.info(`İE kapasite dolduğu için kapatıldı (${yeniProdToplam} sağlam, ${yeniFireToplam} fire). Fire için telafi İE açıldı.`)
+      }
+    } else if (freshProd === 0 && w.durum !== 'uretimde') {
       // İlk üretim girişi → durum "üretimde"
       await supabase.from('uys_work_orders').update({ durum: 'uretimde' }).eq('id', woId)
     }

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
+import { fireIEOlustur } from '@/features/production/stokTuketim'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -787,16 +788,22 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     const q = parseInt(qty) || 0; const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
     if (q <= 0 && !hasDurus) { toast.error('Adet veya duruş girin'); return }
-    // Güncel üretimi Supabase'den çek (stale data / eşzamanlı giriş koruması)
-    const { data: freshLogs } = await supabase.from('uys_logs').select('qty').eq('wo_id', woId)
+    // Güncel üretim + fire'ı çek — İE kapasitesi (fire dahil)
+    const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
     const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
-    const freshKalan = Math.max(0, w.hedef - freshProd + (editLog?.qty || 0))
-    if (q > freshKalan) { toast.error('Hedeften fazla üretilemez! Kalan: ' + freshKalan); return }
-    // Stok kontrolü — sağlam + fire toplamı için
+    const freshFire = (freshLogs || []).reduce((a: number, l: any) => a + (l.fire || 0), 0)
+    // Edit mode'da mevcut log'un q ve f'i çıkart, yeni değerleri karşılaştır
+    const kapasiteOnceki = freshProd + freshFire - (editLog?.qty || 0) - (editLog?.fire || 0)
+    const freshKalan = Math.max(0, w.hedef - kapasiteOnceki)
     const opToplam = q + f
-    if (opToplam > 0 && maxUretim <= 0 && hmSatirlar.length > 0) { toast.error('Stok yetersiz — üretim yapılamaz'); return }
-    if (opToplam > 0 && opToplam > maxUretim && hmSatirlar.length > 0) {
-      toast.error(`Stok yetersiz! ${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''} = ${opToplam} gerekli, max ${maxUretim}`)
+    if (opToplam > freshKalan) {
+      toast.error(
+        `İE kapasitesi aşılamaz! Hedef: ${w.hedef}\n` +
+        `Mevcut: ${freshProd} sağlam + ${freshFire} fire\n` +
+        `Kalan: ${freshKalan}\n` +
+        `Girmek istediğin: ${q} sağlam + ${f} fire = ${opToplam}\n\n` +
+        `Hat kenarındaki hammadde tükenmiş. Fire varsa yönetim telafi İE açar.`
+      )
       return
     }
     if (!oprList.length) { toast.error('En az bir operatör eklenmeli'); return }
@@ -902,12 +909,20 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
           not_: aciklama || '',
         })
+        // Her fire için otomatik telafi İE (sipariş dışı)
+        const { workOrders: fullWos } = useStore.getState()
+        const telafiIe = await fireIEOlustur(woId, f, fullWos)
+        if (telafiIe) toast.info(`🔁 ${f} fire için telafi İE: ${telafiIe}`)
       }
     }
-    // ═══ AUTO-CLOSE: İE tamamlandı mı? ═══
+    // ═══ AUTO-CLOSE: İE kapasitesi doldu mu? (sağlam + fire >= hedef) ═══
     const q_ = parseInt(qty) || 0
-    const yeniToplam = prod - (editLog?.qty || 0) + q_
-    if (yeniToplam >= w.hedef && w.hedef > 0) {
+    const f_ = parseInt(fire) || 0
+    // Edit mode'da mevcut log'un eski q ve f'ini çıkart
+    const eskiQ = editLog?.qty || 0
+    const eskiF = editLog?.fire || 0
+    const yeniKapasite = (freshProd - eskiQ + q_) + (freshFire - eskiF + f_)
+    if (yeniKapasite >= w.hedef && w.hedef > 0) {
       // Bu İE'ye ait tüm active_work kayıtlarını otomatik kapat
       await supabase.from('uys_active_work').delete().eq('wo_id', woId)
       // Her operatörün bitiş saatini kaydet (sonraki iş için akıllı saat)
