@@ -291,7 +291,16 @@ export function WorkOrders() {
                     return (
                       <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
                         <td className="px-2 py-1.5"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggleSelect(w.id)} className="accent-accent" /></td>
-                        <td className="px-3 py-1.5"><div className="font-mono text-accent text-[11px]">{w.ieNo}</div>{ord2 && groupBy !== 'siparis' && <div className="text-[9px] text-zinc-600">{ord2.siparisNo}</div>}</td>
+                        <td className="px-3 py-1.5">
+                          <div className="font-mono text-accent text-[11px]">{w.ieNo}</div>
+                          {ord2 && groupBy !== 'siparis' && <div className="text-[9px] text-zinc-600">{ord2.siparisNo}</div>}
+                          {w.bagimsiz && (w.not || '').toLowerCase().includes('fire telafi') && (
+                            <div className="text-[9px] px-1 py-0.5 mt-0.5 bg-red/10 text-red rounded inline-block font-semibold" title={w.not}>🔁 Fire Telafisi</div>
+                          )}
+                          {w.bagimsiz && !(w.not || '').toLowerCase().includes('fire telafi') && (
+                            <div className="text-[9px] px-1 py-0.5 mt-0.5 bg-amber/10 text-amber rounded inline-block" title="Sipariş dışı bağımsız üretim">Sipariş Dışı</div>
+                          )}
+                        </td>
                         <td className="px-3 py-1.5 min-w-[280px]">
                           <div className="text-[11px] text-zinc-300 leading-snug">{w.malad}</div>
                           <div className="text-[9px] text-zinc-600 font-mono">{w.malkod}</div>
@@ -432,6 +441,12 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
         </div>
 
         {wo.whAlloc > 0 && <div className="mb-3 text-[10px] px-2 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/15 inline-block">Depodan kullanılan: {wo.whAlloc} adet</div>}
+
+        {wo.not && (
+          <div className={`mb-3 p-2 rounded border text-xs ${(wo.not || '').toLowerCase().includes('fire telafi') ? 'bg-red/10 border-red/25 text-red' : 'bg-amber/10 border-amber/25 text-amber'}`}>
+            <span className="font-semibold">{(wo.not || '').toLowerCase().includes('fire telafi') ? '🔁 ' : '📝 '}Not:</span> {wo.not}
+          </div>
+        )}
 
         <div className="grid grid-cols-4 gap-3 mb-4">
           <div className="bg-bg-2 border border-border rounded-lg p-3 text-center"><div className="text-[10px] text-zinc-500 font-mono mb-1">HEDEF</div><div className={`text-xl font-mono font-bold ${can('wo_edit') ? 'cursor-pointer hover:text-accent' : ''}`} onClick={() => can('wo_edit') && updateHedef(wo.id)}>{wo.hedef}</div></div>
