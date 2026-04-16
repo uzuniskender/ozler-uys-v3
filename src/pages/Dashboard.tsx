@@ -289,10 +289,10 @@ export function Dashboard() {
             />
             <FlowArrow />
             <FlowCard
-              icon="✂️" label="Kesim Planı" count={kesimEksik + bekleyenKP}
-              sublabel={kesimEksik > 0 ? `${kesimEksik} planlanmadı` : `${bekleyenKP} bekliyor`}
+              icon="✂️" label="Kesim Planı" count={kesimEksik > 0 ? kesimEksik : bekleyenKP}
+              sublabel={kesimEksik > 0 ? `${kesimEksik} planlanmadı` : bekleyenKP > 0 ? `${bekleyenKP} plan aktif` : 'Tamam'}
               warning={kesimEksik > 0}
-              color="amber"
+              color={kesimEksik > 0 ? 'amber' : bekleyenKP > 0 ? 'green' : 'zinc-500'}
               onClick={() => navigate('/cutting')}
             />
           </div>
