@@ -167,19 +167,25 @@ export function kesimPlanOlustur(
   const mevcutKopyasi = [...mevcutPlanlar]
 
   for (const g of Object.values(gruplar)) {
-    // Mevcut bekleyen plan var mı?
-    const mevcutPlan = mevcutKopyasi.find(p => p.hamMalkod === g.hamMalkod && p.durum !== 'tamamlandi')
+    // Sadece BEKLEYEN plan varsa birleştir — başladı/tamamlandı planlara dokunma
+    const mevcutPlan = mevcutKopyasi.find(p => p.hamMalkod === g.hamMalkod && p.durum === 'bekliyor')
 
     if (mevcutPlan) {
-      // Mevcut plan var — sadece henüz planlanmamış WO'ları ekle
+      // Bu plana daha önce eklenmemiş WO'ları ayıkla
       const planlananWoIds = new Set<string>()
       mevcutPlan.satirlar.forEach(s => s.kesimler.forEach(k => planlananWoIds.add(k.woId)))
       const yeniIhtiyaclar = g.ihtiyaclar.filter(iht => !planlananWoIds.has(iht.woId))
+
       if (yeniIhtiyaclar.length > 0) {
-        const ekGrup = { ...g, ihtiyaclar: yeniIhtiyaclar }
-        const ekSatirlar = boykesimOptimum(ekGrup, workOrders, materials, logs)
-        mevcutPlan.satirlar = mevcutPlan.satirlar.concat(ekSatirlar)
-        mevcutPlan.gerekliAdet = mevcutPlan.satirlar.reduce((a, s) => a + s.hamAdet, 0)
+        // Mevcut satırları bar seed'i olarak ver → önce fire'a sığdır, sonra yeni bar aç, en son grupla
+        const birlesik = boykesimOptimum(
+          { ...g, ihtiyaclar: yeniIhtiyaclar },
+          workOrders, materials, logs,
+          mevcutPlan.satirlar,
+        )
+        mevcutPlan.satirlar = birlesik
+        mevcutPlan.gerekliAdet = birlesik.reduce((a, s) => a + s.hamAdet, 0)
+        console.log(`🔀 Plan birleştirildi: ${g.hamMalkod} | +${yeniIhtiyaclar.length} yeni İE | ${birlesik.length} satır`)
       }
       sonuclar.push(mevcutPlan)
     } else {
@@ -199,24 +205,39 @@ export function kesimPlanOlustur(
 }
 
 // Boy kesim optimizasyonu — Decreasing First Fit + Fire Doldurma
+// mevcutSatirlar verilirse: mevcut bar'lar seed olarak kullanılır, yeni ihtiyaçlar önce onların fire'ına sığdırılır
 function boykesimOptimum(
   g: { hamMalkod: string; hamBoy: number; ihtiyaclar: { woId: string; ieNo: string; malkod: string; malad: string; parcaBoy: number; parcaEn: number; adet: number }[] },
   allWOs: WorkOrder[],
   materials: Material[],
-  logs: { woId: string; qty: number }[]
+  logs: { woId: string; qty: number }[],
+  mevcutSatirlar?: KesimSatir[]
 ): KesimSatir[] {
   const hamBoy = g.hamBoy || 6000
   const ihtiyaclar = g.ihtiyaclar.slice().sort((a, b) => (b.parcaBoy || 0) - (a.parcaBoy || 0))
 
-  // Bar listesi
-  const barlar: { kalan: number; kesimler: KesimKesim[] }[] = []
+  // Bar listesi — mevcut satırlar varsa bar'lara patlat (hamAdet kadar)
+  const barlar: { kalan: number; kesimler: KesimKesim[]; kilitli?: boolean }[] = []
+  if (mevcutSatirlar?.length) {
+    for (const s of mevcutSatirlar) {
+      // Başlayan/tamamlanan satırlar kilitli — fire'ına dokunma, kesim düzenini koru
+      const kilitli = !!(s.durum && s.durum !== 'bekliyor')
+      for (let i = 0; i < s.hamAdet; i++) {
+        barlar.push({
+          kalan: kilitli ? 0 : (s.fireMm || 0),
+          kesimler: JSON.parse(JSON.stringify(s.kesimler)),
+          kilitli,
+        })
+      }
+    }
+  }
 
   for (const iht of ihtiyaclar) {
     const parcaBoy = iht.parcaBoy; if (!parcaBoy) continue
     let kalanAdet = iht.adet
 
     while (kalanAdet > 0) {
-      // Best-fit: en az boşluk bırakan bar'ı seç
+      // Best-fit: en az boşluk bırakan bar'ı seç (kilitli barlar kalan=0 olduğu için otomatik dışlanır)
       let enIyiBi = -1; let enIyiKalan = Infinity
       for (let bi = 0; bi < barlar.length; bi++) {
         const adedPerBor = Math.floor(barlar[bi].kalan / parcaBoy)
@@ -248,7 +269,7 @@ function boykesimOptimum(
     }
   }
 
-  // Fire doldurma — 3 aşama
+  // Fire doldurma — 3 aşama (kilitli barlar zaten kalan=0, etkilenmez)
   // 1) Diğer açık İE'lerden parça sığdır
   for (const bar of barlar) {
     if (bar.kalan < 10) continue
@@ -296,13 +317,13 @@ function boykesimOptimum(
   // Aynı kesim düzenindeki barları grupla
   const gruplu: KesimSatir[] = []
   for (const bar of barlar) {
-    const anahtar = bar.kesimler.map(k => k.woId + ':' + k.parcaBoy + ':' + k.adet).sort().join('|')
+    const anahtar = bar.kesimler.map(k => k.woId + ':' + k.parcaBoy + ':' + k.adet).sort().join('|') + '#' + (bar.kilitli ? 'LOCK' : 'OK')
     const mev = gruplu.find(g => {
-      const gAnahtar = g.kesimler.map(k => k.woId + ':' + k.parcaBoy + ':' + k.adet).sort().join('|')
+      const gAnahtar = g.kesimler.map(k => k.woId + ':' + k.parcaBoy + ':' + k.adet).sort().join('|') + '#' + (g.durum === 'bekliyor' ? 'OK' : 'LOCK')
       return gAnahtar === anahtar
     })
     if (mev) mev.hamAdet++
-    else gruplu.push({ id: uid(), hamAdet: 1, fireMm: bar.kalan, kesimler: JSON.parse(JSON.stringify(bar.kesimler)), durum: 'bekliyor' })
+    else gruplu.push({ id: uid(), hamAdet: 1, fireMm: bar.kalan, kesimler: JSON.parse(JSON.stringify(bar.kesimler)), durum: bar.kilitli ? 'basladi' : 'bekliyor' })
   }
 
   return gruplu

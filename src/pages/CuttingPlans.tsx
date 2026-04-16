@@ -55,10 +55,14 @@ export function CuttingPlans() {
           {can('cutting_add') && <button onClick={async () => {
             const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
             const cpMapped = cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
+            const eskiIdSet = new Set(cuttingPlans.map((p: any) => p.id))
             const planlar = kesimPlanOlustur(workOrders, operations as any, recipes, materials, logsSimple, cpMapped as any)
             if (!planlar.length) { toast.info('Kesim operasyonlu açık İE bulunamadı'); return }
-            const count = await kesimPlanlariKaydet(planlar as any)
-            loadAll(); toast.success(count + ' kesim planı oluşturuldu/güncellendi')
+            const yeniSayi = planlar.filter(p => !eskiIdSet.has(p.id)).length
+            const birlestirilen = planlar.length - yeniSayi
+            await kesimPlanlariKaydet(planlar as any)
+            const parcalar = [yeniSayi > 0 && `${yeniSayi} yeni plan`, birlestirilen > 0 && `${birlestirilen} plana İE eklendi`].filter(Boolean).join(' · ')
+            loadAll(); toast.success(parcalar || 'Değişiklik yok')
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs font-semibold hover:bg-green/20"><Zap size={13} /> Otomatik Plan</button>}
           {can('cutting_add') && <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Scissors size={13} /> Manuel Plan</button>}
         </div>
