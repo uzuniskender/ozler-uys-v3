@@ -177,11 +177,12 @@ interface UYSStore {
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
+  reloadTables: (tableNames: string[]) => Promise<void>
   setOrders: (orders: Order[]) => void
   setWorkOrders: (wos: WorkOrder[]) => void
 }
 
-const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<string, unknown>) => unknown }> = [
+export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<string, unknown>) => unknown }> = [
   { key: 'orders', table: 'uys_orders', mapper: M.order },
   { key: 'workOrders', table: 'uys_work_orders', mapper: M.wo },
   { key: 'logs', table: 'uys_logs', mapper: M.log },
@@ -206,6 +207,9 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
   { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
   { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
 ]
+
+// Tablo adı → TABLE_MAP entry lookup (realtime için)
+const TABLE_LOOKUP: Record<string, typeof TABLE_MAP[number]> = TABLE_MAP.reduce((a, t) => { a[t.table] = t; return a }, {} as Record<string, typeof TABLE_MAP[number]>)
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
@@ -248,4 +252,21 @@ export const useStore = create<UYSStore>((set) => ({
   },
   setOrders: (orders) => set({ orders }),
   setWorkOrders: (workOrders) => set({ workOrders }),
+
+  // ═══ Selective reload — realtime için ═══
+  reloadTables: async (tableNames: string[]) => {
+    const entries = tableNames.map(t => TABLE_LOOKUP[t]).filter(Boolean)
+    if (!entries.length) return
+    try {
+      const results = await Promise.all(entries.map(e => supabase.from(e.table).select('*')))
+      const updates: Record<string, unknown> = {}
+      results.forEach((res, i) => {
+        const e = entries[i]
+        if (!res.error && res.data) updates[e.key as string] = res.data.map(r => e.mapper(r as Record<string, unknown>))
+      })
+      if (Object.keys(updates).length) set(updates as Partial<UYSStore>)
+    } catch (e) {
+      console.error('reloadTables:', e)
+    }
+  },
 }))
