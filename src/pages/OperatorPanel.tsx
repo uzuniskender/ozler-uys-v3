@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
-import { fireIEOlustur } from '@/features/production/stokTuketim'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -909,10 +908,8 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
           not_: aciklama || '',
         })
-        // Her fire için otomatik telafi İE (sipariş dışı)
-        const { workOrders: fullWos } = useStore.getState()
-        const telafiIe = await fireIEOlustur(woId, f, fullWos)
-        if (telafiIe) toast.info(`🔁 ${f} fire için telafi İE: ${telafiIe}`)
+        // Telafi İE otomatik açılmaz — yönetim Reports → Fire sekmesinden onaylayıp açar
+        toast.info(`⚠ ${f} fire kaydedildi. Telafi için yönetim onayı bekleniyor.`, { duration: 5000 })
       }
     }
     // ═══ AUTO-CLOSE: İE kapasitesi doldu mu? (sağlam + fire >= hedef) ═══

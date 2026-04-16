@@ -149,6 +149,8 @@ export function Dashboard() {
 
   const bugunFire = fireLogs.filter(f => f.tarih === todayStr)
   const toplamFire = bugunFire.reduce((a, f) => a + f.qty, 0)
+  const bekleyenTelafi = fireLogs.filter(f => !f.telafiWoId)
+  const bekleyenTelafiAdet = bekleyenTelafi.reduce((a, f) => a + f.qty, 0)
   const okunmamis = operatorNotes.filter(n => !n.okundu && !(n.opAd || '').includes('Yönetim'))
 
   // Tamamlanmış İE'lerin aktif çalışma hayaletlerini filtrele
@@ -415,6 +417,7 @@ export function Dashboard() {
         <StatCard value={terminGecen.length} label="Termin Geçmiş" color="red" icon={AlertTriangle} onClick={() => navigate('/orders')} />
         <StatCard value={acikWOs.length} label="Açık İş Emri" color="zinc-300" icon={Clock} onClick={() => navigate('/work-orders')} />
         <StatCard value={toplamFire || '—'} label="Bugün Fire" color={toplamFire > 0 ? 'red' : 'zinc-500'} icon={Flame} onClick={() => navigate('/reports')} />
+        <StatCard value={bekleyenTelafiAdet || '—'} label="Telafi Onay Bekleyen" color={bekleyenTelafiAdet > 0 ? 'amber' : 'zinc-500'} icon={Flame} onClick={() => navigate('/reports')} />
         <StatCard value={okunmamis.length} label="Yeni Mesaj" color={okunmamis.length > 0 ? 'amber' : 'zinc-500'} icon={MessageSquare} onClick={() => navigate('/messages')} />
         <StatCard value={gercekAktif.length} label="Aktif Çalışma" color={gercekAktif.length > 0 ? 'green' : 'zinc-500'} icon={Wrench} onClick={() => navigate('/production')} />
       </div>

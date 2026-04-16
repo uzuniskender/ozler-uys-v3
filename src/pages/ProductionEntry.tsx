@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
-import { stokTuketimIsle, fireIEOlustur } from '@/features/production/stokTuketim'
+import { stokTuketimIsle } from '@/features/production/stokTuketim'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -372,10 +372,9 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       }
     }
 
-    // Fire → otomatik telafi İE (her fire için, onay yok)
+    // Fire kaydedildi — telafi İE otomatik açılmaz, yönetim Reports → Fire'dan onaylayacak
     if (f > 0) {
-      const ieNo = await fireIEOlustur(woId, f, workOrders)
-      if (ieNo) toast.info(`🔁 Fire telafisi: ${f} adet için yeni İE oluşturuldu: ${ieNo}`)
+      toast.info(`⚠ ${f} fire kaydedildi. Telafi İE için Reports → Fire sekmesinden onay verin.`, { duration: 5000 })
     }
 
     // Auto-close: İE kapasitesi doldu mu? (q + fire >= hedef)
