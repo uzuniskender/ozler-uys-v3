@@ -116,7 +116,7 @@ export function Dashboard() {
   const {
     orders, workOrders, logs, operatorNotes, activeWork, operators,
     fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
-    operations, stations, sevkler, izinler, recipes, loadAll,
+    operations, stations, sevkler, izinler, recipes, bomTrees, loadAll,
   } = useStore()
   const { can, isGuest, role } = useAuth()
   const todayStr = today()
@@ -333,22 +333,62 @@ export function Dashboard() {
             {(() => {
               const cards: { icon: string; label: string; sub: string; link: string; color: string }[] = []
               if (role === 'admin' || role === 'planlama') {
-                cards.push({ icon: '📋', label: 'Siparişler', sub: `${aktifOrders.length} aktif`, link: '/orders', color: 'accent' })
-                cards.push({ icon: '📊', label: 'MRP', sub: mrpYapilmamis > 0 ? `${mrpYapilmamis} bekliyor` : 'Güncel', link: '/mrp', color: 'cyan' })
-                cards.push({ icon: '✂️', label: 'Kesim Planı', sub: `${bekleyenKP} plan`, link: '/cutting', color: 'amber' })
-                cards.push({ icon: '🌳', label: 'Ürün Ağacı', sub: 'BOM', link: '/bom', color: 'green' })
+                cards.push({
+                  icon: '📋', label: 'Siparişler',
+                  sub: terminGecen.length > 0 ? `${terminGecen.length} termin geçmiş` : `${aktifOrders.length} aktif`,
+                  link: '/orders',
+                  color: terminGecen.length > 0 ? 'red' : 'accent',
+                })
+                cards.push({
+                  icon: '📊', label: 'MRP',
+                  sub: mrpYapilmamis > 0 ? `${mrpYapilmamis} bekliyor` : 'Güncel',
+                  link: '/mrp',
+                  color: mrpYapilmamis > 0 ? 'amber' : 'cyan',
+                })
+                cards.push({
+                  icon: '✂️', label: 'Kesim Planı',
+                  sub: kesimEksik > 0 ? `${kesimEksik} planlanmadı` : bekleyenKP > 0 ? `${bekleyenKP} plan aktif` : 'Tamam',
+                  link: '/cutting',
+                  color: kesimEksik > 0 ? 'amber' : bekleyenKP > 0 ? 'green' : 'zinc-500',
+                })
+                cards.push({ icon: '🌳', label: 'Ürün Ağacı', sub: `${bomTrees.length} ağaç`, link: '/bom', color: 'green' })
                 cards.push({ icon: '📑', label: 'Reçeteler', sub: `${recipes.length}`, link: '/recipes', color: 'purple-400' })
               }
               if (role === 'admin' || role === 'uretim_sor') {
-                cards.push({ icon: '⚙', label: 'İş Emirleri', sub: `${acikWOs.length} açık`, link: '/work-orders', color: 'zinc-300' })
-                cards.push({ icon: '🔧', label: 'Üretim', sub: `${uretimCount} aktif`, link: '/production', color: 'green' })
+                cards.push({
+                  icon: '⚙', label: 'İş Emirleri',
+                  sub: ieBekleyenCount > 0 ? `${ieBekleyenCount} oluşmadı` : `${acikWOs.length} açık`,
+                  link: '/work-orders',
+                  color: ieBekleyenCount > 0 ? 'amber' : 'zinc-300',
+                })
+                cards.push({
+                  icon: '🔧', label: 'Üretim',
+                  sub: `${uretimCount} aktif`,
+                  link: '/production',
+                  color: uretimCount > 0 ? 'green' : 'zinc-500',
+                })
                 cards.push({ icon: '📈', label: 'Raporlar', sub: 'Analiz', link: '/reports', color: 'blue-400' })
               }
               if (role === 'admin' || role === 'depocu') {
-                cards.push({ icon: '📦', label: 'Stok / Depo', sub: `${materials.length} malzeme`, link: '/warehouse', color: 'amber' })
-                cards.push({ icon: '🚚', label: 'Tedarik', sub: bekleyenTed.length > 0 ? `${bekleyenTed.length} bekliyor` : 'Tamam', link: '/procurement', color: 'purple-400' })
+                cards.push({
+                  icon: '📦', label: 'Stok / Depo',
+                  sub: minStokUyari.length > 0 ? `⚠ ${minStokUyari.length} min altı` : `${materials.length} malzeme`,
+                  link: '/warehouse',
+                  color: minStokUyari.length > 0 ? 'red' : 'amber',
+                })
+                cards.push({
+                  icon: '🚚', label: 'Tedarik',
+                  sub: bekleyenTed.length > 0 ? `${bekleyenTed.length} bekliyor` : 'Tamam',
+                  link: '/procurement',
+                  color: bekleyenTed.length > 0 ? 'amber' : 'purple-400',
+                })
                 cards.push({ icon: '📋', label: 'Malzemeler', sub: 'Katalog', link: '/materials', color: 'accent' })
-                cards.push({ icon: '🚢', label: 'Sevkiyat', sub: `${sevkBekleyenCount} bu hafta`, link: '/shipment', color: 'blue-400' })
+                cards.push({
+                  icon: '🚢', label: 'Sevkiyat',
+                  sub: `${sevkBekleyenCount} bu hafta`,
+                  link: '/shipment',
+                  color: sevkBekleyenCount > 0 ? 'blue-400' : 'zinc-500',
+                })
               }
               if (role === 'admin') {
                 cards.push({ icon: '✅', label: 'Checklist', sub: 'Görev/İstek', link: '/checklist', color: 'purple-400' })
