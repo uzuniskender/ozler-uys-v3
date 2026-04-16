@@ -846,7 +846,11 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       await supabase.from('uys_fire_logs').delete().eq('log_id', editLogId)
       if (f > 0) {
         await supabase.from('uys_fire_logs').insert({
-          id: uid(), log_id: editLogId, wo_id: woId, tarih, miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
+          id: uid(), log_id: editLogId, wo_id: woId, tarih,
+          malkod: w.malkod, malad: w.malad, qty: f,
+          ie_no: w.ieNo, op_ad: oprList.map(o => o.ad).join(', '),
+          operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
+          not_: aciklama || '',
         })
       }
     } else {
@@ -875,7 +879,11 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       }
       if (f > 0) {
         await supabase.from('uys_fire_logs').insert({
-          id: uid(), log_id: logId, wo_id: woId, tarih, miktar: f, opertor: oprList.map(o => o.ad).join(', '), neden: aciklama || '',
+          id: uid(), log_id: logId, wo_id: woId, tarih,
+          malkod: w.malkod, malad: w.malad, qty: f,
+          ie_no: w.ieNo, op_ad: oprList.map(o => o.ad).join(', '),
+          operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
+          not_: aciklama || '',
         })
       }
     }
