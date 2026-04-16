@@ -292,10 +292,10 @@ export function WorkOrders() {
                       <tr key={w.id} className="border-b border-border/30 hover:bg-bg-3/30">
                         <td className="px-2 py-1.5"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggleSelect(w.id)} className="accent-accent" /></td>
                         <td className="px-3 py-1.5"><div className="font-mono text-accent text-[11px]">{w.ieNo}</div>{ord2 && groupBy !== 'siparis' && <div className="text-[9px] text-zinc-600">{ord2.siparisNo}</div>}</td>
-                        <td className="px-3 py-1.5 max-w-[220px]">
-                          <div className="text-[11px] text-zinc-300 truncate">{w.malad}</div>
+                        <td className="px-3 py-1.5 min-w-[280px]">
+                          <div className="text-[11px] text-zinc-300 leading-snug">{w.malad}</div>
                           <div className="text-[9px] text-zinc-600 font-mono">{w.malkod}</div>
-                          {w.hm && w.hm.length > 0 && <div className="mt-0.5 flex flex-wrap gap-0.5">{w.hm.slice(0, 3).map((h, i) => <span key={i} className="text-[8px] px-1 rounded bg-cyan-500/8 text-cyan-400/80 border border-cyan-500/15">{(h.malad || '').slice(0, 20)}</span>)}{w.hm.length > 3 && <span className="text-[8px] text-zinc-600">+{w.hm.length - 3}</span>}</div>}
+                          {w.hm && w.hm.length > 0 && <div className="mt-0.5 flex flex-wrap gap-0.5">{w.hm.slice(0, 3).map((h, i) => <span key={i} className="text-[8px] px-1 rounded bg-cyan-500/8 text-cyan-400/80 border border-cyan-500/15" title={h.malad || ''}>{h.malad || ''}</span>)}{w.hm.length > 3 && <span className="text-[8px] text-zinc-600">+{w.hm.length - 3}</span>}</div>}
                           {w.whAlloc > 0 && <div className="text-[8px] mt-0.5"><span className="px-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/15">Depo: {w.whAlloc}</span></div>}
                           {stokBadgeEl(w)}
                         </td>
