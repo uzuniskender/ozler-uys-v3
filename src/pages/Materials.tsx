@@ -600,14 +600,24 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Malzeme Düzenle' : 'Yeni Malzeme'}</h2>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label>
-            <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Tipi</label>
-            <select value={tip} onChange={e => { setTip(e.target.value); if (e.target.value !== 'Hammadde') setHammaddeTipi('') }} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-              <option value="Hammadde">Hammadde</option><option value="YarıMamul">Yarı Mamul</option>
-              <option value="Mamul">Mamul</option><option value="Sarf">Sarf</option>
-            </select></div>
+          {/* ═══ Malzeme Tipi — tam genişlik, belirgin ═══ */}
+          <div className="p-3 bg-accent/5 border border-accent/30 rounded-lg">
+            <label className="text-[11px] text-accent font-semibold mb-1.5 block uppercase tracking-wide">Malzeme Tipi *</label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['Hammadde','YarıMamul','Mamul','Sarf'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setTip(t); if (t !== 'Hammadde') setHammaddeTipi('') }}
+                  className={`px-2 py-2 rounded-lg text-xs font-semibold transition ${tip === t ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-bg-2 border border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'}`}
+                >
+                  {t === 'YarıMamul' ? 'Yarı Mamul' : t}
+                </button>
+              ))}
+            </div>
+            {initial?.id && initial.tip !== tip && (
+              <div className="text-[10px] text-amber mt-2">⚠ Tip değiştiriliyor: {initial.tip} → {tip}. İlişkili BOM/reçete kayıtları etkilenebilir.</div>
+            )}
           </div>
           {tip === 'Hammadde' && (
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
@@ -624,8 +634,12 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
             )}
             </div>
           )}
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
-          <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label>
+            <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
+            <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Birim</label>
             <select value={birim} onChange={e => setBirim(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
@@ -636,7 +650,8 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Min Stok</label>
             <input type="number" value={minStok} onChange={e => setMinStok(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
-          {/* Ölçü alanları — profil/boru/levha/sac */}
+          {/* Ölçü alanları — Sarf hariç */}
+          {tip !== 'Sarf' && (
           <div className="p-3 bg-bg-3/30 border border-border/50 rounded-lg">
             <div className="text-[10px] text-zinc-500 mb-2">
               {['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? '📐 Kesit: Uzun Kenar × Kısa Kenar × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
@@ -655,7 +670,8 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
               <div className="text-[10px] text-red mt-2">⚠ Kısa kenar, uzun kenardan büyük olamaz. Kaydetme sırasında otomatik düzeltilecek.</div>
             )}
           </div>
-          <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden uzun/kısa kenar tahmin et</button>
+          )}
+          {tip !== 'Sarf' && <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden uzun/kısa kenar tahmin et</button>}
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
             <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>
