@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
@@ -120,6 +120,13 @@ export function Dashboard() {
   } = useStore()
   const { can, isGuest, role } = useAuth()
   const todayStr = today()
+
+  // ═══ Canlı sayaç — 30 sn'de bir süre güncellensin ═══
+  const [nowTick, setNowTick] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30000)
+    return () => clearInterval(id)
+  }, [])
 
   // ═══ TEMEL HESAPLAMALAR ═══
   const aktifOrders = orders.filter(o => {
@@ -556,33 +563,107 @@ export function Dashboard() {
       })()}
 
       {/* Aktif Çalışmalar */}
-      {gercekAktif.length > 0 && (
-        <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2 border-b border-border text-sm font-semibold flex items-center gap-2">
-            <Wrench size={14} className="text-green" /> Aktif Çalışmalar ({gercekAktif.length})
+      {gercekAktif.length > 0 && (() => {
+        // Süre hesapla, diğer İE bilgileri + progress + durum renklendirmesi
+        const now = nowTick  // eslint bağımlılık farkında olsun
+        const kartlar = gercekAktif.map(a => {
+          const wo = workOrders.find(w => w.id === a.woId)
+          const prod = wo ? logs.filter(l => l.woId === wo.id).reduce((s, l) => s + l.qty, 0) : 0
+          const hedef = wo?.hedef || 0
+          const pct = hedef > 0 ? Math.min(100, Math.round(prod / hedef * 100)) : 0
+          // Süre (dakika cinsinden)
+          let dk = 0
+          if (a.baslangic && a.tarih) {
+            const bas = new Date(a.tarih + 'T' + a.baslangic + ':00').getTime()
+            if (bas > 0) dk = Math.max(0, Math.floor((now - bas) / 60000))
+          }
+          const saat = Math.floor(dk / 60)
+          const mins = dk % 60
+          const sureLabel = saat > 0 ? `${saat}s ${mins}dk` : `${mins}dk`
+          // Son log zamanı (durgunluk göstergesi) — operatorlar[].bit'ten
+          const oprLogs = logs.filter(l => l.woId === a.woId)
+          let sonLogDk = -1
+          for (const l of oprLogs) {
+            for (const o of (l.operatorlar || [])) {
+              if (o.bit && l.tarih) {
+                const t = new Date(l.tarih + 'T' + o.bit + ':00').getTime()
+                if (t > 0) {
+                  const fark = Math.max(0, Math.floor((now - t) / 60000))
+                  if (sonLogDk === -1 || fark < sonLogDk) sonLogDk = fark
+                }
+              }
+            }
+          }
+          // Uyarı seviyesi: uzun açık (480dk+=8s) = red, durgun (180dk+ log yok) = amber
+          const uzunAcik = dk > 480
+          const durgun = !uzunAcik && sonLogDk > 180 && dk > 60
+          return { a, wo, prod, hedef, pct, dk, sureLabel, uzunAcik, durgun, sonLogDk }
+        }).sort((a, b) => b.dk - a.dk)  // Uzun süredir açık olanlar üstte
+
+        const uzunSayi = kartlar.filter(k => k.uzunAcik).length
+        const durgunSayi = kartlar.filter(k => k.durgun).length
+
+        return (
+          <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+            <div className="px-4 py-2 border-b border-border text-sm font-semibold flex items-center gap-2 flex-wrap">
+              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green"></span></span>
+              <Wrench size={14} className="text-green" /> Aktif Çalışmalar — Canlı ({gercekAktif.length})
+              {uzunSayi > 0 && <span className="px-1.5 py-0.5 bg-red/15 text-red rounded text-[10px] font-mono">⏰ {uzunSayi} uzun</span>}
+              {durgunSayi > 0 && <span className="px-1.5 py-0.5 bg-amber/15 text-amber rounded text-[10px] font-mono">⌛ {durgunSayi} durgun</span>}
+              <span className="ml-auto text-[10px] text-zinc-600">her 30 sn günceller</span>
+            </div>
+            <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {kartlar.map(({ a, wo, prod, hedef, pct, sureLabel, uzunAcik, durgun, sonLogDk }) => {
+                const borderCls = uzunAcik ? 'border-red/40 bg-red/5' : durgun ? 'border-amber/40 bg-amber/5' : 'border-border hover:border-green/30'
+                return (
+                  <div
+                    key={a.id}
+                    onClick={() => navigate('/operator?oprId=' + a.opId)}
+                    className={`p-3 bg-bg-3/40 border ${borderCls} rounded-lg cursor-pointer transition`}
+                  >
+                    {/* Başlık: Operatör + İstasyon */}
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm font-semibold text-zinc-200 truncate flex-1">{a.opAd}</span>
+                      {wo?.istAd && <span className="px-1.5 py-0.5 bg-bg-2 border border-border/50 rounded text-[10px] text-zinc-400 whitespace-nowrap">{wo.istAd}</span>}
+                    </div>
+                    {/* İE no + operasyon */}
+                    <div className="flex items-center gap-2 mb-1 text-[11px]">
+                      <span className="font-mono text-accent">{wo?.ieNo || '—'}</span>
+                      {wo?.opAd && <span className="text-zinc-500">· {wo.opAd}</span>}
+                    </div>
+                    {/* Ürün adı */}
+                    <div className="text-[11px] text-zinc-400 truncate mb-2" title={a.woAd}>{a.woAd}</div>
+                    {/* Progress bar */}
+                    {hedef > 0 && (
+                      <div className="mb-2">
+                        <div className="flex justify-between text-[10px] font-mono mb-1">
+                          <span className="text-zinc-400">{prod} / {hedef}</span>
+                          <span className={pct >= 100 ? 'text-green' : pct >= 50 ? 'text-accent' : 'text-zinc-500'}>%{pct}</span>
+                        </div>
+                        <div className="h-1.5 bg-bg-2 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-accent' : 'bg-zinc-600'}`} style={{ width: pct + '%' }} />
+                        </div>
+                      </div>
+                    )}
+                    {/* Alt satır: süre + başlangıç + durgunluk */}
+                    <div className="flex items-center gap-2 text-[10px] font-mono pt-1 border-t border-border/30">
+                      <Clock size={10} className={uzunAcik ? 'text-red' : durgun ? 'text-amber' : 'text-zinc-500'} />
+                      <span className={uzunAcik ? 'text-red font-bold' : durgun ? 'text-amber font-bold' : 'text-zinc-300'}>{sureLabel}</span>
+                      <span className="text-zinc-600">· {a.baslangic}</span>
+                      {sonLogDk >= 0 && durgun && (
+                        <span className="ml-auto text-amber text-[10px]">giriş yok: {Math.floor(sonLogDk / 60)}s+</span>
+                      )}
+                      {uzunAcik && (
+                        <span className="ml-auto text-red text-[10px]">⚠ 8s+</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border text-zinc-500">
-                <th className="text-left px-4 py-2">Operatör</th>
-                <th className="text-left px-4 py-2">İE No</th>
-                <th className="text-left px-4 py-2">Ürün</th>
-                <th className="text-left px-4 py-2">Başlangıç</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gercekAktif.map(a => (
-                <tr key={a.id} className="border-b border-border/50 cursor-pointer hover:bg-bg-3/50" onClick={() => navigate('/operator?oprId=' + a.opId)}>
-                  <td className="px-4 py-1.5 font-medium underline decoration-dotted">{a.opAd}</td>
-                  <td className="px-4 py-1.5 font-mono text-accent">{workOrders.find(w => w.id === a.woId)?.ieNo || a.woId}</td>
-                  <td className="px-4 py-1.5 text-zinc-400">{a.woAd}</td>
-                  <td className="px-4 py-1.5 font-mono text-zinc-500">{a.baslangic}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Operatör Mesajları */}
       {operatorNotes.length > 0 && (
@@ -810,35 +891,6 @@ export function Dashboard() {
           <div className="p-8 text-center text-zinc-600 text-sm">Aktif sipariş yok</div>
         )}
       </div>
-
-      {/* Uzun Süredir Açık İşler */}
-      {(() => {
-        const now = new Date()
-        const uzunAcik = gercekAktif.filter(a => {
-          if (!a.baslangic || !a.tarih) return false
-          const bas = new Date(a.tarih + 'T' + a.baslangic + ':00')
-          return Math.round((now.getTime() - bas.getTime()) / 60000) > 480
-        }).map(a => {
-          const bas = new Date(a.tarih + 'T' + a.baslangic + ':00')
-          const dakika = Math.round((now.getTime() - bas.getTime()) / 60000)
-          const wo = workOrders.find(w => w.id === a.woId)
-          return { ...a, dakika, saat: Math.floor(dakika / 60), ieNo: wo?.ieNo || '—' }
-        })
-        if (!uzunAcik.length) return null
-        return (
-          <div className="mb-4 p-3 bg-red/5 border border-red/20 rounded-lg">
-            <div className="text-sm font-semibold text-red mb-2">⏰ {uzunAcik.length} iş 8+ saattir açık — kapatılmayı unutmuş olabilir!</div>
-            {uzunAcik.map(a => (
-              <div key={a.id} className="flex items-center gap-3 text-xs py-1 cursor-pointer hover:bg-red/5 rounded px-1 -mx-1" onClick={() => navigate('/operator?oprId=' + a.opId)}>
-                <span className="text-zinc-300 font-semibold underline decoration-dotted">{a.opAd}</span>
-                <span className="font-mono text-accent">{a.ieNo}</span>
-                <span className="text-zinc-500 truncate">{a.woAd?.slice(0, 30)}</span>
-                <span className="ml-auto font-mono text-red font-bold">{a.saat}s {a.dakika % 60}dk</span>
-              </div>
-            ))}
-          </div>
-        )
-      })()}
 
       {/* Yapılması Gerekenler */}
       {(() => {
