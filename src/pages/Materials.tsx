@@ -490,7 +490,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
       toast.info('Uzun kenar / Kısa kenar otomatik düzeltildi')
     }
     const row: Record<string, unknown> = {
-      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: tip === 'Hammadde' ? (hammaddeTipi || '').toLocaleUpperCase('tr-TR') : '', birim, boy: boyNum,
+      kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: (tip === 'Hammadde' || tip === 'YarıMamul') ? (hammaddeTipi || '').toLocaleUpperCase('tr-TR') : '', birim, boy: boyNum,
       en: enNum, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
     }
@@ -676,8 +676,10 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
               <div className="text-[10px] text-amber mt-2">⚠ Tip değiştiriliyor: {initial.tip} → {tip}. İlişkili BOM/reçete kayıtları etkilenebilir.</div>
             )}
           </div>
-          {tip === 'Hammadde' && (
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
+          {(tip === 'Hammadde' || tip === 'YarıMamul') && (
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">
+              {tip === 'Hammadde' ? 'Hammadde Tipi' : 'Yarı Mamul Tipi'}
+            </label>
             <select
               value={hammaddeTipi}
               onChange={e => setHammaddeTipi(e.target.value)}
@@ -687,7 +689,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
               {hmTipler.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             {hmTipler.length === 0 && (
-              <div className="text-[10px] text-amber mt-1">⚠ HM Tipi tanımlı değil. Veri Yönetimi → Hammadde Tipleri'nden ekleyin.</div>
+              <div className="text-[10px] text-amber mt-1">⚠ Tip tanımlı değil. Veri Yönetimi → Hammadde Tipleri'nden ekleyin.</div>
             )}
             </div>
           )}
