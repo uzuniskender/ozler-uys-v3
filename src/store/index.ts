@@ -5,7 +5,7 @@ import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -153,6 +153,11 @@ const M = {
     onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
     not: (r.not_ || '') as string, olusturan: (r.olusturan || 'admin') as string,
   }),
+  hmTip: (r: Record<string, unknown>): HmTip => ({
+    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
+    aciklama: (r.aciklama || '') as string, sira: (r.sira as number) || 0,
+    olusturma: (r.olusturma || '') as string,
+  }),
   kullanici: (r: Record<string, unknown>): Kullanici => ({
     id: r.id as string, ad: (r.ad || '') as string,
     kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
@@ -168,7 +173,7 @@ interface UYSStore {
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
-  izinler: Izin[]; kullanicilar: Kullanici[]
+  izinler: Izin[]; kullanicilar: Kullanici[]; hmTipler: HmTip[]
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
@@ -199,13 +204,14 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
   { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
   { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
   { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
+  { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
 ]
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [],
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [], hmTipler: [],
   loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {

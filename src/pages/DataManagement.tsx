@@ -255,6 +255,13 @@ export function DataManagement() {
         <YetkiPanel />
       </div>}
 
+      {/* Hammadde Tipleri */}
+      {can('data_pass') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
+        <div className="text-sm font-semibold text-zinc-300 mb-2">🏷️ Hammadde Tipleri</div>
+        <p className="text-xs text-zinc-500 mb-3">Malzeme kartlarında seçilebilecek hammadde tiplerini tanımlayın (BORU, PROFİL, LEVHA vb.)</p>
+        <HmTipleriPanel />
+      </div>}
+
       {/* #35: Sıfırlama İşlemleri — seçimli */}
       {can('data_reset') && <div className="mt-6 bg-red/5 border border-red/20 rounded-lg p-4">
         <div className="text-sm font-semibold text-red mb-3">⚠ Sıfırlama İşlemleri — Silinecek kalemleri seçin</div>
@@ -795,6 +802,125 @@ function YetkiPanel() {
             {saving ? 'Kaydediliyor...' : '💾 Kaydet'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══ HAMMADDE TİPLERİ PANELİ ═══
+function HmTipleriPanel() {
+  const { hmTipler, loadAll } = useStore()
+  const [yeniKod, setYeniKod] = useState('')
+  const [yeniAd, setYeniAd] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const sorted = [...hmTipler].sort((a, b) => a.sira - b.sira || a.kod.localeCompare(b.kod))
+
+  async function ekle() {
+    const kod = yeniKod.trim().toLocaleUpperCase('tr-TR')
+    const ad = yeniAd.trim() || kod
+    if (!kod) { toast.error('Kod zorunlu'); return }
+    if (hmTipler.some(t => t.kod === kod)) { toast.error('Bu kod zaten var'); return }
+    setSaving(true)
+    const maxSira = Math.max(0, ...hmTipler.map(t => t.sira))
+    await supabase.from('uys_hm_tipleri').insert({
+      id: uid(), kod, ad, aciklama: '', sira: maxSira + 1, olusturma: today()
+    })
+    setYeniKod(''); setYeniAd(''); setSaving(false)
+    loadAll(); toast.success(`${kod} eklendi`)
+  }
+
+  async function duzenle(t: { id: string; kod: string; ad: string }) {
+    const yeniAd = await showPrompt('HM Tipi Adı', 'Görünen ad', t.ad)
+    if (yeniAd == null) return
+    await supabase.from('uys_hm_tipleri').update({ ad: yeniAd.trim() || t.kod }).eq('id', t.id)
+    loadAll(); toast.success('Güncellendi')
+  }
+
+  async function sil(t: { id: string; kod: string }) {
+    if (!await showConfirm(`"${t.kod}" HM tipini silmek istediğinize emin misiniz? Bu tipte malzemeler varsa bağlantı kalır ama seçim listesinden kaybolur.`)) return
+    await supabase.from('uys_hm_tipleri').delete().eq('id', t.id)
+    loadAll(); toast.success('Silindi')
+  }
+
+  async function yukari(t: { id: string; sira: number; kod: string }) {
+    const prev = sorted.find(x => x.sira < t.sira)
+    if (!prev) return
+    await supabase.from('uys_hm_tipleri').update({ sira: prev.sira }).eq('id', t.id)
+    await supabase.from('uys_hm_tipleri').update({ sira: t.sira }).eq('id', prev.id)
+    loadAll()
+  }
+
+  async function asagi(t: { id: string; sira: number; kod: string }) {
+    const next = [...sorted].reverse().find(x => x.sira > t.sira)
+    if (!next) return
+    await supabase.from('uys_hm_tipleri').update({ sira: next.sira }).eq('id', t.id)
+    await supabase.from('uys_hm_tipleri').update({ sira: t.sira }).eq('id', next.id)
+    loadAll()
+  }
+
+  return (
+    <div>
+      {/* Ekleme formu */}
+      <div className="flex gap-2 mb-3">
+        <input
+          value={yeniKod}
+          onChange={e => setYeniKod(e.target.value.toLocaleUpperCase('tr-TR'))}
+          placeholder="KOD (örn: BORU)"
+          className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded text-xs text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+        />
+        <input
+          value={yeniAd}
+          onChange={e => setYeniAd(e.target.value)}
+          placeholder="Görünen ad (örn: Boru)"
+          className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+        />
+        <button
+          onClick={ekle}
+          disabled={saving || !yeniKod.trim()}
+          className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded text-xs font-semibold"
+        >+ Ekle</button>
+      </div>
+
+      {/* Liste */}
+      {sorted.length === 0 ? (
+        <div className="text-center py-4 text-xs text-zinc-600">Henüz tanımlı HM tipi yok</div>
+      ) : (
+        <div className="bg-bg-3/30 border border-border/50 rounded overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-[10px] text-zinc-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2 w-16">Sıra</th>
+                <th className="text-left px-3 py-2 w-32">Kod</th>
+                <th className="text-left px-3 py-2">Ad</th>
+                <th className="text-right px-3 py-2 w-32">İşlem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((t, i) => (
+                <tr key={t.id} className="border-b border-border/30 hover:bg-bg-3/50">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-zinc-500 w-6">{t.sira}</span>
+                      <button onClick={() => yukari(t)} disabled={i === 0} className="text-zinc-500 hover:text-accent disabled:opacity-20 text-[10px]">▲</button>
+                      <button onClick={() => asagi(t)} disabled={i === sorted.length - 1} className="text-zinc-500 hover:text-accent disabled:opacity-20 text-[10px]">▼</button>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-accent font-semibold">{t.kod}</td>
+                  <td className="px-3 py-2 text-zinc-300">{t.ad}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => duzenle(t)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1">✎ Düzenle</button>
+                    <button onClick={() => sil(t)} className="px-2 py-0.5 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">Sil</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-3 text-[10px] text-zinc-600">
+        💡 Tipler sıralı görünür (yukarı/aşağı ile değiştir). Kod büyük harfe çevrilir. Aynı kod tekrar eklenemez.
       </div>
     </div>
   )

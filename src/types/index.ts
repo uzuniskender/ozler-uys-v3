@@ -114,6 +114,15 @@ export interface Material {
   aktif: boolean
 }
 
+export interface HmTip {
+  id: string
+  kod: string
+  ad: string
+  aciklama: string
+  sira: number
+  olusturma: string
+}
+
 export interface Operation {
   id: string
   kod: string

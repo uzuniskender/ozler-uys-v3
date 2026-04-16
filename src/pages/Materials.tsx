@@ -10,7 +10,7 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
 
 export function Materials() {
-  const { materials, operations, recipes, bomTrees, workOrders, loadAll } = useStore()
+  const { materials, operations, recipes, bomTrees, workOrders, hmTipler: dbHmTipler, loadAll } = useStore()
   const { can, isGuest } = useAuth()
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
@@ -33,11 +33,10 @@ export function Materials() {
 
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
   const hmTipler = useMemo(() => {
-    // Sabit liste + DB'deki mevcut değerler (kullanıcı ekleyebilsin)
-    const sabit = ['BORU', 'PROFİL', 'LEVHA', 'SAC', 'ÇUBUK', 'NPU']
-    const dbValues = materials.map(m => (m.hammaddeTipi || '').toLocaleUpperCase('tr-TR')).filter(Boolean)
-    return [...new Set([...sabit, ...dbValues])].sort()
-  }, [materials])
+    // DB'deki tanımlı HM tipleri (Veri Yönetimi'nden yönetilir)
+    const tanimli = [...dbHmTipler].sort((a, b) => a.sira - b.sira).map(t => t.kod)
+    return tanimli
+  }, [dbHmTipler])
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
 
   // Ölçü eşleştirme: string başlangıç eşleşmesi
@@ -611,17 +610,18 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
             </select></div>
           </div>
           {tip === 'Hammadde' && (
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi <span className="text-zinc-600 text-[9px]">(seçin veya yazın)</span></label>
-            <input
-              list="hm-tipler-datalist"
+            <div><label className="text-[11px] text-zinc-500 mb-1 block">Hammadde Tipi</label>
+            <select
               value={hammaddeTipi}
-              onChange={e => setHammaddeTipi(e.target.value.toLocaleUpperCase('tr-TR'))}
-              placeholder="BORU, PROFİL, LEVHA, SAC, ÇUBUK, NPU..."
+              onChange={e => setHammaddeTipi(e.target.value)}
               className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
-            />
-            <datalist id="hm-tipler-datalist">
-              {hmTipler.map(t => <option key={t} value={t} />)}
-            </datalist>
+            >
+              <option value="">— Seçin —</option>
+              {hmTipler.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {hmTipler.length === 0 && (
+              <div className="text-[10px] text-amber mt-1">⚠ HM Tipi tanımlı değil. Veri Yönetimi → Hammadde Tipleri'nden ekleyin.</div>
+            )}
             </div>
           )}
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
