@@ -433,7 +433,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     const children = rows.filter(r => r.kirno.startsWith(parentKirno + '.') && r.kirno.split('.').length === parentKirno.split('.').length + 1)
     const nextNum = children.length + 1
     const newKirno = parentKirno + '.' + nextNum
-    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: 'Yeni Bileşen', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk' }])
+    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: '', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk' }])
   }
 
   function deleteRow(idx: number) {

@@ -362,7 +362,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
   function addRow(parentKirno: string) {
     const children = rows.filter(r => r.kirno.startsWith(parentKirno + '.') && r.kirno.split('.').length === parentKirno.split('.').length + 1)
     const newKirno = parentKirno + '.' + (children.length + 1)
-    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: 'Yeni Bileşen', tip: 'Hammadde', miktar: 1, birim: 'Adet' }])
+    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: '', tip: 'Hammadde', miktar: 1, birim: 'Adet' }])
   }
   function deleteRow(i: number) { const k = rows[i].kirno; setRows(prev => prev.filter((r, idx) => idx !== i && !r.kirno.startsWith(k + '.'))) }
 
