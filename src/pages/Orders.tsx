@@ -254,11 +254,18 @@ function OrderFormModal({ initial, recipes, onClose, onSaved }: { initial: Order
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Adet</label>
             <input type="number" min={1} value={adet} onChange={e => setAdet(parseInt(e.target.value) || 1)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Reçete</label>
-          <select value={receteId} onChange={e => setReceteId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-            <option value="">— Seçin —</option>
-            {recipes.map(r => <option key={r.id} value={r.id}>{r.mamulKod || r.ad} — {r.mamulAd || r.ad}</option>)}
-          </select></div>
+          <div><label className="text-[11px] text-zinc-500 mb-1 block">Reçete / Ürün</label>
+          {(() => {
+            const opts = recipes.map(r => ({
+              value: r.id,
+              label: `${r.mamulKod || r.ad} — ${r.mamulAd || r.ad}`,
+            }))
+            return <SearchSelect options={opts} value={receteId} onChange={v => setReceteId(v)} placeholder="Ürün kodu veya adıyla ara..." />
+          })()}
+          {receteId && (() => {
+            const rc = recipes.find(r => r.id === receteId)
+            return rc ? <div className="text-[10px] text-zinc-500 mt-1"><span className="font-mono text-accent">{rc.mamulKod}</span> · {rc.mamulAd || rc.ad}</div> : null
+          })()}</div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
           <input value={not_} onChange={e => setNot(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" placeholder="Opsiyonel..." /></div>
         </div>

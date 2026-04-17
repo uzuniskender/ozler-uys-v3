@@ -922,6 +922,8 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     const eskiF = editLog?.fire || 0
     const yeniKapasite = (freshProd - eskiQ + q_) + (freshFire - eskiF + f_)
     if (yeniKapasite >= w.hedef && w.hedef > 0) {
+      // İE durumu 'tamamlandi'
+      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi', tamamlanma_tarih: today() }).eq('id', woId)
       // Bu İE'ye ait tüm active_work kayıtlarını otomatik kapat
       await supabase.from('uys_active_work').delete().eq('wo_id', woId)
       // Her operatörün bitiş saatini kaydet (sonraki iş için akıllı saat)
@@ -931,6 +933,9 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         try { localStorage.setItem('uys_lastStop_' + o.id, JSON.stringify({ tarih: today(), saat: stopSaat })) } catch {}
       })
       toast.success(w.ieNo + ' tamamlandı ✓ Aktif çalışma otomatik kapatıldı', { duration: 4000 })
+    } else if (w.durum === 'bekliyor') {
+      // İlk üretim/fire girişi → durum "uretimde"
+      await supabase.from('uys_work_orders').update({ durum: 'uretimde' }).eq('id', woId)
     }
     setSaving(false); clearDraft(); onSaved()
   }
