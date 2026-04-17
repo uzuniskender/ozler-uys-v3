@@ -384,7 +384,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     const yeniFireToplam = freshFire + f
     const yeniKapasite = yeniProdToplam + yeniFireToplam
     if (yeniKapasite >= w.hedef && w.durum !== 'tamamlandi') {
-      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi', tamamlanma_tarih: today() }).eq('id', woId)
+      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi' }).eq('id', woId)
       if (yeniProdToplam < w.hedef) {
         toast.info(`İE kapasite dolduğu için kapatıldı (${yeniProdToplam} sağlam, ${yeniFireToplam} fire). Fire için telafi İE açıldı.`)
       }

@@ -172,7 +172,7 @@ export function WorkOrders() {
       await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden }).eq('id', id)
       loadAll(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
-    if (durum === 'tamamlandi') await supabase.from('uys_work_orders').update({ durum, tamamlanma_tarih: tarih }).eq('id', id)
+    if (durum === 'tamamlandi') await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     else await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     loadAll(); toast.success(wo.ieNo + ' → ' + durum)
   }

@@ -923,7 +923,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     const yeniKapasite = (freshProd - eskiQ + q_) + (freshFire - eskiF + f_)
     if (yeniKapasite >= w.hedef && w.hedef > 0) {
       // İE durumu 'tamamlandi'
-      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi', tamamlanma_tarih: today() }).eq('id', woId)
+      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi' }).eq('id', woId)
       // Bu İE'ye ait tüm active_work kayıtlarını otomatik kapat
       await supabase.from('uys_active_work').delete().eq('wo_id', woId)
       // Her operatörün bitiş saatini kaydet (sonraki iş için akıllı saat)
