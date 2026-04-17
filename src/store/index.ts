@@ -40,6 +40,7 @@ const M = {
   },
   log: (r: Record<string, unknown>): ProductionLog => ({
     id: r.id as string, woId: (r.wo_id || '') as string, tarih: (r.tarih || '') as string,
+    saat: (r.saat || '') as string,
     qty: (r.qty as number) || 0, fire: (r.fire as number) || 0,
     operatorlar: (r.operatorlar || []) as ProductionLog['operatorlar'],
     duruslar: (r.duruslar || []) as ProductionLog['duruslar'],

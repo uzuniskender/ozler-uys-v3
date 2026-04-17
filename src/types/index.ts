@@ -67,6 +67,7 @@ export interface ProductionLog {
   id: string
   woId: string
   tarih: string
+  saat: string
   qty: number
   fire: number
   operatorlar: LogOperator[]

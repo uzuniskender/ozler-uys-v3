@@ -340,7 +340,7 @@ export function Reports() {
                     <tr><td colSpan={15} className="px-3 py-8 text-center text-zinc-600">Filtre kriterlerine uygun kayıt bulunamadı</td></tr>
                   )}
                   {detayliData.map(r => (
-                    <tr key={r.logId} onClick={() => navigate(`/workorders?ie=${r.woId}&log=${r.logId}`)}
+                    <tr key={r.logId} onClick={() => navigate(`/work-orders?ie=${r.woId}&log=${r.logId}`)}
                         title="İE detayına git" className="border-b border-border/20 hover:bg-accent/10 cursor-pointer">
                       <td className="px-3 py-1.5 font-mono text-zinc-400">{r.tarih}</td>
                       <td className="px-3 py-1.5 font-mono text-zinc-300">{r.siparisNo}</td>
