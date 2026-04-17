@@ -965,15 +965,18 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           </div>
 
           {hmSatirlar.length > 0 && (
-            <div className={`border rounded-lg p-3 ${maxUretim <= 0 ? 'bg-red/5 border-red/30' : maxUretim < kalan ? 'bg-amber/5 border-amber/30' : 'bg-green/5 border-green/30'}`}>
-              <div className="text-[10px] font-bold mb-2 uppercase tracking-wider">{maxUretim <= 0 ? '⛔ STOK YOK' : maxUretim < kalan ? '⚠ STOK KISMI' : '✓ STOK YETERLİ'}</div>
+            <div className={`border rounded-lg p-3 ${maxUretim <= 0 ? 'bg-amber/5 border-amber/30' : maxUretim < kalan ? 'bg-amber/5 border-amber/30' : 'bg-green/5 border-green/30'}`}>
+              <div className="text-[10px] font-bold mb-2 uppercase tracking-wider flex items-center justify-between">
+                <span>{maxUretim <= 0 ? 'ℹ️ DB STOĞU GÖRÜNMÜYOR' : maxUretim < kalan ? '⚠ DB STOĞU KISMI' : '✓ DB STOĞU YETERLİ'}</span>
+                <span className="text-[9px] text-zinc-500 normal-case font-normal">HM iş emrine tahsisli — bilgi amaçlı</span>
+              </div>
               <table className="w-full text-[10px]">
                 <thead><tr className="text-zinc-500"><td className="py-1 pr-2">Kod</td><td className="py-1 pr-2">Malzeme</td><td className="py-1 text-right pr-2">Mevcut</td><td className="py-1 text-right pr-2">Gereken</td><td className="py-1">Durum</td></tr></thead>
                 <tbody>{hmSatirlar.map((hm: any, i: number) => {
                   const mevcut = Math.round(stokNet(hm.malkod || hm.kod))
                   const gereken = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * kalan)
                   const durum = mevcut <= 0 ? 'YOK' : mevcut < gereken ? 'KISMI' : 'YETERLİ'
-                  const renk = durum === 'YOK' ? 'text-red' : durum === 'KISMI' ? 'text-amber' : 'text-green'
+                  const renk = durum === 'YOK' ? 'text-amber' : durum === 'KISMI' ? 'text-amber' : 'text-green'
                   return (<tr key={i} className="border-t border-border/20">
                     <td className="py-1 pr-2 font-mono text-accent">{hm.malkod || hm.kod}</td>
                     <td className="py-1 pr-2 text-zinc-300">{(hm.malad || hm.ad || '').slice(0, 25)}</td>
@@ -983,7 +986,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
                   </tr>)
                 })}</tbody>
               </table>
-              {maxUretim > 0 && maxUretim < kalan && <div className="text-[10px] text-amber mt-2 font-semibold">En fazla {maxUretim} adet üretilebilir</div>}
+              {maxUretim > 0 && maxUretim < kalan && <div className="text-[10px] text-zinc-400 mt-2">DB stoğuna göre {maxUretim} adet yapılabilir görünüyor. Gerçek hat kenarındaki HM ile üretime devam edebilirsin.</div>}
             </div>
           )}
 
@@ -1014,9 +1017,10 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
               <label className="text-[10px] text-zinc-500 mb-1 block">Üretim Adedi *</label>
               <input type="number" value={qty} onChange={e => {
                 const v = parseInt(e.target.value) || 0
-                const mx = hmSatirlar.length > 0 ? Math.min(kalan, maxUretim) : kalan
-                if (v > mx) { setQty(String(mx)); toast.error('Max: ' + mx) } else setQty(e.target.value)
-              }} placeholder={String(Math.min(kalan, maxUretim))} className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-white focus:outline-none focus:border-green" autoFocus />
+                // q + f > kalan hard constraint — save() içinde zaten kontrol ediliyor.
+                // Burada sadece q > kalan'ı engelliyoruz (fire henüz girilmemiş olabilir).
+                if (v > kalan) { setQty(String(kalan)); toast.error('Hedef kalan: ' + kalan) } else setQty(e.target.value)
+              }} placeholder={String(kalan)} className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-white focus:outline-none focus:border-green" autoFocus />
             </div>
             <div>
               <label className="text-[10px] text-zinc-500 mb-1 block">Fire</label>
