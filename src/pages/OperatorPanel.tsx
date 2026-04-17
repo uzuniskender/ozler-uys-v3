@@ -938,6 +938,10 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       // İlk üretim/fire girişi → durum "uretimde"
       await supabase.from('uys_work_orders').update({ durum: 'uretimde' }).eq('id', woId)
     }
+    // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
+    try {
+      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work'])
+    } catch (e) { console.error('Post-save reload:', e) }
     setSaving(false); clearDraft(); onSaved()
   }
 
