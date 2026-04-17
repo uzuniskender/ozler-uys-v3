@@ -786,7 +786,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   async function save() {
     const q = parseInt(qty) || 0; const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
-    if (q <= 0 && !hasDurus) { toast.error('Adet veya duruş girin'); return }
+    if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Adet, fire veya duruş girin'); return }
     // Güncel üretim + fire'ı çek — İE kapasitesi (fire dahil)
     const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
     const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)

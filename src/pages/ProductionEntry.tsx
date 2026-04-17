@@ -306,7 +306,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     const q = parseInt(qty) || 0
     const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
-    if (q <= 0 && !hasDurus) { toast.error('Miktar veya duruş girmelisiniz'); return }
+    if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Miktar, fire veya duruş girmelisiniz'); return }
     // #2: Fazla üretim kontrolü — HARD BLOCK (fire dahil)
     // Güncel üretim + fire'ı Supabase'den çek (stale data riski)
     const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
@@ -574,14 +574,15 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       const q = parseInt(r.qty) || 0
       const f = parseInt(r.fire) || 0
       const wo = acikWOs.find(w => w.id === r.woId)
-      if (!wo || q <= 0) continue
+      if (!wo || (q <= 0 && f <= 0)) continue
 
-      // Hedef kontrolü — güncel veri ile
-      const { data: fLogs } = await supabase.from('uys_logs').select('qty').eq('wo_id', r.woId)
+      // Hedef kontrolü — güncel veri ile (fire dahil)
+      const { data: fLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', r.woId)
       const fProd = (fLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
-      const fKalan = Math.max(0, wo.hedef - fProd)
-      if (q > fKalan) {
-        toast.error(`${wo.ieNo}: Hedef aşılamaz! Kalan: ${fKalan}, girilen: ${q}`)
+      const fFire = (fLogs || []).reduce((a: number, l: any) => a + (l.fire || 0), 0)
+      const fKalan = Math.max(0, wo.hedef - fProd - fFire)
+      if (q + f > fKalan) {
+        toast.error(`${wo.ieNo}: Hedef aşılamaz! Kalan kapasite: ${fKalan}, girilen: ${q} sağlam + ${f} fire = ${q + f}`)
         continue
       }
 

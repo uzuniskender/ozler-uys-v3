@@ -384,7 +384,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
     if (!result) return
     const yeniQty = parseInt(result.qty) || 0
     const yeniFire = parseInt(result.fire) || 0
-    if (yeniQty <= 0) { toast.error('Geçersiz adet'); return }
+    if (yeniQty <= 0 && yeniFire <= 0) { toast.error('Adet veya fire girin (en az biri >0 olmalı)'); return }
 
     const delta = yeniQty - (l.qty || 0)
     const rc = wo.rcId ? recipes.find((r: any) => r.id === wo.rcId) : recipes.find((r: any) => r.mamulKod === wo.mamulKod)
