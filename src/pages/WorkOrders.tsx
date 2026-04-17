@@ -91,7 +91,8 @@ export function WorkOrders() {
   }
 
   function wProd(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
-  function wPct(w: { id: string; hedef: number }): number { return w.hedef > 0 ? Math.min(100, Math.round(wProd(w.id) / w.hedef * 100)) : 0 }
+  function wKapasite(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + (l.qty || 0) + (l.fire || 0), 0) }
+  function wPct(w: { id: string; hedef: number }): number { return w.hedef > 0 ? Math.min(100, Math.round(wKapasite(w.id) / w.hedef * 100)) : 0 }
 
   const getStokDurum = useCallback((w: any) => {
     const kalan = Math.max(0, w.hedef - wProd(w.id))
@@ -129,7 +130,10 @@ export function WorkOrders() {
       }
       if (statusFilter.size > 0) {
         const pct = wPct(w)
-        const wDurum = w.durum === 'iptal' ? 'iptal' : w.durum === 'beklemede' ? 'beklemede' : pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor'
+        // Öncelik: DB'deki açık durumlar (iptal/beklemede/tamamlandi). Yoksa pct'e göre türet.
+        const wDurum = (w.durum === 'iptal' || w.durum === 'beklemede' || w.durum === 'tamamlandi') 
+          ? w.durum 
+          : (pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor')
         if (!statusFilter.has(wDurum)) return false
       }
       if (search) {
@@ -337,7 +341,7 @@ export function WorkOrders() {
                         <td className="px-3 py-1.5 text-right font-mono"><b>{prod}</b><span className="text-zinc-600">/{w.hedef}</span></td>
                         <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : pct > 0 ? 'bg-accent' : 'bg-zinc-700'}`} style={{ width: `${Math.max(2, pct)}%` }} /></div><span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span></div></td>
                         <td className="px-3 py-1.5">
-                          <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
+                          <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (w.durum === 'tamamlandi') return 'tamamlandi'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
                             <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                           </select>
                         </td>
