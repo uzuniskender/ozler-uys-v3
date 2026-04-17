@@ -97,9 +97,9 @@ export function WorkOrders() {
   const getStokDurum = useCallback((w: any) => {
     const kalan = Math.max(0, w.hedef - wProd(w.id))
     if (kalan <= 0) return null
-    try { return stokKontrolWO(w, kalan, stokHareketler, tedarikler, materials) } catch { return null }
+    try { return stokKontrolWO(w, kalan, stokHareketler, tedarikler, materials, recipes) } catch { return null }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stokHareketler, tedarikler, logs])
+  }, [stokHareketler, tedarikler, logs, recipes])
 
   function stokBadgeEl(w: any) {
     const sk = getStokDurum(w)
