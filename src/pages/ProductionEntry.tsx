@@ -341,12 +341,14 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       operator_id: oprList[0]?.id || null, vardiya: '',
     })
 
-    // Stok girişi (üretilen mamul)
-    await supabase.from('uys_stok_hareketler').insert({
-      id: uid(), tarih, malkod: w.malkod, malad: w.malad,
-      miktar: q, tip: 'giris', log_id: logId, wo_id: woId,
-      aciklama: 'Üretim — ' + w.ieNo,
-    })
+    // Stok girişi (üretilen mamul) — sadece sağlam adet varsa
+    if (q > 0) {
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), tarih, malkod: w.malkod, malad: w.malad,
+        miktar: q, tip: 'giris', log_id: logId, wo_id: woId,
+        aciklama: 'Üretim — ' + w.ieNo,
+      })
+    }
 
     // Fire logu (fire mamul stoğuna girmediği için çıkış kaydı yok — HM tüketimi aşağıda q+f üzerinden hesaplanır)
     if (f > 0) {
@@ -598,11 +600,13 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
         duruslar: [], malkod: wo.malkod, ie_no: wo.ieNo, operator_id: oprId || null,
       })
 
-      await supabase.from('uys_stok_hareketler').insert({
-        id: uid(), tarih, malkod: wo.malkod, malad: wo.malad,
-        miktar: q, tip: 'giris', log_id: logId, wo_id: r.woId,
-        aciklama: 'Toplu üretim — ' + wo.ieNo,
-      })
+      if (q > 0) {
+        await supabase.from('uys_stok_hareketler').insert({
+          id: uid(), tarih, malkod: wo.malkod, malad: wo.malad,
+          miktar: q, tip: 'giris', log_id: logId, wo_id: r.woId,
+          aciklama: 'Toplu üretim — ' + wo.ieNo,
+        })
+      }
 
       // HM tüketim — sağlam + fire (fire da hammadde harcar)
       await stokTuketimIsle(r.woId, q + f, logId, workOrders, recipes)
