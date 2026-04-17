@@ -8,6 +8,7 @@ import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
 import { analizReceteTumSatirlar, donusturBirim } from '@/features/production/sureAnaliz'
 
 export function Recipes() {
@@ -241,6 +242,7 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   const { can } = useAuth()
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
+  const [searchModalIdx, setSearchModalIdx] = useState<number | null>(null)
 
   // Gerçek üretim verilerinden süre analizi: kirno → analiz
   const sureAnalizMap = useMemo(
@@ -499,7 +501,19 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                   <tr key={r.id || i} className="border-b border-border/20 hover:bg-bg-3/20">
                     <td className="px-2 py-1"><span className="font-mono text-zinc-500">{r.kirno}</span></td>
                     <td className="px-2 py-1">
-                      <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
+                      <div className="flex items-center gap-1">
+                        <div className="flex-1">
+                          <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSearchModalIdx(i)}
+                          title="Detaylı arama (ölçü filtreli)"
+                          className="w-6 h-6 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0"
+                        >
+                          <Search size={11} />
+                        </button>
+                      </div>
                     </td>
                     <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
@@ -591,6 +605,42 @@ function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         </div>
       </div>
       {dimFixList && <DimFixModal items={dimFixList} onSave={saveDimFixes} onClose={() => setDimFixList(null)} />}
+      {searchModalIdx !== null && (() => {
+        // Mevcut satırın zaten seçilmiş bir kodu varsa onun ölçülerini default yap
+        // Yoksa parent satırın (bir üst kırılım) ölçülerini default yap
+        const curRow = rows[searchModalIdx]
+        const curMat = curRow?.malkod ? materials.find(m => m.kod === curRow.malkod) : null
+        // Parent satır = kirno'da son kısmı atınca kalan ("1.1" → "1")
+        let parentMat: typeof curMat = null
+        if (curRow?.kirno) {
+          const parts = curRow.kirno.split('.')
+          if (parts.length > 1) {
+            const parentKirno = parts.slice(0, -1).join('.')
+            const parentRow = rows.find(x => x.kirno === parentKirno)
+            if (parentRow?.malkod) parentMat = materials.find(m => m.kod === parentRow.malkod) || null
+          }
+        }
+        const src = curMat || parentMat
+        const defaultFilter: MaterialSearchFilter = src ? {
+          boy: src.boy || undefined,
+          en: src.en || undefined,
+          kalinlik: src.kalinlik || undefined,
+          cap: src.cap || undefined,
+          icCap: src.icCap || undefined,
+        } : {}
+        return (
+          <MaterialSearchModal
+            materials={materials}
+            defaultFilter={defaultFilter}
+            title="Malzeme Ara — Ölçü Filtreli"
+            onSelect={(mat) => {
+              onMalkodChange(searchModalIdx, mat.kod)
+              setSearchModalIdx(null)
+            }}
+            onClose={() => setSearchModalIdx(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
