@@ -8,6 +8,7 @@ import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { BomTree } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
 
 export function BomTrees() {
   const { bomTrees, recipes, workOrders, materials, loadAll } = useStore()
@@ -299,6 +300,7 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const { can } = useAuth()
   const [mamulKod, setMamulKod] = useState('')
   const [ad, setAd] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
 
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
 
@@ -321,8 +323,18 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Yeni Ürün Ağacı</h2>
         <div className="space-y-3">
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Mamul Kodu (Malzeme listesinden arayın)</label>
-          <SearchSelect options={matOptions} value={mamulKod} onChange={onMamulKodChange} placeholder="Kod yazın veya arayın..." allowNew={true} /></div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Mamul Kodu (Malzeme listesinden arayın)</label>
+            <div className="flex items-center gap-1">
+              <div className="flex-1">
+                <SearchSelect options={matOptions} value={mamulKod} onChange={onMamulKodChange} placeholder="Kod yazın veya arayın..." allowNew={true} />
+              </div>
+              <button type="button" onClick={() => setShowSearch(true)} title="Detaylı arama (ölçü filtreli)"
+                className="w-8 h-8 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0">
+                <Search size={12} />
+              </button>
+            </div>
+          </div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Ürün Adı *</label><input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
@@ -330,6 +342,14 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Oluştur</button>
         </div>
       </div>
+      {showSearch && (
+        <MaterialSearchModal
+          materials={materials}
+          title="Mamul Ara — Ölçü Filtreli"
+          onSelect={(mat) => { onMamulKodChange(mat.kod, mat.kod + ' — ' + mat.ad); setShowSearch(false) }}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
     </div>
   )
 }
@@ -341,6 +361,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
   const { can } = useAuth()
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
+  const [searchModalIdx, setSearchModalIdx] = useState<number | null>(null)
 
   function updateRow(i: number, field: string, value: string | number) { setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r)) }
 
@@ -552,7 +573,21 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
               return (
                 <tr key={i} className="border-b border-border/20 hover:bg-bg-3/20">
                   <td className="px-2 py-1 font-mono text-zinc-500">{r.kirno}</td>
-                  <td className="px-2 py-1"><SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" /></td>
+                  <td className="px-2 py-1">
+                    <div className="flex items-center gap-1">
+                      <div className="flex-1">
+                        <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSearchModalIdx(i)}
+                        title="Detaylı arama (ölçü filtreli)"
+                        className="w-6 h-6 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0"
+                      >
+                        <Search size={11} />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}><input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" /></td>
                   <td className="px-2 py-1"><select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200"><option value="Mamul">Mamul</option><option value="YarıMamul">Yarı Mamul</option><option value="Hammadde">Hammadde</option><option value="Sarf">Sarf</option></select></td>
                   <td className="px-2 py-1"><input type="number" value={r.miktar} onChange={e => updateRow(i, 'miktar', parseFloat(e.target.value) || 0)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" /></td>
@@ -576,6 +611,39 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
         </div>
       </div>
       {dimFixList && <DimFixModal items={dimFixList} onSave={saveDimFixes} onClose={() => setDimFixList(null)} />}
+      {searchModalIdx !== null && (() => {
+        const curRow = rows[searchModalIdx]
+        const curMat = curRow?.malkod ? materials.find(m => m.kod === curRow.malkod) : null
+        let parentMat: typeof curMat = null
+        if (curRow?.kirno) {
+          const parts = curRow.kirno.split('.')
+          if (parts.length > 1) {
+            const parentKirno = parts.slice(0, -1).join('.')
+            const parentRow = rows.find(x => x.kirno === parentKirno)
+            if (parentRow?.malkod) parentMat = materials.find(m => m.kod === parentRow.malkod) || null
+          }
+        }
+        const src = curMat || parentMat
+        const defaultFilter: MaterialSearchFilter = src ? {
+          boy: src.boy || undefined,
+          en: src.en || undefined,
+          kalinlik: src.kalinlik || undefined,
+          cap: src.cap || undefined,
+          icCap: src.icCap || undefined,
+        } : {}
+        return (
+          <MaterialSearchModal
+            materials={materials}
+            defaultFilter={defaultFilter}
+            title="Malzeme Ara — Ölçü Filtreli"
+            onSelect={(mat) => {
+              onMalkodChange(searchModalIdx, mat.kod)
+              setSearchModalIdx(null)
+            }}
+            onClose={() => setSearchModalIdx(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
@@ -583,6 +584,7 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
   const [orderId, setOrderId] = useState('')
   const [not_, setNot] = useState('')
   const [rcSearch, setRcSearch] = useState('')
+  const [showMatSearch, setShowMatSearch] = useState(false)
 
   // Reçete seçilince auto-fill
   function selectRecipe(id: string) {
@@ -692,17 +694,25 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
           {/* Malzeme — Aranabilir */}
           <div>
             <label className="text-[11px] text-zinc-500 mb-1 block">Malzeme / Ürün *</label>
-            <SearchSelect
-              options={malOptions}
-              value={malkod}
-              onChange={(val, lbl) => {
-                setMalkod(val)
-                const m = materials.find(mm => mm.kod === val)
-                setMalad(m ? m.ad : lbl.includes(' — ') ? lbl.split(' — ').slice(1).join(' — ') : lbl)
-              }}
-              placeholder="Malzeme ara... (kod veya ad)"
-              allowNew={false}
-            />
+            <div className="flex items-center gap-1">
+              <div className="flex-1">
+                <SearchSelect
+                  options={malOptions}
+                  value={malkod}
+                  onChange={(val, lbl) => {
+                    setMalkod(val)
+                    const m = materials.find(mm => mm.kod === val)
+                    setMalad(m ? m.ad : lbl.includes(' — ') ? lbl.split(' — ').slice(1).join(' — ') : lbl)
+                  }}
+                  placeholder="Malzeme ara... (kod veya ad)"
+                  allowNew={false}
+                />
+              </div>
+              <button type="button" onClick={() => setShowMatSearch(true)} title="Detaylı arama (ölçü filtreli)"
+                className="w-8 h-8 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0">
+                <Search size={12} />
+              </button>
+            </div>
             {malkod && <div className="text-[10px] text-zinc-600 mt-0.5 font-mono">{malkod}</div>}
           </div>
 
@@ -778,6 +788,14 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
           <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Oluştur</button>
         </div>
       </div>
+      {showMatSearch && (
+        <MaterialSearchModal
+          materials={materials}
+          title="Malzeme Ara — Ölçü Filtreli"
+          onSelect={(mat) => { setMalkod(mat.kod); setMalad(mat.ad); setShowMatSearch(false) }}
+          onClose={() => setShowMatSearch(false)}
+        />
+      )}
     </div>
   )
 }

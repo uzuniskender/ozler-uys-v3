@@ -5,10 +5,11 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Plus, Truck, Download, Eye } from 'lucide-react'
+import { Plus, Truck, Download, Eye, Search } from 'lucide-react'
+import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Shipment() {
-  const { sevkler, orders, workOrders, logs, stokHareketler, loadAll } = useStore()
+  const { sevkler, orders, workOrders, logs, stokHareketler, materials, loadAll } = useStore()
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -109,21 +110,23 @@ export function Shipment() {
         </div>
       )}
 
-      {showForm && <SevkFormModal orders={orders} workOrders={workOrders} logs={logs} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); loadAll(); toast.success('Sevkiyat oluşturuldu') }} />}
+      {showForm && <SevkFormModal orders={orders} workOrders={workOrders} logs={logs} materials={materials} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); loadAll(); toast.success('Sevkiyat oluşturuldu') }} />}
     </div>
   )
 }
 
-function SevkFormModal({ orders, workOrders, logs, onClose, onSaved }: {
+function SevkFormModal({ orders, workOrders, logs, materials, onClose, onSaved }: {
   orders: { id: string; siparisNo: string; musteri: string; mamulKod: string; mamulAd: string; adet: number }[]
   workOrders: { id: string; orderId: string; malkod: string; malad: string; hedef: number }[]
   logs: { woId: string; qty: number }[]
+  materials: import('@/types').Material[]
   onClose: () => void; onSaved: () => void
 }) {
   const [orderId, setOrderId] = useState('')
   const [not_, setNot] = useState('')
   const [kalemler, setKalemler] = useState<{ malkod: string; malad: string; miktar: number }[]>([{ malkod: '', malad: '', miktar: 1 }])
   const [stokCikis, setStokCikis] = useState(true)
+  const [searchIdx, setSearchIdx] = useState<number | null>(null)
 
   const ord = orders.find(o => o.id === orderId)
 
@@ -210,6 +213,10 @@ function SevkFormModal({ orders, workOrders, logs, onClose, onSaved }: {
             {kalemler.map((k, i) => (
               <div key={i} className="flex gap-2 mb-1.5">
                 <input value={k.malkod} onChange={e => updateKalem(i, 'malkod', e.target.value)} placeholder="Malzeme kodu" className="w-28 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-accent" />
+                <button type="button" onClick={() => setSearchIdx(i)} title="Detaylı arama (ölçü filtreli)"
+                  className="w-8 h-8 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0">
+                  <Search size={12} />
+                </button>
                 <input value={k.malad} onChange={e => updateKalem(i, 'malad', e.target.value)} placeholder="Malzeme adı" className="flex-1 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
                 <input type="number" min={1} value={k.miktar} onChange={e => updateKalem(i, 'miktar', parseInt(e.target.value) || 0)} className="w-16 px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 text-right focus:outline-none" />
                 {kalemler.length > 1 && <button onClick={() => removeKalem(i)} className="text-zinc-500 hover:text-red text-xs">✕</button>}
@@ -231,6 +238,18 @@ function SevkFormModal({ orders, workOrders, logs, onClose, onSaved }: {
           <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Oluştur</button>
         </div>
       </div>
+      {searchIdx !== null && (
+        <MaterialSearchModal
+          materials={materials}
+          title="Malzeme Ara — Ölçü Filtreli"
+          allowedTypes={['Mamul', 'YarıMamul']}
+          onSelect={(mat) => {
+            setKalemler(prev => prev.map((k, idx) => idx === searchIdx ? { ...k, malkod: mat.kod, malad: mat.ad } : k))
+            setSearchIdx(null)
+          }}
+          onClose={() => setSearchIdx(null)}
+        />
+      )}
     </div>
   )
 }

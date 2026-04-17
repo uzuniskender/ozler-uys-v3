@@ -7,6 +7,7 @@ import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
+import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Warehouse() {
   const { stokHareketler, materials, loadAll } = useStore()
@@ -258,6 +259,7 @@ function StokGirisModal({ materials, onClose, onSaved }: {
   const [tip, setTip] = useState<'giris' | 'cikis'>('giris')
   const [aciklama, setAciklama] = useState('')
   const [search, setSearch] = useState('')
+  const [showMatSearch, setShowMatSearch] = useState(false)
 
   const filteredMats = materials.filter(m => !search || (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())).slice(0, 20)
   const selectedMat = materials.find(m => m.kod === malkod)
@@ -278,8 +280,14 @@ function StokGirisModal({ materials, onClose, onSaved }: {
         <div className="space-y-3">
           <div>
             <label className="text-[11px] text-zinc-500 mb-1 block">Malzeme *</label>
-            <input value={search} onChange={e => { setSearch(e.target.value); setMalkod('') }} placeholder="Malzeme ara..."
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+            <div className="flex items-center gap-1">
+              <input value={search} onChange={e => { setSearch(e.target.value); setMalkod('') }} placeholder="Malzeme ara..."
+                className="flex-1 px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+              <button type="button" onClick={() => setShowMatSearch(true)} title="Detaylı arama (ölçü filtreli)"
+                className="w-9 h-9 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0">
+                <Search size={12} />
+              </button>
+            </div>
             {search && !malkod && (
               <div className="mt-1 max-h-32 overflow-y-auto bg-bg-2 border border-border rounded-lg">
                 {filteredMats.map(m => (
@@ -308,6 +316,14 @@ function StokGirisModal({ materials, onClose, onSaved }: {
           <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
         </div>
       </div>
+      {showMatSearch && (
+        <MaterialSearchModal
+          materials={materials as any}
+          title="Malzeme Ara — Ölçü Filtreli"
+          onSelect={(mat) => { setMalkod(mat.kod); setSearch(mat.kod + ' — ' + mat.ad); setShowMatSearch(false) }}
+          onClose={() => setShowMatSearch(false)}
+        />
+      )}
     </div>
   )
 }

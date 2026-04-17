@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -178,6 +179,7 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
   const [teslim, setTeslim] = useState((initial as Record<string, unknown>)?.teslimTarihi as string || '')
   const [not_, setNot] = useState((initial as Record<string, unknown>)?.not as string || '')
   const { materials } = useStore()
+  const [showMatSearch, setShowMatSearch] = useState(false)
   const { can } = useAuth()
 
   const ted = tedarikciler.find(t => t.id === tedarikcId)
@@ -189,7 +191,18 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Tedarik Düzenle' : 'Yeni Tedarik'}</h2>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label><SearchSelect options={materials.map(m => ({ value: m.kod, label: m.kod, sub: m.ad }))} value={malkod} onChange={(v, l) => { setMalkod(v); if (!malad) setMalad(materials.find(m => m.kod === v)?.ad || l) }} placeholder="Malzeme kodu ara..." /></div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label>
+              <div className="flex items-center gap-1">
+                <div className="flex-1">
+                  <SearchSelect options={materials.map(m => ({ value: m.kod, label: m.kod, sub: m.ad }))} value={malkod} onChange={(v, l) => { setMalkod(v); if (!malad) setMalad(materials.find(m => m.kod === v)?.ad || l) }} placeholder="Malzeme kodu ara..." />
+                </div>
+                <button type="button" onClick={() => setShowMatSearch(true)} title="Detaylı arama (ölçü filtreli)"
+                  className="w-8 h-8 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0">
+                  <Search size={12} />
+                </button>
+              </div>
+            </div>
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Miktar *</label><input type="number" value={miktar} onChange={e => setMiktar(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı</label><input value={malad} onChange={e => setMalad(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
@@ -216,6 +229,14 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
           }} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
         </div>
       </div>
+      {showMatSearch && (
+        <MaterialSearchModal
+          materials={materials}
+          title="Malzeme Ara — Ölçü Filtreli"
+          onSelect={(mat) => { setMalkod(mat.kod); if (!malad) setMalad(mat.ad); setShowMatSearch(false) }}
+          onClose={() => setShowMatSearch(false)}
+        />
+      )}
     </div>
   )
 }

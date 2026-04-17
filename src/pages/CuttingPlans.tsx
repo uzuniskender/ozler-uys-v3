@@ -7,7 +7,8 @@ import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy } from '@/features/production/cutting'
 import type { WorkOrder } from '@/types'
-import { Trash2, Plus, Scissors, Zap } from 'lucide-react'
+import { Trash2, Plus, Scissors, Zap, Search } from 'lucide-react'
+import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function CuttingPlans() {
   const { cuttingPlans, materials, workOrders, operations, recipes, logs, loadAll } = useStore()
@@ -385,6 +386,7 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   const { operations, recipes, logs, cuttingPlans } = useStore()
   const [hamMalkod, setHamMalkod] = useState('')
   const [seciliIEler, setSeciliIEler] = useState<Record<string, number>>({}) // woId → adet
+  const [showMatSearch, setShowMatSearch] = useState(false)
 
   // HM listesi — sadece Hammadde (boy veya uzunluk > 0)
   const hmListesi = materials.filter(m => m.tip === 'Hammadde' && (getHamBoy(m) > 0))
@@ -490,11 +492,17 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
         {/* 1: HM Seç */}
         <div className="mb-4">
           <label className="text-[11px] text-zinc-500 mb-1 block">1. Hammadde Seç</label>
-          <select value={hamMalkod} onChange={e => { setHamMalkod(e.target.value); setSeciliIEler({}) }}
-            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
-            <option value="">— Hammadde seçin —</option>
-            {hmListesi.map(m => <option key={m.kod} value={m.kod}>{m.kod} — {m.ad} ({getHamBoy(m)}mm)</option>)}
-          </select>
+          <div className="flex items-center gap-1">
+            <select value={hamMalkod} onChange={e => { setHamMalkod(e.target.value); setSeciliIEler({}) }}
+              className="flex-1 px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+              <option value="">— Hammadde seçin —</option>
+              {hmListesi.map(m => <option key={m.kod} value={m.kod}>{m.kod} — {m.ad} ({getHamBoy(m)}mm)</option>)}
+            </select>
+            <button type="button" onClick={() => setShowMatSearch(true)} title="Detaylı arama (ölçü filtreli)"
+              className="w-9 h-9 flex items-center justify-center rounded bg-bg-3 border border-border/50 text-zinc-400 hover:text-accent hover:border-accent/50 shrink-0">
+              <Search size={12} />
+            </button>
+          </div>
         </div>
 
         {/* 2: İE Seç */}
@@ -569,6 +577,15 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
           </button>
         </div>
       </div>
+      {showMatSearch && (
+        <MaterialSearchModal
+          materials={materials as any}
+          allowedTypes={['Hammadde']}
+          title="Hammadde Ara — Ölçü Filtreli"
+          onSelect={(mat) => { setHamMalkod(mat.kod); setSeciliIEler({}); setShowMatSearch(false) }}
+          onClose={() => setShowMatSearch(false)}
+        />
+      )}
     </div>
   )
 }
