@@ -426,14 +426,14 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
           // Arttı → ek HM tüketimi
           await supabase.from('uys_stok_hareketler').insert({
             id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmDelta,
-            tip: 'cikis', kaynak: 'uretim-hm-duzeltme', aciklama: wo.ieNo + ' düzeltme +' + delta,
+            tip: 'cikis', aciklama: wo.ieNo + ' düzeltme +' + delta,
             tarih: today(), log_id: l.id, wo_id: wo.id,
           })
         } else {
           // Azaldı → HM iadesi
           await supabase.from('uys_stok_hareketler').insert({
             id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmDelta,
-            tip: 'giris', kaynak: 'uretim-hm-iade', aciklama: wo.ieNo + ' düzeltme ' + delta,
+            tip: 'giris', aciklama: wo.ieNo + ' düzeltme ' + delta,
             tarih: today(), log_id: l.id, wo_id: wo.id,
           })
         }

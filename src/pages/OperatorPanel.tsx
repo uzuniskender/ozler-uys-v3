@@ -840,7 +840,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       if (q > 0) {
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-          tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
+          tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
           tarih, log_id: editLogId, wo_id: woId,
         })
       }
@@ -852,7 +852,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           if (hmMiktar > 0) {
             await supabase.from('uys_stok_hareketler').insert({
               id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-              tip: 'cikis', kaynak: 'uretim-hm',
+              tip: 'cikis',
               aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''}) - düzenlendi`,
               tarih, log_id: editLogId, wo_id: woId,
             })
@@ -883,7 +883,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       if (q > 0) {
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-          tip: 'giris', kaynak: 'uretim', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
+          tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
           tarih, log_id: logId, wo_id: woId,
         })
       }
@@ -895,7 +895,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           if (hmMiktar > 0) {
             await supabase.from('uys_stok_hareketler').insert({
               id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-              tip: 'cikis', kaynak: 'uretim-hm',
+              tip: 'cikis',
               aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''})`,
               tarih, log_id: logId, wo_id: woId,
             })
