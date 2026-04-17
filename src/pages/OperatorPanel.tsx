@@ -872,8 +872,10 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       }
     } else {
       // YENİ KAYIT MODU
+      const nowOp = new Date()
+      const logSaat = oprList[0]?.bas || (String(nowOp.getHours()).padStart(2, '0') + ':' + String(nowOp.getMinutes()).padStart(2, '0'))
       await supabase.from('uys_logs').insert({
-        id: logId, wo_id: woId, tarih, qty: q, fire: f,
+        id: logId, wo_id: woId, tarih, saat: logSaat, qty: q, fire: f,
         operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
         not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
       })

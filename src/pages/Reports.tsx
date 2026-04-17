@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -12,6 +13,7 @@ const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899'
 export function Reports() {
   const { workOrders, logs, operators, fireLogs, orders, operations, loadAll } = useStore()
   const { can } = useAuth()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('ozet')
   const [telafiRunning, setTelafiRunning] = useState(false)
 
@@ -89,7 +91,7 @@ export function Reports() {
   const dSiparisList = useMemo(() => [...new Set(orders.map(o => o.siparisNo).filter(Boolean))].sort(), [orders])
 
   interface DetayRow {
-    logId: string; tarih: string; siparisNo: string; ieNo: string
+    logId: string; woId: string; tarih: string; siparisNo: string; ieNo: string
     mamulKod: string; mamulAd: string; opAd: string; operatorler: string
     basStr: string; bitStr: string; calismaDk: number; calismaStr: string
     uretim: number; fire: number; fireOran: number; durusDk: number
@@ -144,7 +146,7 @@ export function Reports() {
       const fireQty = l.fire || 0
       const totalQty = l.qty + fireQty
       rows.push({
-        logId: l.id, tarih: l.tarih, siparisNo, ieNo: wo.ieNo || l.ieNo || '',
+        logId: l.id, woId: l.woId, tarih: l.tarih, siparisNo, ieNo: wo.ieNo || l.ieNo || '',
         mamulKod: wo.mamulKod || wo.malkod || '', mamulAd: wo.mamulAd || wo.malad || '',
         opAd: wo.opAd || '', operatorler: oprNames.join(', '),
         basStr: minBas, bitStr: maxBit, calismaDk,
@@ -338,7 +340,8 @@ export function Reports() {
                     <tr><td colSpan={15} className="px-3 py-8 text-center text-zinc-600">Filtre kriterlerine uygun kayıt bulunamadı</td></tr>
                   )}
                   {detayliData.map(r => (
-                    <tr key={r.logId} className="border-b border-border/20 hover:bg-bg-1/30">
+                    <tr key={r.logId} onClick={() => navigate(`/workorders?ie=${r.woId}&log=${r.logId}`)}
+                        title="İE detayına git" className="border-b border-border/20 hover:bg-accent/10 cursor-pointer">
                       <td className="px-3 py-1.5 font-mono text-zinc-400">{r.tarih}</td>
                       <td className="px-3 py-1.5 font-mono text-zinc-300">{r.siparisNo}</td>
                       <td className="px-3 py-1.5 font-mono text-accent">{r.ieNo}</td>

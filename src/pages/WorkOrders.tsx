@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -20,6 +21,25 @@ export function WorkOrders() {
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['siparis', 'ym']))
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
+  const [highlightLogId, setHighlightLogId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // URL'den ?ie=X&log=Y → detail modal aç + log highlight
+  useEffect(() => {
+    const ieParam = searchParams.get('ie')
+    const logParam = searchParams.get('log')
+    if (ieParam) {
+      const wo = workOrders.find((w: any) => w.id === ieParam || w.ieNo === ieParam)
+      if (wo) {
+        setDetailWO(wo.id)
+        if (logParam) setHighlightLogId(logParam)
+      }
+      const sp = new URLSearchParams(searchParams)
+      sp.delete('ie'); sp.delete('log')
+      setSearchParams(sp, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workOrders.length])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showNewIE, setShowNewIE] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -333,17 +353,27 @@ export function WorkOrders() {
       })}
       {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
 
-      {detailW && <WODetailModal wo={detailW} onClose={() => setDetailWO(null)} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAll} />}
+      {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAll} />}
       {showNewIE && <NewIEModal operations={operations} orders={orders} onClose={() => setShowNewIE(false)} onSaved={() => { setShowNewIE(false); loadAll(); toast.success('İş emri oluşturuldu') }} recipes={recipes} />}
     </div>
   )
 }
 
-function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, loadAll }: any) {
+function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, loadAll, highlightLogId }: any) {
   const { durusKodlari } = useStore()
   const { can } = useAuth()
   const [adminEntryWO, setAdminEntryWO] = useState<string | null>(null)
   const prod = wProd(wo.id); const pct = wPct(wo); const kalan = Math.max(0, wo.hedef - prod)
+
+  // highlight edilen log satırına scroll
+  useEffect(() => {
+    if (!highlightLogId) return
+    const tick = setTimeout(() => {
+      const el = document.getElementById('log-row-' + highlightLogId)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 200)
+    return () => clearTimeout(tick)
+  }, [highlightLogId])
 
   // #7: Stok kontrollü log düzenleme
   async function editLog(l: any) {
@@ -416,10 +446,11 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
   }
 
   async function deleteLog(l: any) {
-    if (!await showConfirm('Bu logu silmek istediğinize emin misiniz? İlişkili stok hareketleri de silinecek.')) return
+    if (!await showConfirm('Bu logu silmek istediğinize emin misiniz? İlişkili stok hareketleri ve fire kayıtları da silinecek.')) return
     await supabase.from('uys_logs').delete().eq('id', l.id)
     await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id)
-    loadAll(); toast.success('Log ve stok hareketleri silindi')
+    await supabase.from('uys_fire_logs').delete().eq('log_id', l.id)
+    loadAll(); toast.success('Log, stok hareketleri ve fire kayıtları silindi')
   }
   const ord = orders.find((o: any) => o.id === wo.orderId)
   const woLogs = logs.filter((l: any) => l.woId === wo.id).sort((a: any, b: any) => (b.tarih || '').localeCompare(a.tarih || ''))
@@ -510,8 +541,9 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
           <div className="overflow-x-auto mb-4"><table className="w-full text-xs min-w-[500px]"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Tarih</th><th className="text-right px-3 py-2">Adet</th><th className="text-left px-3 py-2">Operatör / Duruş</th><th className="text-left px-3 py-2">Not</th><th className="px-3 py-2"></th></tr></thead><tbody>
             {woLogs.map((l: any) => {
               const oprList = l.operatorlar || []; const durusList = l.duruslar || []
-              return (<tr key={l.id} className="border-b border-border/30">
-                <td className="px-3 py-1.5 font-mono text-zinc-500 whitespace-nowrap">{l.tarih}</td>
+              const isHighlight = highlightLogId === l.id
+              return (<tr key={l.id} id={'log-row-' + l.id} className={`border-b border-border/30 ${isHighlight ? 'bg-amber/10 ring-2 ring-amber/40' : ''}`}>
+                <td className="px-3 py-1.5 font-mono text-zinc-500 whitespace-nowrap">{l.tarih}{l.saat ? <span className="text-zinc-600 ml-1">{l.saat}</span> : ''}</td>
                 <td className="px-3 py-1.5 text-right font-mono text-sm font-bold text-green pr-3">+{l.qty}{l.fire > 0 && <span className="text-red text-[10px] ml-1">🔥{l.fire}</span>}</td>
                 <td className="px-3 py-1.5"><div className="flex flex-wrap gap-1">{oprList.length > 0 ? oprList.map((op: any, i: number) => <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-accent/10 text-[10px]">{op.ad}{(op.bas || op.bit) && <span className="font-mono text-zinc-500 ml-1">{op.bas || ''}→{op.bit || ''}</span>}</span>) : <span className="text-[10px] text-zinc-600">—</span>}</div>{durusList.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{durusList.map((d: any, i: number) => <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-red/8 border border-red/15 text-[10px] text-red">⏸ {d.sebep || d.kodAd || ''}{d.sure ? ` ${d.sure}dk` : ''}</span>)}</div>}</td>
                 <td className="px-3 py-1.5 text-zinc-500 text-[11px]">{l.not || ''}</td>

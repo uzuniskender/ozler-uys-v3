@@ -328,10 +328,12 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     setSaving(true)
 
     const logId = uid()
+    const nowTs = new Date()
+    const saatStr = String(nowTs.getHours()).padStart(2, '0') + ':' + String(nowTs.getMinutes()).padStart(2, '0')
 
     // Üretim logu
     await supabase.from('uys_logs').insert({
-      id: logId, wo_id: woId, tarih, qty: q, fire: f,
+      id: logId, wo_id: woId, tarih, saat: saatStr, qty: q, fire: f,
       operatorlar: oprList.length > 0 ? oprList : [],
       duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
       not_: not, malkod: w.malkod, ie_no: w.ieNo,
@@ -585,7 +587,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
 
       const logId = uid()
       await supabase.from('uys_logs').insert({
-        id: logId, wo_id: r.woId, tarih, qty: q, fire: f,
+        id: logId, wo_id: r.woId, tarih, saat, qty: q, fire: f,
         operatorlar: opr ? [{ id: opr.id, ad: opr.ad, bas: saat, bit: saat }] : [],
         duruslar: [], malkod: wo.malkod, ie_no: wo.ieNo, operator_id: oprId || null,
       })
