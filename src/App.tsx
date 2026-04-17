@@ -23,6 +23,7 @@ import { Operators } from '@/pages/Operators'
 import { Suppliers } from '@/pages/Suppliers'
 import { DowntimeCodes } from '@/pages/DowntimeCodes'
 import { Reports } from '@/pages/Reports'
+import { TestPanel } from '@/pages/TestPanel'
 import { DataManagement } from '@/pages/DataManagement'
 import { Procurement } from '@/pages/Procurement'
 import { OperatorPanel } from '@/pages/OperatorPanel'
@@ -59,6 +60,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/suppliers" element={<Suppliers />} />
           <Route path="/downtime-codes" element={<DowntimeCodes />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/test" element={<TestPanel />} />
           <Route path="/data" element={<DataManagement />} />
           <Route path="/procurement" element={<Procurement />} />
           <Route path="/checklist" element={<Checklist />} />

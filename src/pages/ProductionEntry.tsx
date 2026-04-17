@@ -307,6 +307,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
     if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Miktar, fire veya duruş girmelisiniz'); return }
+    if (q < 0 || f < 0) { toast.error('Negatif değer girilemez'); return }
     // #2: Fazla üretim kontrolü — HARD BLOCK (fire dahil)
     // Güncel üretim + fire'ı Supabase'den çek (stale data riski)
     const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)

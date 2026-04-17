@@ -787,6 +787,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     const q = parseInt(qty) || 0; const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
     if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Adet, fire veya duruş girin'); return }
+    if (q < 0 || f < 0) { toast.error('Negatif değer girilemez'); return }
     // Güncel üretim + fire'ı çek — İE kapasitesi (fire dahil)
     const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
     const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
@@ -1022,16 +1023,19 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] text-zinc-500 mb-1 block">Üretim Adedi *</label>
-              <input type="number" value={qty} onChange={e => {
+              <input type="number" min={0} value={qty} onChange={e => {
                 const v = parseInt(e.target.value) || 0
-                // q + f > kalan hard constraint — save() içinde zaten kontrol ediliyor.
-                // Burada sadece q > kalan'ı engelliyoruz (fire henüz girilmemiş olabilir).
+                if (v < 0) { setQty('0'); return }
                 if (v > kalan) { setQty(String(kalan)); toast.error('Hedef kalan: ' + kalan) } else setQty(e.target.value)
               }} placeholder={String(kalan)} className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-white focus:outline-none focus:border-green" autoFocus />
             </div>
             <div>
               <label className="text-[10px] text-zinc-500 mb-1 block">Fire</label>
-              <input type="number" value={fire} onChange={e => setFire(e.target.value)} placeholder="0" className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-red focus:outline-none focus:border-red" />
+              <input type="number" min={0} value={fire} onChange={e => {
+                const v = parseInt(e.target.value) || 0
+                if (v < 0) { setFire('0'); return }
+                setFire(e.target.value)
+              }} placeholder="0" className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-red focus:outline-none focus:border-red" />
             </div>
           </div>
 
