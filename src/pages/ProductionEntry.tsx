@@ -422,24 +422,25 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
           </div>
         </div>
 
-        {/* HM Stok Kontrol */}
+        {/* HM Stok Kontrol — bilgi amaçlı (İE oluşumunda HM tahsisi zaten yapıldı) */}
         {hmSatirlar.length > 0 && (
           <div className="mb-3">
-            <div className="text-[10px] text-zinc-500 mb-1">Hammadde Stok Durumu {maxUretim < kalan && <span className="text-amber ml-1">— Max: {maxUretim} adet</span>}</div>
+            <div className="text-[10px] text-zinc-500 mb-1 flex items-center justify-between">
+              <span>Hammadde DB Stoğu</span>
+              <span className="text-[9px] text-zinc-600">bilgi amaçlı — HM iş emrine tahsislidir</span>
+            </div>
             <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
               <table className="w-full text-[11px]">
-                <thead><tr className="border-b border-border text-zinc-600"><th className="text-left px-2 py-1">Malzeme</th><th className="text-right px-2 py-1">Stok</th><th className="text-right px-2 py-1">Gerekli</th><th className="text-right px-2 py-1">Durum</th></tr></thead>
+                <thead><tr className="border-b border-border text-zinc-600"><th className="text-left px-2 py-1">Malzeme</th><th className="text-right px-2 py-1">DB Stok</th><th className="text-right px-2 py-1">Gerekli</th></tr></thead>
                 <tbody>{hmSatirlar.map((hm, i) => {
                   const mevcut = Math.round(stokNet(hm.malkod))
                   const q_ = parseInt(qty) || kalan
                   const gerekli = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q_)
-                  const yeterli = mevcut >= gerekli
                   return (
                     <tr key={i} className="border-b border-border/20">
                       <td className="px-2 py-1 text-zinc-300 truncate max-w-[140px]" title={hm.malkod}>{hm.malad || hm.malkod}</td>
-                      <td className={`px-2 py-1 text-right font-mono ${mevcut <= 0 ? 'text-red' : 'text-zinc-400'}`}>{mevcut}</td>
+                      <td className="px-2 py-1 text-right font-mono text-zinc-400">{mevcut}</td>
                       <td className="px-2 py-1 text-right font-mono text-zinc-500">{gerekli}</td>
-                      <td className={`px-2 py-1 text-right font-mono font-semibold ${yeterli ? 'text-green' : 'text-red'}`}>{yeterli ? '✓' : '✗'}</td>
                     </tr>
                   )
                 })}</tbody>

@@ -20,26 +20,25 @@
 
 ## 2. Bugün Yapılan İşler (17 Nisan 2026)
 
-### 🔧 "Stok Yok" Blokajı Kaldırıldı (OperatorPanel)
+### 🔧 "Stok Yok" Uyarıları Yumuşatıldı (Hem Admin Hem Operatör)
 
-**Sorun:** Operatör kendi giriş ekranında (OperatorPanel.tsx) DB stoğu 0 göründüğünde adet girişi yapamıyordu — "Max: 0" toast'u çıkıp değer otomatik 0'a düşüyordu.
-
-**Kök Neden:** Input onChange'de `mx = Math.min(kalan, maxUretim)` kullanılıyordu. `maxUretim` DB stoğuna göre hesaplandığı için stok 0 ise girişi bloklıyordu. Oysa iş kuralı:
+**Sorun:** İE'de HM DB stoğu 0 görününce hem operatör ekranı (OperatorPanel) hem admin ekranı (ProductionEntry) alarmlı kırmızı uyarılar gösteriyordu — bu iş kuralıyla çelişiyor:
 > İE oluşturulduğunda HM tahsis edilmiş sayılır, hat kenarına geldi. Sadece `q + f ≤ hedef` hard constraint.
 
-**Uygulanan Düzeltme (src/pages/OperatorPanel.tsx):**
+**Uygulanan Düzeltmeler:**
 
-1. **Input blokajı kaldırıldı** (satır ~1015):
-   - Önce: `mx = hmSatirlar.length > 0 ? Math.min(kalan, maxUretim) : kalan`
-   - Şimdi: Sadece `v > kalan` kontrolü. `save()` içindeki `q+f > freshKalan` hard blokajı zaten mevcut (satır 798).
+**1. OperatorPanel.tsx — Input blokajı kaldırıldı:**
+- Önce: `mx = Math.min(kalan, maxUretim)` → stok 0 ise giriş yok
+- Şimdi: Sadece `v > kalan` kontrolü. `save()`'deki `q+f > freshKalan` hard blokajı yeterli.
+- "⛔ STOK YOK" kırmızı → "ℹ️ DB STOĞU GÖRÜNMÜYOR" amber bilgilendirme.
 
-2. **"STOK YOK" kırmızı alarmı yumuşatıldı** (satır ~967):
-   - Başlık: `⛔ STOK YOK` → `ℹ️ DB STOĞU GÖRÜNMÜYOR`
-   - Renk: red → amber
-   - Alt not: "HM iş emrine tahsisli — bilgi amaçlı"
-   - Kısmi uyarı bilgilendirici: "DB stoğuna göre X adet yapılabilir görünüyor. Gerçek hat kenarındaki HM ile üretime devam edebilirsin."
+**2. ProductionEntry.tsx (admin ekranı) — Display yumuşatıldı:**
+- Başlık: "Hammadde Stok Durumu — Max: X adet" → "Hammadde DB Stoğu · bilgi amaçlı — HM iş emrine tahsislidir"
+- "Durum" sütunu (✓/✗ renkli) tamamen kaldırıldı
+- Kırmızı/amber renkler → nötr zinc-400
+- Input zaten doğruydu (`max={kalan}`, stok yok blokajı save()'de kaldırılmıştı satır 327'de)
 
-**Not:** ProductionEntry.tsx (admin yığın girişi) zaten doğruydu — stok sadece göstergeydi, blokaj yoktu. Sorun yalnızca OperatorPanel'deydi.
+**Sonuç:** Her iki ekranda da DB stoğu sadece bilgi olarak gözüküyor, alarmsız. Hard constraint sadece `q+f ≤ hedef`.
 
 ---
 
