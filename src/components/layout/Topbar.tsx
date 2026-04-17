@@ -3,6 +3,7 @@ import { Menu, LogOut, RefreshCw, Key } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
+import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 
 interface TopbarProps {
   onMenuClick: () => void
@@ -45,6 +46,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
       </div>
 
       <button onClick={() => loadAll()} className="text-zinc-500 hover:text-zinc-300" title="Yenile"><RefreshCw size={14} /></button>
+      <HelpNotesButtons username={user?.username || 'anonim'} />
       <button onClick={() => setShowPassModal(true)} className="text-zinc-500 hover:text-amber" title="Şifre Değiştir"><Key size={14} /></button>
       <button onClick={onSignOut} className="text-zinc-500 hover:text-red" title="Çıkış"><LogOut size={14} /></button>
     </header>

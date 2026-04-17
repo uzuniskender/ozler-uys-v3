@@ -153,12 +153,13 @@ export function Orders() {
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
-          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="px-2 py-2.5 w-6"><input type="checkbox" onChange={e => e.target.checked ? setSelIds(new Set(filtered.map(o => o.id))) : setSelIds(new Set())} className="accent-accent" /></th><th className="text-left px-4 py-2.5">Sipariş No</th><th className="text-left px-4 py-2.5">Müşteri</th><th className="text-left px-4 py-2.5">Ürün</th><th className="text-right px-4 py-2.5">Adet</th><th className="text-left px-4 py-2.5">Termin</th><th className="text-right px-4 py-2.5">İlerleme</th><th className="text-right px-4 py-2.5">İE</th><th className="text-center px-2 py-2.5">MRP</th><th className="px-4 py-2.5"></th></tr></thead>
+          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="px-2 py-2.5 w-6"><input type="checkbox" onChange={e => e.target.checked ? setSelIds(new Set(filtered.map(o => o.id))) : setSelIds(new Set())} className="accent-accent" /></th><th className="text-left px-4 py-2.5">Sipariş No</th><th className="text-left px-4 py-2.5">Müşteri</th><th className="text-left px-4 py-2.5">Ürün</th><th className="text-right px-4 py-2.5">Adet</th><th className="text-left px-4 py-2.5">Termin</th><th className="text-right px-4 py-2.5">İlerleme</th><th className="text-right px-4 py-2.5">İE</th><th className="text-center px-2 py-2.5">MRP</th><th className="text-center px-2 py-2.5">Sevk</th><th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {filtered.map(o => {
               const pct = orderPct(o.id); const woCount = workOrders.filter(w => w.orderId === o.id).length
               const isLate = o.termin && o.termin < today() && pct < 100
               const mrpBadge = o.mrpDurum === 'tamamlandi' ? { bg: 'bg-green/10', color: 'text-green', label: '✓' } : o.mrpDurum === 'calistirildi' ? { bg: 'bg-amber/10', color: 'text-amber', label: '⚡' } : { bg: 'bg-cyan-500/10', color: 'text-cyan-400', label: '📊' }
+              const sevkBadge = o.sevkDurum === 'tamamen_sevk' ? { bg: 'bg-green/10', color: 'text-green', label: '✓ Tamam', title: 'Tamamen sevk edildi' } : o.sevkDurum === 'kismi_sevk' ? { bg: 'bg-amber/10', color: 'text-amber', label: 'Kısmi', title: 'Kısmi sevk edildi' } : { bg: 'bg-bg-3', color: 'text-zinc-600', label: '—', title: 'Sevk yok' }
               return (
                 <tr key={o.id} className={`border-b border-border/50 hover:bg-bg-3/50 ${selIds.has(o.id) ? 'bg-accent/5' : ''}`}>
                   <td className="px-2 py-2.5"><input type="checkbox" checked={selIds.has(o.id)} onChange={() => selToggle(o.id)} className="accent-accent" /></td>
@@ -170,6 +171,7 @@ export function Orders() {
                   <td className="px-4 py-2.5 text-right"><div className="flex items-center justify-end gap-2"><div className="w-14 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${pct}%` }} /></div><span className={`font-mono text-[11px] w-8 text-right ${pctColor(pct)}`}>{pct}%</span></div></td>
                   <td className="px-4 py-2.5 text-right font-mono text-zinc-500">{woCount}</td>
                   <td className="px-2 py-2.5 text-center">{woCount > 0 && <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${mrpBadge.bg} ${mrpBadge.color}`}>{mrpBadge.label}</span>}</td>
+                  <td className="px-2 py-2.5 text-center"><span title={sevkBadge.title} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${sevkBadge.bg} ${sevkBadge.color}`}>{sevkBadge.label}</span></td>
                   <td className="px-4 py-2.5 text-right"><div className="flex gap-1 justify-end">
                     <button onClick={() => setSelectedOrder(o)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={13} /></button>
                     {can('orders_edit') && <button onClick={() => oncelikDegistir(o.id, 1)} className="p-1 text-zinc-500 hover:text-amber" title="Öncelik artır"><ArrowUp size={11} /></button>}

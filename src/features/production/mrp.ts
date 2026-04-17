@@ -1,4 +1,6 @@
 import type { Recipe, StokHareket, Tedarik, WorkOrder, Material } from '@/types'
+import { supabase } from '@/lib/supabase'
+import { uid, today } from '@/lib/utils'
 
 export interface MRPRow {
   malkod: string; malad: string; tip: string; birim: string
@@ -265,8 +267,6 @@ export function hesaplaMRP(
 export async function mrpTedarikOlustur(
   orderId: string, siparisNo: string, mrpRows: MRPRow[]
 ): Promise<number> {
-  const { supabase } = await import('@/lib/supabase')
-  const { uid, today } = await import('@/lib/utils')
   const ihtiyaclar = mrpRows.filter(r => r.net > 0)
   if (!ihtiyaclar.length) return 0
   for (const r of ihtiyaclar) {

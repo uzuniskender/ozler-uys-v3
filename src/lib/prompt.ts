@@ -2,6 +2,8 @@
  * Browser prompt() yerine uygulama içi modal prompt
  * Kullanım: const value = await showPrompt('Başlık', 'placeholder', 'varsayılan')
  */
+import { toast } from 'sonner'
+
 export function showPrompt(label: string, placeholder?: string, defaultValue?: string): Promise<string | null> {
   return new Promise(resolve => {
     const overlay = document.createElement('div')
@@ -153,7 +155,6 @@ export async function requirePassword(action: string): Promise<boolean> {
   const entered = await showPrompt(`"${action}" için admin şifresi girin`, 'Şifre')
   if (!entered) return false
   if (entered !== storedPass) {
-    const { toast } = await import('sonner')
     toast.error('Şifre hatalı')
     return false
   }

@@ -14,6 +14,7 @@ export interface Order {
   receteId: string
   mrpDurum: string
   durum: string
+  sevkDurum: string
   oncelik: number
   olusturma: string
 }

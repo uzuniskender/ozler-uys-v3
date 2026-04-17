@@ -16,7 +16,8 @@ const M = {
     urunler: (r.urunler || []) as Order['urunler'], mamulKod: (r.mamul_kod || '') as string,
     mamulAd: (r.mamul_ad || '') as string, adet: (r.adet as number) || 1,
     receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
-    durum: (r.durum || '') as string, oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
+    durum: (r.durum || '') as string, sevkDurum: (r.sevk_durum || 'sevk_yok') as string,
+    oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
   }),
   wo: (r: Record<string, unknown>): WorkOrder => {
     const malkod = (r.malkod || '') as string

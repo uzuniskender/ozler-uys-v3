@@ -17,9 +17,24 @@ export function Shipment() {
 
   async function deleteSevk(id: string) {
     if (!await showConfirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
+    const silinenSevk = sevkler.find(s => s.id === id)
     await supabase.from('uys_sevkler').delete().eq('id', id)
     // Stok çıkışlarını da sil
     await supabase.from('uys_stok_hareketler').delete().eq('aciklama', 'Sevkiyat — ' + id)
+    // Order sevk_durum recalc
+    if (silinenSevk?.orderId) {
+      const ord = orders.find(o => o.id === silinenSevk.orderId)
+      if (ord) {
+        const { data: kalanSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', silinenSevk.orderId)
+        let toplamSevk = 0
+        for (const s of (kalanSevkler || [])) {
+          const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
+          toplamSevk += kk.filter(k => k.malkod === ord.mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+        }
+        const yeniDurum = toplamSevk <= 0 ? 'sevk_yok' : toplamSevk >= ord.adet ? 'tamamen_sevk' : 'kismi_sevk'
+        await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', silinenSevk.orderId)
+      }
+    }
     loadAll(); toast.success('Sevkiyat silindi')
   }
 
@@ -153,7 +168,30 @@ function SevkFormModal({ orders, workOrders, logs, onClose, onSaved }: {
         })
       }
     }
+    // Sipariş sevk_durum güncelle (orderId varsa)
+    if (orderId && ord) {
+      const yeniSevkDurum = await hesaplaSevkDurum(orderId, ord.adet, ord.mamulKod, [...kalemler])
+      await supabase.from('uys_orders').update({ sevk_durum: yeniSevkDurum }).eq('id', orderId)
+      if (yeniSevkDurum === 'tamamen_sevk' && ord.durum !== 'kapalı') {
+        toast.success('🎯 Sipariş tamamen sevk edildi. İstersen Siparişler sayfasından kapat.', { duration: 6000 })
+      }
+    }
     onSaved()
+  }
+
+  // Sipariş için sevk durumunu hesapla (yeni sevk dahil)
+  async function hesaplaSevkDurum(ordId: string, toplamAdet: number, mamulKod: string, yeniKalemler: { malkod: string; miktar: number }[]): Promise<string> {
+    const { data: mevcutSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', ordId)
+    let toplamSevk = 0
+    for (const s of (mevcutSevkler || [])) {
+      const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
+      toplamSevk += kk.filter(k => k.malkod === mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+    }
+    // Yeni kalemlerden de ekle (insert daha sonra yapılıyor ama hesaba kat)
+    toplamSevk += yeniKalemler.filter(k => k.malkod === mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+    if (toplamSevk <= 0) return 'sevk_yok'
+    if (toplamSevk >= toplamAdet) return 'tamamen_sevk'
+    return 'kismi_sevk'
   }
 
   return (

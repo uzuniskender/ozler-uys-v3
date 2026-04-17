@@ -219,27 +219,116 @@ export function DataManagement() {
           Sistem Testi Çalıştır
         </button>
         <button onClick={async () => {
-          if (!await showConfirm('Silinmiş ana kayıtların bağlıları (orphan) temizlenecek:\n• İE silinmiş fire logları\n• İE silinmiş stok hareketleri\n• Log silinmiş fire/stok hareketleri\n• Fire silinmiş telafi İE\'leri\n\nDevam?')) return
-          let silinen = 0
-          // Fire logları — İE'si silinmiş
-          const woIds = new Set(store.workOrders.map(w => w.id))
-          const orfanFireWo = store.fireLogs.filter(f => f.woId && !woIds.has(f.woId))
-          for (const f of orfanFireWo) { await supabase.from('uys_fire_logs').delete().eq('id', f.id); silinen++ }
-          // Fire logları — Log'u silinmiş
-          const logIds = new Set(store.logs.map(l => l.id))
-          const orfanFireLog = store.fireLogs.filter(f => f.logId && !logIds.has(f.logId))
-          for (const f of orfanFireLog) { await supabase.from('uys_fire_logs').delete().eq('id', f.id); silinen++ }
-          // Stok hareketleri — Log'u silinmiş
-          const orfanStokLog = store.stokHareketler.filter(h => h.logId && !logIds.has(h.logId))
-          for (const h of orfanStokLog) { await supabase.from('uys_stok_hareketler').delete().eq('id', h.id); silinen++ }
-          // Stok hareketleri — İE'si silinmiş (wo_id varsa)
-          const orfanStokWo = store.stokHareketler.filter(h => h.woId && !woIds.has(h.woId))
-          for (const h of orfanStokWo) { await supabase.from('uys_stok_hareketler').delete().eq('id', h.id); silinen++ }
-          // Telafi İE'leri — Fire log'u silinmiş olanlar
-          const fireTelafiIds = new Set(store.fireLogs.map(f => f.telafiWoId).filter(Boolean))
-          const orfanTelafi = store.workOrders.filter(w => (w.ieNo || '').startsWith('FIRE-') && !fireTelafiIds.has(w.id))
-          for (const w of orfanTelafi) { await supabase.from('uys_work_orders').delete().eq('id', w.id); silinen++ }
-          toast.success(`✓ ${silinen} orphan kayıt silindi`)
+          if (!await showConfirm('Orphan (sahipsiz) kayıtlar temizlenecek:\n• İE silinmiş log/fire/stok kayıtları\n• Log silinmiş fire/stok kayıtları\n• Fire telafi\'si yokken kalmış telafi İE\'leri\n• Tedarik "geldi" olmasına rağmen stok girişi olmamış kayıtlar\n\nDevam?')) return
+
+          // Fresh DB okuma — store güncel olmayabilir
+          const [woRes, logRes, fireRes, stokRes, tedRes] = await Promise.all([
+            supabase.from('uys_work_orders').select('id,ie_no'),
+            supabase.from('uys_logs').select('id,wo_id'),
+            supabase.from('uys_fire_logs').select('id,wo_id,log_id,telafi_wo_id'),
+            supabase.from('uys_stok_hareketler').select('id,wo_id,log_id'),
+            supabase.from('uys_tedarikler').select('id,malkod,geldi'),
+          ])
+
+          const woIds = new Set((woRes.data || []).map(w => w.id))
+          const logIds = new Set((logRes.data || []).map(l => l.id))
+          const fireIds = new Set((fireRes.data || []).map(f => f.id))
+
+          const sayilar = { logOrphan: 0, fireOrphan: 0, stokOrphan: 0, telafiOrphan: 0, tedarikOrphan: 0 }
+
+          // 1. Log — wo_id silinmiş
+          const badLogs = (logRes.data || []).filter(l => l.wo_id && !woIds.has(l.wo_id))
+          if (badLogs.length) {
+            const ids = badLogs.map(l => l.id)
+            for (let i = 0; i < ids.length; i += 50) {
+              await supabase.from('uys_logs').delete().in('id', ids.slice(i, i + 50))
+            }
+            sayilar.logOrphan = badLogs.length
+            badLogs.forEach(l => logIds.delete(l.id))  // silinen log'ları set'ten de çıkar
+          }
+
+          // 2. Fire log — wo_id veya log_id silinmiş
+          const badFires = (fireRes.data || []).filter(f =>
+            (f.wo_id && !woIds.has(f.wo_id)) || (f.log_id && !logIds.has(f.log_id))
+          )
+          if (badFires.length) {
+            const ids = badFires.map(f => f.id)
+            for (let i = 0; i < ids.length; i += 50) {
+              await supabase.from('uys_fire_logs').delete().in('id', ids.slice(i, i + 50))
+            }
+            sayilar.fireOrphan = badFires.length
+            badFires.forEach(f => fireIds.delete(f.id))
+          }
+
+          // 3. Stok hareketi — wo_id veya log_id silinmiş (NULL wo_id olanlar tedarik, dokunma)
+          const badStok = (stokRes.data || []).filter(h =>
+            (h.wo_id && !woIds.has(h.wo_id)) || (h.log_id && !logIds.has(h.log_id))
+          )
+          if (badStok.length) {
+            const ids = badStok.map(h => h.id)
+            for (let i = 0; i < ids.length; i += 50) {
+              await supabase.from('uys_stok_hareketler').delete().in('id', ids.slice(i, i + 50))
+            }
+            sayilar.stokOrphan = badStok.length
+          }
+
+          // 4. Telafi İE — fire_log silinmiş (telafi_wo_id geçerli değil)
+          const telafiRefs = new Set((fireRes.data || []).map(f => f.telafi_wo_id).filter(Boolean))
+          // Geçersiz telafi ref'i olan fire_log'ları da temizle
+          const badTelafiRef = (fireRes.data || []).filter(f => f.telafi_wo_id && !woIds.has(f.telafi_wo_id))
+          if (badTelafiRef.length) {
+            for (const f of badTelafiRef) {
+              await supabase.from('uys_fire_logs').update({ telafi_wo_id: null }).eq('id', f.id)
+            }
+          }
+          // WO'larda "fire telafi" notlu olup fire_log'u silinmiş olanlar
+          const orphanTelafiWos = (woRes.data || []).filter(w => {
+            // IE numarası -FXXXX deseni varsa telafi
+            return (w.ie_no || '').match(/-F[A-Z0-9]{4,}$/) && !telafiRefs.has(w.id)
+          })
+          if (orphanTelafiWos.length) {
+            // Önce bağlı log/fire/stok'ları temizle
+            const telafiIds = orphanTelafiWos.map(w => w.id)
+            for (let i = 0; i < telafiIds.length; i += 50) {
+              const batch = telafiIds.slice(i, i + 50)
+              await supabase.from('uys_logs').delete().in('wo_id', batch)
+              await supabase.from('uys_fire_logs').delete().in('wo_id', batch)
+              await supabase.from('uys_stok_hareketler').delete().in('wo_id', batch)
+              await supabase.from('uys_work_orders').delete().in('id', batch)
+            }
+            sayilar.telafiOrphan = orphanTelafiWos.length
+          }
+
+          // 5. Tedarik — "geldi" işaretli ama stok girişi yok
+          const gelmisTed = (tedRes.data || []).filter(t => t.geldi)
+          // Stok girişi aciklama'sında "Tedarik" geçen malkod'lar
+          const { data: tedStok } = await supabase.from('uys_stok_hareketler')
+            .select('malkod').eq('tip', 'giris').ilike('aciklama', '%Tedarik%')
+          const stokliMallar = new Set((tedStok || []).map(h => h.malkod))
+          const stoksuzTed = gelmisTed.filter(t => !stokliMallar.has(t.malkod))
+          if (stoksuzTed.length) {
+            // Sadece say, silme — kullanıcıya bildir, elle karar versin
+            sayilar.tedarikOrphan = stoksuzTed.length
+          }
+
+          const toplam = sayilar.logOrphan + sayilar.fireOrphan + sayilar.stokOrphan + sayilar.telafiOrphan
+          const detay = [
+            sayilar.logOrphan ? `• ${sayilar.logOrphan} orphan log` : null,
+            sayilar.fireOrphan ? `• ${sayilar.fireOrphan} orphan fire kaydı` : null,
+            sayilar.stokOrphan ? `• ${sayilar.stokOrphan} orphan stok hareketi` : null,
+            sayilar.telafiOrphan ? `• ${sayilar.telafiOrphan} orphan telafi İE (+bağlılar)` : null,
+            sayilar.tedarikOrphan ? `⚠ ${sayilar.tedarikOrphan} tedarik "geldi" ama stok girişi yok (elle kontrol)` : null,
+          ].filter(Boolean).join('\n')
+
+          if (toplam === 0 && sayilar.tedarikOrphan === 0) {
+            toast.success('✓ Sistem temiz — orphan bulunamadı')
+          } else if (toplam === 0) {
+            toast.warning(`${sayilar.tedarikOrphan} tedarik uyarısı`)
+            await showAlert(detay, 'Orphan Temizleme Özeti')
+          } else {
+            toast.success(`✓ ${toplam} orphan kayıt silindi`)
+            await showAlert(detay, 'Orphan Temizleme Özeti')
+          }
           await loadAll()
         }} className="ml-2 px-4 py-2 bg-red/10 border border-red/25 text-red rounded-lg text-xs hover:bg-red/20">
           🗑 Orphan Temizle
