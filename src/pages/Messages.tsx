@@ -4,8 +4,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Send, Trash2, Check, CheckCheck } from 'lucide-react'
-import type { OperatorNote } from '@/types'
+import { Search, Send, Trash2, Check, CheckCheck, AlertTriangle } from 'lucide-react'
+import type { OperatorNote, OperatorNoteKategori, OperatorNoteOncelik } from '@/types'
+import { OPERATOR_NOTE_KATEGORILER } from '@/types'
 
 const isAdmin = (n: OperatorNote) => (n.opAd || '').includes('Yönetim')
 
@@ -17,6 +18,11 @@ export function Messages() {
   const [sending, setSending] = useState(false)
   const [search, setSearch] = useState('')
   const [onlyUnread, setOnlyUnread] = useState(false)
+  const [filterKategori, setFilterKategori] = useState<OperatorNoteKategori | ''>('')
+  const [filterOncelik, setFilterOncelik] = useState<OperatorNoteOncelik | ''>('')
+  // Admin cevap gönderirken kategori/öncelik (opsiyonel)
+  const [replyKategori, setReplyKategori] = useState<OperatorNoteKategori | ''>('')
+  const [replyOncelik, setReplyOncelik] = useState<OperatorNoteOncelik>('Normal')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const canSend = can('opr_mesaj')
@@ -27,12 +33,14 @@ export function Messages() {
       opId: string; opAd: string
       lastMsg: OperatorNote | null
       unreadCount: number
+      unreadAcilCount: number
       msgCount: number
+      hasAcil: boolean
     }>()
 
     // Önce aktif operatörleri ekle (henüz mesajı olmayanlar için de giriş noktası olsun)
     operators.filter(o => o.aktif !== false).forEach(o => {
-      byOpId.set(o.id, { opId: o.id, opAd: o.ad, lastMsg: null, unreadCount: 0, msgCount: 0 })
+      byOpId.set(o.id, { opId: o.id, opAd: o.ad, lastMsg: null, unreadCount: 0, unreadAcilCount: 0, msgCount: 0, hasAcil: false })
     })
 
     // Mesajlardan güncelle
@@ -40,18 +48,24 @@ export function Messages() {
       if (!byOpId.has(n.opId)) {
         const firstOpMsg = operatorNotes.find(x => x.opId === n.opId && !isAdmin(x))
         const opAd = firstOpMsg?.opAd || operators.find(o => o.id === n.opId)?.ad || 'Bilinmeyen Operatör'
-        byOpId.set(n.opId, { opId: n.opId, opAd, lastMsg: null, unreadCount: 0, msgCount: 0 })
+        byOpId.set(n.opId, { opId: n.opId, opAd, lastMsg: null, unreadCount: 0, unreadAcilCount: 0, msgCount: 0, hasAcil: false })
       }
       const c = byOpId.get(n.opId)!
       c.msgCount++
-      if (!isAdmin(n) && !n.okundu) c.unreadCount++
+      if (!isAdmin(n) && !n.okundu) {
+        c.unreadCount++
+        if (n.oncelik === 'Acil') c.unreadAcilCount++
+      }
+      if (!isAdmin(n) && n.oncelik === 'Acil' && !n.okundu) c.hasAcil = true
       if (!c.lastMsg || (n.tarih + n.saat) > (c.lastMsg.tarih + c.lastMsg.saat)) c.lastMsg = n
     }
 
     return [...byOpId.values()].sort((a, b) => {
-      // Önce okunmamışlar
+      // 1. Okunmamış acil olan en üstte
+      if (a.hasAcil !== b.hasAcil) return a.hasAcil ? -1 : 1
+      // 2. Sonra okunmamışlar
       if ((a.unreadCount > 0) !== (b.unreadCount > 0)) return a.unreadCount > 0 ? -1 : 1
-      // Sonra son mesaj zamanı (yeni üstte)
+      // 3. Sonra son mesaj zamanı (yeni üstte)
       const aT = a.lastMsg ? a.lastMsg.tarih + a.lastMsg.saat : ''
       const bT = b.lastMsg ? b.lastMsg.tarih + b.lastMsg.saat : ''
       if (aT !== bT) return bT.localeCompare(aT)
@@ -60,10 +74,19 @@ export function Messages() {
     })
   }, [operatorNotes, operators])
 
-  // Arama / filtre
+  // Arama / filtre (kategori + öncelik)
   const filteredConv = conversations.filter(c => {
     if (search && !c.opAd.toLowerCase().includes(search.toLowerCase())) return false
     if (onlyUnread && c.unreadCount === 0) return false
+    // Kategori/öncelik filtresi: operatörün mesajlarında eşleşme varsa göster
+    if (filterKategori || filterOncelik) {
+      const opMessages = operatorNotes.filter(n => n.opId === c.opId && !isAdmin(n))
+      const hasMatch = opMessages.some(n =>
+        (!filterKategori || n.kategori === filterKategori) &&
+        (!filterOncelik || n.oncelik === filterOncelik)
+      )
+      if (!hasMatch) return false
+    }
     return true
   })
 
@@ -106,10 +129,12 @@ export function Messages() {
     const { error } = await supabase.from('uys_operator_notes').insert({
       id: uid(), op_id: selectedOprId, op_ad: '📋 Yönetim',
       tarih: today(), saat, mesaj: mesaj.trim(), okundu: false,
+      kategori: replyKategori || null, oncelik: replyOncelik,
     })
     setSending(false)
     if (error) { toast.error('Gönderilemedi: ' + error.message); return }
-    setMesaj(''); loadAll()
+    setMesaj(''); setReplyKategori(''); setReplyOncelik('Normal')
+    loadAll()
   }
 
   async function deleteMsg(id: string) {
@@ -127,6 +152,7 @@ export function Messages() {
   }
 
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
+  const totalUnreadAcil = conversations.reduce((s, c) => s + c.unreadAcilCount, 0)
 
   // Tarih etiketi (bugün, dün, tarih)
   function formatGun(tarih: string): string {
@@ -156,6 +182,11 @@ export function Messages() {
           <p className="text-xs text-zinc-500">
             {conversations.length} operatör · {operatorNotes.length} mesaj
             {totalUnread > 0 && <span className="ml-2 px-1.5 py-0.5 bg-red text-white rounded text-[10px] font-mono">{totalUnread} okunmamış</span>}
+            {totalUnreadAcil > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 bg-red text-white rounded text-[10px] font-mono inline-flex items-center gap-0.5 animate-pulse">
+                <AlertTriangle size={9} /> {totalUnreadAcil} ACİL
+              </span>
+            )}
           </p>
         </div>
         {totalUnread > 0 && canSend && (
@@ -183,6 +214,29 @@ export function Messages() {
             >
               {onlyUnread ? '✓ Sadece Okunmamışlar' : '○ Tümü'}
             </button>
+            <div className="grid grid-cols-2 gap-1.5">
+              <select
+                value={filterKategori}
+                onChange={e => setFilterKategori(e.target.value as OperatorNoteKategori | '')}
+                className="px-1.5 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-300 focus:outline-none focus:border-accent"
+              >
+                <option value="">Tüm kategoriler</option>
+                {OPERATOR_NOTE_KATEGORILER.map(k => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+              <select
+                value={filterOncelik}
+                onChange={e => setFilterOncelik(e.target.value as OperatorNoteOncelik | '')}
+                className={`px-1.5 py-1 bg-bg-3 border rounded text-[10px] focus:outline-none focus:border-accent ${
+                  filterOncelik === 'Acil' ? 'border-red/50 text-red' : 'border-border text-zinc-300'
+                }`}
+              >
+                <option value="">Tüm öncelikler</option>
+                <option value="Acil">🚨 Acil</option>
+                <option value="Normal">Normal</option>
+              </select>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0">
             {filteredConv.length === 0 && (
@@ -196,18 +250,30 @@ export function Messages() {
                 <div
                   key={c.opId}
                   onClick={() => setSelectedOprId(c.opId)}
-                  className={`px-3 py-2 border-b border-border/30 cursor-pointer transition ${isSelected ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-bg-3/50 border-l-2 border-l-transparent'}`}
+                  className={`px-3 py-2 border-b border-border/30 cursor-pointer transition ${
+                    isSelected
+                      ? 'bg-accent/10 border-l-2 border-l-accent'
+                      : c.hasAcil
+                        ? 'bg-red/5 border-l-2 border-l-red hover:bg-red/10'
+                        : 'hover:bg-bg-3/50 border-l-2 border-l-transparent'
+                  }`}
                 >
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className={`text-sm truncate flex-1 ${c.unreadCount > 0 ? 'font-semibold text-white' : 'text-zinc-300'}`}>{c.opAd}</span>
-                    {c.unreadCount > 0 && (
-                      <span className="bg-red text-white text-[9px] px-1.5 py-0.5 rounded-full font-mono min-w-[18px] text-center">{c.unreadCount}</span>
+                    {c.unreadAcilCount > 0 && (
+                      <span className="bg-red text-white text-[9px] px-1.5 py-0.5 rounded-full font-mono min-w-[18px] text-center inline-flex items-center gap-0.5 animate-pulse">
+                        <AlertTriangle size={8} /> {c.unreadAcilCount}
+                      </span>
+                    )}
+                    {c.unreadCount > 0 && c.unreadCount > c.unreadAcilCount && (
+                      <span className="bg-accent text-white text-[9px] px-1.5 py-0.5 rounded-full font-mono min-w-[18px] text-center">{c.unreadCount - c.unreadAcilCount}</span>
                     )}
                   </div>
                   {c.lastMsg ? (
                     <div className="flex items-center gap-1.5 text-[11px]">
                       <span className={`truncate flex-1 ${isAdmin(c.lastMsg) ? 'text-zinc-500' : 'text-zinc-400'}`}>
                         {isAdmin(c.lastMsg) && <span className="text-accent">→ </span>}
+                        {c.lastMsg.kategori && <span className="text-zinc-600">[{c.lastMsg.kategori}] </span>}
                         {c.lastMsg.mesaj}
                       </span>
                       <span className="text-zinc-600 text-[10px] shrink-0 font-mono">{c.lastMsg.saat}</span>
@@ -259,9 +325,30 @@ export function Messages() {
                     <div className="space-y-2">
                       {grup.mesajlar.map(n => {
                         const fromAdmin = isAdmin(n)
+                        const isAcil = n.oncelik === 'Acil'
                         return (
                           <div key={n.id} className={`flex group ${fromAdmin ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[75%] rounded-lg px-3 py-2 relative ${fromAdmin ? 'bg-accent/15 border border-accent/25 rounded-tr-none' : 'bg-bg-3 border border-border rounded-tl-none'}`}>
+                            <div className={`max-w-[75%] rounded-lg px-3 py-2 relative ${
+                              isAcil
+                                ? 'bg-red/15 border-2 border-red/50 ' + (fromAdmin ? 'rounded-tr-none' : 'rounded-tl-none')
+                                : fromAdmin
+                                  ? 'bg-accent/15 border border-accent/25 rounded-tr-none'
+                                  : 'bg-bg-3 border border-border rounded-tl-none'
+                            }`}>
+                              {(isAcil || n.kategori) && (
+                                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                  {isAcil && (
+                                    <span className="px-1.5 py-0.5 bg-red text-white text-[9px] font-bold rounded flex items-center gap-0.5">
+                                      <AlertTriangle size={8} /> ACİL
+                                    </span>
+                                  )}
+                                  {n.kategori && (
+                                    <span className="px-1.5 py-0.5 bg-bg-1 border border-border text-[9px] text-zinc-300 rounded font-mono">
+                                      {n.kategori}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               <div className="text-xs text-zinc-200 whitespace-pre-wrap break-words">{n.mesaj}</div>
                               <div className="flex items-center gap-1 mt-1 text-[9px] font-mono">
                                 <span className="text-zinc-500">{n.saat}</span>
@@ -291,7 +378,31 @@ export function Messages() {
 
               {/* Mesaj gönderme */}
               {canSend ? (
-                <div className="p-3 border-t border-border">
+                <div className="p-3 border-t border-border space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={replyKategori}
+                      onChange={e => setReplyKategori(e.target.value as OperatorNoteKategori | '')}
+                      className="px-2 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent"
+                    >
+                      <option value="">Kategori (opsiyonel)</option>
+                      {OPERATOR_NOTE_KATEGORILER.map(k => (
+                        <option key={k} value={k}>{k}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setReplyOncelik(replyOncelik === 'Acil' ? 'Normal' : 'Acil')}
+                      className={`px-2.5 py-1 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                        replyOncelik === 'Acil'
+                          ? 'bg-red text-white border border-red'
+                          : 'bg-bg-3 text-zinc-400 border border-border hover:text-zinc-200'
+                      }`}
+                      title={replyOncelik === 'Acil' ? 'Acil — tıklayarak Normal yap' : 'Normal — tıklayarak Acil yap'}
+                    >
+                      {replyOncelik === 'Acil' ? <><AlertTriangle size={11} /> ACİL</> : 'Normal'}
+                    </button>
+                  </div>
                   <div className="flex items-end gap-2">
                     <textarea
                       value={mesaj}

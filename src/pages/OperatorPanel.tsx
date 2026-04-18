@@ -5,7 +5,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
-import { LogOut, Play, Square, Send, CheckCircle } from 'lucide-react'
+import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-react'
+import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -1091,6 +1092,8 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
   const [mesaj, setMesaj] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  const [kategori, setKategori] = useState<OperatorNoteKategori | ''>('')
+  const [oncelik, setOncelik] = useState<OperatorNoteOncelik>('Normal')
 
   // Bu operatöre ait TÜM mesajlar (operatör + admin)
   const myNotes = operatorNotes.filter(n => n.opId === oprId).sort((a, b) => (a.tarih + a.saat).localeCompare(b.tarih + b.saat))
@@ -1114,9 +1117,11 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
     const { error } = await supabase.from('uys_operator_notes').insert({
       id: uid(), op_id: oprId, op_ad: oprAd, tarih: today(), saat,
       mesaj: mesaj.trim(), okundu: false,
+      kategori: kategori || null, oncelik,
     })
     if (error) { toast.error('Mesaj gönderilemedi: ' + error.message); return }
-    setMesaj(''); loadAll(); onSent()
+    setMesaj(''); setKategori(''); setOncelik('Normal')
+    loadAll(); onSent()
   }
 
   async function saveEdit(id: string) {
@@ -1138,12 +1143,31 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
         {myNotes.length === 0 && <div className="text-xs text-zinc-600 text-center py-4">Henüz mesaj yok</div>}
         {myNotes.map(n => {
           const fromAdmin = isAdmin(n)
+          const isAcil = n.oncelik === 'Acil'
           return (
             <div key={n.id} className={`flex ${fromAdmin ? 'justify-start' : 'justify-end'}`}>
-              <div className={`max-w-[85%] rounded-lg px-3 py-2 ${fromAdmin ? 'bg-green/10 border border-green/15 rounded-tl-none' : 'bg-accent/10 border border-accent/10 rounded-tr-none'}`}>
+              <div className={`max-w-[85%] rounded-lg px-3 py-2 ${
+                isAcil
+                  ? 'bg-red/15 border-2 border-red/40 ' + (fromAdmin ? 'rounded-tl-none' : 'rounded-tr-none')
+                  : fromAdmin
+                    ? 'bg-green/10 border border-green/15 rounded-tl-none'
+                    : 'bg-accent/10 border border-accent/10 rounded-tr-none'
+              }`}>
                 <div className="flex items-center justify-between gap-3 mb-0.5">
-                  <span className={`text-[10px] font-semibold ${fromAdmin ? 'text-green' : 'text-accent'}`}>{fromAdmin ? '📋 Yönetim' : oprAd}</span>
-                  <span className="text-[10px] text-zinc-600">{n.tarih} {n.saat}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] font-semibold ${fromAdmin ? 'text-green' : 'text-accent'}`}>{fromAdmin ? '📋 Yönetim' : oprAd}</span>
+                    {isAcil && (
+                      <span className="px-1.5 py-0.5 bg-red text-white text-[9px] font-bold rounded flex items-center gap-0.5">
+                        <AlertTriangle size={8} /> ACİL
+                      </span>
+                    )}
+                    {n.kategori && (
+                      <span className="px-1.5 py-0.5 bg-bg-3 border border-border text-[9px] text-zinc-300 rounded font-mono">
+                        {n.kategori}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-zinc-600 shrink-0">{n.tarih} {n.saat}</span>
                 </div>
                 {editId === n.id ? (
                   <div className="flex gap-1.5 mt-1">
@@ -1153,7 +1177,7 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
                     <button onClick={() => setEditId(null)} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px]">✕</button>
                   </div>
                 ) : (
-                  <div className="text-xs text-zinc-200">{n.mesaj}</div>
+                  <div className="text-xs text-zinc-200 whitespace-pre-wrap break-words">{n.mesaj}</div>
                 )}
                 {!fromAdmin && editId !== n.id && (
                   <div className="flex gap-1 mt-1 justify-end">
@@ -1167,13 +1191,40 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
         })}
       </div>
 
-      <div className="p-3 border-t border-border flex gap-2">
-        <input value={mesaj} onChange={e => setMesaj(e.target.value)} placeholder="Mesaj yazın..."
-          onKeyDown={e => e.key === 'Enter' && send()}
-          className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
-        <button onClick={send} disabled={!mesaj.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
-          <Send size={13} />
-        </button>
+      <div className="p-3 border-t border-border space-y-2">
+        {/* Kategori + Öncelik toolbar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={kategori}
+            onChange={e => setKategori(e.target.value as OperatorNoteKategori | '')}
+            className="px-2 py-1 bg-bg-3 border border-border rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent"
+          >
+            <option value="">Kategori (opsiyonel)</option>
+            {OPERATOR_NOTE_KATEGORILER.map(k => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setOncelik(oncelik === 'Acil' ? 'Normal' : 'Acil')}
+            className={`px-2.5 py-1 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+              oncelik === 'Acil'
+                ? 'bg-red text-white border border-red'
+                : 'bg-bg-3 text-zinc-400 border border-border hover:text-zinc-200'
+            }`}
+            title={oncelik === 'Acil' ? 'Acil — tıklayarak Normal yap' : 'Normal — tıklayarak Acil yap'}
+          >
+            {oncelik === 'Acil' ? <><AlertTriangle size={11} /> ACİL</> : 'Normal'}
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <input value={mesaj} onChange={e => setMesaj(e.target.value)} placeholder="Mesaj yazın..."
+            onKeyDown={e => e.key === 'Enter' && send()}
+            className="flex-1 px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+          <button onClick={send} disabled={!mesaj.trim()} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+            <Send size={13} />
+          </button>
+        </div>
       </div>
     </div>
   )

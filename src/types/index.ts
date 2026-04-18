@@ -305,7 +305,14 @@ export interface OperatorNote {
   cevap?: string
   cevaplayan?: string
   cevapTarih?: string
+  kategori?: OperatorNoteKategori
+  oncelik?: OperatorNoteOncelik
 }
+
+export type OperatorNoteKategori = 'Stok' | 'Arıza' | 'Malzeme' | 'Talep' | 'Diğer'
+export type OperatorNoteOncelik = 'Normal' | 'Acil'
+
+export const OPERATOR_NOTE_KATEGORILER: OperatorNoteKategori[] = ['Stok', 'Arıza', 'Malzeme', 'Talep', 'Diğer']
 
 export interface ActiveWork {
   id: string

@@ -125,6 +125,8 @@ const M = {
     mesaj: (r.mesaj || '') as string, okundu: !!r.okundu,
     cevap: (r.cevap || '') as string, cevaplayan: (r.cevaplayan || '') as string,
     cevapTarih: (r.cevap_tarih || '') as string,
+    kategori: (r.kategori || undefined) as OperatorNote['kategori'],
+    oncelik: ((r.oncelik as string) || 'Normal') as OperatorNote['oncelik'],
   }),
   activeWork: (r: Record<string, unknown>): ActiveWork => ({
     id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
