@@ -47,6 +47,22 @@ export function DataManagement() {
   }
 
   // #17: JSON Import
+  // camelCase → snake_case converter
+  // Özel eşlemeler: 'not' → 'not_', icCap → 'ic_cap' gibi tüm kolonlar
+  function camelToSnake(s: string): string {
+    // 'not' özel — DB'de 'not_' (reserved keyword)
+    if (s === 'not') return 'not_'
+    return s.replace(/([A-Z])/g, '_$1').toLowerCase()
+  }
+
+  function convertRowToSnake(row: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(row)) {
+      out[camelToSnake(key)] = row[key]
+    }
+    return out
+  }
+
   async function importJSON() {
     if (!await showConfirm('JSON yedeğini yüklemek mevcut verilerin ÜZERİNE YAZACAKTIR. Devam etmek istiyor musunuz?')) return
     const input = document.createElement('input')
@@ -58,21 +74,33 @@ export function DataManagement() {
         const text = await file.text()
         const data = JSON.parse(text)
         let restored = 0
+        const errors: string[] = []
         for (const t of tables) {
           const arr = data[t.key]
           if (Array.isArray(arr) && arr.length > 0) {
             // Tabloyu temizle ve yeniden yaz
             await supabase.from(t.table).delete().neq('id', '___impossible___')
-            for (let i = 0; i < arr.length; i += 100) {
-              await supabase.from(t.table).upsert(arr.slice(i, i + 100), { onConflict: 'id' })
+            // camelCase alanları snake_case'e çevir
+            const snakeArr = arr.map(r => convertRowToSnake(r as Record<string, unknown>))
+            for (let i = 0; i < snakeArr.length; i += 100) {
+              const { error } = await supabase.from(t.table).upsert(snakeArr.slice(i, i + 100), { onConflict: 'id' })
+              if (error) {
+                errors.push(`${t.table}: ${error.message}`)
+                break
+              }
             }
             restored++
           }
         }
         store.loadAll()
-        toast.success(`${restored} tablo geri yüklendi`)
+        if (errors.length > 0) {
+          toast.error(`${restored} tablo yüklendi, ${errors.length} hata`)
+          await showAlert(errors.join('\n'), 'Yükleme Hataları')
+        } else {
+          toast.success(`${restored} tablo geri yüklendi`)
+        }
       } catch (err) {
-        toast.error('JSON dosyası okunamadı')
+        toast.error('JSON dosyası okunamadı: ' + (err as Error).message)
       }
     }
     input.click()
