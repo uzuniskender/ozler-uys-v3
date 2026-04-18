@@ -2667,6 +2667,720 @@
   ],
   "materials": [
     {
+      "id": "mmu4unpdfbwo",
+      "kod": "H0105C010079159",
+      "ad": "ÇELİK - NPU 120 - 6000 MM - S235-JR",
+      "tip": "Hammadde",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 120,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 6000,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "",
+      "opKod": ""
+    },
+    {
+      "id": "mmu4unpdseq9",
+      "kod": "S0120CV20155122",
+      "ad": "ÇELİK - SOMUN M8 - 6.8 - GALVANİZ",
+      "tip": "Sarf",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "",
+      "opKod": ""
+    },
+    {
+      "id": "mmu4unpdoc9z",
+      "kod": "YMH100330",
+      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 1294MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 2,
+      "uzunluk": 1294,
+      "cap": 33.7,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mmu4unpd33aq",
+      "kod": "YMH100285",
+      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 2457MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 2457,
+      "en": 0,
+      "kalinlik": 2,
+      "uzunluk": 0,
+      "cap": 33.7,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mmu4unpdvt57",
+      "kod": "YMH100324",
+      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 2657MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 2657,
+      "en": 0,
+      "kalinlik": 2,
+      "uzunluk": 0,
+      "cap": 33.7,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mnyi6rftkms22z",
+      "kod": "SS TAM PANO 829 MM",
+      "ad": "PROFİL BOY KESİM VE DELİK DELME - 40x50x2MM - 829MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 50,
+      "en": 40,
+      "kalinlik": 2,
+      "uzunluk": 829,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdjupj",
+      "kod": "YMH100322",
+      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 1493MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 2,
+      "uzunluk": 1493,
+      "cap": 33.7,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mmu4unpdskl2",
+      "kod": "YMH100392",
+      "ad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X4 MM - 887MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 75,
+      "en": 50,
+      "kalinlik": 4,
+      "uzunluk": 887,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdblnf",
+      "kod": "H0109C080027434",
+      "ad": "ÇELİK - RAPIDO PROFİL  - 2,5 MM - 6170 MM - S420-MC",
+      "tip": "Hammadde",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 2.5,
+      "uzunluk": 6170,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "",
+      "opKod": ""
+    },
+    {
+      "id": "mo2y2d8atq5nj8",
+      "kod": "Ø48,3x3,2 - 854MM",
+      "ad": "BORU BOY KESİM Ø48,3x3,2 - 854MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 3.2,
+      "uzunluk": 854,
+      "cap": 48.3,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpd5eoa",
+      "kod": "YMH100312",
+      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 629MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 100,
+      "en": 50,
+      "kalinlik": 3,
+      "uzunluk": 629,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mo11r1s5bu7nok",
+      "kod": "YMH50x100x3-22,9",
+      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 22,9MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 100,
+      "en": 50,
+      "kalinlik": 3,
+      "uzunluk": 22.9,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdqgut",
+      "kod": "YMH100309",
+      "ad": "DYB KÖŞEBENT BOY KESİM 40x40x3MM - 195MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 195,
+      "en": 0,
+      "kalinlik": 3,
+      "uzunluk": 0,
+      "cap": 40,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mmu4unpdfzt6",
+      "kod": "YMH100308",
+      "ad": "DYB KÖŞEBENT DELME 40x40x3MM - 195MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 195,
+      "en": 0,
+      "kalinlik": 3,
+      "uzunluk": 0,
+      "cap": 40,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mmu4unpdv7qe",
+      "kod": "YMH100307",
+      "ad": "DYB PLAKA KESİM - 8x165x250MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "LEVHA",
+      "birim": "Adet",
+      "boy": 250,
+      "en": 165,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyzovu",
+      "opKod": "026"
+    },
+    {
+      "id": "mmu4unpdlryc",
+      "kod": "YMH100332",
+      "ad": "İSKELE EKLEME ELEMANI BORUSU Ø60 DELİK DELME",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 60,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mo18jo2sgyxrm9",
+      "kod": "40X40X2 580MM",
+      "ad": "PROFİL BOY KESİM VE DELİK DELME - 40X40X2MM - 580MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 40,
+      "en": 40,
+      "kalinlik": 2,
+      "uzunluk": 580,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mo2v0xdwhkgmlg",
+      "kod": "60x40x1,5 450MM",
+      "ad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 450MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 60,
+      "en": 40,
+      "kalinlik": 1.5,
+      "uzunluk": 450,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdutou",
+      "kod": "YMK100099",
+      "ad": "RAPID-UNI PANEL BOYAMA - 500X3000MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 3000,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmysqo4",
+      "opKod": "013"
+    },
+    {
+      "id": "mmu4unpdy6h1",
+      "kod": "YMK100102",
+      "ad": "RAPID-UNI PANEL BOYAMA - 600X3000MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 3000,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmysqo4",
+      "opKod": "013"
+    },
+    {
+      "id": "mmu4unpdobi2",
+      "kod": "YMK100101",
+      "ad": "RAPID-UNI PANEL BOYAMA - 750X3000MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 3000,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmysqo4",
+      "opKod": "013"
+    },
+    {
+      "id": "mmu4unpd98cb",
+      "kod": "YMK100100",
+      "ad": "RAPID-UNI PANEL BOYAMA - 900X3000MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 3000,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmysqo4",
+      "opKod": "013"
+    },
+    {
+      "id": "mmu4unpdi57y",
+      "kod": "YMH100351",
+      "ad": "RAPIDO CALISMA KONSOLU FIKSTUR KAYNAK",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmypt29",
+      "opKod": "020"
+    },
+    {
+      "id": "mmu4unpdt9eq",
+      "kod": "YMK100001",
+      "ad": "RAPIDO IC KOSE 30X40X330 PANEL BOYAMA",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmysqo4",
+      "opKod": "013"
+    },
+    {
+      "id": "mmu4unpdf1e9",
+      "kod": "YMH100352",
+      "ad": "RAPIDO IC KOSE FIKSTUR KAYNAK 30X40X330",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmypt29",
+      "opKod": "020"
+    },
+    {
+      "id": "mmu4unpd0ygp",
+      "kod": "YMH100353",
+      "ad": "RAPIDO IC KOSE YAN KAYIT KAYNAK MONTAJ - 3300MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 3300,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmypt29",
+      "opKod": "020"
+    },
+    {
+      "id": "mmu4unpda6gs",
+      "kod": "YMH100356",
+      "ad": "RAPIDO IC PROFIL DELIK DELME - 3290MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 3290,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmychjx",
+      "opKod": "008"
+    },
+    {
+      "id": "mmu4unpdjt9k",
+      "kod": "H0101C030029598",
+      "ad": "ÇELİK - BORU Ø33,7x2 MM - 5150 MM - S235-JRH",
+      "tip": "Hammadde",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 2,
+      "uzunluk": 5150,
+      "cap": 33.7,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "",
+      "opKod": ""
+    },
+    {
+      "id": "mmu4unpdlqyz",
+      "kod": "YMH100306",
+      "ad": "AYAR MİLİ DYB PLAKASI + DYB KÖŞEBENT KAYNAK",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmypt29",
+      "opKod": "020"
+    },
+    {
+      "id": "mo2y8jhhs2zxsp",
+      "kod": "Ø48,3x3,2 - 1854MM",
+      "ad": "BORU BOY KESİM Ø48,3x3,2 - 1854MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 3.2,
+      "uzunluk": 1854,
+      "cap": 48.3,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mnzn2aygba7hia",
+      "kod": "YMH100313-729",
+      "ad": "RAPIDO UNI PROFİL BOY KESİM VE DELİK DELME - 50x100x4MM - 729 MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 100,
+      "en": 50,
+      "kalinlik": 4,
+      "uzunluk": 729,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdldil",
+      "kod": "YMM100018",
+      "ad": "RAPIDO PANEL DİKEY ARA KAYIT PRES MONTAJ - 215MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 215,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyikys",
+      "opKod": "003"
+    },
+    {
+      "id": "mmu4unpdpir9",
+      "kod": "YMH100391",
+      "ad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X4 MM - 987MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 75,
+      "en": 50,
+      "kalinlik": 4,
+      "uzunluk": 987,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mo11vlm9c6b9mu",
+      "kod": "YMH50x100x3-37,9",
+      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 37,9MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 100,
+      "en": 50,
+      "kalinlik": 3,
+      "uzunluk": 37.9,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdncs5",
+      "kod": "YMH100149",
+      "ad": "RAPIDO PANEL 21MM PLYWOOD KESİM - 577x1477MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 1477,
+      "en": 577,
+      "kalinlik": 21,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mn5owcrxpmlk",
+      "opKod": "025"
+    },
+    {
+      "id": "mo2v4ntg4iqwi6",
+      "kod": "60x40x1,5 350MM",
+      "ad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 350MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 60,
+      "en": 40,
+      "kalinlik": 1.5,
+      "uzunluk": 350,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdiqer",
+      "kod": "YMK100059",
+      "ad": "RAPID-UNI PANEL BOYAMA - 1000x3000MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "",
+      "birim": "Adet",
+      "boy": 3000,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 0,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmysqo4",
+      "opKod": "013"
+    },
+    {
+      "id": "mo2y8l1bt6m3ti",
+      "kod": "Ø48,3x3,2 - 185MM",
+      "ad": "BORU BOY KESİM Ø48,3x3,2 - 185MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 3.2,
+      "uzunluk": 185,
+      "cap": 48.3,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdut3y",
+      "kod": "YMH100344",
+      "ad": "RAPIDO PROFIL AÇILI KAFA KESİM - 1050MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 0,
+      "uzunluk": 1050,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmy0ijl",
+      "opKod": "027"
+    },
+    {
+      "id": "mo11zor3vbsvjv",
+      "kod": "YMH50x100x3-52,9",
+      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 52,9MM",
+      "tip": "YarıMamul",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 100,
+      "en": 50,
+      "kalinlik": 3,
+      "uzunluk": 52.9,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "mmu5ykmyhiw3",
+      "opKod": "023"
+    },
+    {
+      "id": "mmu4unpdgf30",
+      "kod": "H0102C030086924",
+      "ad": "ÇELİK - PROFİL 75X50X4 MM - 6000 MM- S235-JRH",
+      "tip": "Hammadde",
+      "hammaddeTipi": "PROFİL",
+      "birim": "Adet",
+      "boy": 75,
+      "en": 50,
+      "kalinlik": 4,
+      "uzunluk": 6000,
+      "cap": 0,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "",
+      "opKod": ""
+    },
+    {
+      "id": "mmu4unpdsfny",
+      "kod": "H0101C030171449",
+      "ad": "ÇELİK - BORU Ø48,3x2,5 MM - 6000 MM - S235-JRH - GALVANİZ",
+      "tip": "Hammadde",
+      "hammaddeTipi": "BORU",
+      "birim": "Adet",
+      "boy": 0,
+      "en": 0,
+      "kalinlik": 2.5,
+      "uzunluk": 6000,
+      "cap": 48.3,
+      "icCap": 0,
+      "minStok": 0,
+      "opId": "",
+      "opKod": ""
+    },
+    {
       "id": "mo020b7mpdgjbs",
       "kod": "Ø60,3X2MM - 3000 MM",
       "ad": "BORU BOY KESİM - Ø60,3X2MM - 3000 MM",
@@ -3891,23 +4605,6 @@
       "opKod": ""
     },
     {
-      "id": "mmu4unpdfbwo",
-      "kod": "H0105C010079159",
-      "ad": "ÇELİK - NPU 120 - 6000 MM - S235-JR",
-      "tip": "Hammadde",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 120,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 5999,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "",
-      "opKod": ""
-    },
-    {
       "id": "mmu4unpd1ndr",
       "kod": "H0105C010079006",
       "ad": "ÇELİK - NPU 200 - 6000 MM - S235-JR",
@@ -3952,23 +4649,6 @@
       "en": 0,
       "kalinlik": 0,
       "uzunluk": 2700,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mmu4unpdiq7c",
-      "kod": "YMH100388",
-      "ad": "RAPID PANEL ÜST PROFIL DELİK DELME - 750MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 750,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
       "cap": 0,
       "icCap": 0,
       "minStok": 0,
@@ -4418,701 +5098,21 @@
       "opKod": ""
     },
     {
-      "id": "mmu4unpdseq9",
-      "kod": "S0120CV20155122",
-      "ad": "ÇELİK - SOMUN M8 - 6.8 - GALVANİZ",
-      "tip": "Sarf",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "",
-      "opKod": ""
-    },
-    {
-      "id": "mmu4unpdoc9z",
-      "kod": "YMH100330",
-      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 1294MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 2,
-      "uzunluk": 1294,
-      "cap": 33.7,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mmu4unpd33aq",
-      "kod": "YMH100285",
-      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 2457MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 2457,
-      "en": 0,
-      "kalinlik": 2,
-      "uzunluk": 0,
-      "cap": 33.7,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mmu4unpdvt57",
-      "kod": "YMH100324",
-      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 2657MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 2657,
-      "en": 0,
-      "kalinlik": 2,
-      "uzunluk": 0,
-      "cap": 33.7,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mnyi6rftkms22z",
-      "kod": "SS TAM PANO 829 MM",
-      "ad": "PROFİL BOY KESİM VE DELİK DELME - 40x50x2MM - 829MM",
+      "id": "mmu4unpdiq7c",
+      "kod": "YMH100388",
+      "ad": "RAPID PANEL ÜST PROFIL DELİK DELME - 750MM",
       "tip": "YarıMamul",
       "hammaddeTipi": "PROFİL",
       "birim": "Adet",
-      "boy": 50,
-      "en": 40,
-      "kalinlik": 2,
-      "uzunluk": 829,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdjupj",
-      "kod": "YMH100322",
-      "ad": "SLABFORM ÇAPRAZ BORUSU CİVATA DELİĞİ AÇMA - Ø33,7X2MM - 1493MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 2,
-      "uzunluk": 1493,
-      "cap": 33.7,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mmu4unpdskl2",
-      "kod": "YMH100392",
-      "ad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X4 MM - 887MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 75,
-      "en": 50,
-      "kalinlik": 4,
-      "uzunluk": 887,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdblnf",
-      "kod": "H0109C080027434",
-      "ad": "ÇELİK - RAPIDO PROFİL  - 2,5 MM - 6170 MM - S420-MC",
-      "tip": "Hammadde",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 2.5,
-      "uzunluk": 6170,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "",
-      "opKod": ""
-    },
-    {
-      "id": "mo2y2d8atq5nj8",
-      "kod": "Ø48,3x3,2 - 854MM",
-      "ad": "BORU BOY KESİM Ø48,3x3,2 - 854MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 3.2,
-      "uzunluk": 854,
-      "cap": 48.3,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpd5eoa",
-      "kod": "YMH100312",
-      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 629MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 100,
-      "en": 50,
-      "kalinlik": 3,
-      "uzunluk": 629,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mo11r1s5bu7nok",
-      "kod": "YMH50x100x3-22,9",
-      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 22,9MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 100,
-      "en": 50,
-      "kalinlik": 3,
-      "uzunluk": 22.9,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdqgut",
-      "kod": "YMH100309",
-      "ad": "DYB KÖŞEBENT BOY KESİM 40x40x3MM - 195MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 195,
-      "en": 0,
-      "kalinlik": 3,
-      "uzunluk": 0,
-      "cap": 40,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mmu4unpdfzt6",
-      "kod": "YMH100308",
-      "ad": "DYB KÖŞEBENT DELME 40x40x3MM - 195MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 195,
-      "en": 0,
-      "kalinlik": 3,
-      "uzunluk": 0,
-      "cap": 40,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mmu4unpdv7qe",
-      "kod": "YMH100307",
-      "ad": "DYB PLAKA KESİM - 8x165x250MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "LEVHA",
-      "birim": "Adet",
-      "boy": 250,
-      "en": 165,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyzovu",
-      "opKod": "026"
-    },
-    {
-      "id": "mmu4unpdlryc",
-      "kod": "YMH100332",
-      "ad": "İSKELE EKLEME ELEMANI BORUSU Ø60 DELİK DELME",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
       "boy": 0,
       "en": 0,
       "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 60,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmychjx",
-      "opKod": "008"
-    },
-    {
-      "id": "mo18jo2sgyxrm9",
-      "kod": "40X40X2 580MM",
-      "ad": "PROFİL BOY KESİM VE DELİK DELME - 40X40X2MM - 580MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 40,
-      "en": 40,
-      "kalinlik": 2,
-      "uzunluk": 580,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mo2v0xdwhkgmlg",
-      "kod": "60x40x1,5 450MM",
-      "ad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 450MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 60,
-      "en": 40,
-      "kalinlik": 1.5,
-      "uzunluk": 450,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdutou",
-      "kod": "YMK100099",
-      "ad": "RAPID-UNI PANEL BOYAMA - 500X3000MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 3000,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmysqo4",
-      "opKod": "013"
-    },
-    {
-      "id": "mmu4unpdy6h1",
-      "kod": "YMK100102",
-      "ad": "RAPID-UNI PANEL BOYAMA - 600X3000MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 3000,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmysqo4",
-      "opKod": "013"
-    },
-    {
-      "id": "mmu4unpdobi2",
-      "kod": "YMK100101",
-      "ad": "RAPID-UNI PANEL BOYAMA - 750X3000MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 3000,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmysqo4",
-      "opKod": "013"
-    },
-    {
-      "id": "mmu4unpd98cb",
-      "kod": "YMK100100",
-      "ad": "RAPID-UNI PANEL BOYAMA - 900X3000MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 3000,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmysqo4",
-      "opKod": "013"
-    },
-    {
-      "id": "mmu4unpdi57y",
-      "kod": "YMH100351",
-      "ad": "RAPIDO CALISMA KONSOLU FIKSTUR KAYNAK",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmypt29",
-      "opKod": "020"
-    },
-    {
-      "id": "mmu4unpdt9eq",
-      "kod": "YMK100001",
-      "ad": "RAPIDO IC KOSE 30X40X330 PANEL BOYAMA",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmysqo4",
-      "opKod": "013"
-    },
-    {
-      "id": "mmu4unpdf1e9",
-      "kod": "YMH100352",
-      "ad": "RAPIDO IC KOSE FIKSTUR KAYNAK 30X40X330",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmypt29",
-      "opKod": "020"
-    },
-    {
-      "id": "mmu4unpd0ygp",
-      "kod": "YMH100353",
-      "ad": "RAPIDO IC KOSE YAN KAYIT KAYNAK MONTAJ - 3300MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 3300,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmypt29",
-      "opKod": "020"
-    },
-    {
-      "id": "mmu4unpda6gs",
-      "kod": "YMH100356",
-      "ad": "RAPIDO IC PROFIL DELIK DELME - 3290MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 3290,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
+      "uzunluk": 750,
       "cap": 0,
       "icCap": 0,
       "minStok": 0,
       "opId": "mmu5ykmychjx",
       "opKod": "008"
-    },
-    {
-      "id": "mmu4unpdjt9k",
-      "kod": "H0101C030029598",
-      "ad": "ÇELİK - BORU Ø33,7x2 MM - 5150 MM - S235-JRH",
-      "tip": "Hammadde",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 2,
-      "uzunluk": 5150,
-      "cap": 33.7,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "",
-      "opKod": ""
-    },
-    {
-      "id": "mmu4unpdlqyz",
-      "kod": "YMH100306",
-      "ad": "AYAR MİLİ DYB PLAKASI + DYB KÖŞEBENT KAYNAK",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmypt29",
-      "opKod": "020"
-    },
-    {
-      "id": "mo2y8jhhs2zxsp",
-      "kod": "Ø48,3x3,2 - 1854MM",
-      "ad": "BORU BOY KESİM Ø48,3x3,2 - 1854MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 3.2,
-      "uzunluk": 1854,
-      "cap": 48.3,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mnzn2aygba7hia",
-      "kod": "YMH100313-729",
-      "ad": "RAPIDO UNI PROFİL BOY KESİM VE DELİK DELME - 50x100x4MM - 729 MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 100,
-      "en": 50,
-      "kalinlik": 4,
-      "uzunluk": 729,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdldil",
-      "kod": "YMM100018",
-      "ad": "RAPIDO PANEL DİKEY ARA KAYIT PRES MONTAJ - 215MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 215,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyikys",
-      "opKod": "003"
-    },
-    {
-      "id": "mmu4unpdpir9",
-      "kod": "YMH100391",
-      "ad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X4 MM - 987MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 75,
-      "en": 50,
-      "kalinlik": 4,
-      "uzunluk": 987,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mo11vlm9c6b9mu",
-      "kod": "YMH50x100x3-37,9",
-      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 37,9MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 100,
-      "en": 50,
-      "kalinlik": 3,
-      "uzunluk": 37.9,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdncs5",
-      "kod": "YMH100149",
-      "ad": "RAPIDO PANEL 21MM PLYWOOD KESİM - 577x1477MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 1477,
-      "en": 577,
-      "kalinlik": 21,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mn5owcrxpmlk",
-      "opKod": "025"
-    },
-    {
-      "id": "mo2v4ntg4iqwi6",
-      "kod": "60x40x1,5 350MM",
-      "ad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 350MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 60,
-      "en": 40,
-      "kalinlik": 1.5,
-      "uzunluk": 350,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdiqer",
-      "kod": "YMK100059",
-      "ad": "RAPID-UNI PANEL BOYAMA - 1000x3000MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "",
-      "birim": "Adet",
-      "boy": 3000,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 0,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmysqo4",
-      "opKod": "013"
-    },
-    {
-      "id": "mo2y8l1bt6m3ti",
-      "kod": "Ø48,3x3,2 - 185MM",
-      "ad": "BORU BOY KESİM Ø48,3x3,2 - 185MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 3.2,
-      "uzunluk": 185,
-      "cap": 48.3,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdut3y",
-      "kod": "YMH100344",
-      "ad": "RAPIDO PROFIL AÇILI KAFA KESİM - 1050MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 0,
-      "uzunluk": 1050,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmy0ijl",
-      "opKod": "027"
-    },
-    {
-      "id": "mo11zor3vbsvjv",
-      "kod": "YMH50x100x3-52,9",
-      "ad": "RAPIDO PANEL PROFİL BOY KESİM VE DELİK DELME - 50x100x3MM - 52,9MM",
-      "tip": "YarıMamul",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 100,
-      "en": 50,
-      "kalinlik": 3,
-      "uzunluk": 52.9,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "mmu5ykmyhiw3",
-      "opKod": "023"
-    },
-    {
-      "id": "mmu4unpdgf30",
-      "kod": "H0102C030086924",
-      "ad": "ÇELİK - PROFİL 75X50X4 MM - 6000 MM- S235-JRH",
-      "tip": "Hammadde",
-      "hammaddeTipi": "PROFİL",
-      "birim": "Adet",
-      "boy": 75,
-      "en": 50,
-      "kalinlik": 4,
-      "uzunluk": 6000,
-      "cap": 0,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "",
-      "opKod": ""
-    },
-    {
-      "id": "mmu4unpdsfny",
-      "kod": "H0101C030171449",
-      "ad": "ÇELİK - BORU Ø48,3x2,5 MM - 6000 MM - S235-JRH - GALVANİZ",
-      "tip": "Hammadde",
-      "hammaddeTipi": "BORU",
-      "birim": "Adet",
-      "boy": 0,
-      "en": 0,
-      "kalinlik": 2.5,
-      "uzunluk": 6000,
-      "cap": 48.3,
-      "icCap": 0,
-      "minStok": 0,
-      "opId": "",
-      "opKod": ""
     },
     {
       "id": "mmu4unpdrx4r",
@@ -16469,6 +16469,44 @@
       ]
     },
     {
+      "id": "mo2up8zx3a82t8",
+      "rcKod": "RC-60x40x1,5 2687MM",
+      "ad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
+      "bomId": "mo2uori8etgaa8",
+      "mamulKod": "60x40x1,5 2687MM",
+      "mamulAd": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
+      "satirlar": [
+        {
+          "id": "mo2up8zwrc82ky",
+          "tip": "YarıMamul",
+          "opId": "mmu5ykmyhiw3",
+          "birim": "Adet",
+          "istId": "",
+          "kirno": "1",
+          "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
+          "malkod": "60x40x1,5 2687MM",
+          "miktar": 1,
+          "islemSure": 20,
+          "sureBirim": "sn",
+          "hazirlikSure": 0
+        },
+        {
+          "id": "mo2up8zxuuqj5j",
+          "tip": "Hammadde",
+          "opId": "",
+          "birim": "Adet",
+          "istId": "",
+          "kirno": "1.1",
+          "malad": "ÇELİK - PROFİL 60x40x1,5 MM - 6000 MM - S235-JRH",
+          "malkod": "H0102C030011892",
+          "miktar": 0.5,
+          "islemSure": 0,
+          "sureBirim": "dk",
+          "hazirlikSure": 0
+        }
+      ]
+    },
+    {
       "id": "mo11tt5t7t3b0h",
       "rcKod": "RC-YMH50x100x3-22,9",
       "ad": "RAPIDO PANEL YATAY ARA KAYIT  PROFİL BOY KESİM VE DELİK DELME - 50x100x3mm - 22,9mm",
@@ -17146,44 +17184,6 @@
           "malad": "ÇELİK - PROFİL 40x40x2 mm - 6300 mm - S235-JRH",
           "malkod": "H0102C030085610",
           "miktar": 0.0192,
-          "islemSure": 0,
-          "sureBirim": "dk",
-          "hazirlikSure": 0
-        }
-      ]
-    },
-    {
-      "id": "mo2up8zx3a82t8",
-      "rcKod": "RC-60x40x1,5 2687MM",
-      "ad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
-      "bomId": "mo2uori8etgaa8",
-      "mamulKod": "60x40x1,5 2687MM",
-      "mamulAd": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
-      "satirlar": [
-        {
-          "id": "mo2up8zwrc82ky",
-          "tip": "YarıMamul",
-          "opId": "mmu5ykmyhiw3",
-          "birim": "Adet",
-          "istId": "",
-          "kirno": "1",
-          "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
-          "malkod": "60x40x1,5 2687MM",
-          "miktar": 1,
-          "islemSure": 20,
-          "sureBirim": "sn",
-          "hazirlikSure": 0
-        },
-        {
-          "id": "mo2up8zxuuqj5j",
-          "tip": "Hammadde",
-          "opId": "",
-          "birim": "Adet",
-          "istId": "",
-          "kirno": "1.1",
-          "malad": "ÇELİK - PROFİL 60x40x1,5 MM - 6000 MM - S235-JRH",
-          "malkod": "H0102C030011892",
-          "miktar": 0.5,
           "islemSure": 0,
           "sureBirim": "dk",
           "hazirlikSure": 0
@@ -20337,6 +20337,17 @@
       "aciklama": "Tedarik girişi"
     },
     {
+      "id": "mo2yyovglhivo8",
+      "tarih": "2026-04-17",
+      "malkod": "H0101C030044639",
+      "malad": "ÇELİK - BORU Ø60,3x2,5 MM - 6000 MM - S235-JRH",
+      "miktar": 1,
+      "tip": "giris",
+      "logId": "",
+      "woId": "",
+      "aciklama": "Tedarik girişi"
+    },
+    {
       "id": "mnylzck4n24cig",
       "tarih": "2026-04-14",
       "malkod": "SS TAM PANO 829 MM",
@@ -20819,20 +20830,39 @@
       "logId": "",
       "woId": "",
       "aciklama": "Tedarik girişi"
-    },
-    {
-      "id": "mo2yyovglhivo8",
-      "tarih": "2026-04-17",
-      "malkod": "H0101C030044639",
-      "malad": "ÇELİK - BORU Ø60,3x2,5 MM - 6000 MM - S235-JRH",
-      "miktar": 1,
-      "tip": "giris",
-      "logId": "",
-      "woId": "",
-      "aciklama": "Tedarik girişi"
     }
   ],
   "cuttingPlans": [
+    {
+      "id": "mo17ttq4xcyn4v",
+      "hamMalkod": "H0102C030093207",
+      "hamMalad": "ÇELİK - PROFİL 50x100x4 mm - 6000 mm - S235-JRH",
+      "hamBoy": 6000,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "bekliyor",
+      "satirlar": [
+        {
+          "id": "mo17ttq44d16v9",
+          "durum": "bekliyor",
+          "fireMm": 24.799999999999727,
+          "hamAdet": 1,
+          "kesimler": [
+            {
+              "adet": 88,
+              "ieNo": "IE-MANUAL-MO13327G",
+              "woId": "mo13327g1x3biy",
+              "malad": "RAPIDO UNI PROFİL BOY KESİM VE DELİK DELME - 50X100X4MM - 67,9 MM",
+              "malkod": "50X100X4MM-67,9",
+              "parcaBoy": 67.9,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-16",
+      "gerekliAdet": 1
+    },
     {
       "id": "mnyisst0skotlu",
       "hamMalkod": "H0102C030093207",
@@ -20879,6 +20909,135 @@
       ],
       "tarih": "2026-04-14",
       "gerekliAdet": 100
+    },
+    {
+      "id": "mo0193f7ndsabi",
+      "hamMalkod": "H0101C030044639",
+      "hamMalad": "ÇELİK - BORU Ø60,3x2,5 mm - 6000 mm - S235-JRH",
+      "hamBoy": 6000,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "tamamlandi",
+      "satirlar": [
+        {
+          "id": "mo0193f7klln1b",
+          "durum": "bekliyor",
+          "fireMm": 0,
+          "hamAdet": 1,
+          "kesimler": [
+            {
+              "adet": 20,
+              "ieNo": "IE-MANUAL-MO018W90",
+              "woId": "mo018w903o3udv",
+              "malad": "BORU BOY KESİM - Ø60,3x2,5mm - 300 mm",
+              "malkod": "YMH100334-300 mm",
+              "parcaBoy": 300,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-15",
+      "gerekliAdet": 1
+    },
+    {
+      "id": "mo2ur73s41g502",
+      "hamMalkod": "H0102C030011892",
+      "hamMalad": "ÇELİK - PROFİL 60x40x1,5 MM - 6000 MM - S235-JRH",
+      "hamBoy": 6000,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "tamamlandi",
+      "satirlar": [
+        {
+          "id": "mo2v9phtg310fs",
+          "durum": "bekliyor",
+          "fireMm": 26,
+          "hamAdet": 55,
+          "kesimler": [
+            {
+              "adet": 2,
+              "ieNo": "IE-MANUAL-MO2UR17Y",
+              "woId": "mo2ur17y2k2263",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
+              "malkod": "60x40x1,5 2687MM",
+              "parcaBoy": 2687,
+              "tamamlandi": 0
+            },
+            {
+              "adet": 1,
+              "ieNo": "IE-MANUAL-MO2UUIQQ",
+              "woId": "mo2uuiqq5kleei",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 600MM",
+              "malkod": "60x40x1,5 600MM",
+              "parcaBoy": 600,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mo2v9pht41bhtv",
+          "durum": "bekliyor",
+          "fireMm": 0,
+          "hamAdet": 4,
+          "kesimler": [
+            {
+              "adet": 12,
+              "ieNo": "IE-MANUAL-MO2V9I8E",
+              "woId": "mo2v9i8em744wa",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 500MM",
+              "malkod": "60x40x1,5 500MM",
+              "parcaBoy": 500,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mo2v9phtb5fv0x",
+          "durum": "bekliyor",
+          "fireMm": 250,
+          "hamAdet": 1,
+          "kesimler": [
+            {
+              "adet": 7,
+              "ieNo": "IE-MANUAL-MO2V9I8E",
+              "woId": "mo2v9i8em744wa",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 500MM",
+              "malkod": "60x40x1,5 500MM",
+              "parcaBoy": 500,
+              "tamamlandi": 0
+            },
+            {
+              "adet": 5,
+              "ieNo": "IE-MANUAL-MO2V4CNF",
+              "woId": "mo2v4cnf9ll07k",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 450MM",
+              "malkod": "60x40x1,5 450MM",
+              "parcaBoy": 450,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mo2v9phtsvdnkn",
+          "durum": "bekliyor",
+          "fireMm": 50,
+          "hamAdet": 13,
+          "kesimler": [
+            {
+              "adet": 17,
+              "ieNo": "IE-MANUAL-MO2V8T70",
+              "woId": "mo2v8t70fym1lj",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 350MM",
+              "malkod": "60x40x1,5 350MM",
+              "parcaBoy": 350,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-17",
+      "gerekliAdet": 73
     },
     {
       "id": "mnznpb0jnyc7mf",
@@ -21103,36 +21262,6 @@
       "gerekliAdet": 54
     },
     {
-      "id": "mo0193f7ndsabi",
-      "hamMalkod": "H0101C030044639",
-      "hamMalad": "ÇELİK - BORU Ø60,3x2,5 mm - 6000 mm - S235-JRH",
-      "hamBoy": 6000,
-      "hamEn": 0,
-      "kesimTip": "boy",
-      "durum": "tamamlandi",
-      "satirlar": [
-        {
-          "id": "mo0193f7klln1b",
-          "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 1,
-          "kesimler": [
-            {
-              "adet": 20,
-              "ieNo": "IE-MANUAL-MO018W90",
-              "woId": "mo018w903o3udv",
-              "malad": "BORU BOY KESİM - Ø60,3x2,5mm - 300 mm",
-              "malkod": "YMH100334-300 mm",
-              "parcaBoy": 300,
-              "tamamlandi": 0
-            }
-          ]
-        }
-      ],
-      "tarih": "2026-04-15",
-      "gerekliAdet": 1
-    },
-    {
       "id": "mo01xq7ya1wxum",
       "hamMalkod": "H0101C030044639",
       "hamMalad": "ÇELİK - BORU Ø60,3x2,5 mm - 6000 mm - S235-JRH",
@@ -21178,105 +21307,6 @@
       ],
       "tarih": "2026-04-15",
       "gerekliAdet": 2
-    },
-    {
-      "id": "mo2ur73s41g502",
-      "hamMalkod": "H0102C030011892",
-      "hamMalad": "ÇELİK - PROFİL 60x40x1,5 MM - 6000 MM - S235-JRH",
-      "hamBoy": 6000,
-      "hamEn": 0,
-      "kesimTip": "boy",
-      "durum": "tamamlandi",
-      "satirlar": [
-        {
-          "id": "mo2v9phtg310fs",
-          "durum": "bekliyor",
-          "fireMm": 26,
-          "hamAdet": 55,
-          "kesimler": [
-            {
-              "adet": 2,
-              "ieNo": "IE-MANUAL-MO2UR17Y",
-              "woId": "mo2ur17y2k2263",
-              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 2687MM",
-              "malkod": "60x40x1,5 2687MM",
-              "parcaBoy": 2687,
-              "tamamlandi": 0
-            },
-            {
-              "adet": 1,
-              "ieNo": "IE-MANUAL-MO2UUIQQ",
-              "woId": "mo2uuiqq5kleei",
-              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 600MM",
-              "malkod": "60x40x1,5 600MM",
-              "parcaBoy": 600,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mo2v9pht41bhtv",
-          "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 4,
-          "kesimler": [
-            {
-              "adet": 12,
-              "ieNo": "IE-MANUAL-MO2V9I8E",
-              "woId": "mo2v9i8em744wa",
-              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 500MM",
-              "malkod": "60x40x1,5 500MM",
-              "parcaBoy": 500,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mo2v9phtb5fv0x",
-          "durum": "bekliyor",
-          "fireMm": 250,
-          "hamAdet": 1,
-          "kesimler": [
-            {
-              "adet": 7,
-              "ieNo": "IE-MANUAL-MO2V9I8E",
-              "woId": "mo2v9i8em744wa",
-              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 500MM",
-              "malkod": "60x40x1,5 500MM",
-              "parcaBoy": 500,
-              "tamamlandi": 0
-            },
-            {
-              "adet": 5,
-              "ieNo": "IE-MANUAL-MO2V4CNF",
-              "woId": "mo2v4cnf9ll07k",
-              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 450MM",
-              "malkod": "60x40x1,5 450MM",
-              "parcaBoy": 450,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mo2v9phtsvdnkn",
-          "durum": "bekliyor",
-          "fireMm": 50,
-          "hamAdet": 13,
-          "kesimler": [
-            {
-              "adet": 17,
-              "ieNo": "IE-MANUAL-MO2V8T70",
-              "woId": "mo2v8t70fym1lj",
-              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x1,5MM - 350MM",
-              "malkod": "60x40x1,5 350MM",
-              "parcaBoy": 350,
-              "tamamlandi": 0
-            }
-          ]
-        }
-      ],
-      "tarih": "2026-04-17",
-      "gerekliAdet": 73
     },
     {
       "id": "mo2wchyxnkwtei",
@@ -21950,36 +21980,6 @@
       "gerekliAdet": 3
     },
     {
-      "id": "mo0z7fsf2zmzv4",
-      "hamMalkod": "H0101C030030266",
-      "hamMalad": "ÇELİK - BORU Ø48,3x3 mm - 6060 mm - S235-JRH",
-      "hamBoy": 6060,
-      "hamEn": 0,
-      "kesimTip": "boy",
-      "durum": "bekliyor",
-      "satirlar": [
-        {
-          "id": "mo0z7fsfx38nw6",
-          "durum": "bekliyor",
-          "fireMm": 60,
-          "hamAdet": 4,
-          "kesimler": [
-            {
-              "adet": 2,
-              "ieNo": "IE-MANUAL-MO0Z77BJ",
-              "woId": "mo0z77bjf2piuj",
-              "malad": "BORU BOY KESİM - Ø48,3X3MM - 3000 MM",
-              "malkod": "YMH100334-3000 MM - Ø48,3",
-              "parcaBoy": 3000,
-              "tamamlandi": 0
-            }
-          ]
-        }
-      ],
-      "tarih": "2026-04-16",
-      "gerekliAdet": 4
-    },
-    {
       "id": "mnyib67ymbtj7p",
       "hamMalkod": "H0102C030085264",
       "hamMalad": "ÇELİK - PROFİL 50x40x2 mm - 6000 mm - S235-JRH",
@@ -22055,6 +22055,165 @@
       ],
       "tarih": "2026-04-14",
       "gerekliAdet": 84
+    },
+    {
+      "id": "mo2xmmghu6w519",
+      "hamMalkod": "H0101C030013696",
+      "hamMalad": "ÇELİK - BORU Ø38x4 MM - 6000 MM - S235-JRH",
+      "hamBoy": 6000,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "tamamlandi",
+      "satirlar": [
+        {
+          "id": "mo2xmmgh5pgdr0",
+          "durum": "bekliyor",
+          "fireMm": 280,
+          "hamAdet": 3,
+          "kesimler": [
+            {
+              "adet": 11,
+              "ieNo": "IE-MANUAL-MO2XMJZR",
+              "woId": "mo2xmjzrea1x1n",
+              "malad": "BORU BOY KESİM Ø38x4 - 520MM",
+              "malkod": "Ø38x4 - 520MM",
+              "parcaBoy": 520,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-17",
+      "gerekliAdet": 3
+    },
+    {
+      "id": "mnzrpqblwldhya",
+      "hamMalkod": "50x75x3 mm",
+      "hamMalad": "ÇELİK - PROFİL 75x50x3 mm - 6000 mm - S235-JRH",
+      "hamBoy": 6000,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "tamamlandi",
+      "satirlar": [
+        {
+          "id": "mnzrpqbk3dzac9",
+          "durum": "bekliyor",
+          "fireMm": 241,
+          "hamAdet": 42,
+          "kesimler": [
+            {
+              "adet": 6,
+              "ieNo": "IE-MANUAL-MNZRHIWG",
+              "woId": "mnzrhiwg3fup09",
+              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 887 MM",
+              "malkod": "YMH100392-3 mm",
+              "parcaBoy": 887,
+              "tamamlandi": 0
+            },
+            {
+              "adet": 1,
+              "ieNo": "IE-MANUAL-MNZRPKCE",
+              "woId": "mnzrpkce88q7oe",
+              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 887 MM (Kopya)",
+              "malkod": "YMH100392-3 mm - 437 mm",
+              "parcaBoy": 437,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mnzssikw6uytkj",
+          "durum": "bekliyor",
+          "fireMm": 319,
+          "hamAdet": 3,
+          "kesimler": [
+            {
+              "adet": 13,
+              "ieNo": "IE-MANUAL-MNZSSCM3",
+              "woId": "mnzsscm3va02cb",
+              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 437 MM",
+              "malkod": "YMH100392-3 mm - 437 mm",
+              "parcaBoy": 437,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mnzssikw8hetfh",
+          "durum": "bekliyor",
+          "fireMm": 254,
+          "hamAdet": 1,
+          "kesimler": [
+            {
+              "adet": 3,
+              "ieNo": "IE-MANUAL-MNZSSCM3",
+              "woId": "mnzsscm3va02cb",
+              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 437 MM",
+              "malkod": "YMH100392-3 mm - 437 mm",
+              "parcaBoy": 437,
+              "tamamlandi": 0
+            },
+            {
+              "adet": 5,
+              "ieNo": "IE-MANUAL-MNZRHIWG",
+              "woId": "mnzrhiwg3fup09",
+              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 887 MM",
+              "malkod": "YMH100392-3 mm",
+              "parcaBoy": 887,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-15",
+      "gerekliAdet": 46
+    },
+    {
+      "id": "mnyib67oqi2eup",
+      "hamMalkod": "YMH100144",
+      "hamMalad": "RAPIDO UNI PROFİL BOYKESİM VE DELİK DELME - 50x100x4mm - 1079mm",
+      "hamBoy": 1079,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "tamamlandi",
+      "satirlar": [
+        {
+          "id": "mnyib67ms3szdj",
+          "durum": "bekliyor",
+          "fireMm": 0,
+          "hamAdet": 250,
+          "kesimler": [
+            {
+              "adet": 1,
+              "ieNo": "IE-MANUAL-MNYI29L8",
+              "woId": "mnyi29l82lbd9g",
+              "malad": "RAPIDO UNI PROFİL BOYKESİM VE DELİK DELME - 50x100x4mm - 1079mm",
+              "malkod": "YMH100144",
+              "parcaBoy": 1079,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mnyib67n384bsj",
+          "durum": "bekliyor",
+          "fireMm": 0,
+          "hamAdet": 250,
+          "kesimler": [
+            {
+              "adet": 1,
+              "ieNo": "IE-MANUAL-MNYI2TDL",
+              "woId": "mnyi2tdlg7s6wq",
+              "malad": "RAPIDO UNI PROFİL BOYKESİM VE DELİK DELME - 50x100x4mm - 1079mm",
+              "malkod": "YMH100144",
+              "parcaBoy": 1079,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-14",
+      "gerekliAdet": 500
     },
     {
       "id": "mo2yy4f4dkdhy4",
@@ -22251,257 +22410,111 @@
       "gerekliAdet": 36
     },
     {
-      "id": "mo2xmmghu6w519",
-      "hamMalkod": "H0101C030013696",
-      "hamMalad": "ÇELİK - BORU Ø38x4 MM - 6000 MM - S235-JRH",
-      "hamBoy": 6000,
-      "hamEn": 0,
-      "kesimTip": "boy",
-      "durum": "tamamlandi",
-      "satirlar": [
-        {
-          "id": "mo2xmmgh5pgdr0",
-          "durum": "bekliyor",
-          "fireMm": 280,
-          "hamAdet": 3,
-          "kesimler": [
-            {
-              "adet": 11,
-              "ieNo": "IE-MANUAL-MO2XMJZR",
-              "woId": "mo2xmjzrea1x1n",
-              "malad": "BORU BOY KESİM Ø38x4 - 520MM",
-              "malkod": "Ø38x4 - 520MM",
-              "parcaBoy": 520,
-              "tamamlandi": 0
-            }
-          ]
-        }
-      ],
-      "tarih": "2026-04-17",
-      "gerekliAdet": 3
-    },
-    {
-      "id": "mnzrpqblwldhya",
-      "hamMalkod": "50x75x3 mm",
-      "hamMalad": "ÇELİK - PROFİL 75x50x3 mm - 6000 mm - S235-JRH",
-      "hamBoy": 6000,
-      "hamEn": 0,
-      "kesimTip": "boy",
-      "durum": "tamamlandi",
-      "satirlar": [
-        {
-          "id": "mnzrpqbk3dzac9",
-          "durum": "bekliyor",
-          "fireMm": 241,
-          "hamAdet": 42,
-          "kesimler": [
-            {
-              "adet": 6,
-              "ieNo": "IE-MANUAL-MNZRHIWG",
-              "woId": "mnzrhiwg3fup09",
-              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 887 MM",
-              "malkod": "YMH100392-3 mm",
-              "parcaBoy": 887,
-              "tamamlandi": 0
-            },
-            {
-              "adet": 1,
-              "ieNo": "IE-MANUAL-MNZRPKCE",
-              "woId": "mnzrpkce88q7oe",
-              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 887 MM (Kopya)",
-              "malkod": "YMH100392-3 mm - 437 mm",
-              "parcaBoy": 437,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mnzssikw6uytkj",
-          "durum": "bekliyor",
-          "fireMm": 319,
-          "hamAdet": 3,
-          "kesimler": [
-            {
-              "adet": 13,
-              "ieNo": "IE-MANUAL-MNZSSCM3",
-              "woId": "mnzsscm3va02cb",
-              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 437 MM",
-              "malkod": "YMH100392-3 mm - 437 mm",
-              "parcaBoy": 437,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mnzssikw8hetfh",
-          "durum": "bekliyor",
-          "fireMm": 254,
-          "hamAdet": 1,
-          "kesimler": [
-            {
-              "adet": 3,
-              "ieNo": "IE-MANUAL-MNZSSCM3",
-              "woId": "mnzsscm3va02cb",
-              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 437 MM",
-              "malkod": "YMH100392-3 mm - 437 mm",
-              "parcaBoy": 437,
-              "tamamlandi": 0
-            },
-            {
-              "adet": 5,
-              "ieNo": "IE-MANUAL-MNZRHIWG",
-              "woId": "mnzrhiwg3fup09",
-              "malad": "RAPID UNI PROFİL BOY KESİM VE DELİK DELME - 50X75X3 MM - 887 MM",
-              "malkod": "YMH100392-3 mm",
-              "parcaBoy": 887,
-              "tamamlandi": 0
-            }
-          ]
-        }
-      ],
-      "tarih": "2026-04-15",
-      "gerekliAdet": 46
-    },
-    {
-      "id": "mnyib67oqi2eup",
-      "hamMalkod": "YMH100144",
-      "hamMalad": "RAPIDO UNI PROFİL BOYKESİM VE DELİK DELME - 50x100x4mm - 1079mm",
-      "hamBoy": 1079,
-      "hamEn": 0,
-      "kesimTip": "boy",
-      "durum": "tamamlandi",
-      "satirlar": [
-        {
-          "id": "mnyib67ms3szdj",
-          "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 250,
-          "kesimler": [
-            {
-              "adet": 1,
-              "ieNo": "IE-MANUAL-MNYI29L8",
-              "woId": "mnyi29l82lbd9g",
-              "malad": "RAPIDO UNI PROFİL BOYKESİM VE DELİK DELME - 50x100x4mm - 1079mm",
-              "malkod": "YMH100144",
-              "parcaBoy": 1079,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mnyib67n384bsj",
-          "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 250,
-          "kesimler": [
-            {
-              "adet": 1,
-              "ieNo": "IE-MANUAL-MNYI2TDL",
-              "woId": "mnyi2tdlg7s6wq",
-              "malad": "RAPIDO UNI PROFİL BOYKESİM VE DELİK DELME - 50x100x4mm - 1079mm",
-              "malkod": "YMH100144",
-              "parcaBoy": 1079,
-              "tamamlandi": 0
-            }
-          ]
-        }
-      ],
-      "tarih": "2026-04-14",
-      "gerekliAdet": 500
-    },
-    {
-      "id": "mo00lf1jsloiud",
-      "hamMalkod": "H0101C030028055",
-      "hamMalad": "ÇELİK - BORU Ø60,3x2 mm - 6000 mm - S235-JRH",
-      "hamBoy": 6000,
+      "id": "mo0z7fsf2zmzv4",
+      "hamMalkod": "H0101C030030266",
+      "hamMalad": "ÇELİK - BORU Ø48,3x3 mm - 6060 mm - S235-JRH",
+      "hamBoy": 6060,
       "hamEn": 0,
       "kesimTip": "boy",
       "durum": "bekliyor",
       "satirlar": [
         {
-          "id": "mo00lf1judw3so",
+          "id": "mo0z7fsfx38nw6",
           "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 2,
-          "kesimler": [
-            {
-              "adet": 30,
-              "ieNo": "IE-MANUAL-MO00L9HH",
-              "woId": "mo00l9hhqbdx4j",
-              "malad": "BORU BOY KESİM Ø60,3X2 - 200 MM",
-              "malkod": "YMH100114 - 200 MM",
-              "parcaBoy": 200,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mo0282omqmgevb",
-          "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 1,
-          "kesimler": [
-            {
-              "adet": 20,
-              "ieNo": "IE-MANUAL-MO027ZFA",
-              "woId": "mo027zfaykipmt",
-              "malad": "BORU BOY KESİM - Ø60,3x2mm - 300 mm",
-              "malkod": "YMH100334-300 mm - Ø60,3-2 mm",
-              "parcaBoy": 300,
-              "tamamlandi": 0
-            }
-          ]
-        },
-        {
-          "id": "mo0z4p3d2v7xad",
-          "durum": "bekliyor",
-          "fireMm": 0,
-          "hamAdet": 10,
+          "fireMm": 60,
+          "hamAdet": 4,
           "kesimler": [
             {
               "adet": 2,
-              "ieNo": "IE-MANUAL-MO0Z3Z1Z",
-              "woId": "mo0z3z1z0i4v9o",
-              "malad": "BORU BOY KESİM - Ø60,3x2mm - 3000 mm",
-              "malkod": "YMH100334-3000 mm - Ø60,3-2 mm",
+              "ieNo": "IE-MANUAL-MO0Z77BJ",
+              "woId": "mo0z77bjf2piuj",
+              "malad": "BORU BOY KESİM - Ø48,3X3MM - 3000 MM",
+              "malkod": "YMH100334-3000 MM - Ø48,3",
               "parcaBoy": 3000,
               "tamamlandi": 0
             }
           ]
         }
       ],
-      "tarih": "2026-04-15",
-      "gerekliAdet": 13
+      "tarih": "2026-04-16",
+      "gerekliAdet": 4
     },
     {
-      "id": "mo17ttq4xcyn4v",
-      "hamMalkod": "H0102C030093207",
-      "hamMalad": "ÇELİK - PROFİL 50x100x4 mm - 6000 mm - S235-JRH",
+      "id": "mo0107pf31zzsp",
+      "hamMalkod": "BORU Ø48,3x2,5 mm - 6000 mm",
+      "hamMalad": "ÇELİK - BORU Ø48,3x2,5 mm - 6000 mm - S235-JRH",
       "hamBoy": 6000,
       "hamEn": 0,
       "kesimTip": "boy",
       "durum": "bekliyor",
       "satirlar": [
         {
-          "id": "mo17ttq44d16v9",
+          "id": "mo0107pfo6yd0u",
           "durum": "bekliyor",
-          "fireMm": 24.799999999999727,
+          "fireMm": 150,
+          "hamAdet": 3,
+          "kesimler": [
+            {
+              "adet": 26,
+              "ieNo": "IE-MANUAL-MO0103GX",
+              "woId": "mo0103gxkcla0a",
+              "malad": "BORU BOY KESİM - Ø48,3X2,5MM - 225 MM",
+              "malkod": "YMH100334-225 MM",
+              "parcaBoy": 225,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mo0282omqtwfyo",
+          "durum": "bekliyor",
+          "fireMm": 0,
           "hamAdet": 1,
           "kesimler": [
             {
-              "adet": 88,
-              "ieNo": "IE-MANUAL-MO13327G",
-              "woId": "mo13327g1x3biy",
-              "malad": "RAPIDO UNI PROFİL BOY KESİM VE DELİK DELME - 50X100X4MM - 67,9 MM",
-              "malkod": "50X100X4MM-67,9",
-              "parcaBoy": 67.9,
+              "adet": 20,
+              "ieNo": "IE-MANUAL-MO026E8O",
+              "woId": "mo026e8olc86iu",
+              "malad": "BORU BOY KESİM - Ø48,3x2,5mm - 300 mm",
+              "malkod": "YMH100334-300 mm-Ø48,3",
+              "parcaBoy": 300,
               "tamamlandi": 0
             }
           ]
         }
       ],
-      "tarih": "2026-04-16",
-      "gerekliAdet": 1
+      "tarih": "2026-04-15",
+      "gerekliAdet": 4
+    },
+    {
+      "id": "mnyisssy01arri",
+      "hamMalkod": "H0102C030085264",
+      "hamMalad": "ÇELİK - PROFİL 50x40x2 mm - 6000 mm - S235-JRH",
+      "hamBoy": 6000,
+      "hamEn": 0,
+      "kesimTip": "boy",
+      "durum": "tamamlandi",
+      "satirlar": [
+        {
+          "id": "mnyisssy2o66ap",
+          "durum": "bekliyor",
+          "fireMm": 197,
+          "hamAdet": 110,
+          "kesimler": [
+            {
+              "adet": 7,
+              "ieNo": "IE-00003-01",
+              "woId": "mnyin870tdbm8s",
+              "malad": "SS TAM PANO-3P 40X50X2 MM 829 MM PROFİL KESME",
+              "malkod": "SS TAM PANO 829 MM",
+              "parcaBoy": 829,
+              "tamamlandi": 0
+            }
+          ]
+        }
+      ],
+      "tarih": "2026-04-14",
+      "gerekliAdet": 110
     },
     {
       "id": "mnztaw7omnxymd",
@@ -22585,81 +22598,98 @@
       "gerekliAdet": 304
     },
     {
-      "id": "mo0107pf31zzsp",
-      "hamMalkod": "BORU Ø48,3x2,5 mm - 6000 mm",
-      "hamMalad": "ÇELİK - BORU Ø48,3x2,5 mm - 6000 mm - S235-JRH",
+      "id": "mo00lf1jsloiud",
+      "hamMalkod": "H0101C030028055",
+      "hamMalad": "ÇELİK - BORU Ø60,3x2 mm - 6000 mm - S235-JRH",
       "hamBoy": 6000,
       "hamEn": 0,
       "kesimTip": "boy",
       "durum": "bekliyor",
       "satirlar": [
         {
-          "id": "mo0107pfo6yd0u",
+          "id": "mo00lf1judw3so",
           "durum": "bekliyor",
-          "fireMm": 150,
-          "hamAdet": 3,
+          "fireMm": 0,
+          "hamAdet": 2,
           "kesimler": [
             {
-              "adet": 26,
-              "ieNo": "IE-MANUAL-MO0103GX",
-              "woId": "mo0103gxkcla0a",
-              "malad": "BORU BOY KESİM - Ø48,3X2,5MM - 225 MM",
-              "malkod": "YMH100334-225 MM",
-              "parcaBoy": 225,
+              "adet": 30,
+              "ieNo": "IE-MANUAL-MO00L9HH",
+              "woId": "mo00l9hhqbdx4j",
+              "malad": "BORU BOY KESİM Ø60,3X2 - 200 MM",
+              "malkod": "YMH100114 - 200 MM",
+              "parcaBoy": 200,
               "tamamlandi": 0
             }
           ]
         },
         {
-          "id": "mo0282omqtwfyo",
+          "id": "mo0282omqmgevb",
           "durum": "bekliyor",
           "fireMm": 0,
           "hamAdet": 1,
           "kesimler": [
             {
               "adet": 20,
-              "ieNo": "IE-MANUAL-MO026E8O",
-              "woId": "mo026e8olc86iu",
-              "malad": "BORU BOY KESİM - Ø48,3x2,5mm - 300 mm",
-              "malkod": "YMH100334-300 mm-Ø48,3",
+              "ieNo": "IE-MANUAL-MO027ZFA",
+              "woId": "mo027zfaykipmt",
+              "malad": "BORU BOY KESİM - Ø60,3x2mm - 300 mm",
+              "malkod": "YMH100334-300 mm - Ø60,3-2 mm",
               "parcaBoy": 300,
+              "tamamlandi": 0
+            }
+          ]
+        },
+        {
+          "id": "mo0z4p3d2v7xad",
+          "durum": "bekliyor",
+          "fireMm": 0,
+          "hamAdet": 10,
+          "kesimler": [
+            {
+              "adet": 2,
+              "ieNo": "IE-MANUAL-MO0Z3Z1Z",
+              "woId": "mo0z3z1z0i4v9o",
+              "malad": "BORU BOY KESİM - Ø60,3x2mm - 3000 mm",
+              "malkod": "YMH100334-3000 mm - Ø60,3-2 mm",
+              "parcaBoy": 3000,
               "tamamlandi": 0
             }
           ]
         }
       ],
       "tarih": "2026-04-15",
-      "gerekliAdet": 4
+      "gerekliAdet": 13
     },
     {
-      "id": "mnyisssy01arri",
-      "hamMalkod": "H0102C030085264",
-      "hamMalad": "ÇELİK - PROFİL 50x40x2 mm - 6000 mm - S235-JRH",
+      "id": "mo46wjrvc8s6gc",
+      "hamMalkod": "H0102C030085594",
+      "hamMalad": "ÇELİK - PROFİL 60x40x3 MM - 6000 MM - S235-JRH",
       "hamBoy": 6000,
       "hamEn": 0,
       "kesimTip": "boy",
-      "durum": "tamamlandi",
+      "durum": "bekliyor",
       "satirlar": [
         {
-          "id": "mnyisssy2o66ap",
+          "id": "mo46wjqwohmemn",
           "durum": "bekliyor",
-          "fireMm": 197,
-          "hamAdet": 110,
+          "fireMm": 73.11999999999989,
+          "hamAdet": 58824,
           "kesimler": [
             {
-              "adet": 7,
-              "ieNo": "IE-00003-01",
-              "woId": "mnyin870tdbm8s",
-              "malad": "SS TAM PANO-3P 40X50X2 MM 829 MM PROFİL KESME",
-              "malkod": "SS TAM PANO 829 MM",
-              "parcaBoy": 829,
+              "adet": 17,
+              "ieNo": "IE-MANUAL-MO46VM3J",
+              "woId": "mo46vm3jgz4ohk",
+              "malad": "PROFİL BOY KESİM VE DELİK DELME - 60x40x3MM - 348,64MM",
+              "malkod": "60x40x3 348,64MM",
+              "parcaBoy": 348.64,
               "tamamlandi": 0
             }
           ]
         }
       ],
-      "tarih": "2026-04-14",
-      "gerekliAdet": 110
+      "tarih": "2026-04-18",
+      "gerekliAdet": 58824
     }
   ],
   "tedarikler": [
@@ -23334,18 +23364,36 @@
       "cevap": "",
       "cevaplayan": "",
       "cevapTarih": ""
-    }
-  ],
-  "activeWork": [
+    },
     {
-      "id": "mo2gh50wklouyn",
-      "opId": "mn5l4qcv6lm1",
-      "opAd": "MUSTAFA ÇAKMAK",
-      "woId": "mnznosd4on68kt",
-      "woAd": "RAPIDO UNI PROFİL BOY KESİM VE DELİK DELME - 50x100x4mm - 629mm",
-      "baslangic": "07:00",
-      "tarih": "2026-04-17"
+      "id": "mo4767wsaczbif",
+      "opId": "mn5l4qcwlgpf",
+      "opAd": "📋 Yönetim",
+      "tarih": "2026-04-18",
+      "saat": "13:31",
+      "mesaj": "SERKAN BU GÜN ÇALIŞIYOR MUSUNUZ?",
+      "okundu": false,
+      "cevap": "",
+      "cevaplayan": "",
+      "cevapTarih": ""
     }
   ],
-  "fireLogs": []
+  "activeWork": [],
+  "fireLogs": [],
+  "problemler": [
+    {
+      "id": "mo43htclh3236k",
+      "problem": "Reçetelerin hazırlanması (deneme)",
+      "termin": "2026-04-30",
+      "sorumlu": "İskender UZUN",
+      "durum": "Açık",
+      "yapilanlar": "",
+      "notlar": "",
+      "olusturan": "adamin",
+      "olusturma": "2026-04-18T08:48:40.917+00:00",
+      "sonDegistiren": "adamin",
+      "sonDegistirme": "2026-04-18T09:01:16.645+00:00",
+      "kapatmaTarihi": ""
+    }
+  ]
 }
