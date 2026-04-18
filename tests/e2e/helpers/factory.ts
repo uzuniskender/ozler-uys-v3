@@ -1,19 +1,12 @@
 import { supabaseTest } from './supabase'
 import { E2E_PREFIX } from './cleanup'
 
-/**
- * Benzersiz test kodu üret. Zaman damgası + rastgele ek.
- */
 export function uniqueId(suffix = ''): string {
   const ts = Date.now().toString(36).toUpperCase()
   const rnd = Math.random().toString(36).substring(2, 6).toUpperCase()
   return `${E2E_PREFIX}${ts}-${rnd}${suffix ? '-' + suffix : ''}`
 }
 
-/**
- * Bağımsız hammadde İE oluştur (stok kontrol testi için).
- * Hedef stoktan yüksek → ⛔ YOK badge bekleniyor.
- */
 export async function createIndependentHammaddeWO(params: {
   hmKod: string
   hmAd: string
@@ -42,10 +35,6 @@ export async function createIndependentHammaddeWO(params: {
   return { kod, row }
 }
 
-/**
- * Test malzemesi (hammadde) oluştur — stok = 0 varsayılan.
- * Not: aktif ve birim kolonları DB'de DEFAULT var, set etmiyoruz.
- */
 export async function createTestMaterial(params: {
   ad: string
   tip?: 'Hammadde' | 'YarıMamul' | 'Mamul'
@@ -63,9 +52,6 @@ export async function createTestMaterial(params: {
   return { kod, ad: row.ad }
 }
 
-/**
- * Test operatörü oluştur (mesaj testleri için).
- */
 export async function createTestOperator(params: { ad: string; bolum?: string }) {
   const kod = uniqueId('OPR')
   const row = {
@@ -80,9 +66,6 @@ export async function createTestOperator(params: { ad: string; bolum?: string })
   return { id: kod, ad: row.ad }
 }
 
-/**
- * Operatör mesajı oluştur (ses + bildirim testi için).
- */
 export async function createOperatorMessage(params: {
   oprId: string
   oprAd: string
@@ -90,16 +73,18 @@ export async function createOperatorMessage(params: {
   kategori?: 'Stok' | 'Arıza' | 'Malzeme' | 'Talep' | 'Diğer'
   oncelik?: 'Normal' | 'Acil'
 }) {
+  const id = uniqueId('MSG')
+  const now = new Date()
   const row = {
-    id: uniqueId('MSG'),
-    opr_id: params.oprId,
-    opr_ad: params.oprAd,
-    wo_kod: uniqueId('WO-MSG'),
+    id,
+    op_id: params.oprId,
+    op_ad: params.oprAd,
+    tarih: now.toISOString().slice(0, 10), // YYYY-MM-DD
+    saat: now.toTimeString().slice(0, 5),  // HH:MM
     mesaj: params.mesaj,
-    kategori: params.kategori ?? 'Diğer',
-    oncelik: params.oncelik ?? 'Normal',
-    olusturma: new Date().toISOString(),
     okundu: false,
+    kategori: params.kategori ?? null,
+    oncelik: params.oncelik ?? 'Normal',
   }
   const { error } = await supabaseTest.from('uys_operator_notes').insert(row)
   if (error) throw new Error(`Mesaj oluşturulamadı: ${error.message}`)
