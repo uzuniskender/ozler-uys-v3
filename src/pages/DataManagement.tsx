@@ -52,6 +52,12 @@ export function DataManagement() {
   function camelToSnake(s: string): string {
     // 'not' özel — DB'de 'not_' (reserved keyword)
     if (s === 'not') return 'not_'
+    // Özel eşlemeler — JSON alan adı DB kolon adıyla farklı olanlar
+    const specialMap: Record<string, string> = {
+      tedarikcId: 'tedarikci_id',
+      tedarikcAd: 'tedarikci_ad',
+    }
+    if (specialMap[s]) return specialMap[s]
     return s.replace(/([A-Z])/g, '_$1').toLowerCase()
   }
 
