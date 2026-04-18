@@ -187,7 +187,40 @@ export function stokKontrolWO(
 
   const altlar = dogrudanAltBilesenler(wo.malkod, recipes || [], wo)
   if (altlar.length === 0) {
-    return { durum: 'OK', satirlar: [], maxYapilabilir: kalan }
+    // FIX 3: Alt bileşen yok — İE'nin kendisi yaprak (hammadde/yarı mamul için bağımsız İE
+    // veya reçetesi/wo.hm'si olmayan mamul İE). Kendi stok + açık tedariğe göre karar ver.
+    const acikTed = netAcikTed(wo.malkod, tedarikler)
+    const toplam = mamulStok + acikTed
+    if (toplam >= kalan) {
+      // Açık tedarik ile karşılanıyor → KISMI (BEKLIYOR satırıyla), alındığında OK olur
+      const mat = materials?.find(m => m.kod === wo.malkod)
+      const satir: StokKontrolSatir = {
+        malkod: wo.malkod,
+        malad: wo.malad,
+        tip: mat?.tip || 'Hammadde',
+        gerekli: Math.ceil(kalan),
+        mevcut: mamulStok,
+        acikTed,
+        durum: 'BEKLIYOR',
+      }
+      return { durum: 'KISMI', satirlar: [satir], maxYapilabilir: mamulStok }
+    }
+    // Yetersiz — YOK veya KISMI
+    const mat = materials?.find(m => m.kod === wo.malkod)
+    const satir: StokKontrolSatir = {
+      malkod: wo.malkod,
+      malad: wo.malad,
+      tip: mat?.tip || 'Hammadde',
+      gerekli: Math.ceil(kalan),
+      mevcut: mamulStok,
+      acikTed,
+      durum: toplam <= 0 ? 'YOK' : 'KISMI',
+    }
+    return {
+      durum: toplam <= 0 ? 'YOK' : 'KISMI',
+      satirlar: [satir],
+      maxYapilabilir: Math.max(0, toplam),
+    }
   }
 
   const tumSatirlar: StokKontrolSatir[] = []
