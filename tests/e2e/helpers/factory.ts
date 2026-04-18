@@ -44,6 +44,7 @@ export async function createIndependentHammaddeWO(params: {
 
 /**
  * Test malzemesi (hammadde) oluştur — stok = 0 varsayılan.
+ * Not: aktif ve birim kolonları DB'de DEFAULT var, set etmiyoruz.
  */
 export async function createTestMaterial(params: {
   ad: string
@@ -56,9 +57,6 @@ export async function createTestMaterial(params: {
     kod,
     ad: `${E2E_PREFIX}${params.ad}`,
     tip: params.tip ?? 'Hammadde',
-    birim: 'Adet',
-    min_stok: 0,
-    aktif: true,
   }
   const { error } = await supabaseTest.from('uys_malzemeler').insert(row)
   if (error) throw new Error(`Malzeme oluşturulamadı: ${error.message}`)
@@ -75,7 +73,6 @@ export async function createTestOperator(params: { ad: string; bolum?: string })
     kod,
     ad: `${E2E_PREFIX}${params.ad}`,
     bolum: params.bolum ?? 'Test',
-    aktif: true,
     sifre: '1234',
   }
   const { error } = await supabaseTest.from('uys_operators').insert(row)
