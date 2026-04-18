@@ -11,23 +11,26 @@ export async function createIndependentHammaddeWO(params: {
   hmKod: string
   hmAd: string
   hedef: number
-  kalan?: number
+  kalan?: number // Backward-compat: ignore edilir, master_schema'da yok
 }) {
   const kod = uniqueId('WO')
-  const { hmKod, hmAd, hedef, kalan = hedef } = params
+  const { hmKod, hmAd, hedef } = params
+  // master_schema.sql uys_work_orders kolonları:
+  // id, order_id, rc_id, sira, kirno, op_id, op_kod, op_ad, ist_id, ist_kod, ist_ad,
+  // malkod, malad, hedef, mpm, hm (jsonb), ie_no, wh_alloc, hazirlik_sure, islem_sure,
+  // durum, bagimsiz, siparis_disi, mamul_kod, mamul_ad, mamul_auto, operator_id, not_,
+  // olusturma, updated_at
   const row = {
     id: kod,
-    kod,
-    siparis_kod: null,
     mamul_kod: hmKod,
     mamul_ad: hmAd,
+    malkod: hmKod,
+    malad: hmAd,
     hedef,
-    kalan,
-    tamamlanan: 0,
-    durum: 'Başlamadı',
-    tip: 'bagimsiz',
-    hm: null,
-    rc_id: null,
+    durum: 'bekliyor',
+    bagimsiz: true,
+    siparis_disi: false,
+    ie_no: kod, // İş Emirleri tablosunda görünür kolon — testler kod ile arayabilsin
     olusturma: new Date().toISOString(),
   }
   const { error } = await supabaseTest.from('uys_work_orders').insert(row)
