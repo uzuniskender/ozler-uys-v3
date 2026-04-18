@@ -19,6 +19,7 @@ export function DataManagement() {
     { label: 'İş Emirleri', key: 'workOrders', table: 'uys_work_orders' },
     { label: 'Üretim Logları', key: 'logs', table: 'uys_logs' },
     { label: 'Malzemeler', key: 'materials', table: 'uys_malzemeler' },
+    { label: 'HM Tipleri', key: 'hmTipler', table: 'uys_hm_tipleri' },
     { label: 'Operasyonlar', key: 'operations', table: 'uys_operations' },
     { label: 'İstasyonlar', key: 'stations', table: 'uys_stations' },
     { label: 'Operatörler', key: 'operators', table: 'uys_operators' },
@@ -35,6 +36,11 @@ export function DataManagement() {
     { label: 'Aktif Çalışmalar', key: 'activeWork', table: 'uys_active_work' },
     { label: 'Fire Logları', key: 'fireLogs', table: 'uys_fire_logs' },
     { label: 'Problem Takip', key: 'problemler', table: 'pt_problemler' },
+    { label: 'İzinler', key: 'izinler', table: 'uys_izinler' },
+    { label: 'Kullanıcılar', key: 'kullanicilar', table: 'uys_kullanicilar' },
+    { label: 'Yetki Ayarları', key: 'yetkiAyarlari', table: 'uys_yetki_ayarlari' },
+    { label: 'Ekip Notları', key: 'notes', table: 'uys_notes' },
+    { label: 'Checklist/Görevler', key: 'checklist', table: 'uys_checklist' },
   ]
 
   function exportJSON() {
