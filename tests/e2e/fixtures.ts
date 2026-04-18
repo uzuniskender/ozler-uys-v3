@@ -1,26 +1,21 @@
-import { test as base, expect } from '@playwright/test'
-import { cleanupTestData, preTestSafetyCheck, loginAsAdmin } from './helpers'
+import { test as base } from '@playwright/test'
+import { cleanupAllTestData } from './helpers/cleanup'
+
+type Fixtures = {
+  autoCleanup: void
+}
 
 /**
- * Özelleştirilmiş test fixture
- * - Her test öncesi test verisi temizlenir (güvenlik)
- * - Her test öncesi admin login yapılır
- * - Her test sonrası test verisi temizlenir
+ * Base test — her spec'te `test` olarak import edilir.
+ * Her testten ÖNCE TEST-E2E-* kayıtlarını temizler.
  */
-export const test = base.extend({
-  page: async ({ page }, use) => {
-    // Test öncesi güvenlik
-    await preTestSafetyCheck()
-
-    // Login
-    await loginAsAdmin(page)
-
-    // Test çalışsın
-    await use(page)
-
-    // Test sonrası temizlik
-    await cleanupTestData()
-  },
+export const test = base.extend<Fixtures>({
+  autoCleanup: [async ({}, use) => {
+    await cleanupAllTestData(false)
+    await use()
+    // Test sonunda da temizle (başka testi etkilemesin)
+    await cleanupAllTestData(false)
+  }, { auto: true }],
 })
 
-export { expect }
+export { expect } from '@playwright/test'

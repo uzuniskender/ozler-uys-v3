@@ -1,40 +1,33 @@
+import { cleanupAllTestData } from './helpers/cleanup'
+import { TEST_URL } from './helpers/supabase'
+
 /**
- * Standalone temizlik — test dışında elle çalıştırmak için
- * Kullanım: npm run test:e2e:cleanup
+ * Playwright globalTeardown — tüm suite bittikten sonra çalışır.
+ * Yarım kalan test kayıtlarını temizler.
+ * Aynı zamanda `npm run test:e2e:cleanup` ile manuel çağrılabilir.
  */
-import { config } from 'dotenv'
-import { resolve } from 'path'
-
-// .env.test yükle
-config({ path: resolve(process.cwd(), '.env.test') })
-
-import { cleanupTestData, supabaseTest, TEST_PREFIX } from './helpers'
-
 async function main() {
-  console.log('🧹 Test verisi temizliği başlıyor...')
-  console.log('   Hedef DB:', process.env.VITE_SUPABASE_URL)
-  console.log('   Prefix:', TEST_PREFIX, '\n')
-
-  // Önce sayım
-  const { count: before } = await supabaseTest
-    .from('uys_work_orders')
-    .select('*', { count: 'exact', head: true })
-    .ilike('ie_no', `${TEST_PREFIX}%`)
-
-  console.log(`   ${before || 0} test IE bulundu\n`)
-
-  await cleanupTestData()
-
-  // Sonra sayım
-  const { count: after } = await supabaseTest
-    .from('uys_work_orders')
-    .select('*', { count: 'exact', head: true })
-    .ilike('ie_no', `${TEST_PREFIX}%`)
-
-  console.log(`✓ Temizlik tamamlandı. Kalan: ${after || 0}`)
+  console.log('')
+  console.log('═══════════════════════════════════════════════')
+  console.log('🧹 E2E Global Teardown — Test verisi temizleniyor')
+  console.log(`   Supabase: ${TEST_URL}`)
+  console.log('═══════════════════════════════════════════════')
+  const n = await cleanupAllTestData(true)
+  console.log('═══════════════════════════════════════════════')
+  console.log(`✅ Bitti. ${n} kayıt silindi.`)
+  console.log('')
 }
 
-main().catch(e => {
-  console.error('❌ Hata:', e)
-  process.exit(1)
-})
+// Playwright çağırırken default export bekler, tsx ile çağırınca direkt çalıştır
+const scriptPath = process.argv[1] ?? ''
+if (
+  scriptPath.includes('run-cleanup') &&
+  !scriptPath.includes('playwright')
+) {
+  main().catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+}
+
+export default main
