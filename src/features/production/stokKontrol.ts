@@ -31,27 +31,53 @@ function netAcikTed(malkod: string, tedarikler: Tedarik[]): number {
 
 /**
  * Bir malzemeyi üretmek için GEREKLİ olan doğrudan alt bileşenleri bul.
- * Öncelik: 1) Kendi reçetesi (mamulKod === malkod), 2) wo.hm (kök İE için)
+ * Reçete arama sırası: 1) wo.rcId (kök İE için), 2) mamulKod eşleşmesi
+ * Fallback: 1) kirno-based top-level, 2) tip-based (Hammadde/YarıMamul), 3) wo.hm
  */
 function dogrudanAltBilesenler(
   malkod: string,
   recipes: Recipe[],
   wo?: WorkOrder
 ): { malkod: string; malad: string; tip: string; birimIhtiyac: number }[] {
-  const rc = recipes.find(r => r.mamulKod === malkod)
+  // Reçete ara: önce wo.rcId (kök İE için), sonra mamulKod
+  const rc =
+    (wo && wo.malkod === malkod && wo.rcId
+      ? recipes.find(r => r.id === wo.rcId)
+      : null) || recipes.find(r => r.mamulKod === malkod)
+
   if (rc && rc.satirlar?.length) {
-    const topLevel = rc.satirlar.filter(s => s.kirno && !s.kirno.includes('.'))
-    return topLevel
-      .filter(s => s.malkod && s.malkod !== malkod)
-      .map(s => ({
+    // 1) kirno-based top-level (nokta içermeyen kirno = 1. seviye)
+    const kirnoTop = rc.satirlar.filter(
+      s => s.kirno && !s.kirno.includes('.') && s.malkod && s.malkod !== malkod
+    )
+    if (kirnoTop.length > 0) {
+      return kirnoTop.map(s => ({
         malkod: s.malkod,
         malad: s.malad || s.malkod,
         tip: s.tip || 'Hammadde',
         birimIhtiyac: s.miktar || 0,
       }))
+    }
+    // 2) tip-based fallback (kirno formatı uyumsuzsa)
+    const tipBased = rc.satirlar.filter(
+      s =>
+        (s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul') &&
+        s.malkod &&
+        s.malkod !== malkod
+    )
+    if (tipBased.length > 0) {
+      return tipBased.map(s => ({
+        malkod: s.malkod,
+        malad: s.malad || s.malkod,
+        tip: s.tip || 'Hammadde',
+        birimIhtiyac: s.miktar || 0,
+      }))
+    }
   }
+
+  // 3) wo.hm fallback (reçete yok veya reçeteden anlamlı sonuç çıkmadı)
   if (wo && wo.malkod === malkod && wo.hm?.length) {
-    return wo.hm
+    const hmAltlar = wo.hm
       .filter(hm => hm.malkod !== malkod && hm.malkod !== wo.mamulKod)
       .map(hm => ({
         malkod: hm.malkod,
@@ -59,6 +85,7 @@ function dogrudanAltBilesenler(
         tip: 'Hammadde',
         birimIhtiyac: (hm.miktarTotal || 0) / (wo.hedef || 1),
       }))
+    if (hmAltlar.length > 0) return hmAltlar
   }
   return []
 }
