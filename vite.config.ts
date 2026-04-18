@@ -3,9 +3,11 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-export default defineConfig({
+export default defineConfig(({ command, mode }) => ({
   plugins: [react(), tailwindcss()],
-  base: '/ozler-uys-v3/',
+  // Production build GitHub Pages için /ozler-uys-v3/ path'inde
+  // Dev ve test modunda root (localhost:5173/)
+  base: command === 'build' && mode !== 'test' ? '/ozler-uys-v3/' : '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -28,4 +30,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
