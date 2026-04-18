@@ -373,3 +373,18 @@ export interface Kullanici {
   rol: 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
   aktif: boolean
 }
+
+export interface Problem {
+  id: string
+  problem: string          // Problem tanımı (zorunlu)
+  termin: string           // ISO date 'YYYY-MM-DD' (opsiyonel)
+  sorumlu: string          // Ad Soyad (metin)
+  durum: string            // 'Açık' | 'Devam' | 'Kapandı'
+  yapilanlar: string       // Aksiyon tarihçesi (stamp'lı append)
+  notlar: string           // Ek notlar (opsiyonel)
+  olusturan: string
+  olusturma: string        // ISO datetime
+  sonDegistiren: string
+  sonDegistirme: string    // ISO datetime
+  kapatmaTarihi: string    // ISO date
+}

@@ -34,6 +34,7 @@ export function DataManagement() {
     { label: 'Operatör Mesajları', key: 'operatorNotes', table: 'uys_operator_notes' },
     { label: 'Aktif Çalışmalar', key: 'activeWork', table: 'uys_active_work' },
     { label: 'Fire Logları', key: 'fireLogs', table: 'uys_fire_logs' },
+    { label: 'Problem Takip', key: 'problemler', table: 'pt_problemler' },
   ]
 
   function exportJSON() {

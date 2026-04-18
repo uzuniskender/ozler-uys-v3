@@ -5,7 +5,7 @@ import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -166,6 +166,20 @@ const M = {
     kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
     rol: (r.rol || 'planlama') as Kullanici['rol'], aktif: r.aktif !== false,
   }),
+  problem: (r: Record<string, unknown>): Problem => ({
+    id: r.id as string,
+    problem: (r.problem || '') as string,
+    termin: (r.termin || '') as string,
+    sorumlu: (r.sorumlu || '') as string,
+    durum: (r.durum || 'Açık') as string,
+    yapilanlar: (r.yapilanlar || '') as string,
+    notlar: (r.notlar || '') as string,
+    olusturan: (r.olusturan || '') as string,
+    olusturma: (r.olusturma || '') as string,
+    sonDegistiren: (r.son_degistiren || '') as string,
+    sonDegistirme: (r.son_degistirme || '') as string,
+    kapatmaTarihi: (r.kapatma_tarihi || '') as string,
+  }),
 }
 
 interface UYSStore {
@@ -177,6 +191,7 @@ interface UYSStore {
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
   izinler: Izin[]; kullanicilar: Kullanici[]; hmTipler: HmTip[]
+  problemler: Problem[]
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
@@ -209,6 +224,7 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
   { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
   { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
+  { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
 ]
 
 // Tablo adı → TABLE_MAP entry lookup (realtime için)
@@ -219,6 +235,7 @@ export const useStore = create<UYSStore>((set) => ({
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
   customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [], hmTipler: [],
+  problemler: [],
   loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {

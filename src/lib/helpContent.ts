@@ -163,6 +163,23 @@ export const HELP_CONTENT: Record<string, HelpContent> = {
       { baslik: 'Ne Zaman Çalıştırılır', icerik: 'Deploy sonrası büyük değişikliklerde. Canlı veriye dokunmaz.' },
     ],
   },
+  '/problem-takip': {
+    title: 'Problem Takip',
+    ozet: 'Fabrika genelindeki problemleri, hedef tarihleri ve kim ne yaptı tarihçesini tek yerden takip etmek için basit bir not defteri.',
+    bolumler: [
+      { baslik: 'Yeni Problem', icerik: '+ Yeni Problem butonu ile kayıt açın. Problem tanımı zorunlu, diğerleri opsiyonel.' },
+      { baslik: 'Durum Mantığı', icerik: 'Açık = henüz çalışılmaya başlanmadı · Devam = çalışılıyor · Kapandı = çözüldü. Kapandı işaretlenince kapatma tarihi otomatik bugün olur.' },
+      { baslik: 'Termin ve Gecikme', icerik: 'Termin geçmiş ve durum "Kapandı" değilse satır kırmızı görünür ve KPI "Geciken" sayısına eklenir.' },
+      { baslik: '+ Yeni Aksiyon Ekle', icerik: 'Modal içindeki bu buton "Yapılanlar" kutusuna otomatik olarak tarih-saat ve isim damgası yapıştırır. Damganın yanına yazdığınız metin tarihçeye birikir. Silmeyin, üstüne yazın.' },
+      { baslik: 'Son Değişiklik Barı', icerik: 'Sayfanın üstünde kimin en son hangi kaydı değiştirdiği görünür — ekip koordinasyonu için.' },
+      { baslik: 'Sıralama', icerik: 'Geciken kayıtlar üstte, sonra Açık > Devam > Kapandı, her grup içinde termin yakın olan önce.' },
+    ],
+    ipuclari: [
+      '"Yapılanlar" alanını silmeyin, üstüne yeni aksiyon ekleyin — tam tarihçe burada tutulur.',
+      'Terminiyle birlikte sorumluyu da yazarsanız kim takipçi netleşir.',
+      'Kapandı olan kayıtlar silinmez, sadece altta görünür — raporlama ve öğrenme için.',
+    ],
+  },
 }
 
 export function getHelpFor(pathname: string): HelpContent | null {

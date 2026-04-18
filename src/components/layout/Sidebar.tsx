@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare, AlertOctagon
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -38,6 +38,7 @@ const NAV = [
   ]},
   { label: 'SİSTEM', items: [
     { path: '/reports', label: 'Raporlar', icon: BarChart3, guest: true },
+    { path: '/problem-takip', label: 'Problem Takip', icon: AlertOctagon, badge: 'problemlerOpen', guest: false },
     { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
     { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
     { path: '/checklist', label: 'Checklist', icon: ClipboardCheck, badge: 'checklist', guest: false },
@@ -82,6 +83,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     if (key === 'cuttingPlans') {
       const bekleyen = store.cuttingPlans.filter(p => p.durum !== 'tamamlandi').length
       return bekleyen > 0 ? String(bekleyen) : ''
+    }
+    if (key === 'problemlerOpen') {
+      const acik = store.problemler.filter(p => p.durum !== 'Kapandı').length
+      return acik > 0 ? String(acik) : ''
     }
     const arr = (store as unknown as Record<string, unknown>)[key]
     if (Array.isArray(arr) && arr.length > 0) return String(arr.length)
@@ -134,6 +139,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                         item.badge === 'tedarikler' ? 'bg-amber/15 text-amber' :
                         item.badge === 'workOrders' ? 'bg-accent/15 text-accent' :
                         item.badge === 'cuttingPlans' ? 'bg-green/15 text-green' :
+                        item.badge === 'problemlerOpen' ? 'bg-red/15 text-red' :
                         'bg-bg-3 text-zinc-400'
                       }`}>
                         {badge}

@@ -87,6 +87,11 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
     { key: 'data_syscheck', label: 'Sistem testi' }, { key: 'data_reset', label: 'Sıfırlama' },
     { key: 'data_pass', label: 'Şifre / kullanıcı yönetimi' },
   ]},
+  { group: 'Problem Takip', actions: [
+    { key: 'pt_add', label: 'Ekleme' },
+    { key: 'pt_edit', label: 'Düzenleme' },
+    { key: 'pt_delete', label: 'Silme' },
+  ]},
 ]
 
 export const DEFAULTS: Record<string, AdminRole[]> = {
@@ -110,6 +115,7 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   rapor_view:['uretim_sor','planlama'], rapor_excel:['uretim_sor','planlama','depocu'],
   check_add:[], check_edit:[], check_delete:[],
   data_backup:['planlama'], data_import:[], data_export:[], data_test:['planlama'], data_syscheck:[], data_reset:[], data_pass:[],
+  pt_add:['uretim_sor','planlama','depocu'], pt_edit:['uretim_sor','planlama','depocu'], pt_delete:[],
 }
 
 export const ROLE_LIST: { key: AdminRole; label: string }[] = [

@@ -23,6 +23,7 @@ const ETIKET: Record<string, string> = {
   uys_active_work: 'Aktif İş', uys_fire_logs: 'Fire', uys_checklist: 'Checklist',
   uys_izinler: 'İzin', uys_kullanicilar: 'Kullanıcı', uys_hm_tipleri: 'HM Tipi',
   uys_yetki_ayarlari: 'Yetki',
+  pt_problemler: 'Problem',
 }
 
 export function useRealtime() {
