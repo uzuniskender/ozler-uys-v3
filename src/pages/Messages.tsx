@@ -4,9 +4,13 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Search, Send, Trash2, Check, CheckCheck, AlertTriangle } from 'lucide-react'
+import { Search, Send, Trash2, Check, CheckCheck, AlertTriangle, Volume2, VolumeX, Bell, BellOff } from 'lucide-react'
 import type { OperatorNote, OperatorNoteKategori, OperatorNoteOncelik } from '@/types'
 import { OPERATOR_NOTE_KATEGORILER } from '@/types'
+import {
+  isSoundEnabled, setSoundEnabled,
+  requestNotificationPermission, getNotificationPermission,
+} from '@/hooks/useMessageNotifications'
 
 const isAdmin = (n: OperatorNote) => (n.opAd || '').includes('Yönetim')
 
@@ -23,6 +27,8 @@ export function Messages() {
   // Admin cevap gönderirken kategori/öncelik (opsiyonel)
   const [replyKategori, setReplyKategori] = useState<OperatorNoteKategori | ''>('')
   const [replyOncelik, setReplyOncelik] = useState<OperatorNoteOncelik>('Normal')
+  const [soundOn, setSoundOn] = useState<boolean>(isSoundEnabled())
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(getNotificationPermission())
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const canSend = can('opr_mesaj')
@@ -189,11 +195,41 @@ export function Messages() {
             )}
           </p>
         </div>
-        {totalUnread > 0 && canSend && (
-          <button onClick={markAllRead} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">
-            <CheckCheck size={13} /> Tümünü Okundu Yap
+        <div className="flex items-center gap-2">
+          {/* Ses toggle */}
+          <button
+            onClick={() => { setSoundOn(!soundOn); setSoundEnabled(!soundOn); toast.success(!soundOn ? 'Ses açıldı' : 'Ses kapatıldı') }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"
+            title={soundOn ? 'Sesli uyarı açık (tıklayarak kapat)' : 'Sesli uyarı kapalı (tıklayarak aç)'}
+          >
+            {soundOn ? <Volume2 size={13} /> : <VolumeX size={13} className="text-zinc-600" />}
           </button>
-        )}
+          {/* Notification izin */}
+          {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
+            <button
+              onClick={async () => {
+                const result = await requestNotificationPermission()
+                setNotifPerm(result)
+                if (result === 'granted') toast.success('Tarayıcı bildirimleri aktif')
+                else if (result === 'denied') toast.error('İzin reddedildi. Tarayıcı ayarlarından değiştirebilirsin.')
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/10 border border-accent/25 rounded-lg text-xs text-accent hover:bg-accent/15"
+              title="Sayfa arka plandayken bildirim almak için izin ver"
+            >
+              <BellOff size={13} /> Bildirimleri Aç
+            </button>
+          )}
+          {notifPerm === 'granted' && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green/10 border border-green/20 rounded-lg text-xs text-green" title="Bildirimler aktif">
+              <Bell size={13} />
+            </div>
+          )}
+          {totalUnread > 0 && canSend && (
+            <button onClick={markAllRead} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">
+              <CheckCheck size={13} /> Tümünü Okundu Yap
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-bg-2 border border-border rounded-xl overflow-hidden grid grid-cols-1 md:grid-cols-[300px_1fr] h-[calc(100vh-180px)] min-h-[500px]">

@@ -3,12 +3,16 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 import { useAuth } from '@/hooks/useAuth'
+import { useMessageNotifications } from '@/hooks/useMessageNotifications'
 
 export function Layout({ onSignOut }: { onSignOut: () => void }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { isGuest, role } = useAuth()
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
   const hasTopBanner = isGuest || role === 'uretim_sor' || role === 'planlama' || role === 'depocu'
+
+  // Global mesaj bildirimleri (ses + tarayıcı notification)
+  useMessageNotifications()
 
   return (
     <div className={`flex h-screen overflow-hidden ${hasTopBanner ? 'pt-7' : ''}`}>
