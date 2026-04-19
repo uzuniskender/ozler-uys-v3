@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Menu, LogOut, RefreshCw, Key } from 'lucide-react'
+import { Menu, LogOut, RefreshCw, Key, MessageCircle } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
+import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
 
 interface TopbarProps {
   onMenuClick: () => void
@@ -15,6 +16,10 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
+
+  // Chat bildirim sistemi — realtime subscription + unread count (tek yerde çağrılmalı)
+  useChatNotifications()
+  const chatUnread = useChatNotifStore(s => s.unreadCount)
 
   return (
     <>
@@ -35,6 +40,20 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
         <button onClick={() => { localStorage.setItem('uys_test_mode', 'true'); window.location.reload() }}
           className="text-[10px] text-zinc-600 hover:text-amber px-2 py-0.5 rounded" title="Test modunu aç">🧪 Test</button>
       )}
+
+      {/* Chat ikonu + unread badge */}
+      <button
+        onClick={() => { window.location.hash = '/chat' }}
+        className="relative text-zinc-400 hover:text-white transition-colors"
+        title={chatUnread > 0 ? `${chatUnread} okunmamış mesaj` : 'Ekip Sohbet'}
+      >
+        <MessageCircle size={16} />
+        {chatUnread > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 bg-red text-white text-[9px] font-bold px-1 rounded-full min-w-[15px] text-center leading-[14px] ring-2 ring-bg-1">
+            {chatUnread > 99 ? '99+' : chatUnread}
+          </span>
+        )}
+      </button>
 
       {user && (
         <span className="text-[11px] text-zinc-500 font-mono">{user.email ? `${user.username} (${user.email})` : user.username}</span>

@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
+import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
@@ -54,6 +55,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const store = useStore()
   const { user } = useAuth()
   const isGuest = user?.role === 'guest'
+  const chatUnread = useChatNotifStore(s => s.unreadCount)
 
   function getBadge(key?: string): string {
     if (!key) return ''
@@ -120,7 +122,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               </div>
               {group.items.map(item => {
                 const active = location.pathname === item.path
-                const badge = getBadge(item.badge)
+                // Chat için özel: unread count store'dan; diğerleri için getBadge
+                const badge = item.path === '/chat'
+                  ? (chatUnread > 0 ? (chatUnread > 99 ? '99+' : String(chatUnread)) : '')
+                  : getBadge(item.badge)
                 return (
                   <button
                     key={item.path}
@@ -136,6 +141,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                     <span className="flex-1 text-left">{item.label}</span>
                     {badge && (
                       <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                        item.path === '/chat' ? 'bg-red/20 text-red font-semibold' :
                         item.badge === 'dash' && parseInt(badge) > 0 ? 'bg-red/20 text-red' :
                         item.badge === 'tedarikler' ? 'bg-amber/15 text-amber' :
                         item.badge === 'workOrders' ? 'bg-accent/15 text-accent' :

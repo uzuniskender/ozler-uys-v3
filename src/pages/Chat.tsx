@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
-  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check,
+  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell,
 } from 'lucide-react'
 import { useChatUser } from '@/features/chat/useChatUser'
 import {
@@ -27,6 +27,10 @@ import {
   type ChatMessage,
   type ChatUserLite,
 } from '@/features/chat/types'
+import {
+  requestNotificationPermission,
+  getNotificationPermission,
+} from '@/hooks/useMessageNotifications'
 
 // ═══════════════════════════════════════════════════════════════════
 // ANA SAYFA
@@ -42,7 +46,18 @@ export default function Chat() {
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [showNewDm, setShowNewDm] = useState(false)
   const [showNewGroup, setShowNewGroup] = useState(false)
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>('default')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Notification izni durumunu oku (mount'ta)
+  useEffect(() => {
+    setNotifPerm(getNotificationPermission())
+  }, [])
+
+  async function handleGrantNotif() {
+    const result = await requestNotificationPermission()
+    setNotifPerm(result)
+  }
 
   // Sidebar yükle
   const reloadSidebar = async () => {
@@ -196,6 +211,20 @@ export default function Chat() {
           <MessageCircle size={16} className="text-accent" />
           <div className="text-sm font-semibold flex-1">Ekip Sohbet</div>
         </div>
+
+        {/* Bildirim izni banner — sadece izin istenmemişse görünür */}
+        {notifPerm === 'default' && (
+          <div className="px-3 py-2 border-b border-border bg-amber/10">
+            <button
+              onClick={handleGrantNotif}
+              className="w-full text-xs text-amber hover:text-amber/80 flex items-center justify-center gap-1.5 py-1"
+              title="Yeni mesaj geldiğinde masaüstünde bildirim al"
+            >
+              <Bell size={12} />
+              Bildirimleri aç
+            </button>
+          </div>
+        )}
 
         <div className="p-2 flex gap-2 border-b border-border">
           <button
