@@ -27,6 +27,12 @@ const ROOT = path.resolve(__dirname, '..')
 const STORE_WHITELIST = new Set([
   'uys_notes',          // HelpNotesButtons komponenti kendi çekiyor
   'uys_yetki_ayarlari', // useAuth kendi çekiyor
+  'uys_chat_channels',    // ÖzlerMsg v1 — Chat.tsx kendi fetch ediyor, realtime subscription var
+  'uys_chat_members',     // ÖzlerMsg v1
+  'uys_chat_messages',    // ÖzlerMsg v1 — çok büyük tablo, global state'e yüklenmemeli
+  'uys_chat_mentions',    // ÖzlerMsg v1
+  'uys_chat_reactions',   // ÖzlerMsg v1
+  'uys_chat_attachments', // ÖzlerMsg v1
 ])
 
 // ═══════════════════════════════════════════════════════════════

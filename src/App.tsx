@@ -30,6 +30,7 @@ import { OperatorPanel } from '@/pages/OperatorPanel'
 import { Checklist } from '@/pages/Checklist'
 import { Messages } from '@/pages/Messages'
 import { ProblemTakip } from '@/pages/ProblemTakip'
+import Chat from '@/pages/Chat'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
 
@@ -67,6 +68,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/checklist" element={<Checklist />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/problem-takip" element={<ProblemTakip />} />
+          <Route path="/chat" element={<Chat />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -246,7 +246,10 @@ function extractUsages() {
       // Bu `from()` sonrası METHOD chain'ini tara
       // Bir sonraki `supabase.from` veya dosya sonuna kadar
       const startAfterFrom = m.index + m[0].length
-      const nextFrom = content.indexOf('supabase.from', startAfterFrom)
+      const nextFromRegex = /supabase\s*\.\s*from\s*\(/g
+      nextFromRegex.lastIndex = startAfterFrom
+      const nextFromMatch = nextFromRegex.exec(content)
+      const nextFrom = nextFromMatch ? nextFromMatch.index : -1
       const chainEnd = nextFrom > 0 ? nextFrom : content.length
       const chainSlice = content.slice(startAfterFrom, chainEnd)
 

@@ -41,6 +41,12 @@ export function DataManagement() {
     { label: 'Yetki Ayarları', key: 'yetkiAyarlari', table: 'uys_yetki_ayarlari' },
     { label: 'Ekip Notları', key: 'notes', table: 'uys_notes' },
     { label: 'Checklist/Görevler', key: 'checklist', table: 'uys_checklist' },
+    { label: 'Chat Kanallar', key: 'chatChannels', table: 'uys_chat_channels' },
+    { label: 'Chat Üyeler', key: 'chatMembers', table: 'uys_chat_members' },
+    { label: 'Chat Mesajlar', key: 'chatMessages', table: 'uys_chat_messages' },
+    { label: 'Chat Mentions', key: 'chatMentions', table: 'uys_chat_mentions' },
+    { label: 'Chat Reactions', key: 'chatReactions', table: 'uys_chat_reactions' },
+    { label: 'Chat Attachments', key: 'chatAttachments', table: 'uys_chat_attachments' },
   ]
 
   function exportJSON() {

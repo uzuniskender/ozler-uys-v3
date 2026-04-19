@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare, AlertOctagon
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -15,6 +15,7 @@ const NAV = [
   { label: 'GENEL', items: [
     { path: '/', label: 'Genel Bakış', icon: LayoutDashboard, badge: 'dash', guest: true },
     { path: '/messages', label: 'Mesajlar', icon: MessageSquare, badge: 'messages', guest: false },
+    { path: '/chat', label: 'Ekip Sohbet', icon: MessageCircle, guest: false },
   ]},
   { label: 'ÜRETİM', items: [
     { path: '/orders', label: 'Siparişler', icon: ClipboardList, badge: 'orders', guest: true },
