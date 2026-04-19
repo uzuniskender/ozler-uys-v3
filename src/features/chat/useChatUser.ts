@@ -1,17 +1,15 @@
 // src/features/chat/useChatUser.ts
 // Chat sistemi için "current user" hook'u.
-// useAuth DB id'sini tutmadığı için burada kullanici_ad veya ad'dan lookup yapılır.
+// Öncelik sırası:
+//  1) user.dbId varsa → direkt id ile lookup (en sağlam, string eşleştirmesi yok)
+//  2) user.username → kullanici_ad ile lookup
+//  3) user.username → ad ile lookup (admin/OAuth fallback)
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import type { ChatUserLite } from './types';
 
-/**
- * Chat için mevcut kullanıcı.
- * useAuth().user.username → uys_kullanicilar.kullanici_ad veya ad ile eşleşen kayıt.
- * Kayıt bulunamazsa null.
- */
 export function useChatUser(): {
   chatUser: ChatUserLite | null;
   loading: boolean;
@@ -26,7 +24,7 @@ export function useChatUser(): {
     let cancelled = false;
 
     async function load() {
-      if (!user?.username) {
+      if (!user?.username && !user?.dbId) {
         setChatUser(null);
         setLoading(false);
         return;
@@ -36,23 +34,39 @@ export function useChatUser(): {
       setError(null);
 
       try {
-        // 1) Önce kullanici_ad (login adı) ile dene
-        let { data } = await supabase
-          .from('uys_kullanicilar')
-          .select('id, ad, kullanici_ad, rol')
-          .eq('kullanici_ad', user.username)
-          .eq('aktif', true)
-          .limit(1);
+        let data: any[] | null = null;
 
-        // 2) Bulunamadıysa ad (tam ad) ile dene — admin/OAuth senaryosu için
-        if (!data || data.length === 0) {
-          const alt = await supabase
+        // 1) user.dbId varsa direkt id ile — en sağlam yol
+        if (user?.dbId) {
+          const byId = await supabase
+            .from('uys_kullanicilar')
+            .select('id, ad, kullanici_ad, rol')
+            .eq('id', user.dbId)
+            .eq('aktif', true)
+            .limit(1);
+          data = byId.data;
+        }
+
+        // 2) Fallback: kullanici_ad (login adı)
+        if ((!data || data.length === 0) && user?.username) {
+          const byKullaniciAd = await supabase
+            .from('uys_kullanicilar')
+            .select('id, ad, kullanici_ad, rol')
+            .eq('kullanici_ad', user.username)
+            .eq('aktif', true)
+            .limit(1);
+          data = byKullaniciAd.data;
+        }
+
+        // 3) Fallback: ad (tam ad — admin/OAuth senaryosu için)
+        if ((!data || data.length === 0) && user?.username) {
+          const byAd = await supabase
             .from('uys_kullanicilar')
             .select('id, ad, kullanici_ad, rol')
             .eq('ad', user.username)
             .eq('aktif', true)
             .limit(1);
-          data = alt.data;
+          data = byAd.data;
         }
 
         if (cancelled) return;
@@ -61,7 +75,10 @@ export function useChatUser(): {
           setChatUser(data[0] as ChatUserLite);
         } else {
           setChatUser(null);
-          setError(`Chat profili bulunamadı (${user.username}). uys_kullanicilar tablosunda kayıt gerek.`);
+          setError(
+            `Chat profili bulunamadı (username=${user?.username ?? '-'}, dbId=${user?.dbId ?? '-'}). ` +
+            `uys_kullanicilar tablosunda aktif kayıt gerek.`
+          );
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -75,7 +92,7 @@ export function useChatUser(): {
 
     load();
     return () => { cancelled = true; };
-  }, [user?.username]);
+  }, [user?.username, user?.dbId]);
 
   return { chatUser, loading, error };
 }

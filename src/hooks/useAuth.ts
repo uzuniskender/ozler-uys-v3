@@ -8,6 +8,7 @@ interface AuthUser {
   email?: string
   loginTime: string
   oprId?: string
+  dbId?: string           // uys_kullanicilar.id
 }
 
 const AUTH_KEY = 'uys_v3_auth'
@@ -96,10 +97,15 @@ export function useAuth() {
         .eq('sifre', password)
         .eq('aktif', true)
         .limit(1)
-      if (data && data.length > 0) {
+     if (data && data.length > 0) {
         const k = data[0]
         const rol = (k.rol || 'planlama') as UserRole
-        const authUser: AuthUser = { role: rol, username: k.ad || username, loginTime: new Date().toISOString() }
+        const authUser: AuthUser = {
+          role: rol,
+          username: k.ad || username,
+          loginTime: new Date().toISOString(),
+          dbId: k.id,
+        }
         localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
         setUser(authUser)
         return { error: null }
