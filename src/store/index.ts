@@ -36,7 +36,7 @@ const M = {
       bagimsiz: !!r.bagimsiz, siparisDisi: !!r.siparis_disi,
       mamulKod: (r.mamul_kod || '') as string, mamulAd: (r.mamul_ad || '') as string,
       mamulAuto: !!r.mamul_auto, operatorId: (r.operator_id || null) as string | null,
-      not: (r.not_ || '') as string, olusturma: (r.olusturma || '') as string,
+      not: (r.not_ || '') as string, olusturma: (r.olusturma || '') as string, termin: (r.termin || '') as string,
     }
   },
   log: (r: Record<string, unknown>): ProductionLog => ({
