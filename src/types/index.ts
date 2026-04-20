@@ -24,6 +24,8 @@ export interface OrderItem {
   mamulKod: string
   mamulAd: string
   adet: number
+  termin: string
+  not?: string
 }
 
 export interface WorkOrder {
