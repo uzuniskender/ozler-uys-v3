@@ -434,3 +434,119 @@ export function subscribeToAllUserMessages(
     supabase.removeChannel(channel);
   };
 }
+// ============================================================
+// MENTION (v15.17)
+// ============================================================
+
+/**
+ * Mesaj gövdesinden @kullanici_ad ifadelerini yakalar.
+ * Kural: @ işaretinden sonra harf/rakam/nokta/altçizgi (Türkçe karakter dahil).
+ * Örn: "Selam @buket.uzun ve @okan" → ["buket.uzun", "okan"]
+ */
+export function extractMentionHandles(body: string): string[] {
+  // \p{L} Unicode letter — Türkçe karakterleri yakalar
+  const re = /@([\p{L}0-9._]+)/gu;
+  const found = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    found.add(m[1].toLowerCase());
+  }
+  return Array.from(found);
+}
+
+/**
+ * Handle listesini uys_kullanicilar id'lerine çevirir.
+ * kullanici_ad üzerinden eşleştirir, aktif olmayan kullanıcıları atar.
+ */
+export async function resolveMentionUserIds(
+  handles: string[]
+): Promise<{ id: string; kullanici_ad: string }[]> {
+  if (handles.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('uys_kullanicilar')
+    .select('id, kullanici_ad')
+    .eq('aktif', true)
+    .in('kullanici_ad', handles);
+
+  if (error) {
+    console.warn('Mention resolve hatası:', error);
+    return [];
+  }
+  return (data ?? []) as { id: string; kullanici_ad: string }[];
+}
+
+/**
+ * Kullanıcının okunmamış mention sayısı (tüm kanallar).
+ */
+export async function getUnreadMentionCount(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('uys_chat_mentions')
+    .select('message_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('read_at', null);
+
+  if (error) {
+    console.warn('Unread mention count hatası:', error);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+/**
+ * Bir kanalın mention'larını okundu işaretle.
+ * İç akış: kanaldaki mesajları çek → o mesajlara ait user'ın mention'ları → read_at set.
+ */
+export async function markChannelMentionsRead(
+  userId: string,
+  channelId: string
+): Promise<void> {
+  const { data: msgIds, error: err1 } = await supabase
+    .from('uys_chat_messages')
+    .select('id')
+    .eq('channel_id', channelId);
+
+  if (err1) throw err1;
+  if (!msgIds || msgIds.length === 0) return;
+
+  const ids = msgIds.map((m: any) => m.id);
+
+  const { error: err2 } = await supabase
+    .from('uys_chat_mentions')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('read_at', null)
+    .in('message_id', ids);
+
+  if (err2) throw err2;
+}
+
+/**
+ * Yeni mention insert'ini dinler (kendi user_id'me gelenler).
+ * Realtime subscription — Topbar'da çağrılacak.
+ */
+export function subscribeToUserMentions(
+  currentUserId: string,
+  onNewMention: (mention: { message_id: string; user_id: string }) => void
+) {
+  const channel = supabase
+    .channel(`chat-mentions-${currentUserId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'uys_chat_mentions',
+        filter: `user_id=eq.${currentUserId}`,
+      },
+      (payload) => {
+        const m = payload.new as { message_id: string; user_id: string };
+        onNewMention(m);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}

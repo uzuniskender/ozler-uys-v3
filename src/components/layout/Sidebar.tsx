@@ -56,6 +56,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { user } = useAuth()
   const isGuest = user?.role === 'guest'
   const chatUnread = useChatNotifStore(s => s.unreadCount)
+  const chatMentions = useChatNotifStore(s => s.unreadMentionCount)
 
   function getBadge(key?: string): string {
     if (!key) return ''
@@ -122,9 +123,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
               </div>
               {group.items.map(item => {
                 const active = location.pathname === item.path
-                // Chat için özel: unread count store'dan; diğerleri için getBadge
+                // Chat için özel: mention + unread count store'dan; diğerleri için getBadge (v15.17)
                 const badge = item.path === '/chat'
-                  ? (chatUnread > 0 ? (chatUnread > 99 ? '99+' : String(chatUnread)) : '')
+                  ? (chatMentions > 0
+                      ? `@${chatMentions}` + (chatUnread > chatMentions ? ` +${chatUnread - chatMentions}` : '')
+                      : chatUnread > 0 ? (chatUnread > 99 ? '99+' : String(chatUnread)) : '')
                   : getBadge(item.badge)
                 return (
                   <button
@@ -141,7 +144,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                     <span className="flex-1 text-left">{item.label}</span>
                     {badge && (
                       <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                        item.path === '/chat' ? 'bg-red/20 text-red font-semibold' :
+                        item.path === '/chat' ? (chatMentions > 0 ? 'bg-amber/25 text-amber font-bold' : 'bg-red/20 text-red font-semibold') :
                         item.badge === 'dash' && parseInt(badge) > 0 ? 'bg-red/20 text-red' :
                         item.badge === 'tedarikler' ? 'bg-amber/15 text-amber' :
                         item.badge === 'workOrders' ? 'bg-accent/15 text-accent' :

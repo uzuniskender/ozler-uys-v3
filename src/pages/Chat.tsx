@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
-  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell,
+  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell, AtSign,
 } from 'lucide-react'
 import { useChatUser } from '@/features/chat/useChatUser'
 import {
@@ -20,6 +20,9 @@ import {
   getAllActiveUsers,
   updateMessage,
   deleteMessage,
+  extractMentionHandles,
+  resolveMentionUserIds,
+  markChannelMentionsRead,
 } from '@/features/chat/chatService'
 import {
   getUserDisplayName,
@@ -47,12 +50,26 @@ export default function Chat() {
   const [showNewDm, setShowNewDm] = useState(false)
   const [showNewGroup, setShowNewGroup] = useState(false)
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>('default')
+  // v15.17 — Mention autocomplete
+  const [allUsers, setAllUsers] = useState<ChatUserLite[]>([])
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Notification izni durumunu oku (mount'ta)
   useEffect(() => {
     setNotifPerm(getNotificationPermission())
   }, [])
+
+  // v15.17 — Tüm aktif kullanıcıları mention autocomplete için yükle
+  useEffect(() => {
+    if (!chatUser?.id) return
+    getAllActiveUsers(chatUser.id)
+      .then((users) => setAllUsers(users))
+      .catch((e) => console.warn('Mention için kullanıcı listesi yüklenemedi:', e))
+  }, [chatUser?.id])
 
   async function handleGrantNotif() {
     const result = await requestNotificationPermission()
@@ -90,6 +107,8 @@ export default function Chat() {
         setSenders(sndrs)
         setLoadingMsgs(false)
         markChannelRead(chatUser.id, selectedChannelId).catch(console.warn)
+        // v15.17 — kanaldaki mention'lar da okundu
+        markChannelMentionsRead(chatUser.id, selectedChannelId).catch(console.warn)
       })
       .catch((e) => {
         console.error(e)
@@ -143,8 +162,24 @@ export default function Chat() {
     if (!input.trim() || !selectedChannelId || !chatUser || sending) return
     setSending(true)
     try {
-      await sendMessage(chatUser.id, { channel_id: selectedChannelId, body: input.trim() })
+      // v15.17 — mention'ları çözümle
+      const body = input.trim()
+      const handles = extractMentionHandles(body)
+      let mentionUserIds: string[] = []
+      if (handles.length > 0) {
+        const resolved = await resolveMentionUserIds(handles)
+        // Kendine mention'ı bildirime sokma
+        mentionUserIds = resolved
+          .map((u) => u.id)
+          .filter((id) => id !== chatUser.id)
+      }
+      await sendMessage(chatUser.id, {
+        channel_id: selectedChannelId,
+        body,
+        mentions: mentionUserIds.length > 0 ? mentionUserIds : undefined,
+      })
       setInput('')
+      setMentionOpen(false)
       reloadSidebar() // sidebar'da son mesaj güncellensin
     } catch (e: any) {
       alert('Gönderim hatası: ' + (e?.message ?? 'bilinmeyen'))
@@ -154,10 +189,86 @@ export default function Chat() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Mention picker açıkken navigasyon
+    if (mentionOpen) {
+      const filtered = getFilteredMentionCandidates()
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex((i) => (i + 1) % Math.max(filtered.length, 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex((i) => (i - 1 + filtered.length) % Math.max(filtered.length, 1))
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setMentionOpen(false)
+        return
+      }
+      if ((e.key === 'Enter' || e.key === 'Tab') && filtered.length > 0) {
+        e.preventDefault()
+        selectMention(filtered[mentionIndex])
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
+  }
+
+  // v15.17 — Input değiştiğinde @ algıla
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setInput(val)
+
+    // Cursor'dan geriye bakıp @ ara
+    const cursorPos = e.target.selectionStart ?? val.length
+    const before = val.slice(0, cursorPos)
+    const match = before.match(/@([\p{L}0-9._]*)$/u)
+    if (match) {
+      setMentionOpen(true)
+      setMentionQuery(match[1].toLowerCase())
+      setMentionIndex(0)
+    } else {
+      setMentionOpen(false)
+    }
+  }
+
+  // v15.17 — Mention aday filtresi
+  const getFilteredMentionCandidates = (): ChatUserLite[] => {
+    if (!mentionOpen) return []
+    const q = mentionQuery
+    if (!q) return allUsers.slice(0, 8)
+    return allUsers
+      .filter((u) => {
+        const ka = u.kullanici_ad.toLocaleLowerCase('tr')
+        const ad = (u.ad ?? '').toLocaleLowerCase('tr')
+        return ka.includes(q) || ad.includes(q)
+      })
+      .slice(0, 8)
+  }
+
+  // v15.17 — Aday seçince input'a yaz
+  const selectMention = (u: ChatUserLite) => {
+    const el = textareaRef.current
+    if (!el) return
+    const cursor = el.selectionStart ?? input.length
+    const before = input.slice(0, cursor)
+    const after = input.slice(cursor)
+    const replaced = before.replace(/@([\p{L}0-9._]*)$/u, `@${u.kullanici_ad} `)
+    const newVal = replaced + after
+    setInput(newVal)
+    setMentionOpen(false)
+    // Cursor'u yeni pozisyona taşı
+    setTimeout(() => {
+      const newCursor = replaced.length
+      el.focus()
+      el.setSelectionRange(newCursor, newCursor)
+    }, 0)
   }
 
   // Yeni DM başlat
@@ -326,13 +437,45 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="border-t border-border p-3">
+            <div className="border-t border-border p-3 relative">
+              {/* v15.17 — Mention autocomplete dropdown */}
+              {mentionOpen && (() => {
+                const candidates = getFilteredMentionCandidates()
+                if (candidates.length === 0) return null
+                return (
+                  <div className="absolute bottom-full left-3 right-3 mb-1 bg-bg-1 border border-border rounded-lg shadow-xl max-h-56 overflow-y-auto z-20">
+                    <div className="px-2 py-1 text-[10px] text-zinc-500 border-b border-border/40">
+                      @bahsetmek için kişi seçin (↑↓ Tab Enter · Esc iptal)
+                    </div>
+                    {candidates.map((u, i) => (
+                      <button
+                        key={u.id}
+                        onClick={() => selectMention(u)}
+                        onMouseEnter={() => setMentionIndex(i)}
+                        className={cn(
+                          'w-full px-2 py-1.5 flex items-center gap-2 text-left border-b border-border/30 last:border-0',
+                          i === mentionIndex ? 'bg-accent/15' : 'hover:bg-bg-2'
+                        )}
+                      >
+                        <div className="w-6 h-6 rounded-full bg-bg-3 flex items-center justify-center text-[10px] font-semibold">
+                          {getUserDisplayName(u).slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-zinc-200 truncate">{getUserDisplayName(u)}</div>
+                          <div className="text-[10px] text-zinc-500 truncate">@{u.kullanici_ad}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
               <div className="flex gap-2 items-end">
                 <textarea
+                  ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="Mesaj yaz... (Enter ile gönder, Shift+Enter ile yeni satır)"
+                  placeholder="Mesaj yaz... (@ ile bahset · Enter gönder · Shift+Enter yeni satır)"
                   rows={1}
                   className="flex-1 resize-none bg-bg-1 border border-border rounded px-3 py-2 text-sm outline-none focus:border-accent max-h-32"
                   disabled={sending}
@@ -374,6 +517,44 @@ export default function Chat() {
         />
       )}
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MENTION VURGULAMA (v15.17)
+// ═══════════════════════════════════════════════════════════════════
+function MentionHighlightedBody({ body }: { body: string }) {
+  // @handle pattern'leri parçala, geri kalan metin olarak render
+  const parts: Array<{ type: 'text' | 'mention'; value: string }> = []
+  const re = /@([\p{L}0-9._]+)/gu
+  let lastIdx = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(body)) !== null) {
+    if (m.index > lastIdx) {
+      parts.push({ type: 'text', value: body.slice(lastIdx, m.index) })
+    }
+    parts.push({ type: 'mention', value: m[1] })
+    lastIdx = m.index + m[0].length
+  }
+  if (lastIdx < body.length) {
+    parts.push({ type: 'text', value: body.slice(lastIdx) })
+  }
+  if (parts.length === 0) return <>{body}</>
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.type === 'mention' ? (
+          <span
+            key={i}
+            className="text-accent bg-accent/15 px-1 rounded font-medium"
+          >
+            @{p.value}
+          </span>
+        ) : (
+          <span key={i}>{p.value}</span>
+        )
+      )}
+    </>
   )
 }
 
@@ -479,7 +660,7 @@ function MessageRow({
             </div>
           ) : (
             <>
-              {msg.body}
+              <MentionHighlightedBody body={msg.body} />
               {isEdited && <span className="text-[10px] text-zinc-500 ml-2">(düzenlendi)</span>}
             </>
           )}

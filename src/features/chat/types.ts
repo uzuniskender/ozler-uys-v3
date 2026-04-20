@@ -118,3 +118,8 @@ export interface UpdateMessageInput {
   message_id: string;
   body: string;
 }
+/** Mention bildirimi için minimum alan — realtime payload'tan gelir. */
+export interface MentionNotification {
+  message_id: string;
+  user_id: string;
+}
