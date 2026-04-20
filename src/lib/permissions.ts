@@ -92,6 +92,11 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
     { key: 'pt_edit', label: 'Düzenleme' },
     { key: 'pt_delete', label: 'Silme' },
   ]},
+  { group: 'Hammadde Tipleri', actions: [
+    { key: 'hmt_add', label: 'Ekleme' },
+    { key: 'hmt_edit', label: 'Düzenleme' },
+    { key: 'hmt_delete', label: 'Silme' },
+  ]},
 ]
 
 export const DEFAULTS: Record<string, AdminRole[]> = {
@@ -116,6 +121,7 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   check_add:[], check_edit:[], check_delete:[],
   data_backup:['planlama'], data_import:[], data_export:[], data_test:['planlama'], data_syscheck:[], data_reset:[], data_pass:[],
   pt_add:['uretim_sor','planlama','depocu'], pt_edit:['uretim_sor','planlama','depocu'], pt_delete:[],
+  hmt_add:['uretim_sor'], hmt_edit:['uretim_sor'], hmt_delete:[],
 }
 
 export const ROLE_LIST: { key: AdminRole; label: string }[] = [

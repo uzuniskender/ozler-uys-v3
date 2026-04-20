@@ -6,7 +6,7 @@ import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, ClipboardCheck, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -36,6 +36,7 @@ const NAV = [
     { path: '/stations', label: 'İstasyonlar', icon: Cpu, badge: 'stations', guest: false },
     { path: '/operators', label: 'Operatörler', icon: Users, badge: 'operators', guest: false },
     { path: '/suppliers', label: 'Tedarikçiler', icon: Building2, badge: 'tedarikciler', guest: false },
+    { path: '/hm-tipleri', label: 'Hammadde Tipleri', icon: Boxes, guest: false },
     { path: '/downtime-codes', label: 'Duruş Kodları', icon: AlertCircle, badge: 'durusKodlari', guest: false },
   ]},
   { label: 'SİSTEM', items: [
