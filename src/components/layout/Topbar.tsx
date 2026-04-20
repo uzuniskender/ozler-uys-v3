@@ -20,6 +20,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   // Chat bildirim sistemi — realtime subscription + unread count (tek yerde çağrılmalı)
   useChatNotifications()
   const chatUnread = useChatNotifStore(s => s.unreadCount)
+  const chatMentions = useChatNotifStore(s => s.unreadMentionCount)
 
   return (
     <>
