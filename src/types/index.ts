@@ -52,6 +52,7 @@ export interface WorkOrder {
   durum: string
   bagimsiz: boolean
   siparisDisi: boolean
+  termin: string
   mamulKod: string
   mamulAd: string
   mamulAuto: boolean

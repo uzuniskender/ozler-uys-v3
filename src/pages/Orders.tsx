@@ -318,7 +318,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       await supabase.from('uys_orders').update(row).eq('id', initial.id)
       let woTotal = 0
       for (const k of kalemler) {
-        if (k.rcId) woTotal += await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes)
+        if (k.rcId) woTotal += await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin)
       }
       toast.info(woTotal + ' iş emri güncellendi')
     } else {
@@ -326,7 +326,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
       let woTotal = 0
       for (const k of kalemler) {
-        if (k.rcId) woTotal += await buildWorkOrders(newId, siparisNo.trim(), k.rcId, k.adet, fullRecipes)
+        if (k.rcId) woTotal += await buildWorkOrders(newId, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin)
       }
       toast.info(woTotal + ' iş emri oluşturuldu')
     }
@@ -488,7 +488,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     let total = 0
     const liste = kalemler.length > 0 ? kalemler : (order.receteId ? [{ rcId: order.receteId, adet: order.adet, mamulKod: order.mamulKod, mamulAd: order.mamulAd, termin: order.termin, not: '' }] : [])
     for (const k of liste) {
-      if (k.rcId) total += await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes)
+      if (k.rcId) total += await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes, k.termin)
     }
     loadAll(); toast.success(total + ' İE yeniden oluşturuldu')
   }
@@ -503,7 +503,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     const eksikSatirlar = (rc.satirlar || []).filter(s => !mevcutKodlar.has(s.malkod))
     if (!eksikSatirlar.length) { toast.info('Eksik İE yok — tüm bileşenler mevcut'); return }
     const adet = kalemler[0]?.adet || order.adet
-    const count = await buildWorkOrders(order.id, order.siparisNo, rcId, adet, fullRecipes)
+    const count = await buildWorkOrders(order.id, order.siparisNo, rcId, adet, fullRecipes, kalemler[0]?.termin || order.termin)
     loadAll(); toast.success(count + ' eksik İE oluşturuldu')
   }
 
@@ -682,10 +682,10 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
       if (!woCount) {
         if (kalemler.length > 0) {
           for (const u of kalemler) {
-            if (u.rcId) woCount += await buildWorkOrders(order.id, order.siparisNo, u.rcId, u.adet, s.recipes)
+            if (u.rcId) woCount += await buildWorkOrders(order.id, order.siparisNo, u.rcId, u.adet, s.recipes, u.termin)
           }
         } else if (order.receteId) {
-          woCount = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes)
+          woCount = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes, order.termin)
         }
       }
       setAdimlar(['✅ ' + woCount + ' iş emri hazır'])
@@ -894,7 +894,7 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
       const r = kabul[i]
       const ins = insertRows[i]
       if (r.receteId) {
-        woTotal += await buildWorkOrders(ins.id, r.siparisNo, r.receteId, r.adet, fullRecipes)
+        woTotal += await buildWorkOrders(ins.id, r.siparisNo, r.receteId, r.adet, fullRecipes, r.termin)
       }
       setProgress({ cur: i + 1, total: kabul.length })
       try { logAction('Sipariş oluşturuldu (toplu)', r.siparisNo) } catch { /* */ }

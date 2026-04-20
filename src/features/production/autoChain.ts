@@ -6,7 +6,7 @@ import { hesaplaMRP } from './mrp'
 
 // ═══ İE OLUŞTUR — reçeteden iş emirleri ═══
 export async function buildWorkOrders(
-  orderId: string, siparisNo: string, recipeId: string, adet: number, recipes: Recipe[]
+  orderId: string, siparisNo: string, recipeId: string, adet: number, recipes: Recipe[], termin?: string
 ): Promise<number> {
   const rc = recipes.find(r => r.id === recipeId)
   if (!rc || !rc.satirlar?.length) return 0
@@ -54,7 +54,7 @@ export async function buildWorkOrders(
       hedef, mpm: s.miktar || 1, hm,
       ie_no: `IE-${siparisNo}-${String(woIdx).padStart(2, '0')}`,
       wh_alloc: 0, hazirlik_sure: s.hazirlikSure || 0, islem_sure: s.islemSure || 0,
-      durum: 'bekliyor', bagimsiz: false, siparis_disi: false,
+      durum: 'bekliyor', bagimsiz: false, siparis_disi: false, termin: termin || null,
       mamul_auto: isMamulAuto, operator_id: null, olusturma: today(),
     })
   }
@@ -110,7 +110,7 @@ export async function autoZincir(
     ieNo: r.ie_no, whAlloc: r.wh_alloc || 0, hazirlikSure: r.hazirlik_sure || 0, islemSure: r.islem_sure || 0,
     durum: r.durum, bagimsiz: !!r.bagimsiz, siparisDisi: !!r.siparis_disi,
     mamulKod: r.mamul_kod, mamulAd: r.mamul_ad, mamulAuto: !!r.mamul_auto,
-    operatorId: r.operator_id, not: r.not_, olusturma: r.olusturma,
+    operatorId: r.operator_id, not: r.not_, olusturma: r.olusturma, termin: r.termin || '',
   })) || workOrders
 
   // ADIM 2: Kesim Planı

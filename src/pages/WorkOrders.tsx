@@ -205,7 +205,7 @@ export function WorkOrders() {
     import('xlsx').then(XLSX => {
       const rows = filtered.map(w => {
         const ord = orders.find(o => o.id === w.orderId)
-        return { 'İE No': w.ieNo, 'Sipariş': ord?.siparisNo || '', 'Müşteri': ord?.musteri || '', 'Malzeme Kodu': w.malkod, 'Malzeme': w.malad, 'Operasyon': w.opAd, 'İstasyon': w.istAd, 'Hedef': w.hedef, 'Üretilen': wProd(w.id), '%': wPct(w), 'Durum': w.durum || '', 'Tip': w.bagimsiz ? 'YM' : 'Sipariş' }
+        return { 'İE No': w.ieNo, 'Sipariş': ord?.siparisNo || '', 'Müşteri': ord?.musteri || '', 'Malzeme Kodu': w.malkod, 'Malzeme': w.malad, 'Operasyon': w.opAd, 'İstasyon': w.istAd, 'Hedef': w.hedef, 'Üretilen': wProd(w.id), '%': wPct(w), 'Termin': w.termin || '', 'Durum': w.durum || '', 'Tip': w.bagimsiz ? 'YM' : 'Sipariş' }
       })
       const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'İş Emirleri'); XLSX.writeFile(wb, `is_emirleri_${today()}.xlsx`)
@@ -309,7 +309,7 @@ export function WorkOrders() {
             {!isCollapsed && (
               <div className="bg-bg-2 border border-border border-t-0 rounded-b-lg overflow-hidden">
                 <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500">
-                  <th className="px-2 py-2 w-6"></th><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme / HM</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-left px-3 py-2">İstasyon</th><th className="text-right px-3 py-2">Adet</th><th className="text-right px-3 py-2 w-24">İlerleme</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2 w-8"></th>
+                  <th className="px-2 py-2 w-6"></th><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme / HM</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-left px-3 py-2">İstasyon</th><th className="text-right px-3 py-2">Adet</th><th className="text-left px-3 py-2">Termin</th><th className="text-right px-3 py-2 w-24">İlerleme</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2 w-8"></th>
                 </tr></thead><tbody>
                   {wos.map(w => {
                     const prod = wProd(w.id); const pct = wPct(w); const ord2 = orders.find(o => o.id === w.orderId)
@@ -339,7 +339,7 @@ export function WorkOrders() {
                         </td>
                         <td className="px-3 py-1.5"><span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/8 text-accent border border-accent/15">{w.opAd || '—'}</span></td>
                         <td className="px-3 py-1.5 text-zinc-500 text-[11px]">{w.istAd || '—'}</td>
-                        <td className="px-3 py-1.5 text-right font-mono"><b>{prod}</b><span className="text-zinc-600">/{w.hedef}</span></td>
+                        <td className="px-3 py-1.5 text-right font-mono"><b>{prod}</b><span className="text-zinc-600">/{w.hedef}</span></td><td className={`px-3 py-1.5 font-mono text-[11px] ${w.termin && w.termin < today() && pct < 100 ? "text-red font-semibold" : "text-zinc-500"}`}>{w.termin || "-"}</td>
                         <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : pct > 0 ? 'bg-accent' : 'bg-zinc-700'}`} style={{ width: `${Math.max(2, pct)}%` }} /></div><span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span></div></td>
                         <td className="px-3 py-1.5">
                           <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (w.durum === 'tamamlandi') return 'tamamlandi'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
