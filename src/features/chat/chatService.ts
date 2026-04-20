@@ -674,4 +674,166 @@ export async function searchMessages(
       sender_name: sender ? sender.ad || sender.kullanici_ad : 'Bilinmeyen',
     };
   });
+}// ============================================================
+// ATTACHMENTS (v15.19)
+// ============================================================
+
+const CHAT_BUCKET = 'chat-attachments';
+
+export interface ChatAttachmentView {
+  id: string;
+  message_id: string;
+  storage_path: string;
+  mime_type: string | null;
+  file_name: string | null;
+  size_bytes: number | null;
+  created_at: string;
+  public_url: string;
 }
+
+/**
+ * Public URL'ini storage path'ten türet.
+ */
+function buildAttachmentUrl(storagePath: string): string {
+  const { data } = supabase.storage.from(CHAT_BUCKET).getPublicUrl(storagePath);
+  return data.publicUrl;
+}
+
+/**
+ * Güvenli dosya adı — Türkçe karakterleri ASCII'ye çevir, özel karakterleri _ yap.
+ */
+function sanitizeFileName(name: string): string {
+  const tr: Record<string, string> = {
+    'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I',
+    'ö': 'o', 'Ö': 'O', 'ş': 's', 'Ş': 'S', 'ü': 'u', 'Ü': 'U',
+  };
+  const converted = name.replace(/[çÇğĞıİöÖşŞüÜ]/g, (ch) => tr[ch] || ch);
+  // Sadece alfanumerik, nokta, tire, alt çizgi kalsın
+  return converted.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+}
+
+/**
+ * Dosyayı Storage'a yükle + uys_chat_attachments'a kaydet.
+ * Path pattern: chat/<channel_id>/<message_id>/<timestamp>-<filename>
+ */
+export async function uploadAttachment(
+  channelId: string,
+  messageId: string,
+  file: File
+): Promise<ChatAttachmentView> {
+  const ts = Date.now();
+  const safeName = sanitizeFileName(file.name);
+  const storagePath = `chat/${channelId}/${messageId}/${ts}-${safeName}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(CHAT_BUCKET)
+    .upload(storagePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (upErr) throw upErr;
+
+  const { data: row, error: dbErr } = await supabase
+    .from('uys_chat_attachments')
+    .insert({
+      message_id: messageId,
+      storage_path: storagePath,
+      mime_type: file.type || null,
+      file_name: file.name, // Orijinal ismi DB'de sakla (gösterim için)
+      size_bytes: file.size,
+    })
+    .select()
+    .single();
+
+  if (dbErr) {
+    // Upload başarılı olmuşsa ama DB insert başarısızsa, storage'taki dosyayı temizle
+    await supabase.storage.from(CHAT_BUCKET).remove([storagePath]).catch(() => {});
+    throw dbErr;
+  }
+
+  return {
+    ...(row as any),
+    public_url: buildAttachmentUrl(storagePath),
+  } as ChatAttachmentView;
+}
+
+/**
+ * Mesaja bağlı ekleri çek.
+ */
+export async function getMessageAttachments(
+  messageIds: string[]
+): Promise<Record<string, ChatAttachmentView[]>> {
+  if (messageIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('uys_chat_attachments')
+    .select('*')
+    .in('message_id', messageIds);
+
+  if (error) throw error;
+
+  const byMessage: Record<string, ChatAttachmentView[]> = {};
+  (data ?? []).forEach((row: any) => {
+    const view: ChatAttachmentView = {
+      ...row,
+      public_url: buildAttachmentUrl(row.storage_path),
+    };
+    if (!byMessage[row.message_id]) byMessage[row.message_id] = [];
+    byMessage[row.message_id].push(view);
+  });
+  return byMessage;
+}
+
+/**
+ * Tek bir mesajın eklerini çek (convenience).
+ */
+export async function getAttachmentsForMessage(
+  messageId: string
+): Promise<ChatAttachmentView[]> {
+  const map = await getMessageAttachments([messageId]);
+  return map[messageId] || [];
+}
+
+/**
+ * Ek dosyayı sil (hem Storage hem DB).
+ */
+export async function deleteAttachment(attachmentId: string): Promise<void> {
+  const { data: row, error: fErr } = await supabase
+    .from('uys_chat_attachments')
+    .select('storage_path')
+    .eq('id', attachmentId)
+    .single();
+
+  if (fErr) throw fErr;
+
+  // DB'den sil
+  const { error: dErr } = await supabase
+    .from('uys_chat_attachments')
+    .delete()
+    .eq('id', attachmentId);
+
+  if (dErr) throw dErr;
+
+  // Storage'tan sil (DB silindikten sonra — best effort)
+  if (row?.storage_path) {
+    await supabase.storage
+      .from(CHAT_BUCKET)
+      .remove([row.storage_path])
+      .catch((e) => console.warn('Storage silme hatası:', e));
+  }
+}
+
+/**
+ * MIME type'a göre görsel mi kontrol.
+ */
+export function isImageMime(mime: string | null): boolean {
+  if (!mime) return false;
+  return mime.startsWith('image/');
+}
+
+/**
+ * Dosya boyutunu insan-okunur formatta ver.
+ */
+export function

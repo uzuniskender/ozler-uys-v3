@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
-  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell, AtSign,
+  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell, AtSign, Paperclip, Download, FileText, Image as ImageIcon, Loader2,
 } from 'lucide-react'
 import { useChatUser } from '@/features/chat/useChatUser'
 import {
@@ -25,6 +25,12 @@ import {
   markChannelMentionsRead,
   searchMessages,
   type SearchResultRow,
+  uploadAttachment,
+  getMessageAttachments,
+  deleteAttachment,
+  isImageMime,
+  formatFileSize,
+  type ChatAttachmentView,
 } from '@/features/chat/chatService'
 import {
   getUserDisplayName,
@@ -63,6 +69,12 @@ export default function Chat() {
   const [searchResults, setSearchResults] = useState<SearchResultRow[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null)
+  // v15.19 — Dosya eklentisi
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [attachments, setAttachments] = useState<Record<string, ChatAttachmentView[]>>({})
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Notification izni durumunu oku (mount'ta)
@@ -147,6 +159,17 @@ export default function Chat() {
         markChannelRead(chatUser.id, selectedChannelId).catch(console.warn)
         // v15.17 — kanaldaki mention'lar da okundu
         markChannelMentionsRead(chatUser.id, selectedChannelId).catch(console.warn)
+        // v15.19 — mesajların eklerini çek
+        const ids = msgs.map((m) => m.id)
+        if (ids.length > 0) {
+          getMessageAttachments(ids)
+            .then((map) => {
+              if (!cancelled) setAttachments(map)
+            })
+            .catch((e) => console.warn('Attachment yükleme hatası:', e))
+        } else {
+          setAttachments({})
+        }
       })
       .catch((e) => {
         console.error(e)
@@ -212,33 +235,90 @@ export default function Chat() {
 
   // Mesaj gönder
   const handleSend = async () => {
-    if (!input.trim() || !selectedChannelId || !chatUser || sending) return
+    // v15.19 — boş mesaj + ek yoksa gönderme, ama ek varsa mesaj boş olabilir
+    const hasText = !!input.trim()
+    const hasFiles = pendingFiles.length > 0
+    if (!hasText && !hasFiles) return
+    if (!selectedChannelId || !chatUser || sending) return
     setSending(true)
     try {
       // v15.17 — mention'ları çözümle
-      const body = input.trim()
+      const body = hasText ? input.trim() : ''
       const handles = extractMentionHandles(body)
       let mentionUserIds: string[] = []
       if (handles.length > 0) {
         const resolved = await resolveMentionUserIds(handles)
-        // Kendine mention'ı bildirime sokma
         mentionUserIds = resolved
           .map((u) => u.id)
           .filter((id) => id !== chatUser.id)
       }
-      await sendMessage(chatUser.id, {
+      const msg = await sendMessage(chatUser.id, {
         channel_id: selectedChannelId,
-        body,
+        body: body || '📎', // Boş gövde yerine clip işareti — DB constraint varsa bozulmasın
         mentions: mentionUserIds.length > 0 ? mentionUserIds : undefined,
       })
+
+      // v15.19 — Dosyaları yükle
+      if (hasFiles) {
+        setUploading(true)
+        const uploads: ChatAttachmentView[] = []
+        for (const f of pendingFiles) {
+          try {
+            const uploaded = await uploadAttachment(selectedChannelId, msg.id, f)
+            uploads.push(uploaded)
+          } catch (e: any) {
+            alert(`"${f.name}" yüklenemedi: ${e?.message ?? 'bilinmeyen'}`)
+          }
+        }
+        if (uploads.length > 0) {
+          setAttachments((prev) => ({
+            ...prev,
+            [msg.id]: [...(prev[msg.id] || []), ...uploads],
+          }))
+        }
+        setUploading(false)
+      }
+
       setInput('')
+      setPendingFiles([])
       setMentionOpen(false)
-      reloadSidebar() // sidebar'da son mesaj güncellensin
+      reloadSidebar()
     } catch (e: any) {
       alert('Gönderim hatası: ' + (e?.message ?? 'bilinmeyen'))
     } finally {
       setSending(false)
     }
+  }
+
+  // v15.19 — Dosya seçimi / drag-drop handler'ları
+  const addFiles = (files: FileList | File[]) => {
+    const arr = Array.from(files)
+    const valid: File[] = []
+    for (const f of arr) {
+      if (f.size > 10 * 1024 * 1024) {
+        alert(`"${f.name}" 10 MB'tan büyük — eklenmedi.`)
+        continue
+      }
+      valid.push(f)
+    }
+    if (valid.length > 0) {
+      setPendingFiles((prev) => [...prev, ...valid].slice(0, 10)) // Max 10 dosya/mesaj
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(e.target.files)
+    e.target.value = '' // Aynı dosya tekrar seçilebilsin
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    if (e.dataTransfer.files) addFiles(e.dataTransfer.files)
+  }
+
+  const removeFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -519,7 +599,32 @@ export default function Chat() {
       </aside>
 
       {/* ─────────── Sağ: Mesaj alanı ─────────── */}
-      <main className="flex-1 flex flex-col bg-bg-0">
+      <main
+        className={cn(
+          'flex-1 flex flex-col bg-bg-0 relative',
+          dragOver && 'ring-2 ring-accent ring-inset'
+        )}
+        onDragOver={(e) => {
+          if (selectedChannelId) {
+            e.preventDefault()
+            setDragOver(true)
+          }
+        }}
+        onDragLeave={(e) => {
+          // Sadece gerçekten main'den çıkarsak kapat
+          if (e.currentTarget === e.target) setDragOver(false)
+        }}
+        onDrop={handleDrop}
+      >
+        {dragOver && selectedChannelId && (
+          <div className="absolute inset-0 z-30 bg-accent/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <Paperclip size={40} className="mx-auto mb-2 text-accent" />
+              <div className="text-sm font-semibold text-accent">Dosyaları bırakın</div>
+              <div className="text-xs text-zinc-400 mt-1">Max 10 MB · 10 dosya/mesaj</div>
+            </div>
+          </div>
+        )}
         {selectedChannelId && selectedItem ? (
           <>
             <header className="h-12 px-4 border-b border-border flex items-center gap-2">
@@ -549,6 +654,7 @@ export default function Chat() {
                     isMe={msg.user_id === chatUser.id}
                     showHeader={showHeader}
                     isHighlighted={msg.id === highlightMessageId}
+                    msgAttachments={attachments[msg.id] || []}
                   />
                 )
               })}
@@ -556,6 +662,35 @@ export default function Chat() {
             </div>
 
             <div className="border-t border-border p-3 relative">
+              {/* v15.19 — Pending dosya listesi (gönderilmeden önce) */}
+              {pendingFiles.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {pendingFiles.map((f, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-1.5 bg-bg-2 border border-border rounded px-2 py-1 text-xs"
+                    >
+                      {f.type.startsWith('image/') ? (
+                        <ImageIcon size={12} className="text-accent" />
+                      ) : (
+                        <FileText size={12} className="text-zinc-400" />
+                      )}
+                      <span className="max-w-[160px] truncate text-zinc-300">{f.name}</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        {formatFileSize(f.size)}
+                      </span>
+                      <button
+                        onClick={() => removeFile(i)}
+                        className="text-zinc-500 hover:text-red ml-0.5"
+                        title="Kaldır"
+                        disabled={uploading}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* v15.17 — Mention autocomplete dropdown */}
               {mentionOpen && (() => {
                 const candidates = getFilteredMentionCandidates()
@@ -588,23 +723,43 @@ export default function Chat() {
                 )
               })()}
               <div className="flex gap-2 items-end">
+                {/* v15.19 — Dosya ekle butonu */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2 py-2 text-zinc-400 hover:text-accent hover:bg-bg-2 rounded transition-colors"
+                  title="Dosya ekle (veya sürükle-bırak)"
+                  disabled={sending || uploading}
+                >
+                  <Paperclip size={16} />
+                </button>
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="Mesaj yaz... (@ ile bahset · Enter gönder · Shift+Enter yeni satır)"
+                  placeholder="Mesaj yaz... (@ ile bahset · 📎 dosya ekle · Enter gönder · Shift+Enter yeni satır)"
                   rows={1}
                   className="flex-1 resize-none bg-bg-1 border border-border rounded px-3 py-2 text-sm outline-none focus:border-accent max-h-32"
                   disabled={sending}
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() || sending}
+                  disabled={(!input.trim() && pendingFiles.length === 0) || sending}
                   className="px-3 py-2 bg-accent text-bg-0 rounded hover:bg-accent/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 text-sm font-medium"
                 >
-                  <Send size={14} />
-                  Gönder
+                  {uploading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Send size={14} />
+                  )}
+                  {uploading ? 'Yükleniyor…' : 'Gönder'}
                 </button>
               </div>
             </div>
@@ -635,6 +790,53 @@ export default function Chat() {
         />
       )}
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EK DOSYA GÖSTERİMİ (v15.19)
+// ═══════════════════════════════════════════════════════════════════
+function AttachmentView({ att }: { att: ChatAttachmentView }) {
+  const isImg = isImageMime(att.mime_type)
+  const name = att.file_name || 'dosya'
+
+  if (isImg) {
+    return (
+      <div className="max-w-xs">
+        <a href={att.public_url} target="_blank" rel="noopener noreferrer" className="block">
+          <img
+            src={att.public_url}
+            alt={name}
+            className="rounded border border-border max-h-64 max-w-full object-contain bg-bg-2 hover:opacity-90 transition-opacity cursor-zoom-in"
+          />
+        </a>
+        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500">
+          <span className="truncate flex-1">{name}</span>
+          <span className="font-mono">{formatFileSize(att.size_bytes)}</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <a
+      href={att.public_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={name}
+      className="flex items-center gap-2 bg-bg-2 hover:bg-bg-3 border border-border rounded px-3 py-2 max-w-xs transition-colors"
+      title={`İndir: ${name}`}
+    >
+      <FileText size={18} className="text-accent flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-zinc-200 truncate">{name}</div>
+        <div className="text-[10px] text-zinc-500 font-mono">
+          {formatFileSize(att.size_bytes)}
+          {att.mime_type && ` · ${att.mime_type.split('/')[1] || att.mime_type}`}
+        </div>
+      </div>
+      <Download size={14} className="text-zinc-500 flex-shrink-0" />
+    </a>
   )
 }
 
@@ -717,12 +919,14 @@ function MessageRow({
   isMe,
   showHeader,
   isHighlighted,
+  msgAttachments = [],
 }: {
   msg: ChatMessage
   sender: ChatUserLite | undefined
   isMe: boolean
   showHeader: boolean
   isHighlighted?: boolean
+  msgAttachments?: ChatAttachmentView[]
 }) {
   const [editing, setEditing] = useState(false)
   const [editBody, setEditBody] = useState(msg.body)
@@ -824,6 +1028,14 @@ function MessageRow({
             </>
           )}
         </div>
+        {/* v15.19 — Ekler */}
+        {msgAttachments.length > 0 && (
+          <div className={cn('mt-1 flex flex-col gap-1', isMe && 'items-end')}>
+            {msgAttachments.map((a) => (
+              <AttachmentView key={a.id} att={a} />
+            ))}
+          </div>
+        )}
         {isMe && !editing && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 mt-0.5">
             <button
