@@ -23,6 +23,8 @@ import {
   extractMentionHandles,
   resolveMentionUserIds,
   markChannelMentionsRead,
+  searchMessages,
+  type SearchResultRow,
 } from '@/features/chat/chatService'
 import {
   getUserDisplayName,
@@ -56,6 +58,11 @@ export default function Chat() {
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // v15.18 — Mesaj arama
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResultRow[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Notification izni durumunu oku (mount'ta)
@@ -70,6 +77,37 @@ export default function Chat() {
       .then((users) => setAllUsers(users))
       .catch((e) => console.warn('Mention için kullanıcı listesi yüklenemedi:', e))
   }, [chatUser?.id])
+
+  // v15.18 — Arama debounce (250ms)
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (q.length < 2) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+    if (!chatUser?.id) return
+    setSearchLoading(true)
+    const handle = setTimeout(() => {
+      searchMessages(chatUser.id, q, 50)
+        .then((rows) => setSearchResults(rows))
+        .catch((e) => {
+          console.warn('Arama hatası:', e)
+          setSearchResults([])
+        })
+        .finally(() => setSearchLoading(false))
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [searchQuery, chatUser?.id])
+
+  // v15.18 — Arama sonucuna tıklanınca kanala geç + highlight
+  const handleSelectSearchResult = (row: SearchResultRow) => {
+    setHighlightMessageId(row.message_id)
+    setSelectedChannelId(row.channel_id)
+    setSearchQuery('') // Aramayı kapat
+    // 4 sn sonra highlight'ı kaldır
+    setTimeout(() => setHighlightMessageId(null), 4000)
+  }
 
   async function handleGrantNotif() {
     const result = await requestNotificationPermission()
@@ -154,8 +192,23 @@ export default function Chat() {
 
   // Yeni mesaj geldiğinde aşağı kaydır
   useEffect(() => {
+    if (highlightMessageId) return // highlight modundayken otomatik en alta kaydırma
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length])
+  }, [messages.length, highlightMessageId])
+
+  // v15.18 — Highlight'li mesaja scroll (mesajlar yüklendikten sonra)
+  useEffect(() => {
+    if (!highlightMessageId) return
+    if (loadingMsgs) return
+    // Render tamamlansın diye küçük gecikme
+    const t = setTimeout(() => {
+      const el = document.getElementById(`chat-msg-${highlightMessageId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 100)
+    return () => clearTimeout(t)
+  }, [highlightMessageId, loadingMsgs, messages])
 
   // Mesaj gönder
   const handleSend = async () => {
@@ -354,50 +407,114 @@ export default function Chat() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {sidebar.length === 0 && (
-            <div className="p-4 text-xs text-zinc-500 text-center">
-              Henüz sohbet yok.<br />DM veya Grup başlat.
-            </div>
-          )}
-          {sidebar.map((item) => {
-            const active = item.id === selectedChannelId
-            return (
+        {/* v15.18 — Mesaj arama */}
+        <div className="p-2 border-b border-border">
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Mesajlarda ara…"
+              className="w-full pl-7 pr-7 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 outline-none focus:border-accent"
+            />
+            {searchQuery && (
               <button
-                key={item.id}
-                onClick={() => setSelectedChannelId(item.id)}
-                className={cn(
-                  'w-full px-3 py-2 flex items-start gap-2 border-b border-border/50 text-left transition-colors',
-                  active ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-bg-2'
-                )}
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                title="Temizle"
               >
-                <div className="mt-0.5">
-                  {item.type === 'dm' ? (
-                    <User size={14} className="text-zinc-400" />
-                  ) : (
-                    <Users size={14} className="text-zinc-400" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <div className={cn('text-[13px] truncate flex-1', active ? 'text-accent font-medium' : 'text-zinc-200')}>
-                      {item.name}
-                    </div>
-                    {item.unread_count > 0 && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red/20 text-red">
-                        {item.unread_count}
-                      </span>
-                    )}
-                  </div>
-                  {item.last_message_preview && (
-                    <div className="text-[11px] text-zinc-500 truncate mt-0.5">
-                      {item.last_message_preview}
-                    </div>
-                  )}
-                </div>
+                <X size={12} />
               </button>
-            )
-          })}
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* v15.18 — Arama modu: sonuçları göster, kanal listesini gizle */}
+          {searchQuery.trim().length >= 2 ? (
+            <div>
+              <div className="px-3 py-1.5 text-[10px] text-zinc-500 bg-bg-2/50 border-b border-border/50">
+                {searchLoading ? 'Aranıyor…' :
+                 searchResults.length === 0 ? 'Sonuç bulunamadı' :
+                 `${searchResults.length} sonuç`}
+              </div>
+              {searchResults.map((row) => (
+                <button
+                  key={row.message_id}
+                  onClick={() => handleSelectSearchResult(row)}
+                  className="w-full px-3 py-2 text-left border-b border-border/40 hover:bg-bg-2 last:border-0"
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    {row.channel_type === 'dm' ? (
+                      <User size={10} className="text-zinc-500" />
+                    ) : (
+                      <Users size={10} className="text-zinc-500" />
+                    )}
+                    <span className="text-[10px] text-zinc-400 truncate flex-1">
+                      {row.channel_name}
+                    </span>
+                    <span className="text-[9px] text-zinc-600 font-mono">
+                      {new Date(row.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-zinc-300 line-clamp-2 leading-snug">
+                    <span className="text-zinc-500">{row.sender_name}: </span>
+                    <SearchHighlight text={row.body} query={searchQuery.trim()} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : searchQuery.trim().length === 1 ? (
+            <div className="p-4 text-[11px] text-zinc-500 text-center">
+              En az 2 karakter yazın
+            </div>
+          ) : (
+            <>
+              {sidebar.length === 0 && (
+                <div className="p-4 text-xs text-zinc-500 text-center">
+                  Henüz sohbet yok.<br />DM veya Grup başlat.
+                </div>
+              )}
+              {sidebar.map((item) => {
+                const active = item.id === selectedChannelId
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSelectedChannelId(item.id)}
+                    className={cn(
+                      'w-full px-3 py-2 flex items-start gap-2 border-b border-border/50 text-left transition-colors',
+                      active ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-bg-2'
+                    )}
+                  >
+                    <div className="mt-0.5">
+                      {item.type === 'dm' ? (
+                        <User size={14} className="text-zinc-400" />
+                      ) : (
+                        <Users size={14} className="text-zinc-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <div className={cn('text-[13px] truncate flex-1', active ? 'text-accent font-medium' : 'text-zinc-200')}>
+                          {item.name}
+                        </div>
+                        {item.unread_count > 0 && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red/20 text-red">
+                            {item.unread_count}
+                          </span>
+                        )}
+                      </div>
+                      {item.last_message_preview && (
+                        <div className="text-[11px] text-zinc-500 truncate mt-0.5">
+                          {item.last_message_preview}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </>
+          )}
         </div>
       </aside>
 
@@ -431,6 +548,7 @@ export default function Chat() {
                     sender={senders[msg.user_id]}
                     isMe={msg.user_id === chatUser.id}
                     showHeader={showHeader}
+                    isHighlighted={msg.id === highlightMessageId}
                   />
                 )
               })}
@@ -521,6 +639,38 @@ export default function Chat() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ARAMA VURGULAMA (v15.18)
+// ═══════════════════════════════════════════════════════════════════
+function SearchHighlight({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const q = query.toLocaleLowerCase('tr')
+  const textLower = text.toLocaleLowerCase('tr')
+  const parts: Array<{ type: 'text' | 'match'; value: string }> = []
+  let i = 0
+  while (i < text.length) {
+    const found = textLower.indexOf(q, i)
+    if (found === -1) {
+      parts.push({ type: 'text', value: text.slice(i) })
+      break
+    }
+    if (found > i) parts.push({ type: 'text', value: text.slice(i, found) })
+    parts.push({ type: 'match', value: text.slice(found, found + q.length) })
+    i = found + q.length
+  }
+  return (
+    <>
+      {parts.map((p, idx) =>
+        p.type === 'match' ? (
+          <mark key={idx} className="bg-amber/40 text-amber px-0.5 rounded">{p.value}</mark>
+        ) : (
+          <span key={idx}>{p.value}</span>
+        )
+      )}
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // MENTION VURGULAMA (v15.17)
 // ═══════════════════════════════════════════════════════════════════
 function MentionHighlightedBody({ body }: { body: string }) {
@@ -566,11 +716,13 @@ function MessageRow({
   sender,
   isMe,
   showHeader,
+  isHighlighted,
 }: {
   msg: ChatMessage
   sender: ChatUserLite | undefined
   isMe: boolean
   showHeader: boolean
+  isHighlighted?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [editBody, setEditBody] = useState(msg.body)
@@ -612,7 +764,14 @@ function MessageRow({
   }
 
   return (
-    <div className={cn('group flex gap-2', isMe && 'flex-row-reverse')}>
+    <div
+      id={`chat-msg-${msg.id}`}
+      className={cn(
+        'group flex gap-2 transition-colors rounded px-1 -mx-1',
+        isMe && 'flex-row-reverse',
+        isHighlighted && 'bg-amber/10 ring-2 ring-amber/40'
+      )}
+    >
       {showHeader && (
         <div className={cn(
           'w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0',

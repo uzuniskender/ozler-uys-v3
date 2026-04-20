@@ -549,4 +549,129 @@ export function subscribeToUserMentions(
   return () => {
     supabase.removeChannel(channel);
   };
+}// ============================================================
+// ARAMA (v15.18)
+// ============================================================
+
+export interface SearchResultRow {
+  message_id: string;
+  channel_id: string;
+  channel_name: string;
+  channel_type: 'dm' | 'group';
+  body: string;
+  created_at: string;
+  sender_id: string;
+  sender_name: string;
+}
+
+/**
+ * Kullanıcının erişebildiği tüm kanallarda body LIKE araması.
+ * pg_trgm GIN index ile hızlı — binlerce mesaj arasında 100ms altı.
+ */
+export async function searchMessages(
+  currentUserId: string,
+  query: string,
+  limit = 50
+): Promise<SearchResultRow[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  // 1) Erişilebilir kanallar
+  const { data: memberRows, error: err1 } = await supabase
+    .from('uys_chat_members')
+    .select('channel_id')
+    .eq('user_id', currentUserId);
+
+  if (err1) throw err1;
+  if (!memberRows || memberRows.length === 0) return [];
+  const channelIds = memberRows.map((m: any) => m.channel_id);
+
+  // 2) Mesajları ara (ilike trgm index kullanır)
+  const { data: msgs, error: err2 } = await supabase
+    .from('uys_chat_messages')
+    .select('id, channel_id, user_id, body, created_at')
+    .in('channel_id', channelIds)
+    .is('deleted_at', null)
+    .ilike('body', `%${q}%`)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (err2) throw err2;
+  if (!msgs || msgs.length === 0) return [];
+
+  // 3) Kanal + gönderici bilgilerini zenginleştir
+  const uniqChannelIds = Array.from(new Set(msgs.map((m: any) => m.channel_id)));
+  const uniqUserIds = Array.from(new Set(msgs.map((m: any) => m.user_id).filter(Boolean)));
+
+  const [channelsRes, usersRes] = await Promise.all([
+    supabase
+      .from('uys_chat_channels')
+      .select('id, name, type')
+      .in('id', uniqChannelIds),
+    uniqUserIds.length > 0
+      ? supabase
+          .from('uys_kullanicilar')
+          .select('id, ad, kullanici_ad')
+          .in('id', uniqUserIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+
+  const channelMap: Record<string, { name: string | null; type: 'dm' | 'group' }> = {};
+  (channelsRes.data ?? []).forEach((c: any) => {
+    channelMap[c.id] = { name: c.name, type: c.type };
+  });
+
+  const userMap: Record<string, { ad: string | null; kullanici_ad: string }> = {};
+  (usersRes.data ?? []).forEach((u: any) => {
+    userMap[u.id] = { ad: u.ad, kullanici_ad: u.kullanici_ad };
+  });
+
+  // 4) DM kanalları için karşı kullanıcıyı çek (kanal adı olarak kullanılır)
+  const dmChannelIds = uniqChannelIds.filter((cid) => channelMap[cid]?.type === 'dm');
+  const dmOtherNames: Record<string, string> = {};
+  if (dmChannelIds.length > 0) {
+    const { data: dmMembers } = await supabase
+      .from('uys_chat_members')
+      .select('channel_id, user_id')
+      .in('channel_id', dmChannelIds)
+      .neq('user_id', currentUserId);
+
+    if (dmMembers && dmMembers.length > 0) {
+      const otherIds = Array.from(new Set(dmMembers.map((m: any) => m.user_id)));
+      const missing = otherIds.filter((id) => !userMap[id]);
+      if (missing.length > 0) {
+        const { data: more } = await supabase
+          .from('uys_kullanicilar')
+          .select('id, ad, kullanici_ad')
+          .in('id', missing);
+        (more ?? []).forEach((u: any) => {
+          userMap[u.id] = { ad: u.ad, kullanici_ad: u.kullanici_ad };
+        });
+      }
+      dmMembers.forEach((m: any) => {
+        const u = userMap[m.user_id];
+        if (u) dmOtherNames[m.channel_id] = u.ad || u.kullanici_ad;
+      });
+    }
+  }
+
+  // 5) Row formatına dönüştür
+  return msgs.map((m: any): SearchResultRow => {
+    const ch = channelMap[m.channel_id];
+    const chName =
+      ch?.type === 'dm'
+        ? dmOtherNames[m.channel_id] || 'DM'
+        : ch?.name || 'İsimsiz Kanal';
+    const sender = userMap[m.user_id];
+    return {
+      message_id: m.id,
+      channel_id: m.channel_id,
+      channel_name: chName,
+      channel_type: ch?.type ?? 'group',
+      body: m.body,
+      created_at: m.created_at,
+      sender_id: m.user_id,
+      sender_name: sender ? sender.ad || sender.kullanici_ad : 'Bilinmeyen',
+    };
+  });
 }
