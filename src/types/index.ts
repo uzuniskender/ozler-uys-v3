@@ -258,6 +258,16 @@ export interface Tedarik {
   tarih: string
 }
 
+export interface MrpRezerve {
+  id: string
+  orderId: string
+  malkod: string
+  malad: string
+  miktar: number
+  birim: string
+  mrpRunId: string
+  tarih: string
+}
 export interface Tedarikci {
   id: string
   kod: string

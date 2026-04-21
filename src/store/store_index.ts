@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
-  CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer,
+  CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem
 } from '@/types'
 
@@ -101,6 +101,12 @@ const M = {
     tedarikcAd: (r.tedarikci_ad || '') as string, not: (r.not_ || '') as string,
     tarih: (r.tarih || '') as string,
   }),
+  mrpRezerve: (r: Record<string, unknown>): MrpRezerve => ({
+    id: r.id as string, orderId: (r.order_id || '') as string,
+    malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
+    miktar: (r.miktar as number) || 0, birim: (r.birim || 'Adet') as string,
+    mrpRunId: (r.mrp_run_id || '') as string, tarih: (r.tarih || '') as string,
+  }),
   tedarikci: (r: Record<string, unknown>): Tedarikci => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     adres: (r.adres || '') as string, tel: (r.tel || '') as string,
@@ -153,7 +159,7 @@ interface UYSStore {
   materials: Material[]; operations: Operation[]; stations: Station[]
   operators: Operator[]; recipes: Recipe[]; bomTrees: BomTree[]
   stokHareketler: StokHareket[]; cuttingPlans: CuttingPlan[]
-  tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]
+  tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]; mrpRezerve: MrpRezerve[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
   loading: boolean; synced: boolean
@@ -175,6 +181,7 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
   { key: 'stokHareketler', table: 'uys_stok_hareketler', mapper: M.stokHareket },
   { key: 'cuttingPlans', table: 'uys_kesim_planlari', mapper: M.cuttingPlan },
   { key: 'tedarikler', table: 'uys_tedarikler', mapper: M.tedarik },
+  { key: 'mrpRezerve', table: 'uys_mrp_rezerve', mapper: M.mrpRezerve },
   { key: 'tedarikciler', table: 'uys_tedarikciler', mapper: M.tedarikci },
   { key: 'durusKodlari', table: 'uys_durus_kodlari', mapper: M.durusKodu },
   { key: 'customers', table: 'uys_customers', mapper: M.customer },
@@ -188,7 +195,7 @@ const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
-  cuttingPlans: [], tedarikler: [], tedarikciler: [], durusKodlari: [],
+  cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
   customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
   loading: true, synced: false,
 
