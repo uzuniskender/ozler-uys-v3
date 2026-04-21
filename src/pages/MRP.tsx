@@ -19,6 +19,7 @@ export function MRP() {
 
   const [showTamamlanan, setShowTamamlanan] = useState(false)
   const [showYMTamamlanan, setShowYMTamamlanan] = useState(false)
+  const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('eksik')
 
   // MRP tamamlanmış YM İE'leri (localStorage'da tutuluyor)
   const mrpDoneYMs = useMemo(() => {
@@ -289,8 +290,8 @@ export function MRP() {
       {hesaplandi && (
         <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-3">
-            <span className="px-2 py-1 bg-red/10 text-red rounded text-[10px] font-semibold">⚠ {eksikler.length} eksik</span>
-            <span className="px-2 py-1 bg-green/10 text-green rounded text-[10px] font-semibold">✓ {yeterliler.length} yeterli</span>
+            <button onClick={() => setViewFilter(viewFilter === 'eksik' ? 'tum' : 'eksik')} className={`px-2 py-1 rounded text-[10px] font-semibold ${viewFilter === 'eksik' ? 'bg-red text-white' : 'bg-red/10 text-red hover:bg-red/20'}`}>⚠ {eksikler.length} eksik</button>
+            <button onClick={() => setViewFilter(viewFilter === 'yeterli' ? 'tum' : 'yeterli')} className={`px-2 py-1 rounded text-[10px] font-semibold ${viewFilter === 'yeterli' ? 'bg-green text-white' : 'bg-green/10 text-green hover:bg-green/20'}`}>✓ {yeterliler.length} yeterli</button>
             <span className="flex-1" />
             {selectedRows.size > 0 && (
               <button onClick={topluTedarikOlustur} className="px-3 py-1.5 bg-accent text-white rounded-lg text-[10px] font-semibold">
@@ -308,7 +309,7 @@ export function MRP() {
                 <th className="text-right px-3 py-2">Net</th><th className="text-left px-3 py-2">Termin</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
-                {sonuc.map(s => {
+                {sonuc.filter(s => viewFilter === 'tum' ? true : viewFilter === 'eksik' ? s.net > 0 : s.net <= 0).map(s => {
                   const color = s.durum === 'yeterli' ? 'text-green' : s.durum === 'eksik' ? 'text-amber' : 'text-red'
                   return (
                     <tr key={s.malkod} className="border-b border-border/30 hover:bg-bg-3/30">
