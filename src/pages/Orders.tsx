@@ -101,8 +101,9 @@ export function Orders() {
     const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats)
     const count = await mrpTedarikOlustur(ordIds[0] || '', hedefOrders[0]?.siparisNo || '', mrpRows)
 
+    const yeniDurum = mrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
     for (const o of hedefOrders) {
-      await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', o.id)
+      await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
     }
     loadAll()
     toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${count} tedarik oluşturuldu`)
@@ -175,7 +176,7 @@ export function Orders() {
               const terminCount = orderUniqueTerminCount(o)
               const kalemCount = (o.urunler || []).length
               const isLate = nearT && nearT < today() && pct < 100
-              const mrpBadge = o.mrpDurum === 'tamamlandi' ? { bg: 'bg-green/10', color: 'text-green', label: '✓' } : o.mrpDurum === 'calistirildi' ? { bg: 'bg-amber/10', color: 'text-amber', label: '⚡' } : { bg: 'bg-cyan-500/10', color: 'text-cyan-400', label: '📊' }
+              const mrpBadge = (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') ? { bg: 'bg-green/10', color: 'text-green', label: '✓' } : o.mrpDurum === 'eksik' ? { bg: 'bg-red/10', color: 'text-red', label: '⚠' } : o.mrpDurum === 'calistirildi' ? { bg: 'bg-amber/10', color: 'text-amber', label: '⚡' } : { bg: 'bg-cyan-500/10', color: 'text-cyan-400', label: '📊' }
               const sevkBadge = o.sevkDurum === 'tamamen_sevk' ? { bg: 'bg-green/10', color: 'text-green', label: '✓ Tamam', title: 'Tamamen sevk edildi' } : o.sevkDurum === 'kismi_sevk' ? { bg: 'bg-amber/10', color: 'text-amber', label: 'Kısmi', title: 'Kısmi sevk edildi' } : { bg: 'bg-bg-3', color: 'text-zinc-600', label: '—', title: 'Sevk yok' }
               return (
                 <tr key={o.id} className={`border-b border-border/50 hover:bg-bg-3/50 ${selIds.has(o.id) ? 'bg-accent/5' : ''}`}>
@@ -470,7 +471,8 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
     const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats)
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
-    await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', order.id)
+    const yeniDurum = rows.some(r => r.net > 0) ? 'eksik' : 'tamam'
+    await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', order.id)
     loadAll()
     toast.success(rows.length + ' malzeme hesaplandı')
   }

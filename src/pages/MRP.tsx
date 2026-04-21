@@ -28,6 +28,7 @@ export function MRP() {
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
       if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
+      if (!showTamamlanan && (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi')) return false
       // MRP tamamlanmış siparişleri varsayılan olarak gizle
       // Gerçek ilerlemeye bak — %100 ise gösterme
       const wos = workOrders.filter(w => w.orderId === o.id)
@@ -40,7 +41,7 @@ export function MRP() {
 
   // MRP tamamlanmış ama hâlâ aktif sipariş sayısı (toggle label için)
   const mrpTamamSayisi = useMemo(() =>
-    orders.filter(o => o.mrpDurum === 'tamamlandi' && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
+    orders.filter(o => (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
   , [orders])
 
   // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
@@ -105,9 +106,10 @@ export function MRP() {
     setSonuc(result)
     setHesaplandi(true)
 
-    // Seçili siparişlerin mrp_durum'unu güncelle
+    // Seçili siparişlerin mrp_durum'unu güncelle (sonuca göre tamam/eksik)
+    const yeniDurum = result.some(r => r.net > 0) ? 'eksik' : 'tamam'
     for (const oid of ordIds) {
-      await supabase.from('uys_orders').update({ mrp_durum: 'tamamlandi' }).eq('id', oid)
+      await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid)
     }
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle
     if (selectedYMs.size > 0) {
@@ -205,7 +207,7 @@ export function MRP() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[250px] overflow-y-auto">
           {aktifOrders.map(o => {
             const sel = selectedOrders.has(o.id); const pct = orderPct(o.id)
-            const mrpDone = o.mrpDurum === 'tamamlandi'
+            const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
             return (
               <button key={o.id} onClick={() => toggleOrder(o.id)}
                 className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : mrpDone ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
