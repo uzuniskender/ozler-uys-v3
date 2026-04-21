@@ -147,7 +147,7 @@ export function MRP() {
     if (!sonuc.length) return
     import('xlsx').then(XLSX => {
       const rows = sonuc.map(s => ({
-        'Malzeme Kodu': s.malkod, 'Malzeme Adı': s.malad, 'Tip': s.tip || '',
+        'Malzeme Kodu': s.malkod, 'Malzeme Adı': s.malad, 'Tip': s.tip || '', 'Termin': s.termin || '',
         'Brüt İhtiyaç': Math.round(s.brut * 100) / 100, 'Stok': Math.round(s.stok * 100) / 100,
         'Açık Tedarik': Math.round(s.acikTedarik * 100) / 100,
         'Net İhtiyaç': Math.round(s.net * 100) / 100,
@@ -170,7 +170,7 @@ export function MRP() {
             import('xlsx').then(XLSX => {
               const rows = eksikler.map(s => ({
                 'Malzeme Kodu': s.malkod, 'Sipariş Miktarı': Math.ceil(s.net),
-                'Beklenen Tarih': '', 'Tedarikçi': '',
+                'Beklenen Tarih': s.termin || '', 'Tedarikçi': '',
                 '(Bilgi) Malzeme Adı': s.malad, '(Bilgi) Net İhtiyaç': Math.ceil(s.net),
                 '(Bilgi) Mevcut Stok': Math.round(s.stok),
               }))
@@ -300,7 +300,7 @@ export function MRP() {
                 <th className="px-2 py-2 w-6"><input type="checkbox" onChange={e => setSelectedRows(e.target.checked ? new Set(eksikler.map(s => s.malkod)) : new Set())} className="accent-accent" /></th>
                 <th className="text-left px-3 py-2">Malzeme Kodu</th><th className="text-left px-3 py-2">Malzeme Adı</th><th className="text-left px-3 py-2">Tip</th>
                 <th className="text-right px-3 py-2">Brüt</th><th className="text-right px-3 py-2">Stok</th><th className="text-right px-3 py-2">Açık Ted.</th>
-                <th className="text-right px-3 py-2">Net</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th>
+                <th className="text-right px-3 py-2">Net</th><th className="text-left px-3 py-2">Termin</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
                 {sonuc.map(s => {
@@ -314,7 +314,7 @@ export function MRP() {
                       <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut)}</td>
                       <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok)}</td>
                       <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{s.acikTedarik > 0 ? Math.round(s.acikTedarik) : '—'}</td>
-                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td><td className={`px-3 py-1.5 font-mono text-[11px] ${s.termin && s.termin < today() ? "text-red font-semibold" : "text-zinc-400"}`}>{s.termin || "-"}</td>
                       <td className={`px-3 py-1.5 font-semibold ${color}`}>{s.durum === 'yeterli' ? '✓ Yeterli' : '⚠ Eksik'}</td>
                       <td className="px-3 py-1.5">{s.durum !== 'yeterli' && (
                         <button onClick={async () => {
@@ -322,7 +322,7 @@ export function MRP() {
                           if (mevcut) { toast.info('Zaten açık tedarik var'); return }
                           await supabase.from('uys_tedarikler').insert({
                             id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
-                            birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, not_: 'MRP',
+                            birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null, durum: 'bekliyor', geldi: false, not_: 'MRP',
                           })
                           loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
                         }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>

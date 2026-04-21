@@ -616,26 +616,26 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                   <span className="flex-1" />
                   <button onClick={() => {
                     import('xlsx').then(XLSX => {
-                      const rows = mrpRows.map(r => ({ 'Malzeme Kodu': r.malkod, 'Malzeme Adı': r.malad, 'Tip': r.tip, 'Birim': r.birim || 'Adet', 'Brüt İhtiyaç': r.brut, 'Stok': r.stok, 'Açık Tedarik': r.acikTedarik, 'Net İhtiyaç': r.net, 'Durum': r.net > 0 ? 'Eksik' : 'Yeterli' }))
+                      const rows = mrpRows.map(r => ({ 'Malzeme Kodu': r.malkod, 'Malzeme Adı': r.malad, 'Tip': r.tip, 'Termin': r.termin || '', 'Birim': r.birim || 'Adet', 'Brüt İhtiyaç': r.brut, 'Stok': r.stok, 'Açık Tedarik': r.acikTedarik, 'Net İhtiyaç': r.net, 'Durum': r.net > 0 ? 'Eksik' : 'Yeterli' }))
                       const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
                       XLSX.utils.book_append_sheet(wb, ws, 'MRP'); XLSX.writeFile(wb, `mrp_${order.siparisNo}_${today()}.xlsx`)
                     })
                   }} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">📥 Excel</button>
                 </div>
-                <table className="w-full text-xs mb-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Malzeme Kodu</th><th className="text-left px-3 py-2">Malzeme Adı</th><th className="text-left px-3 py-2">Tip</th><th className="text-right px-3 py-2">Brüt</th><th className="text-right px-3 py-2">Stok</th><th className="text-right px-3 py-2">Açık Ted.</th><th className="text-right px-3 py-2 font-semibold">Net</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th></tr></thead>
+                <table className="w-full text-xs mb-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-3 py-2">Malzeme Kodu</th><th className="text-left px-3 py-2">Malzeme Adı</th><th className="text-left px-3 py-2">Tip</th><th className="text-left px-3 py-2">Termin</th><th className="text-right px-3 py-2">Brüt</th><th className="text-right px-3 py-2">Stok</th><th className="text-right px-3 py-2">Açık Ted.</th><th className="text-right px-3 py-2 font-semibold">Net</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th></tr></thead>
                   <tbody>
                     {mrpRows.map(r => (
                       <tr key={r.malkod} className={`border-b border-border/30 ${r.net > 0 ? 'bg-red/5' : ''}`}>
                         <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{r.malkod}</td>
                         <td className="px-3 py-1.5 text-zinc-300">{r.malad}</td>
-                        <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px]">{r.tip}</span></td>
+                        <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[10px]">{r.tip}</span></td><td className={`px-3 py-1.5 font-mono text-[11px] ${r.termin && r.termin < today() ? "text-red font-semibold" : "text-zinc-400"}`}>{r.termin || "-"}</td>
                         <td className="px-3 py-1.5 text-right font-mono">{r.brut}</td>
                         <td className="px-3 py-1.5 text-right font-mono text-green">{r.stok}</td>
                         <td className="px-3 py-1.5 text-right font-mono text-zinc-500">{r.acikTedarik}</td>
                         <td className={`px-3 py-1.5 text-right font-mono font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net}</td>
                         <td className="px-3 py-1.5"><span className={`text-[10px] font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net > 0 ? '⚠ Eksik' : '✓ Yeterli'}</span></td>
                         <td className="px-3 py-1.5">{r.net > 0 && <button onClick={async () => {
-                          await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id })
+                          await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id })
                           loadAll(); toast.success(r.malkod + ' tedarik oluşturuldu')
                         }} className="text-amber text-[10px] hover:underline">+ Tedarik</button>}</td>
                       </tr>

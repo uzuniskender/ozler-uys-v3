@@ -6,6 +6,7 @@ export interface MRPRow {
   malkod: string; malad: string; tip: string; birim: string
   brut: number; stok: number; acikTedarik: number; net: number
   durum: 'yeterli' | 'eksik' | 'yok'
+  termin: string
   artik?: boolean
 }
 
@@ -164,7 +165,7 @@ function bomPatlaNet(
 // ═══ ANA MRP HESAPLAMA — v2 hesaplaMRP port'u ═══
 export function hesaplaMRP(
   ordIds: string[] | null,
-  orders: { id: string; adet: number; mamulKod: string; receteId: string; durum: string; urunler?: { mamulKod: string; adet: number }[] }[],
+  orders: { id: string; adet: number; mamulKod: string; receteId: string; durum: string; termin?: string; urunler?: { mamulKod: string; adet: number; termin?: string }[] }[],
   workOrders: WorkOrder[],
   recipes: Recipe[],
   stokHareketler: StokHareket[],
@@ -173,7 +174,7 @@ export function hesaplaMRP(
   materials: Material[],
   secilenYMIds?: Set<string> | null
 ): MRPRow[] {
-  const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number }> = {}
+  const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
 
   // 1. Siparişlerin BOM patlatması
   const siparisler = ordIds === null
@@ -195,10 +196,12 @@ export function hesaplaMRP(
       // For now just use full adet (v2 uses wProd which needs logs)
       const netAdet = u.adet
 
+      const urunTermin = (u as any).termin || o.termin || ''
       const p = bomPatlaNet(u.mamulKod, netAdet, 0, {}, recipes, stokHareketler, materials)
       Object.keys(p).forEach(k => {
         const v = p[k]
-        if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0 }
+        if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: urunTermin }
+        else if (urunTermin && (!brutIhtiyac[k].termin || urunTermin < brutIhtiyac[k].termin)) brutIhtiyac[k].termin = urunTermin
         brutIhtiyac[k].brut += v.miktar
       })
     }
@@ -213,11 +216,13 @@ export function hesaplaMRP(
   for (const w of ymIEs) {
     const kalan = w.hedef // simplified — ideally use logs to get actual remaining
     if (!kalan || !w.malkod) continue
+    const wTermin = (w as any).termin || ''
     const p = bomPatlaNet(w.malkod, kalan, 0, {}, recipes, stokHareketler, materials)
     Object.keys(p).forEach(k => {
       if (k === w.malkod) return
       const v = p[k]
-      if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0 }
+      if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: wTermin }
+      else if (wTermin && (!brutIhtiyac[k].termin || wTermin < brutIhtiyac[k].termin)) brutIhtiyac[k].termin = wTermin
       brutIhtiyac[k].brut += v.miktar
     })
   }
@@ -234,7 +239,7 @@ export function hesaplaMRP(
     if (hmM?.tip === 'YarıMamul') return
     const planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
     if (!planAdet) return
-    if (!brutIhtiyac[hmk]) brutIhtiyac[hmk] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0 }
+    if (!brutIhtiyac[hmk]) brutIhtiyac[hmk] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
     // Kesim planı gerçek bar sayısını gösterir — BOM'u override et
     brutIhtiyac[hmk].brut = planAdet
   })
@@ -254,11 +259,13 @@ export function hesaplaMRP(
     // YarıMamul filtreleme — üretilir, tedarik edilmez
     if (bi.tip === 'YarıMamul') return
 
-    sonuc.push({ malkod: k, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum })
+    sonuc.push({ malkod: k, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum, termin: bi.termin || '' })
   })
 
   return sonuc.sort((a, b) => {
     const s: Record<string, number> = { yok: 0, eksik: 1, yeterli: 2 }
+    const at = a.termin || '9999-99-99'; const bt = b.termin || '9999-99-99'
+    if (at !== bt) return at.localeCompare(bt)
     return (s[a.durum] || 0) - (s[b.durum] || 0) || (a.malad || '').localeCompare(b.malad || '', 'tr')
   })
 }
@@ -273,7 +280,7 @@ export async function mrpTedarikOlustur(
     await supabase.from('uys_tedarikler').insert({
       id: uid(), malkod: r.malkod, malad: r.malad, miktar: r.net, birim: r.birim,
       order_id: orderId, siparis_no: siparisNo,
-      durum: 'bekliyor', geldi: false, tarih: today(), not_: 'MRP otomatik',
+      durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: r.termin || null, not_: 'MRP otomatik',
     })
   }
   return ihtiyaclar.length
