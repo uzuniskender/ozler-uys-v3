@@ -6,7 +6,7 @@ import { hesaplaMRP } from './mrp'
 
 // ═══ İE OLUŞTUR — reçeteden iş emirleri ═══
 export async function buildWorkOrders(
-  orderId: string, siparisNo: string, recipeId: string, adet: number, recipes: Recipe[], termin?: string
+  orderId: string, siparisNo: string, recipeId: string, adet: number, recipes: Recipe[], termin?: string, siraBaslangic?: number
 ): Promise<number> {
   const rc = recipes.find(r => r.id === recipeId)
   if (!rc || !rc.satirlar?.length) return 0
@@ -27,7 +27,7 @@ export async function buildWorkOrders(
   satirlar.forEach(s => { kirnoMap[s.kirno || ''] = s })
 
   const workOrders: Record<string, unknown>[] = []
-  let woIdx = 0
+  let woIdx = siraBaslangic || 0
 
   for (const s of opRows) {
     const parcalar = (s.kirno || '1').split('.')

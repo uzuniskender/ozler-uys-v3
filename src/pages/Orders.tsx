@@ -318,7 +318,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       await supabase.from('uys_orders').update(row).eq('id', initial.id)
       let woTotal = 0
       for (const k of kalemler) {
-        if (k.rcId) woTotal += await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin)
+        if (k.rcId) { const c = await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
       }
       toast.info(woTotal + ' iş emri güncellendi')
     } else {
@@ -326,7 +326,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
       let woTotal = 0
       for (const k of kalemler) {
-        if (k.rcId) woTotal += await buildWorkOrders(newId, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin)
+        if (k.rcId) { const c = await buildWorkOrders(newId, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
       }
       toast.info(woTotal + ' iş emri oluşturuldu')
     }
@@ -488,7 +488,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     let total = 0
     const liste = kalemler.length > 0 ? kalemler : (order.receteId ? [{ rcId: order.receteId, adet: order.adet, mamulKod: order.mamulKod, mamulAd: order.mamulAd, termin: order.termin, not: '' }] : [])
     for (const k of liste) {
-      if (k.rcId) total += await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes, k.termin)
+      if (k.rcId) { const c = await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes, k.termin, total); total += c }
     }
     loadAll(); toast.success(total + ' İE yeniden oluşturuldu')
   }
@@ -682,7 +682,7 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
       if (!woCount) {
         if (kalemler.length > 0) {
           for (const u of kalemler) {
-            if (u.rcId) woCount += await buildWorkOrders(order.id, order.siparisNo, u.rcId, u.adet, s.recipes, u.termin)
+            if (u.rcId) { const c = await buildWorkOrders(order.id, order.siparisNo, u.rcId, u.adet, s.recipes, u.termin, woCount); woCount += c }
           }
         } else if (order.receteId) {
           woCount = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes, order.termin)
