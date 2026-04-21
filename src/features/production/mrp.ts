@@ -243,12 +243,14 @@ export function hesaplaMRP(
   const secilenWoIds = ordIdSet
     ? new Set(workOrders.filter(w => ordIdSet.has(w.orderId)).map(w => w.id))
     : null
+  console.log('[MRP DEBUG] Kapsam filtre:', { ordIds, toplamCuttingPlan: cuttingPlans.length, secilenWoIds: secilenWoIds ? [...secilenWoIds] : null })
   cuttingPlans.filter(p => p.durum !== 'tamamlandi').forEach(p => {
     const hmk = p.hamMalkod; if (!hmk) return
     // Kapsam kontrolü: plan satırlarında seçili siparişlerin İE'leri var mı?
     if (secilenWoIds) {
       const planWoIds = (p.satirlar || []).map((s: any) => s.woId).filter(Boolean)
       const kapsamDahil = planWoIds.some((wid: string) => secilenWoIds.has(wid))
+      console.log('[MRP DEBUG] Plan:', hmk, '| planWoIds:', planWoIds, '| kapsamDahil:', kapsamDahil)
       if (!kapsamDahil) return // Bu plan seçili siparişlerle ilgisiz, atla
     }
     const hmM = materials.find(m => m.kod === hmk)
@@ -256,6 +258,7 @@ export function hesaplaMRP(
     if (hmM?.tip === 'YarıMamul') return
     const planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
     if (!planAdet) return
+    console.log('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)
     if (!brutIhtiyac[hmk]) brutIhtiyac[hmk] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
     // Kesim planı gerçek bar sayısını gösterir — BOM'u override et
     brutIhtiyac[hmk].brut = planAdet
@@ -284,6 +287,8 @@ export function hesaplaMRP(
 
     sonuc.push({ malkod: k, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum, termin: bi.termin || '' })
   })
+
+  console.log('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.keys(brutIhtiyac))
 
   return sonuc.sort((a, b) => {
     const s: Record<string, number> = { yok: 0, eksik: 1, yeterli: 2 }
