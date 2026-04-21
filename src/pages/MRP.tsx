@@ -29,7 +29,6 @@ export function MRP() {
     return orders.filter(o => {
       if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
       // MRP tamamlanmış siparişleri varsayılan olarak gizle
-      if (!showTamamlanan && o.mrpDurum === 'tamamlandi') return false
       // Gerçek ilerlemeye bak — %100 ise gösterme
       const wos = workOrders.filter(w => w.orderId === o.id)
       if (!wos.length) return true // İE yoksa göster (henüz oluşturulmamış)
