@@ -22,7 +22,7 @@ interface KesimPlanSonuc {
 
 // Parça boyunu malzeme bilgisinden al
 export function getParcaBoy(malkod: string, materials: Material[]): number {
-  const m = materials.find(x => x.kod === malkod)
+  const m = findMaterialByKod(materials, malkod)
   if (!m) return 0
   if (m.uzunluk > 0) return m.uzunluk // profil/boru parça uzunluğu
   if (m.boy && m.en) return Math.min(m.boy, m.en)
@@ -31,17 +31,36 @@ export function getParcaBoy(malkod: string, materials: Material[]): number {
 }
 
 function getParcaEn(malkod: string, materials: Material[]): number {
-  const m = materials.find(x => x.kod === malkod)
+  const m = findMaterialByKod(materials, malkod)
   if (!m) return 0
   if (m.uzunluk > 0) return 0 // uzunluk varsa boy kesim, en yok
   if (m.boy && m.en) return Math.max(m.boy, m.en)
   return 0
 }
 
-// HM bar boyu: uzunluk > 0 ise uzunluk, yoksa max(boy,en)
+// HM bar boyu: uzunluk > 0 ise uzunluk, yoksa max(boy,en),
+// hiçbiri yoksa malzeme adından MM parse et (örn. "6000 MM" → 6000)
 export function getHamBoy(m: Material): number {
   if (m.uzunluk > 0) return m.uzunluk
-  return Math.max(m.boy || 0, m.en || 0)
+  const b = Math.max(m.boy || 0, m.en || 0)
+  if (b > 0) return b
+  // Fallback — ad içinden boy parse et (tolerant: "6000 mm", "6000MM", "6000 MM")
+  const ad = (m.ad || '') + ' ' + (m.kod || '')
+  const match = ad.match(/(\d{3,5})\s*[mM]{2}/g)
+  if (match && match.length) {
+    // En büyük rakamı bar boyu kabul et (profil/boru için hep uzun kenar)
+    const sayilar = match.map(s => parseInt(s.replace(/[^\d]/g, ''), 10)).filter(n => n >= 500)
+    if (sayilar.length) return Math.max(...sayilar)
+  }
+  return 0
+}
+
+// Case-insensitive + trim material lookup
+// Kullanım: reçetede 'BORU x 6000 mm' yazılmış, karttaysa 'BORU X 6000 MM' varsa eşleşir
+function findMaterialByKod(materials: Material[], kod: string): Material | undefined {
+  if (!kod) return undefined
+  const target = kod.trim().toLowerCase()
+  return materials.find(x => (x.kod || '').trim().toLowerCase() === target)
 }
 
 // ═══ KESİM PLANI OLUŞTUR — v2 _kesimPlanOlusturCore port'u ═══
@@ -88,7 +107,7 @@ export function kesimPlanOlustur(
       w.hm.forEach(h => {
         // Ürünün kendisini atla
         if (h.malkod === w.malkod || h.malkod === w.mamulKod) { console.log('⏩ Ürünün kendisi atlandı:', h.malkod); return }
-        const mat = materials.find(m => m.kod === h.malkod)
+        const mat = findMaterialByKod(materials, h.malkod)
         // YarıMamul ise kesim planına dahil etme
         if (mat?.tip === 'YarıMamul') { console.log('⏩ YM atlandı:', h.malkod, h.malad); return }
         hmSatirlar.push({ malkod: h.malkod, malad: h.malad })
@@ -122,7 +141,7 @@ export function kesimPlanOlustur(
 
     for (const hm of hmSatirlar) {
       const hmalkod = hm.malkod; if (!hmalkod) { console.log('❌ HM malkod boş'); continue }
-      const hmM = materials.find(m => m.kod === hmalkod)
+      const hmM = findMaterialByKod(materials, hmalkod)
       if (!hmM) { console.log('❌ HM malzeme kartı bulunamadı:', hmalkod); continue }
       const hamBoy = getHamBoy(hmM)
       const hamEn = hmM.uzunluk > 0 ? 0 : Math.min(hmM.boy || 0, hmM.en || 0)
