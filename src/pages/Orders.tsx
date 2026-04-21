@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { useState, useMemo } from 'react'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, mrpTedarikOlustur } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -32,6 +32,7 @@ export function Orders() {
     for (const id of selIds) {
       await supabase.from('uys_work_orders').delete().eq('order_id', id)
       await supabase.from('uys_orders').delete().eq('id', id)
+      await rezerveSil(id)
     }
     setSelIds(new Set()); loadAll(); toast.success(selIds.size + ' sipariş silindi')
   }
@@ -83,12 +84,13 @@ export function Orders() {
     if (!await showConfirm('Bu siparişi ve ilişkili iş emirlerini silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_work_orders').delete().eq('order_id', id)
     await supabase.from('uys_orders').delete().eq('id', id)
+    await rezerveSil(id)
     logAction('Sipariş silindi', id)
     loadAll(); toast.success('Sipariş silindi')
   }
 
   async function topluMRP() {
-    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos, cuttingPlans: cp, materials: mats } = useStore.getState()
+    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos, cuttingPlans: cp, materials: mats, mrpRezerve } = useStore.getState()
     const hedefOrders = selIds.size > 0
       ? orders.filter(o => selIds.has(o.id))
       : orders.filter(o => orderPct(o.id) < 100 && ((o.urunler && o.urunler.length > 0 && o.urunler.some(u => u.rcId)) || o.receteId))
@@ -98,14 +100,16 @@ export function Orders() {
 
     const ordIds = hedefOrders.map(o => o.id)
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
-    const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats)
+    const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve)
     const count = await mrpTedarikOlustur(ordIds[0] || '', hedefOrders[0]?.siparisNo || '', mrpRows)
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
     for (const o of hedefOrders) {
-      const tekMrpRows = hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats)
+      const tekMrpRows = hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, o.id)
       const yeniDurum = tekMrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
+      // Rezerve kayıtları yaz
+      await rezerveYaz(o.id, tekMrpRows)
     }
     loadAll()
     toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${count} tedarik oluşturuldu`)
@@ -207,6 +211,8 @@ export function Orders() {
                     {can('orders_edit') && <button onClick={async () => {
                       const yeniDurum = o.durum === 'kapalı' ? '' : 'kapalı'
                       await supabase.from('uys_orders').update({ durum: yeniDurum }).eq('id', o.id)
+                      // Sipariş kapatıldı — rezerveleri serbest bırak
+                      if (yeniDurum === 'kapalı') await rezerveSil(o.id)
                       loadAll(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))
                     }} className={`p-1 ${o.durum === 'kapalı' ? 'text-green hover:text-green' : 'text-zinc-500 hover:text-amber'}`} title={o.durum === 'kapalı' ? 'Aç' : 'Kapat'}>
                       {o.durum === 'kapalı' ? '🔓' : '🔒'}
@@ -318,7 +324,9 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     if (initial?.id) {
       // Güncelleme — eski İE'leri sil, her kalem için yeniden üret
       await supabase.from('uys_work_orders').delete().eq('order_id', initial.id)
-      await supabase.from('uys_orders').update(row).eq('id', initial.id)
+      await supabase.from('uys_orders').update({ ...row, mrp_durum: 'bekliyor' }).eq('id', initial.id)
+      // Sipariş revize oldu — eski rezervasyonları temizle (yeni hesapla tekrar oluşacak)
+      await rezerveSil(initial.id)
       let woTotal = 0
       for (const k of kalemler) {
         if (k.rcId) { const c = await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
@@ -460,7 +468,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 }
 
 function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; malkod: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
-  const { recipes, stokHareketler, tedarikler, cuttingPlans: cp, materials: mats, orders: allOrders, workOrders: allWOs, loadAll } = useStore()
+  const { recipes, stokHareketler, tedarikler, cuttingPlans: cp, materials: mats, orders: allOrders, workOrders: allWOs, mrpRezerve, loadAll } = useStore()
   const { can } = useAuth()
   const [tab, setTab] = useState<'ie' | 'mrp'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
@@ -471,10 +479,12 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
 
   async function runMRP() {
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
-    const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats)
+    const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, order.id)
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
     const yeniDurum = rows.some(r => r.net > 0) ? 'eksik' : 'tamam'
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', order.id)
+    // Rezerve kayıtları yaz
+    await rezerveYaz(order.id, rows)
     loadAll()
     toast.success(rows.length + ' malzeme hesaplandı')
   }

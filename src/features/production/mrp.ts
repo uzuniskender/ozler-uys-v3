@@ -1,4 +1,4 @@
-import type { Recipe, StokHareket, Tedarik, WorkOrder, Material } from '@/types'
+import type { Recipe, StokHareket, Tedarik, WorkOrder, Material, MrpRezerve } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 
@@ -172,7 +172,9 @@ export function hesaplaMRP(
   tedarikler: Tedarik[],
   cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
   materials: Material[],
-  secilenYMIds?: Set<string> | null
+  secilenYMIds?: Set<string> | null,
+  mrpRezerve?: MrpRezerve[],
+  currentOrderId?: string
 ): MRPRow[] {
   const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
 
@@ -248,7 +250,12 @@ export function hesaplaMRP(
   const sonuc: MRPRow[] = []
   Object.keys(brutIhtiyac).forEach(k => {
     const bi = brutIhtiyac[k]
-    const stok = getStok(k, stokHareketler)
+    const fizikselStok = getStok(k, stokHareketler)
+    // Başka siparişlerin rezervesini düş (kendi siparişin hariç)
+    const baskaRezerve = (mrpRezerve || [])
+      .filter(r => r.malkod === k && r.orderId !== currentOrderId)
+      .reduce((a, r) => a + r.miktar, 0)
+    const stok = Math.max(0, fizikselStok - baskaRezerve)
     // TÜM açık tedarikler (v2 mantığı — sadece aynı sipariş değil)
     const acikTedarik = tedarikler
       .filter(t => t.malkod === k && !t.geldi)
@@ -286,4 +293,41 @@ export async function mrpTedarikOlustur(
   // Siparisin mrp_durum'u 'tamam' olsun (MRP akisi kapandi)
   if (orderId) await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', orderId)
   return ihtiyaclar.length
+}
+
+// ═══ MRP REZERVE YAZMA — Faz B Parça 2C ═══
+// MRP hesabından sonra ilgili siparişe ait rezervasyon kayıtları oluşturur.
+// Önce o siparişin eski rezervasyonlarını siler, sonra yeni kayıtları yazar.
+// Rezerve sadece MRP hesabında 'kullanılabilir stok' düşümü için kullanılır;
+// fiziksel stok kullanımında (üretim/çıkış) dikkate alınmaz.
+export async function rezerveYaz(
+  orderId: string,
+  mrpRows: MRPRow[]
+): Promise<number> {
+  if (!orderId) return 0
+  // Eski rezervasyonları sil (sipariş revize olabilir, yeni hesap yapıldı)
+  await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
+  // Brüt > 0 ve stok var (net eksik olsa bile, stok kadar rezerve edilmeli)
+  // Rezerve miktarı = min(brüt, fiziksel stok) — gerçekten ayrılabilecek miktar
+  const rezerveler = mrpRows
+    .filter(r => r.brut > 0 && r.stok > 0)
+    .map(r => ({
+      id: uid(),
+      order_id: orderId,
+      malkod: r.malkod,
+      malad: r.malad,
+      miktar: Math.min(r.brut, r.stok),
+      birim: r.birim,
+      tarih: today(),
+    }))
+  if (!rezerveler.length) return 0
+  await supabase.from('uys_mrp_rezerve').insert(rezerveler)
+  return rezerveler.length
+}
+
+// Bir siparişe ait tüm rezerveleri siler
+// (sipariş iptal/revize/üretim tamamlandığında çağrılır)
+export async function rezerveSil(orderId: string): Promise<void> {
+  if (!orderId) return
+  await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
 }

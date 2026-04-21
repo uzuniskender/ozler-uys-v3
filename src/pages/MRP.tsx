@@ -6,10 +6,10 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download } from 'lucide-react'
-import { hesaplaMRP, type MRPRow } from '@/features/production/mrp'
+import { hesaplaMRP, rezerveYaz, type MRPRow } from '@/features/production/mrp'
 
 export function MRP() {
-  const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, loadAll } = useStore()
+  const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, mrpRezerve, loadAll } = useStore()
   const { can } = useAuth()
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
   const [selectedYMs, setSelectedYMs] = useState<Set<string>>(new Set())
@@ -111,15 +111,17 @@ export function MRP() {
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
     const ymSet = selectedYMs.size > 0 ? selectedYMs : null
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve)
     setSonuc(result)
     setHesaplandi(true)
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
     for (const oid of ordIds) {
-      const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null)
+      const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid)
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid)
+      // Rezerve kayıtları yaz (eskileri silip yenilerini oluştur)
+      await rezerveYaz(oid, tekResult)
     }
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle
     if (selectedYMs.size > 0) {
