@@ -147,6 +147,7 @@ export function MRP() {
       await supabase.from('uys_tedarikler').insert({
         id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
         birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, not_: 'MRP önerisi',
+        order_id: [...selectedOrders][0] || null, siparis_no: orders.find(o => o.id === [...selectedOrders][0])?.siparisNo || null,
       })
       count++
     }
@@ -338,6 +339,7 @@ export function MRP() {
                           await supabase.from('uys_tedarikler').insert({
                             id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
                             birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null, durum: 'bekliyor', geldi: false, not_: 'MRP',
+                            order_id: [...selectedOrders][0] || null, siparis_no: orders.find(o => o.id === [...selectedOrders][0])?.siparisNo || null,
                           })
                           // Secili siparislerin mrp_durum'unu 'tamam' yap (MRP akisi kapandi)
                           for (const oid of selectedOrders) {
