@@ -40,6 +40,8 @@ function bomPatlaNet(
   // Bu mamul kodunun reçetesini bul
   const rc = recipes.find(r => r.mamulKod === mamulKod)
   if (!rc?.satirlar?.length) {
+    // DEBUG: Derinlik 0'da bu kola girmemeli eğer reçete varsa
+    if (derinlik === 0) console.log(`[MRP DEBUG] ${mamulKod} için RECETE BULUNAMADI, üst reçetelerden HM toplanıyor! rc=`, rc)
     // Kendi reçetesi yok — üst reçetelerden alt kirno'ları bul
     for (const r of recipes) {
       const satirlar = r.satirlar || []
@@ -200,6 +202,8 @@ export function hesaplaMRP(
 
       const urunTermin = (u as any).termin || o.termin || ''
       const p = bomPatlaNet(u.mamulKod, netAdet, 0, {}, recipes, stokHareketler, materials)
+      // DEBUG — bomPatlaNet ne çıkarmış?
+      console.log(`[MRP DEBUG] Sipariş ${o.id} kalem ${u.mamulKod} x${netAdet} → BOM sonuç:`, Object.keys(p).length, 'malzeme:', Object.keys(p))
       Object.keys(p).forEach(k => {
         const v = p[k]
         if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: urunTermin }
