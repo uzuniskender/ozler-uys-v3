@@ -48,7 +48,12 @@ export function Procurement() {
 
   async function del(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
+    // Silinen tedarikin order_id'sini al, sonra o sipariŞi 'bekliyor'a çek
+    const silinen = tedarikler.find(t => t.id === id)
     await supabase.from('uys_tedarikler').delete().eq('id', id)
+    if (silinen?.orderId) {
+      await supabase.from('uys_orders').update({ mrp_durum: 'bekliyor' }).eq('id', silinen.orderId)
+    }
     loadAll(); toast.success('Tedarik silindi')
   }
 
