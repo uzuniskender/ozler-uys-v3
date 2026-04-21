@@ -29,7 +29,15 @@ export function MRP() {
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
       if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
-      if (!showTamamlanan && (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi')) return false
+      if (!showTamamlanan) {
+        // 'tamam' ve eski 'tamamlandi' her zaman gizli
+        if (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') return false
+        // 'eksik' ama tedarik oluşturulmuşsa gizle (iş kapandı)
+        if (o.mrpDurum === 'eksik') {
+          const acikTedarikVar = tedarikler.some(t => t.orderId === o.id && !t.geldi)
+          if (acikTedarikVar) return false
+        }
+      }
       // MRP tamamlanmış siparişleri varsayılan olarak gizle
       // Gerçek ilerlemeye bak — %100 ise gösterme
       const wos = workOrders.filter(w => w.orderId === o.id)
