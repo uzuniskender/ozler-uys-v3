@@ -115,9 +115,10 @@ export function MRP() {
     setSonuc(result)
     setHesaplandi(true)
 
-    // Seçili siparişlerin mrp_durum'unu güncelle (sonuca göre tamam/eksik)
-    const yeniDurum = result.some(r => r.net > 0) ? 'eksik' : 'tamam'
+    // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
     for (const oid of ordIds) {
+      const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null)
+      const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid)
     }
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle

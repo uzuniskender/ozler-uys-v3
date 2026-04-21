@@ -101,8 +101,10 @@ export function Orders() {
     const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats)
     const count = await mrpTedarikOlustur(ordIds[0] || '', hedefOrders[0]?.siparisNo || '', mrpRows)
 
-    const yeniDurum = mrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
+    // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
     for (const o of hedefOrders) {
+      const tekMrpRows = hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats)
+      const yeniDurum = tekMrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
     }
     loadAll()
