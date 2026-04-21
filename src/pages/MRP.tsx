@@ -28,7 +28,7 @@ export function MRP() {
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
       if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
-      if (!showTamamlanan && (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi')) return false
+      if (!showTamamlanan && (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi' || o.mrpDurum === 'eksik')) return false
       // MRP tamamlanmış siparişleri varsayılan olarak gizle
       // Gerçek ilerlemeye bak — %100 ise gösterme
       const wos = workOrders.filter(w => w.orderId === o.id)
@@ -41,7 +41,7 @@ export function MRP() {
 
   // MRP tamamlanmış ama hâlâ aktif sipariş sayısı (toggle label için)
   const mrpTamamSayisi = useMemo(() =>
-    orders.filter(o => (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
+    orders.filter(o => (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi' || o.mrpDurum === 'eksik') && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
   , [orders])
 
   // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
@@ -140,6 +140,10 @@ export function MRP() {
       })
       count++
     }
+    // Seçili siparişleri 'tamam' yap — MRP akışı kapandı (eksik → tedarik oluşturuldu)
+    for (const oid of selectedOrders) {
+      await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
+    }
     loadAll(); setSelectedRows(new Set())
     toast.success(count + ' tedarik oluşturuldu')
   }
@@ -207,7 +211,7 @@ export function MRP() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[250px] overflow-y-auto">
           {aktifOrders.map(o => {
             const sel = selectedOrders.has(o.id); const pct = orderPct(o.id)
-            const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
+            const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi' || o.mrpDurum === 'eksik'
             return (
               <button key={o.id} onClick={() => toggleOrder(o.id)}
                 className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : mrpDone ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
@@ -325,6 +329,10 @@ export function MRP() {
                             id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
                             birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null, durum: 'bekliyor', geldi: false, not_: 'MRP',
                           })
+                          // Secili siparislerin mrp_durum'unu 'tamam' yap (MRP akisi kapandi)
+                          for (const oid of selectedOrders) {
+                            await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
+                          }
                           loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
                         }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>
                       )}</td>

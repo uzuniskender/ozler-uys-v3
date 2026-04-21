@@ -283,5 +283,7 @@ export async function mrpTedarikOlustur(
       durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: r.termin || null, not_: 'MRP otomatik',
     })
   }
+  // Siparisin mrp_durum'u 'tamam' olsun (MRP akisi kapandi)
+  if (orderId) await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', orderId)
   return ihtiyaclar.length
 }

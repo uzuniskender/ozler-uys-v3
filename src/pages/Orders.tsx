@@ -638,6 +638,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                         <td className="px-3 py-1.5"><span className={`text-[10px] font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net > 0 ? '⚠ Eksik' : '✓ Yeterli'}</span></td>
                         <td className="px-3 py-1.5">{r.net > 0 && <button onClick={async () => {
                           await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id })
+                          await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', order.id)
                           loadAll(); toast.success(r.malkod + ' tedarik oluşturuldu')
                         }} className="text-amber text-[10px] hover:underline">+ Tedarik</button>}</td>
                       </tr>
