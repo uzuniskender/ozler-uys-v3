@@ -234,8 +234,19 @@ export function hesaplaMRP(
 
   // 4. KESİM PLANI OVERRIDE — v2 kritik özellik
   // Kesim planı varsa HM ihtiyacını BOM yerine gerçek bar sayısından al
+  // KAPSAM FİLTRESİ: ordIds verilmişse sadece o siparişlerin İE'lerini içeren planları dahil et
+  const ordIdSet = ordIds ? new Set(ordIds) : null
+  const secilenWoIds = ordIdSet
+    ? new Set(workOrders.filter(w => ordIdSet.has(w.orderId)).map(w => w.id))
+    : null
   cuttingPlans.filter(p => p.durum !== 'tamamlandi').forEach(p => {
     const hmk = p.hamMalkod; if (!hmk) return
+    // Kapsam kontrolü: plan satırlarında seçili siparişlerin İE'leri var mı?
+    if (secilenWoIds) {
+      const planWoIds = (p.satirlar || []).map((s: any) => s.woId).filter(Boolean)
+      const kapsamDahil = planWoIds.some((wid: string) => secilenWoIds.has(wid))
+      if (!kapsamDahil) return // Bu plan seçili siparişlerle ilgisiz, atla
+    }
     const hmM = materials.find(m => m.kod === hmk)
     // YarıMamul ise atla — tedarik edilmez
     if (hmM?.tip === 'YarıMamul') return
@@ -251,9 +262,10 @@ export function hesaplaMRP(
   Object.keys(brutIhtiyac).forEach(k => {
     const bi = brutIhtiyac[k]
     const fizikselStok = getStok(k, stokHareketler)
-    // Başka siparişlerin rezervesini düş (kendi siparişin hariç)
+    // Başka siparişlerin rezervesini düş (kendi siparişin hariç) — case-insensitive malkod eşleşmesi
+    const kLower = (k || '').trim().toLowerCase()
     const baskaRezerve = (mrpRezerve || [])
-      .filter(r => r.malkod === k && r.orderId !== currentOrderId)
+      .filter(r => (r.malkod || '').trim().toLowerCase() === kLower && r.orderId !== currentOrderId)
       .reduce((a, r) => a + r.miktar, 0)
     const stok = Math.max(0, fizikselStok - baskaRezerve)
     // TÜM açık tedarikler (v2 mantığı — sadece aynı sipariş değil)
@@ -309,17 +321,26 @@ export async function rezerveYaz(
   await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
   // Brüt > 0 ve stok var (net eksik olsa bile, stok kadar rezerve edilmeli)
   // Rezerve miktarı = min(brüt, fiziksel stok) — gerçekten ayrılabilecek miktar
-  const rezerveler = mrpRows
+  // Case-insensitive gruplama: aynı malzeme farklı yazılmışsa tek kayıtta topla
+  const grupMap: Record<string, { malkod: string; malad: string; miktar: number; birim: string }> = {}
+  mrpRows
     .filter(r => r.brut > 0 && r.stok > 0)
-    .map(r => ({
-      id: uid(),
-      order_id: orderId,
-      malkod: r.malkod,
-      malad: r.malad,
-      miktar: Math.min(r.brut, r.stok),
-      birim: r.birim,
-      tarih: today(),
-    }))
+    .forEach(r => {
+      const key = (r.malkod || '').trim().toLowerCase()
+      if (!grupMap[key]) {
+        grupMap[key] = { malkod: r.malkod, malad: r.malad, miktar: 0, birim: r.birim }
+      }
+      grupMap[key].miktar += Math.min(r.brut, r.stok)
+    })
+  const rezerveler = Object.values(grupMap).map(g => ({
+    id: uid(),
+    order_id: orderId,
+    malkod: g.malkod,
+    malad: g.malad,
+    miktar: g.miktar,
+    birim: g.birim,
+    tarih: today(),
+  }))
   if (!rezerveler.length) return 0
   await supabase.from('uys_mrp_rezerve').insert(rezerveler)
   return rezerveler.length
