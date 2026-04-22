@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { useState, useMemo } from 'react'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -12,6 +12,27 @@ import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, 
 import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
+
+// Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar.
+// Sipariş ekleme/revize/silme/kapatma, toplu MRP, tedarik değişimi sonrası çağrılmalı.
+// Store'dan taze veri okur — loadAll()'dan SONRA çağır.
+async function triggerRezerveSync() {
+  const s = useStore.getState()
+  const cpMapped = s.cuttingPlans.map((p: any) => ({
+    hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+    gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+  }))
+  try {
+    await rezerveleriSenkronla(
+      s.orders as any, s.workOrders, s.recipes,
+      s.stokHareketler, s.tedarikler, cpMapped, s.materials
+    )
+    // Store'u tekrar yükle ki UI rezerve değişikliklerini görsün
+    await s.loadAll()
+  } catch (e) {
+    console.error('[Orders] rezerve senkron hatası:', e)
+  }
+}
 
 export function Orders() {
   const { orders, workOrders, logs, recipes, cuttingPlans, materials, loadAll } = useStore()
@@ -35,6 +56,7 @@ export function Orders() {
       await rezerveSil(id)
     }
     setSelIds(new Set()); loadAll(); toast.success(selIds.size + ' sipariş silindi')
+    await triggerRezerveSync()
   }
 
   function orderPct(orderId: string): number {
@@ -87,6 +109,7 @@ export function Orders() {
     await rezerveSil(id)
     logAction('Sipariş silindi', id)
     loadAll(); toast.success('Sipariş silindi')
+    await triggerRezerveSync()
   }
 
   async function topluMRP() {
@@ -112,6 +135,7 @@ export function Orders() {
       await rezerveYaz(o.id, tekMrpRows)
     }
     loadAll()
+    await triggerRezerveSync()
     toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${count} tedarik oluşturuldu`)
   }
 
@@ -214,6 +238,7 @@ export function Orders() {
                       // Sipariş kapatıldı — rezerveleri serbest bırak
                       if (yeniDurum === 'kapalı') await rezerveSil(o.id)
                       loadAll(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))
+                      await triggerRezerveSync()
                     }} className={`p-1 ${o.durum === 'kapalı' ? 'text-green hover:text-green' : 'text-zinc-500 hover:text-amber'}`} title={o.durum === 'kapalı' ? 'Aç' : 'Kapat'}>
                       {o.durum === 'kapalı' ? '🔓' : '🔒'}
                     </button>}
@@ -225,8 +250,8 @@ export function Orders() {
           </tbody></table>
         ) : <div className="p-8 text-center text-zinc-600 text-sm">{search ? 'Arama sonucu bulunamadı' : 'Henüz sipariş yok'}</div>}
       </div>
-      {showForm && <OrderFormModal initial={editOrder} recipes={recipes} materials={materials} onClose={() => { setShowForm(false); setEditOrder(null) }} onSaved={() => { setShowForm(false); setEditOrder(null); loadAll(); toast.success(editOrder ? 'Güncellendi' : 'Oluşturuldu') }} />}
-      {showBulkImport && <BulkOrderImportModal existingOrders={orders} recipes={recipes} onClose={() => setShowBulkImport(false)} onComplete={() => { setShowBulkImport(false); loadAll() }} />}
+      {showForm && <OrderFormModal initial={editOrder} recipes={recipes} materials={materials} onClose={() => { setShowForm(false); setEditOrder(null) }} onSaved={async () => { setShowForm(false); setEditOrder(null); loadAll(); toast.success(editOrder ? 'Güncellendi' : 'Oluşturuldu'); await triggerRezerveSync() }} />}
+      {showBulkImport && <BulkOrderImportModal existingOrders={orders} recipes={recipes} onClose={() => setShowBulkImport(false)} onComplete={async () => { setShowBulkImport(false); loadAll(); await triggerRezerveSync() }} />}
       {selectedOrder && <OrderDetailModal order={selectedOrder} workOrders={workOrders.filter(w => w.orderId === selectedOrder.id)} logs={logs} onClose={() => setSelectedOrder(null)} />}
     </div>
   )
@@ -486,12 +511,13 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     // Rezerve kayıtları yaz
     await rezerveYaz(order.id, rows)
     loadAll()
+    await triggerRezerveSync()
     toast.success(rows.length + ' malzeme hesaplandı')
   }
 
   async function createTedarik() {
     const count = await mrpTedarikOlustur(order.id, order.siparisNo, mrpRows)
-    if (count > 0) { loadAll(); toast.success(count + ' tedarik kaydı oluşturuldu') }
+    if (count > 0) { loadAll(); toast.success(count + ' tedarik kaydı oluşturuldu'); await triggerRezerveSync() }
     else toast.info('Tüm ihtiyaçlar karşılanmış')
   }
 
@@ -652,6 +678,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                           await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id })
                           await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', order.id)
                           loadAll(); toast.success(r.malkod + ' tedarik oluşturuldu')
+                          await triggerRezerveSync()
                         }} className="text-amber text-[10px] hover:underline">+ Tedarik</button>}</td>
                       </tr>
                     ))}
