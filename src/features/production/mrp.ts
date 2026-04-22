@@ -249,27 +249,45 @@ export function hesaplaMRP(
   // 3. Brüt ihtiyaçları yuvarla
   Object.keys(brutIhtiyac).forEach(k => { brutIhtiyac[k].brut = Math.ceil(brutIhtiyac[k].brut) })
 
-  // 4. KESİM PLANI OVERRIDE — v2 kritik özellik
-  // Kesim planı varsa HM ihtiyacını BOM yerine gerçek bar sayısından al
-  // KAPSAM FİLTRESİ: ordIds verilmişse sadece o siparişlerin İE'lerini içeren planları dahil et
+  // 4. KESİM PLANI OVERRIDE — v2 kritik özellik (şema: p.satirlar[].kesimler[].woId)
+  // Kesim planı varsa HM ihtiyacını BOM yerine gerçek bar sayısından al.
+  // KAPSAM FİLTRESİ: ordIds verilmişse, sadece o siparişlere ait kesimlerin
+  // hamAdet payını topla (satır paylaşımlı ise kesim adet oranıyla böl).
   const secilenWoIds = ordIdSet
     ? new Set(workOrders.filter(w => ordIdSet.has(w.orderId)).map(w => w.id))
     : null
   console.log('[MRP DEBUG] Kapsam filtre:', { ordIds, toplamCuttingPlan: cuttingPlans.length, secilenWoIds: secilenWoIds ? [...secilenWoIds] : null })
   cuttingPlans.filter(p => p.durum !== 'tamamlandi').forEach(p => {
     const hmk = p.hamMalkod; if (!hmk) return
-    // Kapsam kontrolü: plan satırlarında seçili siparişlerin İE'leri var mı?
-    if (secilenWoIds) {
-      const planWoIds = (p.satirlar || []).map((s: any) => s.woId).filter(Boolean)
-      const kapsamDahil = planWoIds.some((wid: string) => secilenWoIds.has(wid))
-      console.log('[MRP DEBUG] Plan:', hmk, '| planWoIds:', planWoIds, '| kapsamDahil:', kapsamDahil)
-      if (!kapsamDahil) return // Bu plan seçili siparişlerle ilgisiz, atla
-    }
     const hmM = materials.find(m => m.kod === hmk)
     // YarıMamul ise atla — tedarik edilmez
     if (hmM?.tip === 'YarıMamul') return
-    const planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
-    if (!planAdet) return
+
+    let planAdet: number
+
+    if (secilenWoIds) {
+      // Seçili siparişlerin kesimlerine düşen hamAdet payını topla
+      let toplamPay = 0
+      for (const s of (p.satirlar || [])) {
+        const kesimler: any[] = (s as any).kesimler || []
+        const toplamKesimAdet = kesimler.reduce((a, k) => a + (k.adet || 0), 0)
+        if (toplamKesimAdet === 0) continue
+        const kapsamKesimAdet = kesimler
+          .filter(k => k.woId && secilenWoIds.has(k.woId))
+          .reduce((a, k) => a + (k.adet || 0), 0)
+        if (kapsamKesimAdet === 0) continue
+        toplamPay += ((s as any).hamAdet || 0) * (kapsamKesimAdet / toplamKesimAdet)
+      }
+      planAdet = Math.ceil(toplamPay)
+      console.log('[MRP DEBUG] Plan:', hmk, '| kapsam pay:', toplamPay.toFixed(3), '→ planAdet:', planAdet)
+      if (planAdet <= 0) return // Bu plan seçili siparişlerle ilgisiz
+    } else {
+      // Genel hesap (ordIds=null): planın tamamı
+      planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
+      if (!planAdet) return
+      console.log('[MRP DEBUG] Plan:', hmk, '| genel → planAdet:', planAdet)
+    }
+
     console.log('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)
     const key = (hmk || '').trim().toLowerCase()
     if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
