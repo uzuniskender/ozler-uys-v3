@@ -2,6 +2,11 @@ import type { Recipe, StokHareket, Tedarik, WorkOrder, Material, MrpRezerve } fr
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 
+// ═══ DEBUG ═══
+// Normal kullanımda false — sorun varsa true yapıp canlı konsoldan izle
+const DEBUG_MRP = false
+const dbg = (...args: any[]) => { if (DEBUG_MRP) console.log(...args) }
+
 export interface MRPRow {
   malkod: string; malad: string; tip: string; birim: string
   brut: number; stok: number; acikTedarik: number; net: number
@@ -41,7 +46,7 @@ function bomPatlaNet(
   const rc = recipes.find(r => r.mamulKod === mamulKod)
   if (!rc?.satirlar?.length) {
     // DEBUG: Derinlik 0'da bu kola girmemeli eğer reçete varsa
-    if (derinlik === 0) console.log(`[MRP DEBUG] ${mamulKod} için RECETE BULUNAMADI, üst reçetelerden HM toplanıyor! rc=`, rc)
+    if (derinlik === 0) dbg(`[MRP DEBUG] ${mamulKod} için RECETE BULUNAMADI, üst reçetelerden HM toplanıyor! rc=`, rc)
     // Kendi reçetesi yok — üst reçetelerden alt kirno'ları bul
     for (const r of recipes) {
       const satirlar = r.satirlar || []
@@ -208,7 +213,7 @@ export function hesaplaMRP(
       const urunTermin = (u as any).termin || o.termin || ''
       const p = bomPatlaNet(u.mamulKod, netAdet, 0, {}, recipes, stokHareketler, materials)
       // DEBUG — bomPatlaNet ne çıkarmış?
-      console.log(`[MRP DEBUG] Sipariş ${o.id} kalem ${u.mamulKod} x${netAdet} → BOM sonuç:`, Object.keys(p).length, 'malzeme:', Object.keys(p))
+      dbg(`[MRP DEBUG] Sipariş ${o.id} kalem ${u.mamulKod} x${netAdet} → BOM sonuç:`, Object.keys(p).length, 'malzeme:', Object.keys(p))
       Object.keys(p).forEach(k => {
         const v = p[k]
         const key = (k || '').trim().toLowerCase()
@@ -229,13 +234,13 @@ export function hesaplaMRP(
     }
     return true
   })
-  console.log('[MRP DEBUG] Bağımsız YM İE sayısı:', ymIEs.length, '| IDs:', ymIEs.map(w => w.id))
+  dbg('[MRP DEBUG] Bağımsız YM İE sayısı:', ymIEs.length, '| IDs:', ymIEs.map(w => w.id))
   for (const w of ymIEs) {
     const kalan = w.hedef // simplified — ideally use logs to get actual remaining
     if (!kalan || !w.malkod) continue
     const wTermin = (w as any).termin || ''
     const p = bomPatlaNet(w.malkod, kalan, 0, {}, recipes, stokHareketler, materials)
-    console.log('[MRP DEBUG] Bağımsız YM İE', w.id, w.malkod, 'x', kalan, '→ BOM:', Object.keys(p).length, 'malzeme:', Object.keys(p))
+    dbg('[MRP DEBUG] Bağımsız YM İE', w.id, w.malkod, 'x', kalan, '→ BOM:', Object.keys(p).length, 'malzeme:', Object.keys(p))
     Object.keys(p).forEach(k => {
       if (k === w.malkod) return
       const v = p[k]
@@ -256,7 +261,7 @@ export function hesaplaMRP(
   const secilenWoIds = ordIdSet
     ? new Set(workOrders.filter(w => ordIdSet.has(w.orderId)).map(w => w.id))
     : null
-  console.log('[MRP DEBUG] Kapsam filtre:', { ordIds, toplamCuttingPlan: cuttingPlans.length, secilenWoIds: secilenWoIds ? [...secilenWoIds] : null })
+  dbg('[MRP DEBUG] Kapsam filtre:', { ordIds, toplamCuttingPlan: cuttingPlans.length, secilenWoIds: secilenWoIds ? [...secilenWoIds] : null })
   cuttingPlans.filter(p => p.durum !== 'tamamlandi').forEach(p => {
     const hmk = p.hamMalkod; if (!hmk) return
     const hmM = materials.find(m => m.kod === hmk)
@@ -279,16 +284,16 @@ export function hesaplaMRP(
         toplamPay += ((s as any).hamAdet || 0) * (kapsamKesimAdet / toplamKesimAdet)
       }
       planAdet = Math.ceil(toplamPay)
-      console.log('[MRP DEBUG] Plan:', hmk, '| kapsam pay:', toplamPay.toFixed(3), '→ planAdet:', planAdet)
+      dbg('[MRP DEBUG] Plan:', hmk, '| kapsam pay:', toplamPay.toFixed(3), '→ planAdet:', planAdet)
       if (planAdet <= 0) return // Bu plan seçili siparişlerle ilgisiz
     } else {
       // Genel hesap (ordIds=null): planın tamamı
       planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
       if (!planAdet) return
-      console.log('[MRP DEBUG] Plan:', hmk, '| genel → planAdet:', planAdet)
+      dbg('[MRP DEBUG] Plan:', hmk, '| genel → planAdet:', planAdet)
     }
 
-    console.log('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)
+    dbg('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)
     const key = (hmk || '').trim().toLowerCase()
     if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
     // Kesim planı gerçek bar sayısını gösterir — BOM'u override et
@@ -320,7 +325,7 @@ export function hesaplaMRP(
     sonuc.push({ malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum, termin: bi.termin || '' })
   })
 
-  console.log('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.values(brutIhtiyac).map(b => b.malkod))
+  dbg('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.values(brutIhtiyac).map(b => b.malkod))
 
   return sonuc.sort((a, b) => {
     const s: Record<string, number> = { yok: 0, eksik: 1, yeterli: 2 }
