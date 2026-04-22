@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>UYS v3 Dashboard — IFS Mockup</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f4f5f7; color: #1f2937; padding: 24px; font-size: 14px; }
+.app-shell { max-width: 1400px; margin: 0 auto; }
+.shell-dark-note { background: #12141d; color: #888; text-align: center; padding: 8px; border-radius: 6px 6px 0 0; font-size: 11px; margin-bottom: 0; }
+.dashboard { background: #f9fafb; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb; padding: 24px; }
+
+/* Header */
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.header h1 { font-size: 22px; font-weight: 600; color: #111827; letter-spacing: -0.01em; }
+.header-meta { font-size: 12px; color: #6b7280; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.header-badges { display: flex; gap: 8px; }
+.badge { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+.badge.red { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+.badge.amber { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+
+/* KPI tiles */
+.kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
+.kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; position: relative; cursor: pointer; transition: all 0.15s; }
+.kpi:hover { border-color: #9ca3af; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
+.kpi-label { font-size: 11px; color: #6b7280; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.kpi-value { font-size: 28px; font-weight: 600; color: #111827; font-family: 'JetBrains Mono', monospace; letter-spacing: -0.02em; }
+.kpi-sub { font-size: 11px; color: #6b7280; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+.kpi-sub .up { color: #059669; }
+.kpi-sub .down { color: #dc2626; }
+.kpi.alert { border-color: #fca5a5; background: #fef2f2; }
+.kpi.alert .kpi-value { color: #dc2626; }
+.kpi.warn { border-color: #fde68a; background: #fffbeb; }
+.kpi.warn .kpi-value { color: #d97706; }
+.kpi-icon { position: absolute; top: 12px; right: 12px; font-size: 14px; opacity: 0.5; }
+
+/* Workflow + Alerts row */
+.row-2col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 24px; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+.panel-hdr { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; }
+.panel-title { font-size: 13px; font-weight: 600; color: #374151; letter-spacing: -0.01em; }
+.panel-count { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7280; }
+.panel-body { padding: 16px; }
+
+/* Workflow */
+.flow { display: flex; align-items: stretch; gap: 0; }
+.flow-step { flex: 1; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; position: relative; cursor: pointer; transition: all 0.15s; min-width: 0; }
+.flow-step:hover { background: #fff; border-color: #9ca3af; }
+.flow-step.warn { border-color: #fde68a; background: #fffbeb; }
+.flow-step.warn::after { content: '!'; position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; background: #d97706; color: #fff; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.flow-step .ico { font-size: 14px; margin-bottom: 4px; }
+.flow-step .nm { font-size: 11px; color: #6b7280; font-weight: 500; }
+.flow-step .vl { font-size: 16px; font-weight: 600; color: #111827; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+.flow-step.warn .vl { color: #d97706; }
+.flow-arrow { display: flex; align-items: center; padding: 0 4px; color: #d1d5db; font-size: 14px; }
+
+/* Alerts panel */
+.alert-list { display: flex; flex-direction: column; gap: 10px; }
+.alert-item { display: flex; align-items: start; gap: 10px; padding: 10px; border-radius: 6px; background: #f9fafb; border-left: 3px solid #d1d5db; font-size: 12px; }
+.alert-item.red { background: #fef2f2; border-left-color: #dc2626; }
+.alert-item.amber { background: #fffbeb; border-left-color: #d97706; }
+.alert-item .dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.alert-item.red .dot { background: #dc2626; }
+.alert-item.amber .dot { background: #d97706; }
+.alert-item .msg { flex: 1; color: #374151; }
+.alert-item .act { font-size: 11px; color: #2563eb; cursor: pointer; font-weight: 500; white-space: nowrap; }
+
+/* Charts + Sevk row */
+.chart-box { height: 200px; display: flex; align-items: end; gap: 4px; padding: 16px; }
+.chart-bar { flex: 1; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.chart-bar .bar-up { background: #10b981; width: 100%; border-radius: 2px 2px 0 0; }
+.chart-bar .bar-fire { background: #ef4444; width: 100%; border-radius: 2px 2px 0 0; }
+.chart-bar .lbl { font-size: 10px; color: #6b7280; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+/* List items */
+.list-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background 0.1s; }
+.list-row:hover { background: #f9fafb; }
+.list-row:last-child { border-bottom: none; }
+.list-row .date { color: #2563eb; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.list-row .sip { color: #2563eb; font-family: 'JetBrains Mono', monospace; }
+.list-row .cus { color: #374151; flex: 1; }
+.list-row .meta { color: #6b7280; font-size: 11px; }
+
+/* Active work grid */
+.work-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px; }
+.work-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #fff; }
+.work-card.urgent { border-color: #fca5a5; background: #fef2f2; }
+.work-card .wc-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.work-card .wc-op { font-size: 13px; font-weight: 600; color: #111827; flex: 1; }
+.work-card .wc-ist { font-size: 10px; padding: 2px 6px; background: #f3f4f6; border-radius: 4px; color: #6b7280; }
+.work-card .wc-ie { font-size: 11px; color: #2563eb; font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+.work-card .wc-prod { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
+.progress { height: 4px; background: #f3f4f6; border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+.progress-fill { height: 100%; background: #2563eb; border-radius: 2px; }
+.wc-foot { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #6b7280; font-family: 'JetBrains Mono', monospace; padding-top: 6px; border-top: 1px solid #f3f4f6; }
+.wc-foot .time.urgent { color: #dc2626; font-weight: 600; }
+
+/* Personnel + Ops row */
+.row-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.person-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid #f3f4f6; }
+.person-row:last-child { border-bottom: none; }
+.person-row .nm { color: #111827; font-weight: 500; }
+.person-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+.person-tag.izin { background: #fef3c7; color: #d97706; }
+.person-tag.rapor { background: #fee2e2; color: #dc2626; }
+.person-tag.mesai { background: #cffafe; color: #0891b2; }
+
+/* Quick access */
+.quick-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 8px; }
+.quick-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.15s; }
+.quick-card:hover { border-color: #2563eb; background: #eff6ff; }
+.quick-card .qi { font-size: 18px; margin-bottom: 6px; }
+.quick-card .ql { font-size: 12px; font-weight: 600; color: #111827; }
+.quick-card .qs { font-size: 10px; color: #6b7280; margin-top: 2px; }
+
+.section-title { font-size: 10px; color: #9ca3af; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.section-title::before { content: ''; display: block; width: 4px; height: 10px; background: #2563eb; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="shell-dark-note">↑ Dark app shell (üst bar, sol menü dark kalır) · Dashboard sayfası light "ada" olarak açılır ↓</div>
+  <div class="dashboard">
+
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <h1>Genel Durum</h1>
+        <div class="header-meta">22.04.2026 · 2 aktif sipariş · 61 açık İE</div>
+      </div>
+      <div class="header-badges">
+        <div class="badge red">⚠ 0 termin geçmiş</div>
+        <div class="badge amber">💬 3 yeni mesaj</div>
+      </div>
+    </div>
+
+    <!-- KPI Row -->
+    <div class="section-title">Anahtar Göstergeler</div>
+    <div class="kpi-row">
+      <div class="kpi"><span class="kpi-icon">📋</span><div class="kpi-label">Aktif Sipariş</div><div class="kpi-value">2</div><div class="kpi-sub">Son 7 gün <span class="up">+1</span></div></div>
+      <div class="kpi"><span class="kpi-icon">⚙</span><div class="kpi-label">Açık İş Emri</div><div class="kpi-value">61</div><div class="kpi-sub">12 tamamlandı bu hafta</div></div>
+      <div class="kpi"><span class="kpi-icon">🔧</span><div class="kpi-label">Aktif Çalışma</div><div class="kpi-value">4</div><div class="kpi-sub">her 30sn güncellenir</div></div>
+      <div class="kpi warn"><span class="kpi-icon">🔥</span><div class="kpi-label">Bugün Fire</div><div class="kpi-value">8</div><div class="kpi-sub">3 telafi bekliyor</div></div>
+      <div class="kpi alert"><span class="kpi-icon">📦</span><div class="kpi-label">Min Stok Altı</div><div class="kpi-value">3</div><div class="kpi-sub">tedarik oluştur →</div></div>
+      <div class="kpi"><span class="kpi-icon">🚚</span><div class="kpi-label">Bu Hafta Sevk</div><div class="kpi-value">5</div><div class="kpi-sub">2 müşteri</div></div>
+    </div>
+
+    <!-- Workflow + Alerts -->
+    <div class="row-2col">
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Üretim Akışı</div><div class="panel-count">Aktif hattı göster</div></div>
+        <div class="panel-body">
+          <div class="flow">
+            <div class="flow-step"><div class="ico">📋</div><div class="nm">Sipariş</div><div class="vl">2</div></div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step"><div class="ico">📑</div><div class="nm">Reçete</div><div class="vl">595</div></div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step"><div class="ico">⚙</div><div class="nm">İş Emri</div><div class="vl">61</div></div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step warn"><div class="ico">✂️</div><div class="nm">Kesim</div><div class="vl">3</div></div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step"><div class="ico">📊</div><div class="nm">MRP</div><div class="vl">0</div></div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step"><div class="ico">🔧</div><div class="nm">Üretim</div><div class="vl">4</div></div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step"><div class="ico">🚚</div><div class="nm">Sevk</div><div class="vl">5</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Uyarılar</div><div class="panel-count">2 aktif</div></div>
+        <div class="panel-body">
+          <div class="alert-list">
+            <div class="alert-item red"><div class="dot"></div><div class="msg"><strong>3 malzeme</strong> minimum stok altında</div><div class="act">Tedarik →</div></div>
+            <div class="alert-item amber"><div class="dot"></div><div class="msg"><strong>3 İE</strong> kesim planına dahil edilmemiş</div><div class="act">Planla →</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart + Sevkler -->
+    <div class="row-2col">
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Son 7 Gün Üretim</div><div class="panel-count">🟢 üretim  🔴 fire</div></div>
+        <div class="chart-box">
+          <div class="chart-bar"><div class="bar-up" style="height: 120px;"></div><div class="bar-fire" style="height: 6px;"></div><div class="lbl">16.04</div></div>
+          <div class="chart-bar"><div class="bar-up" style="height: 145px;"></div><div class="bar-fire" style="height: 10px;"></div><div class="lbl">17.04</div></div>
+          <div class="chart-bar"><div class="bar-up" style="height: 160px;"></div><div class="bar-fire" style="height: 8px;"></div><div class="lbl">18.04</div></div>
+          <div class="chart-bar"><div class="bar-up" style="height: 95px;"></div><div class="bar-fire" style="height: 14px;"></div><div class="lbl">19.04</div></div>
+          <div class="chart-bar"><div class="bar-up" style="height: 135px;"></div><div class="bar-fire" style="height: 4px;"></div><div class="lbl">20.04</div></div>
+          <div class="chart-bar"><div class="bar-up" style="height: 150px;"></div><div class="bar-fire" style="height: 6px;"></div><div class="lbl">21.04</div></div>
+          <div class="chart-bar"><div class="bar-up" style="height: 110px;"></div><div class="bar-fire" style="height: 12px;"></div><div class="lbl">22.04</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Bu Haftanın Sevkleri</div><div class="panel-count">5 sevk · Mon–Sun</div></div>
+        <div style="padding: 4px 0;">
+          <div class="list-row"><span class="date">22.04</span><span class="sip">OZD...630</span><span class="cus">MHM Industry</span><span class="meta">18 kalem</span></div>
+          <div class="list-row"><span class="date">23.04</span><span class="sip">OZD...631</span><span class="cus">Compaco Romania</span><span class="meta">4 kalem</span></div>
+          <div class="list-row"><span class="date">24.04</span><span class="sip">OZD...632</span><span class="cus">İç Piyasa — Ali İnş.</span><span class="meta">7 kalem</span></div>
+          <div class="list-row"><span class="date">25.04</span><span class="sip">OZD...633</span><span class="cus">Dorce Prefab.</span><span class="meta">12 kalem</span></div>
+          <div class="list-row"><span class="date">26.04</span><span class="sip">OZD...634</span><span class="cus">Akkuyu NGS</span><span class="meta">3 kalem</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Work -->
+    <div class="panel" style="margin-bottom: 24px;">
+      <div class="panel-hdr">
+        <div class="panel-title">🟢 Aktif Çalışmalar — Canlı (4)</div>
+        <div class="panel-count">⏰ 1 uzun · her 30sn güncellenir</div>
+      </div>
+      <div class="work-grid">
+        <div class="work-card urgent">
+          <div class="wc-hdr"><div class="wc-op">Ahmet Yılmaz</div><div class="wc-ist">Pres 1</div></div>
+          <div class="wc-ie">IE-2026-0148 · Büküm</div>
+          <div class="wc-prod">Boru 48x2mm · L=1500</div>
+          <div class="progress"><div class="progress-fill" style="width: 62%; background: #dc2626;"></div></div>
+          <div class="wc-foot">⏱ <span class="time urgent">8s 42dk</span> · 08:30</div>
+        </div>
+        <div class="work-card">
+          <div class="wc-hdr"><div class="wc-op">Mehmet Kaya</div><div class="wc-ist">Testere 2</div></div>
+          <div class="wc-ie">IE-2026-0151 · Kesim</div>
+          <div class="wc-prod">Boru 60x3mm · L=6000</div>
+          <div class="progress"><div class="progress-fill" style="width: 85%;"></div></div>
+          <div class="wc-foot">⏱ <span class="time">2s 15dk</span> · 14:30</div>
+        </div>
+        <div class="work-card">
+          <div class="wc-hdr"><div class="wc-op">Ayşe Demir</div><div class="wc-ist">Kaynak 1</div></div>
+          <div class="wc-ie">IE-2026-0153 · Kaynak</div>
+          <div class="wc-prod">Set Başlığı US-32</div>
+          <div class="progress"><div class="progress-fill" style="width: 34%;"></div></div>
+          <div class="wc-foot">⏱ <span class="time">1s 05dk</span> · 15:40</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Personnel + Duruşlar + Bölümsüz -->
+    <div class="row-3col">
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Bugün İzinli / Raporlu</div><div class="panel-count">2</div></div>
+        <div style="padding: 4px 0;">
+          <div class="person-row"><span class="nm">Ali Çelik</span><span class="person-tag rapor">rapor</span><span style="margin-left: auto; font-family: monospace; color: #6b7280;">tüm gün</span></div>
+          <div class="person-row"><span class="nm">Zeynep Aksoy</span><span class="person-tag izin">yıllık</span><span style="margin-left: auto; font-family: monospace; color: #6b7280;">22.04–26.04</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Bugün Duruşlu İstasyonlar</div><div class="panel-count">1</div></div>
+        <div style="padding: 4px 0;">
+          <div class="person-row"><span class="nm">Pres 2</span><span style="color:#dc2626; font-size:11px;">Bakım</span><span style="margin-left: auto; font-family: monospace; color: #6b7280;">Set Başlığı</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr"><div class="panel-title">Giriş Yapmayan Operatörler</div><div class="panel-count">3 / 24</div></div>
+        <div style="padding: 12px 16px; font-size: 12px; color: #6b7280;">
+          Click →&nbsp; detay modal (mevcut InactiveOperatorsCard component'i aynen kullanılacak, sadece renk paleti değişir)
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Access -->
+    <div class="section-title">Hızlı Erişim — Admin</div>
+    <div class="quick-row">
+      <div class="quick-card"><div class="qi">📋</div><div class="ql">Siparişler</div><div class="qs">2 aktif</div></div>
+      <div class="quick-card"><div class="qi">📊</div><div class="ql">MRP</div><div class="qs">güncel</div></div>
+      <div class="quick-card"><div class="qi">✂️</div><div class="ql">Kesim Planı</div><div class="qs">3 planlanmadı</div></div>
+      <div class="quick-card"><div class="qi">⚙</div><div class="ql">İş Emirleri</div><div class="qs">61 açık</div></div>
+      <div class="quick-card"><div class="qi">📦</div><div class="ql">Stok / Depo</div><div class="qs">⚠ 3 min altı</div></div>
+      <div class="quick-card"><div class="qi">📈</div><div class="ql">Raporlar</div><div class="qs">analiz</div></div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
