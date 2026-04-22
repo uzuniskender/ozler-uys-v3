@@ -126,20 +126,11 @@ export function DataManagement() {
         no: 4, ad: 'Tedarik–Stok tutarlılığı',
         durum: tedStokEksik.length ? 'fail' : 'pass',
         mesaj: tedStokEksik.length ? `${tedStokEksik.length} tedarik "geldi" ama stok girişi yok` : `${teds.filter((t: any) => t.geldi).length} gelmiş tedarik temiz`,
-        neden: tedStokEksik.length ? 'Tedarik "geldi" olarak işaretlenmiş ama stok hareketi oluşturulmamış. Sistem geldi=true olduğunda otomatik stok yazmıyor (bu bir bug, düzeltilecek).' : undefined,
-        aksiyon: tedStokEksik.length ? 'Otomatik Düzelt — her tedarik için "Tedarik (otomatik onarım)" açıklamalı stok girişi yazılır.' : undefined,
-        autoFixEtiket: tedStokEksik.length ? 'Stok girişlerini yaz' : undefined,
-        autoFix: tedStokEksik.length ? async () => {
-          const kayitlar = tedStokEksik.map((t: any) => ({
-            id: uid(), malkod: t.malkod, malad: t.malad,
-            tip: 'giris', miktar: t.miktar, birim: t.birim || 'Adet',
-            tarih: today(), aciklama: `Tedarik (otomatik onarım): ${t.siparis_no || ''}`,
-          }))
-          const { error } = await supabase.from('uys_stok_hareketler').insert(kayitlar)
-          if (error) return `Hata: ${error.message}`
-          return `${kayitlar.length} stok girişi yazıldı`
-        } : undefined,
-        detay: tedStokEksik.length ? { tedarikler: tedStokEksik.map((t: any) => ({ malkod: t.malkod, miktar: t.miktar, siparisNo: t.siparis_no })) } : undefined,
+        neden: tedStokEksik.length ? 'Tedarik "geldi" olarak işaretlenmiş ama stok hareketi oluşturulmamış. Muhtemel sebep: kullanıcı yanlışlıkla "geldi" tıkladı, veya malzeme teslim olmadan işaretlendi.' : undefined,
+        aksiyon: tedStokEksik.length ? 'Tedarikler sayfasına git → aşağıdaki kayıtları bul → malzeme gerçekten geldiyse Supabase Table Editor\'dan "uys_stok_hareketler" tablosuna elle giriş yaz; gelmediyse Tedarikler\'deki "geldi" işaretini kaldır.' : undefined,
+        // autoFix kaldırıldı: uys_stok_hareketler şemasında bilmediğim NOT NULL alanlar var
+        // (geçmiş deneme 400 Bad Request döndü). Güvenli çözüm kullanıcı kararı.
+        detay: tedStokEksik.length ? { tedarikler: tedStokEksik.map((t: any) => ({ id: t.id, malkod: t.malkod, miktar: t.miktar, birim: t.birim, tarih: t.tarih, siparisNo: t.siparis_no || '(yok)' })) } : undefined,
       })
 
       // 5. Rezerve–Stok dengesi
@@ -360,12 +351,17 @@ export function DataManagement() {
     setAutoFixing(kontrolNo)
     try {
       const sonuc = await k.autoFix()
-      toast.success(`Kontrol #${kontrolNo}: ${sonuc}`)
+      // autoFix string döner; "Hata:" ile başlıyorsa kırmızı toast
+      if (sonuc.toLowerCase().startsWith('hata:')) {
+        toast.error(`Kontrol #${kontrolNo}: ${sonuc}`)
+      } else {
+        toast.success(`Kontrol #${kontrolNo}: ${sonuc}`)
+      }
       await loadAll()
       // Raporu yeniden çalıştır
       await saglikRaporuCalistir()
     } catch (e: any) {
-      toast.error(`Kontrol #${kontrolNo}: ${e.message}`)
+      toast.error(`Kontrol #${kontrolNo}: ${e.message || 'bilinmeyen hata'}`)
     }
     setAutoFixing(null)
   }
