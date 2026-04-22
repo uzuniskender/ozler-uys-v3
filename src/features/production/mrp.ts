@@ -393,3 +393,83 @@ export async function rezerveSil(orderId: string): Promise<void> {
   if (!orderId) return
   await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
 }
+
+// ═══ TÜM AKTİF SİPARİŞLER İÇİN REZERVE SENKRONİZASYONU — Faz B Parça 2B+2C ═══
+// TERMİN-FIFO ALOKASYON:
+// 1. Aktif siparişleri termine göre sıralar (erken termin önce)
+// 2. Her siparişin MRP'sini sırayla hesaplar — önceki siparişlerin rezervesi kullanılabilir stoktan düşülmüş olarak
+// 3. Her siparişin rezervesini min(brut, kullanılabilir_stok) olarak yazar
+// 4. Kalan stok sonraki siparişlere bırakılır
+//
+// Bu fonksiyon şu durumlarda çağrılmalı (UI tetikleyicilerinden):
+//   - Sipariş oluşturma/revize/silme/kapatma
+//   - Tedarik geldi=true işaretlenmesi
+//   - Stok hareketi (manuel giriş/çıkış)
+export async function rezerveleriSenkronla(
+  orders: any[],
+  workOrders: WorkOrder[],
+  recipes: Recipe[],
+  stokHareketler: StokHareket[],
+  tedarikler: Tedarik[],
+  cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
+  materials: Material[],
+): Promise<{ siparisSayisi: number; rezerveSayisi: number }> {
+  // 1. Aktif siparişler — iptal/tamamlandı hariç
+  const aktif = orders
+    .filter((o: any) => o.durum !== 'İptal' && o.durum !== 'Tamamlandı')
+    .slice()
+    .sort((a: any, b: any) => {
+      // Termine göre FIFO — erken termin önce
+      const at = a.termin || '9999-99-99'
+      const bt = b.termin || '9999-99-99'
+      if (at !== bt) return at.localeCompare(bt)
+      // Aynı termin: önce oluşturulan önce (ikincil FIFO)
+      return (a.olusturma || '').localeCompare(b.olusturma || '')
+    })
+
+  console.log('[REZERVE SYNC] Aktif sipariş sayısı:', aktif.length, '| Sıra:', aktif.map((o: any) => ({ id: o.id, siparisNo: o.siparisNo, termin: o.termin })))
+
+  // 2. Sıralı işleme — önceki siparişlerin yeni rezervesi sonrakinin hesabına girer
+  const guncelRezerveler: MrpRezerve[] = []
+  let toplamRezerve = 0
+
+  for (const o of aktif) {
+    // Bu sipariş için MRP — önceki rezerveler dahil, kendisi hariç
+    const satirlar = hesaplaMRP(
+      [o.id],
+      aktif,
+      workOrders,
+      recipes,
+      stokHareketler,
+      tedarikler,
+      cuttingPlans,
+      materials,
+      null,
+      guncelRezerveler,
+      o.id,
+    )
+
+    // Eski rezerveyi sil + yeni yaz
+    const sayi = await rezerveYaz(o.id, satirlar)
+    toplamRezerve += sayi
+
+    // Bu siparişin yeni rezervelerini guncelRezerveler'e ekle (sonraki siparişler için)
+    satirlar
+      .filter(r => r.brut > 0 && r.stok > 0)
+      .forEach(r => {
+        guncelRezerveler.push({
+          id: '',
+          orderId: o.id,
+          malkod: r.malkod,
+          malad: r.malad,
+          miktar: Math.min(r.brut, r.stok),
+          birim: r.birim,
+          mrpRunId: '',
+          tarih: today(),
+        } as MrpRezerve)
+      })
+  }
+
+  console.log('[REZERVE SYNC] ✓ Tamamlandı. Sipariş:', aktif.length, '| Toplam rezerve kaydı:', toplamRezerve)
+  return { siparisSayisi: aktif.length, rezerveSayisi: toplamRezerve }
+}
