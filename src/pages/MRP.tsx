@@ -6,7 +6,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download } from 'lucide-react'
-import { hesaplaMRP, rezerveYaz, type MRPRow } from '@/features/production/mrp'
+import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, type MRPRow } from '@/features/production/mrp'
 
 export function MRP() {
   const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, mrpRezerve, loadAll } = useStore()
@@ -102,6 +102,24 @@ export function MRP() {
       return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
     }).length
   }, [selectedOrders, workOrders, cuttingPlans])
+
+  async function senkronla() {
+    if (!await showConfirm('Tüm aktif siparişlerin rezerveleri termin-FIFO ile yeniden hesaplanacak. Eski rezerve kayıtları silinip doğru değerlerle yeniden yazılacak. Devam?')) return
+    const cpMapped = cuttingPlans.map((p: any) => ({
+      hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+      gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+    }))
+    try {
+      const { siparisSayisi, rezerveSayisi } = await rezerveleriSenkronla(
+        orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials
+      )
+      loadAll()
+      toast.success(`${siparisSayisi} sipariş · ${rezerveSayisi} rezerve kaydı yazıldı`)
+    } catch (e: any) {
+      toast.error('Senkronizasyon hatası: ' + (e?.message || 'bilinmeyen'))
+      console.error(e)
+    }
+  }
 
   async function hesapla() {
     if (!selectedOrders.size && !selectedYMs.size) { toast.error('Sipariş veya YM İE seçin'); return }
@@ -288,6 +306,12 @@ export function MRP() {
             Hesapla →
           </button>
           <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş{selectedYMs.size > 0 ? ` · ${selectedYMs.size} YM İE` : ''} seçili</span>
+          <span className="flex-1" />
+          <button onClick={senkronla} disabled={!can('mrp_calc')}
+            title="Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar"
+            className="px-3 py-2 bg-amber/10 hover:bg-amber/20 border border-amber/25 disabled:opacity-40 text-amber rounded-lg text-xs font-semibold">
+            🔄 Rezerveleri Senkronla
+          </button>
         </div>
       </div>
 
