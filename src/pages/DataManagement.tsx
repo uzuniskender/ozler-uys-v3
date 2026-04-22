@@ -8,12 +8,319 @@ import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
+import { cuttingPlanTemizle, rezerveleriSenkronla, hesaplaMRP } from '@/features/production/mrp'
+
+// ═══ SAĞLIK RAPORU TİPLERİ ═══
+type SaglikDurum = 'pass' | 'warn' | 'fail'
+interface SaglikKontrolu {
+  no: number
+  ad: string
+  durum: SaglikDurum
+  mesaj: string
+  neden?: string
+  aksiyon?: string
+  autoFixEtiket?: string
+  autoFix?: () => Promise<string>
+  detay?: any
+}
+interface SaglikRaporu {
+  timestamp: string
+  version: string
+  ozet: { pass: number; warn: number; fail: number }
+  kontroller: SaglikKontrolu[]
+}
 
 export function DataManagement() {
   const store = useStore()
   const { loadAll } = store
   const { can } = useAuth()
-  
+
+  // ═══ SAĞLIK RAPORU STATE ═══
+  const [report, setReport] = useState<SaglikRaporu | null>(null)
+  const [running, setRunning] = useState(false)
+  const [autoFixing, setAutoFixing] = useState<number | null>(null)
+
+  async function saglikRaporuCalistir() {
+    setRunning(true)
+    const kontroller: SaglikKontrolu[] = []
+    try {
+      const [woRes, logRes, fireRes, stokRes, tedRes, matsRes, planRes, rezRes, orderRes, recRes] = await Promise.all([
+        supabase.from('uys_work_orders').select('*'),
+        supabase.from('uys_logs').select('*'),
+        supabase.from('uys_fire_logs').select('*'),
+        supabase.from('uys_stok_hareketler').select('*'),
+        supabase.from('uys_tedarikler').select('*'),
+        supabase.from('uys_malzemeler').select('*'),
+        supabase.from('uys_kesim_planlari').select('*'),
+        supabase.from('uys_mrp_rezerve').select('*'),
+        supabase.from('uys_orders').select('*'),
+        supabase.from('uys_recipes').select('*'),
+      ])
+      const wos = woRes.data || []
+      const logs = logRes.data || []
+      const fires = fireRes.data || []
+      const stoks = stokRes.data || []
+      const teds = tedRes.data || []
+      const mats = matsRes.data || []
+      const plans = planRes.data || []
+      const rezs = rezRes.data || []
+      const orders = orderRes.data || []
+      const recs = recRes.data || []
+
+      const aktifOrders = orders.filter((o: any) => o.durum !== 'kapalı' && o.durum !== 'iptal')
+      const aktifOrderIds = new Set(aktifOrders.map((o: any) => o.id))
+      const woIds = new Set(wos.map((w: any) => w.id))
+      const logIds = new Set(logs.map((l: any) => l.id))
+
+      // 1. Sipariş–İE tutarlılığı
+      const siparisIEyok = aktifOrders.filter((o: any) => {
+        const u = o.urunler || []
+        const rcVar = u.some((x: any) => x.rcId) || o.recete_id
+        return rcVar && wos.filter((w: any) => w.order_id === o.id).length === 0
+      })
+      kontroller.push({
+        no: 1, ad: 'Sipariş–İE tutarlılığı',
+        durum: siparisIEyok.length ? 'warn' : 'pass',
+        mesaj: siparisIEyok.length ? `${siparisIEyok.length} reçeteli sipariş için iş emri yok` : `${aktifOrders.length} aktif sipariş temiz`,
+        neden: siparisIEyok.length ? 'Reçete atanmış ama iş emri üretilmemiş. Eski veri veya revize sırasında oluşur.' : undefined,
+        aksiyon: siparisIEyok.length ? 'Sipariş detayında "Yeniden Çalıştır" tıklayın veya siparişi açıp tekrar Kaydet.' : undefined,
+        detay: siparisIEyok.length ? { siparisler: siparisIEyok.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
+      })
+
+      // 2. İE–Reçete tutarlılığı
+      const rcIds = new Set(recs.map((r: any) => r.id))
+      const ieRecetesiz = wos.filter((w: any) => w.recete_id && !rcIds.has(w.recete_id))
+      kontroller.push({
+        no: 2, ad: 'İE–Reçete tutarlılığı',
+        durum: ieRecetesiz.length ? 'fail' : 'pass',
+        mesaj: ieRecetesiz.length ? `${ieRecetesiz.length} İE'nin reçetesi silinmiş` : `${wos.length} İE temiz`,
+        neden: ieRecetesiz.length ? 'Reçete silindi ama bağlı İE duruyor.' : undefined,
+        aksiyon: ieRecetesiz.length ? 'Siparişi silip tekrar oluşturun veya reçeteyi yeniden atayın.' : undefined,
+        detay: ieRecetesiz.length ? { ieler: ieRecetesiz.map((w: any) => ({ id: w.id, ieNo: w.ie_no })) } : undefined,
+      })
+
+      // 3. Cutting plan–İE tutarlılığı (orphan kesim)
+      const orphanKesimler: { planId: string; woId: string }[] = []
+      plans.forEach((p: any) => (p.satirlar || []).forEach((s: any) => (s.kesimler || []).forEach((k: any) => { if (k.woId && !woIds.has(k.woId)) orphanKesimler.push({ planId: p.id, woId: k.woId }) })))
+      const orphanWoIds = [...new Set(orphanKesimler.map(k => k.woId))]
+      kontroller.push({
+        no: 3, ad: 'Cutting plan–İE tutarlılığı',
+        durum: orphanKesimler.length ? 'warn' : 'pass',
+        mesaj: orphanKesimler.length ? `${orphanKesimler.length} kesim kaydı silinmiş İE'ye bağlı (${orphanWoIds.length} farklı woId)` : `${plans.length} plan temiz`,
+        neden: orphanKesimler.length ? 'Sipariş silindiğinde/revize edildiğinde plan güncellenmemiş. v15.25 öncesi bug.' : undefined,
+        aksiyon: orphanKesimler.length ? 'Otomatik Düzelt — orphan kesimler plan satırlarından çıkarılır, boşalan plan silinir.' : undefined,
+        autoFixEtiket: orphanKesimler.length ? 'Orphan kesimleri temizle' : undefined,
+        autoFix: orphanKesimler.length ? async () => {
+          const planObjs = plans.map((p: any) => ({ id: p.id, satirlar: p.satirlar || [] }))
+          const r = await cuttingPlanTemizle(orphanWoIds, planObjs)
+          return `${r.temizlenenKesim} kesim · ${r.guncellenenPlan} plan güncellendi · ${r.silinenPlan} plan silindi`
+        } : undefined,
+        detay: orphanKesimler.length ? { planSayisi: new Set(orphanKesimler.map(k => k.planId)).size, orphanWoIds } : undefined,
+      })
+
+      // 4. Tedarik–Stok tutarlılığı (geldi ama stok yok)
+      const stokTedarikMap = new Set<string>()
+      stoks.filter((h: any) => h.tip === 'giris' && (h.aciklama || '').toLowerCase().includes('tedarik')).forEach((h: any) => stokTedarikMap.add(h.malkod))
+      const tedStokEksik = teds.filter((t: any) => t.geldi && !stokTedarikMap.has(t.malkod))
+      kontroller.push({
+        no: 4, ad: 'Tedarik–Stok tutarlılığı',
+        durum: tedStokEksik.length ? 'fail' : 'pass',
+        mesaj: tedStokEksik.length ? `${tedStokEksik.length} tedarik "geldi" ama stok girişi yok` : `${teds.filter((t: any) => t.geldi).length} gelmiş tedarik temiz`,
+        neden: tedStokEksik.length ? 'Tedarik "geldi" olarak işaretlenmiş ama stok hareketi oluşturulmamış. Sistem geldi=true olduğunda otomatik stok yazmıyor (bu bir bug, düzeltilecek).' : undefined,
+        aksiyon: tedStokEksik.length ? 'Otomatik Düzelt — her tedarik için "Tedarik (otomatik onarım)" açıklamalı stok girişi yazılır.' : undefined,
+        autoFixEtiket: tedStokEksik.length ? 'Stok girişlerini yaz' : undefined,
+        autoFix: tedStokEksik.length ? async () => {
+          const kayitlar = tedStokEksik.map((t: any) => ({
+            id: uid(), malkod: t.malkod, malad: t.malad,
+            tip: 'giris', miktar: t.miktar, birim: t.birim || 'Adet',
+            tarih: today(), aciklama: `Tedarik (otomatik onarım): ${t.siparis_no || ''}`,
+          }))
+          const { error } = await supabase.from('uys_stok_hareketler').insert(kayitlar)
+          if (error) return `Hata: ${error.message}`
+          return `${kayitlar.length} stok girişi yazıldı`
+        } : undefined,
+        detay: tedStokEksik.length ? { tedarikler: tedStokEksik.map((t: any) => ({ malkod: t.malkod, miktar: t.miktar, siparisNo: t.siparis_no })) } : undefined,
+      })
+
+      // 5. Rezerve–Stok dengesi
+      const fizMap = new Map<string, number>()
+      stoks.forEach((h: any) => {
+        const key = (h.malkod || '').trim().toLowerCase()
+        if (!key) return
+        fizMap.set(key, (fizMap.get(key) || 0) + (h.tip === 'giris' ? (h.miktar || 0) : -(h.miktar || 0)))
+      })
+      const rezMap = new Map<string, number>()
+      rezs.forEach((r: any) => {
+        const key = (r.malkod || '').trim().toLowerCase()
+        if (!key) return
+        rezMap.set(key, (rezMap.get(key) || 0) + (r.miktar || 0))
+      })
+      const asimlar: any[] = []
+      rezMap.forEach((rezerve, key) => {
+        const stok = fizMap.get(key) || 0
+        if (rezerve > stok + 0.01) asimlar.push({ malkod: key, rezerve, stok })
+      })
+      kontroller.push({
+        no: 5, ad: 'Rezerve–Stok dengesi',
+        durum: asimlar.length ? 'fail' : 'pass',
+        mesaj: asimlar.length ? `${asimlar.length} malzemede toplam rezerve fiziksel stoğu aşıyor` : `${rezMap.size} rezerveli malzemede aşım yok`,
+        neden: asimlar.length ? 'Rezerve dağılımı bozulmuş. Stok hareketi silinmiş veya eski rezerve kaydı kalmış.' : undefined,
+        aksiyon: asimlar.length ? 'Otomatik Düzelt — rezerveleri termin-FIFO ile tüm aktif siparişler için yeniden dağıtır.' : undefined,
+        autoFixEtiket: asimlar.length ? 'Rezerveleri yeniden senkronize et' : undefined,
+        autoFix: asimlar.length ? async () => {
+          const s = useStore.getState()
+          const cpMapped = s.cuttingPlans.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
+          await rezerveleriSenkronla(s.orders as any, s.workOrders, s.recipes, s.stokHareketler, s.tedarikler, cpMapped, s.materials)
+          return 'Rezerveler yeniden dağıtıldı'
+        } : undefined,
+        detay: asimlar.length ? { asimlar } : undefined,
+      })
+
+      // 6. Rezerve–Sipariş eşleşmesi (orphan rezerve)
+      const orphanRez = rezs.filter((r: any) => r.order_id && !aktifOrderIds.has(r.order_id))
+      kontroller.push({
+        no: 6, ad: 'Rezerve–Sipariş eşleşmesi',
+        durum: orphanRez.length ? 'warn' : 'pass',
+        mesaj: orphanRez.length ? `${orphanRez.length} rezerve kaydı silinmiş/kapalı siparişe bağlı (orphan)` : `${rezs.length} rezerve kaydı temiz`,
+        neden: orphanRez.length ? 'Sipariş silindi veya kapatıldı ama rezerve temizlenmedi.' : undefined,
+        aksiyon: orphanRez.length ? 'Otomatik Düzelt — orphan rezerveleri sil.' : undefined,
+        autoFixEtiket: orphanRez.length ? 'Orphan rezerveleri sil' : undefined,
+        autoFix: orphanRez.length ? async () => {
+          const ids = orphanRez.map((r: any) => r.id)
+          for (let i = 0; i < ids.length; i += 50) await supabase.from('uys_mrp_rezerve').delete().in('id', ids.slice(i, i + 50))
+          return `${ids.length} orphan rezerve silindi`
+        } : undefined,
+        detay: orphanRez.length ? { rezerveIds: orphanRez.map((r: any) => r.id) } : undefined,
+      })
+
+      // 7. MRP durumu senkron (basit: tamam diyor ama rezerve yok)
+      const mrpSenkronsuz = aktifOrders.filter((o: any) => o.mrp_durum === 'tamam' && !rezs.some((r: any) => r.order_id === o.id))
+      kontroller.push({
+        no: 7, ad: 'MRP durumu senkron',
+        durum: mrpSenkronsuz.length ? 'warn' : 'pass',
+        mesaj: mrpSenkronsuz.length ? `${mrpSenkronsuz.length} sipariş "MRP tamam" işaretli ama rezervesi yok` : `${aktifOrders.length} aktif sipariş MRP durumu uyumlu`,
+        neden: mrpSenkronsuz.length ? 'mrp_durum alanı eski veri migrasyonundan kalma veya senkron hatası.' : undefined,
+        aksiyon: mrpSenkronsuz.length ? 'Siparişler sayfasında "Toplu MRP" çalıştırın.' : undefined,
+        detay: mrpSenkronsuz.length ? { siparisler: mrpSenkronsuz.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
+      })
+
+      // 8. Duplicate malzeme kartı
+      const matGroup: Record<string, any[]> = {}
+      mats.forEach((m: any) => {
+        const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
+        if (!norm) return
+        if (!matGroup[norm]) matGroup[norm] = []
+        matGroup[norm].push(m)
+      })
+      const dupPairler = Object.entries(matGroup).filter(([, arr]) => arr.length > 1)
+      kontroller.push({
+        no: 8, ad: 'Duplicate malzeme kartı',
+        durum: dupPairler.length ? 'warn' : 'pass',
+        mesaj: dupPairler.length ? `${dupPairler.length} malzeme kodu birden fazla kartla kayıtlı` : `${mats.length} malzeme kartı tekil`,
+        neden: dupPairler.length ? 'Aynı malzeme küçük/büyük harfli olarak iki kez oluşturulmuş.' : undefined,
+        aksiyon: dupPairler.length ? 'Otomatik Düzelt — en çok stok hareketi olan ana kart kalır, diğerleri birleştirilir.' : undefined,
+        autoFixEtiket: dupPairler.length ? 'Duplicate kartları birleştir' : undefined,
+        autoFix: dupPairler.length ? async () => {
+          let merged = 0
+          for (const [, arr] of dupPairler) {
+            const sayimlar = arr.map((m: any) => ({ m, sayi: stoks.filter((h: any) => (h.malkod || '').trim() === (m.kod || '').trim()).length }))
+            sayimlar.sort((a, b) => b.sayi - a.sayi)
+            const ana = sayimlar[0].m
+            const silinecekler = arr.filter((m: any) => m.id !== ana.id)
+            for (const d of silinecekler) {
+              await supabase.from('uys_bom_trees').update({ malkod: ana.kod }).eq('malkod', d.kod)
+              await supabase.from('uys_stok_hareketler').update({ malkod: ana.kod }).eq('malkod', d.kod)
+              await supabase.from('uys_kesim_planlari').update({ ham_malkod: ana.kod }).eq('ham_malkod', d.kod)
+              await supabase.from('uys_tedarikler').update({ malkod: ana.kod }).eq('malkod', d.kod)
+              await supabase.from('uys_malzemeler').delete().eq('id', d.id)
+              merged++
+            }
+          }
+          return `${merged} duplicate silindi`
+        } : undefined,
+        detay: dupPairler.length ? { gruplar: dupPairler.map(([k, arr]) => ({ norm: k, sayim: arr.length })) } : undefined,
+      })
+
+      // 9. Orphan log/fire/stok hareketi
+      const orphanLog = logs.filter((l: any) => l.wo_id && !woIds.has(l.wo_id))
+      const orphanFire = fires.filter((f: any) => (f.wo_id && !woIds.has(f.wo_id)) || (f.log_id && !logIds.has(f.log_id)))
+      const orphanStok = stoks.filter((h: any) => (h.wo_id && !woIds.has(h.wo_id)) || (h.log_id && !logIds.has(h.log_id)))
+      const toplamOrphan = orphanLog.length + orphanFire.length + orphanStok.length
+      kontroller.push({
+        no: 9, ad: 'Orphan log/fire/stok',
+        durum: toplamOrphan ? 'warn' : 'pass',
+        mesaj: toplamOrphan ? `${orphanLog.length} log · ${orphanFire.length} fire · ${orphanStok.length} stok hareketi silinmiş İE'ye bağlı` : `${logs.length + fires.length + stoks.length} kayıt temiz`,
+        neden: toplamOrphan ? 'İE silindi ama bağlı kayıtlar kaldı.' : undefined,
+        aksiyon: toplamOrphan ? 'Otomatik Düzelt — orphan kayıtları topluca sil.' : undefined,
+        autoFixEtiket: toplamOrphan ? 'Orphan kayıtları sil' : undefined,
+        autoFix: toplamOrphan ? async () => {
+          if (orphanLog.length) { const ids = orphanLog.map((l: any) => l.id); for (let i = 0; i < ids.length; i += 50) await supabase.from('uys_logs').delete().in('id', ids.slice(i, i + 50)) }
+          if (orphanFire.length) { const ids = orphanFire.map((f: any) => f.id); for (let i = 0; i < ids.length; i += 50) await supabase.from('uys_fire_logs').delete().in('id', ids.slice(i, i + 50)) }
+          if (orphanStok.length) { const ids = orphanStok.map((h: any) => h.id); for (let i = 0; i < ids.length; i += 50) await supabase.from('uys_stok_hareketler').delete().in('id', ids.slice(i, i + 50)) }
+          return `${toplamOrphan} kayıt silindi`
+        } : undefined,
+        detay: toplamOrphan ? { logSayim: orphanLog.length, fireSayim: orphanFire.length, stokSayim: orphanStok.length } : undefined,
+      })
+
+      // 10. BOM / Reçete eksik
+      const recetesizAktif = aktifOrders.filter((o: any) => !(o.urunler || []).some((x: any) => x.rcId) && !o.recete_id)
+      kontroller.push({
+        no: 10, ad: 'BOM / Reçete eksik',
+        durum: recetesizAktif.length ? 'warn' : 'pass',
+        mesaj: recetesizAktif.length ? `${recetesizAktif.length} aktif sipariş reçetesiz` : `${aktifOrders.length - recetesizAktif.length} aktif sipariş reçeteli`,
+        neden: recetesizAktif.length ? 'Bu siparişlerde MRP, kesim planı veya İE oluşturulamaz.' : undefined,
+        aksiyon: recetesizAktif.length ? 'İlgili siparişleri açıp reçete atayın.' : undefined,
+        detay: recetesizAktif.length ? { siparisler: recetesizAktif.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
+      })
+    } catch (e: any) {
+      toast.error('Sağlık Raporu hatası: ' + e.message)
+      console.error(e)
+      setRunning(false)
+      return
+    }
+
+    const ozet = {
+      pass: kontroller.filter(k => k.durum === 'pass').length,
+      warn: kontroller.filter(k => k.durum === 'warn').length,
+      fail: kontroller.filter(k => k.durum === 'fail').length,
+    }
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.25', ozet, kontroller })
+    setRunning(false)
+    if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
+    else toast.success('✓ Sistem tamamen sağlıklı')
+  }
+
+  async function autoFixCalistir(kontrolNo: number) {
+    if (!report) return
+    const k = report.kontroller.find(x => x.no === kontrolNo)
+    if (!k?.autoFix) return
+    setAutoFixing(kontrolNo)
+    try {
+      const sonuc = await k.autoFix()
+      toast.success(`Kontrol #${kontrolNo}: ${sonuc}`)
+      await loadAll()
+      // Raporu yeniden çalıştır
+      await saglikRaporuCalistir()
+    } catch (e: any) {
+      toast.error(`Kontrol #${kontrolNo}: ${e.message}`)
+    }
+    setAutoFixing(null)
+  }
+
+  function kopyalaJSON() {
+    if (!report) return
+    const json = JSON.stringify({
+      timestamp: report.timestamp,
+      version: report.version,
+      ozet: report.ozet,
+      kontroller: report.kontroller.map(k => ({
+        no: k.no, ad: k.ad, durum: k.durum, mesaj: k.mesaj,
+        neden: k.neden, aksiyon: k.aksiyon, detay: k.detay,
+      })),
+    }, null, 2)
+    navigator.clipboard.writeText(json).then(() => toast.success('JSON kopyalandı')).catch(() => toast.error('Kopyalama hatası'))
+  }
+
   const tables = [
     { label: 'Siparişler', key: 'orders', table: 'uys_orders' },
     { label: 'İş Emirleri', key: 'workOrders', table: 'uys_work_orders' },
@@ -221,270 +528,91 @@ export function DataManagement() {
         </div>
       </div>
 
-      {/* #24: Sistem Testi */}
+      {/* #24: Sağlık Raporu — Tek buton, 10 kontrol, JSON çıktı + otomatik düzeltmeler */}
       {can('data_syscheck') && <div className="mt-6 bg-bg-2 border border-border rounded-lg p-4">
-        <div className="text-sm font-semibold mb-2">🔍 Sistem Testi</div>
-        <button onClick={async () => {
-          const sorunlar: string[] = []
-          // Orphan İE kontrolü
-          const orphanWO = store.workOrders.filter(w => w.orderId && !store.orders.find(o => o.id === w.orderId))
-          if (orphanWO.length) sorunlar.push(`${orphanWO.length} İE'nin siparişi bulunamadı (orphan)`)
-          // Negatif stok
-          const stokMap: Record<string, number> = {}
-          store.stokHareketler.forEach(h => { stokMap[h.malkod] = (stokMap[h.malkod] || 0) + (h.tip === 'giris' ? h.miktar : -h.miktar) })
-          const negatif = Object.entries(stokMap).filter(([, v]) => v < -0.01)
-          if (negatif.length) sorunlar.push(`${negatif.length} malzemede negatif stok`)
-          // Reçetesiz sipariş
-          const noRecipe = store.orders.filter(o => !o.receteId)
-          if (noRecipe.length) sorunlar.push(`${noRecipe.length} sipariş reçetesiz`)
-          // İE'siz sipariş
-          const noWO = store.orders.filter(o => !store.workOrders.some(w => w.orderId === o.id))
-          if (noWO.length) sorunlar.push(`${noWO.length} siparişin iş emri yok`)
-          // Hedefi 0 olan İE
-          const zeroHedef = store.workOrders.filter(w => w.hedef <= 0)
-          if (zeroHedef.length) sorunlar.push(`${zeroHedef.length} İE'nin hedefi 0`)
-          // Bölümsüz operasyon
-          const bolumYok = store.operations.filter(o => !o.bolum)
-          if (bolumYok.length) sorunlar.push(`${bolumYok.length} operasyonun bölümü yok (operatör eşleşmesi çalışmaz)`)
-          // Kesim planında orphan woId
-          const woIdSet = new Set(store.workOrders.map(w => w.id))
-          let orphanKesim = 0
-          store.cuttingPlans.forEach(p => (p.satirlar || []).forEach((s: any) => (s.kesimler || []).forEach((k: any) => { if (k.woId && !woIdSet.has(k.woId)) orphanKesim++ })))
-          if (orphanKesim) sorunlar.push(`${orphanKesim} kesim kaydında silinmiş İE referansı (orphan)`)
-          // Gelmiş tedarik ama stok girişi yok
-          const gelmisTed = store.tedarikler.filter(t => t.geldi)
-          const stokTedIds = new Set(store.stokHareketler.filter(h => h.aciklama?.includes('Tedarik')).map(h => h.malkod))
-          const stokYokTed = gelmisTed.filter(t => !stokTedIds.has(t.malkod))
-          if (stokYokTed.length) sorunlar.push(`${stokYokTed.length} tedarik "geldi" ama stok girişi bulunamadı`)
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-sm font-semibold">🩺 Sistem Sağlık Raporu</div>
+            <div className="text-[10px] text-zinc-500 mt-1">10 kritik kontrol: sipariş–İE, reçete, kesim planı, tedarik, rezerve, duplicate malzeme, orphan kayıtlar.</div>
+          </div>
+          <button
+            onClick={saglikRaporuCalistir}
+            disabled={running}
+            className="px-4 py-2 bg-accent hover:bg-accent/80 disabled:opacity-50 text-white rounded-lg text-xs font-semibold">
+            {running ? '⏳ Çalışıyor...' : report ? '🔄 Yeniden Çalıştır' : '🩺 Rapor Oluştur'}
+          </button>
+        </div>
 
-          if (sorunlar.length) {
-            toast.warning(`${sorunlar.length} sorun bulundu`)
-            await showAlert(sorunlar.length ? sorunlar.map((s, i) => `${i + 1}. ${s}`).join('\n') : 'Sorun bulunamadı ✓', 'Sistem Testi Sonuçları')
-          } else {
-            toast.success('Sistem testi başarılı — sorun bulunamadı')
-          }
-        }} className="px-4 py-2 bg-accent/10 border border-accent/25 text-accent rounded-lg text-xs hover:bg-accent/20">
-          Sistem Testi Çalıştır
-        </button>
-        <button onClick={async () => {
-          if (!await showConfirm('Orphan (sahipsiz) kayıtlar temizlenecek:\n• İE silinmiş log/fire/stok kayıtları\n• Log silinmiş fire/stok kayıtları\n• Fire telafi\'si yokken kalmış telafi İE\'leri\n• Tedarik "geldi" olmasına rağmen stok girişi olmamış kayıtlar\n\nDevam?')) return
+        {report && (
+          <div className="space-y-3">
+            {/* Özet */}
+            <div className="flex gap-2 text-xs">
+              <div className="flex-1 px-3 py-2 bg-green/10 border border-green/25 rounded">
+                <span className="font-semibold text-green">{report.ozet.pass}</span> <span className="text-zinc-500">temiz</span>
+              </div>
+              <div className="flex-1 px-3 py-2 bg-amber/10 border border-amber/25 rounded">
+                <span className="font-semibold text-amber">{report.ozet.warn}</span> <span className="text-zinc-500">uyarı</span>
+              </div>
+              <div className="flex-1 px-3 py-2 bg-red/10 border border-red/25 rounded">
+                <span className="font-semibold text-red">{report.ozet.fail}</span> <span className="text-zinc-500">hata</span>
+              </div>
+              <div className="px-3 py-2 bg-bg-3 border border-border rounded text-[10px] text-zinc-500 self-center">
+                {new Date(report.timestamp).toLocaleString('tr-TR')}
+              </div>
+            </div>
 
-          // Fresh DB okuma — store güncel olmayabilir
-          const [woRes, logRes, fireRes, stokRes, tedRes] = await Promise.all([
-            supabase.from('uys_work_orders').select('id,ie_no'),
-            supabase.from('uys_logs').select('id,wo_id'),
-            supabase.from('uys_fire_logs').select('id,wo_id,log_id,telafi_wo_id'),
-            supabase.from('uys_stok_hareketler').select('id,wo_id,log_id'),
-            supabase.from('uys_tedarikler').select('id,malkod,geldi'),
-          ])
+            {/* Kontrol listesi */}
+            <div className="space-y-2">
+              {report.kontroller.map(k => {
+                const durumStil = k.durum === 'pass' ? 'bg-green/5 border-green/20' : k.durum === 'warn' ? 'bg-amber/5 border-amber/30' : 'bg-red/5 border-red/30'
+                const durumIcon = k.durum === 'pass' ? '✓' : k.durum === 'warn' ? '⚠' : '✗'
+                const durumRenk = k.durum === 'pass' ? 'text-green' : k.durum === 'warn' ? 'text-amber' : 'text-red'
+                return (
+                  <div key={k.no} className={`border rounded-lg p-3 ${durumStil}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className={`text-sm font-bold ${durumRenk}`}>{durumIcon}</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">#{k.no}</span>
+                          <span className="text-xs font-semibold text-zinc-200">{k.ad}</span>
+                        </div>
+                        <div className="text-xs text-zinc-300 mt-1">{k.mesaj}</div>
+                        {k.neden && <div className="text-[11px] text-zinc-500 mt-1"><span className="font-semibold">Neden: </span>{k.neden}</div>}
+                        {k.aksiyon && <div className="text-[11px] text-zinc-400 mt-1"><span className="font-semibold">Aksiyon: </span>{k.aksiyon}</div>}
+                      </div>
+                      {k.autoFix && (
+                        <button
+                          onClick={() => autoFixCalistir(k.no)}
+                          disabled={autoFixing === k.no || running}
+                          className="shrink-0 px-3 py-1.5 bg-accent/20 hover:bg-accent/30 disabled:opacity-50 border border-accent/40 text-accent text-[11px] rounded whitespace-nowrap">
+                          {autoFixing === k.no ? '⏳' : '🔧'} {k.autoFixEtiket || 'Otomatik Düzelt'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
 
-          const woIds = new Set((woRes.data || []).map(w => w.id))
-          const logIds = new Set((logRes.data || []).map(l => l.id))
-          const fireIds = new Set((fireRes.data || []).map(f => f.id))
+            {/* JSON çıktı kutusu */}
+            <div className="mt-4 p-3 bg-bg-3 border border-border rounded">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider">JSON Rapor (Claude'a paylaş)</span>
+                <button onClick={kopyalaJSON} className="px-2 py-1 bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-[10px] rounded">
+                  📋 Kopyala
+                </button>
+              </div>
+              <pre className="text-[10px] text-zinc-400 font-mono overflow-x-auto max-h-60 whitespace-pre-wrap">
+{JSON.stringify({ timestamp: report.timestamp, version: report.version, ozet: report.ozet, kontroller: report.kontroller.map(k => ({ no: k.no, ad: k.ad, durum: k.durum, mesaj: k.mesaj, neden: k.neden, aksiyon: k.aksiyon, detay: k.detay })) }, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
 
-          const sayilar = { logOrphan: 0, fireOrphan: 0, stokOrphan: 0, telafiOrphan: 0, tedarikOrphan: 0 }
-
-          // 1. Log — wo_id silinmiş
-          const badLogs = (logRes.data || []).filter(l => l.wo_id && !woIds.has(l.wo_id))
-          if (badLogs.length) {
-            const ids = badLogs.map(l => l.id)
-            for (let i = 0; i < ids.length; i += 50) {
-              await supabase.from('uys_logs').delete().in('id', ids.slice(i, i + 50))
-            }
-            sayilar.logOrphan = badLogs.length
-            badLogs.forEach(l => logIds.delete(l.id))  // silinen log'ları set'ten de çıkar
-          }
-
-          // 2. Fire log — wo_id veya log_id silinmiş
-          const badFires = (fireRes.data || []).filter(f =>
-            (f.wo_id && !woIds.has(f.wo_id)) || (f.log_id && !logIds.has(f.log_id))
-          )
-          if (badFires.length) {
-            const ids = badFires.map(f => f.id)
-            for (let i = 0; i < ids.length; i += 50) {
-              await supabase.from('uys_fire_logs').delete().in('id', ids.slice(i, i + 50))
-            }
-            sayilar.fireOrphan = badFires.length
-            badFires.forEach(f => fireIds.delete(f.id))
-          }
-
-          // 3. Stok hareketi — wo_id veya log_id silinmiş (NULL wo_id olanlar tedarik, dokunma)
-          const badStok = (stokRes.data || []).filter(h =>
-            (h.wo_id && !woIds.has(h.wo_id)) || (h.log_id && !logIds.has(h.log_id))
-          )
-          if (badStok.length) {
-            const ids = badStok.map(h => h.id)
-            for (let i = 0; i < ids.length; i += 50) {
-              await supabase.from('uys_stok_hareketler').delete().in('id', ids.slice(i, i + 50))
-            }
-            sayilar.stokOrphan = badStok.length
-          }
-
-          // 4. Telafi İE — fire_log silinmiş (telafi_wo_id geçerli değil)
-          const telafiRefs = new Set((fireRes.data || []).map(f => f.telafi_wo_id).filter(Boolean))
-          // Geçersiz telafi ref'i olan fire_log'ları da temizle
-          const badTelafiRef = (fireRes.data || []).filter(f => f.telafi_wo_id && !woIds.has(f.telafi_wo_id))
-          if (badTelafiRef.length) {
-            for (const f of badTelafiRef) {
-              await supabase.from('uys_fire_logs').update({ telafi_wo_id: null }).eq('id', f.id)
-            }
-          }
-          // WO'larda "fire telafi" notlu olup fire_log'u silinmiş olanlar
-          const orphanTelafiWos = (woRes.data || []).filter(w => {
-            // IE numarası -FXXXX deseni varsa telafi
-            return (w.ie_no || '').match(/-F[A-Z0-9]{4,}$/) && !telafiRefs.has(w.id)
-          })
-          if (orphanTelafiWos.length) {
-            // Önce bağlı log/fire/stok'ları temizle
-            const telafiIds = orphanTelafiWos.map(w => w.id)
-            for (let i = 0; i < telafiIds.length; i += 50) {
-              const batch = telafiIds.slice(i, i + 50)
-              await supabase.from('uys_logs').delete().in('wo_id', batch)
-              await supabase.from('uys_fire_logs').delete().in('wo_id', batch)
-              await supabase.from('uys_stok_hareketler').delete().in('wo_id', batch)
-              await supabase.from('uys_work_orders').delete().in('id', batch)
-            }
-            sayilar.telafiOrphan = orphanTelafiWos.length
-          }
-
-          // 5. Tedarik — "geldi" işaretli ama stok girişi yok
-          const gelmisTed = (tedRes.data || []).filter(t => t.geldi)
-          // Stok girişi aciklama'sında "Tedarik" geçen malkod'lar
-          const { data: tedStok } = await supabase.from('uys_stok_hareketler')
-            .select('malkod').eq('tip', 'giris').ilike('aciklama', '%Tedarik%')
-          const stokliMallar = new Set((tedStok || []).map(h => h.malkod))
-          const stoksuzTed = gelmisTed.filter(t => !stokliMallar.has(t.malkod))
-          if (stoksuzTed.length) {
-            // Sadece say, silme — kullanıcıya bildir, elle karar versin
-            sayilar.tedarikOrphan = stoksuzTed.length
-          }
-
-          const toplam = sayilar.logOrphan + sayilar.fireOrphan + sayilar.stokOrphan + sayilar.telafiOrphan
-          const detay = [
-            sayilar.logOrphan ? `• ${sayilar.logOrphan} orphan log` : null,
-            sayilar.fireOrphan ? `• ${sayilar.fireOrphan} orphan fire kaydı` : null,
-            sayilar.stokOrphan ? `• ${sayilar.stokOrphan} orphan stok hareketi` : null,
-            sayilar.telafiOrphan ? `• ${sayilar.telafiOrphan} orphan telafi İE (+bağlılar)` : null,
-            sayilar.tedarikOrphan ? `⚠ ${sayilar.tedarikOrphan} tedarik "geldi" ama stok girişi yok (elle kontrol)` : null,
-          ].filter(Boolean).join('\n')
-
-          if (toplam === 0 && sayilar.tedarikOrphan === 0) {
-            toast.success('✓ Sistem temiz — orphan bulunamadı')
-          } else if (toplam === 0) {
-            toast.warning(`${sayilar.tedarikOrphan} tedarik uyarısı`)
-            await showAlert(detay, 'Orphan Temizleme Özeti')
-          } else {
-            toast.success(`✓ ${toplam} orphan kayıt silindi`)
-            await showAlert(detay, 'Orphan Temizleme Özeti')
-          }
-          await loadAll()
-        }} className="ml-2 px-4 py-2 bg-red/10 border border-red/25 text-red rounded-lg text-xs hover:bg-red/20">
-          🗑 Orphan Temizle
-        </button>
-        <button onClick={async () => {
-          // Duplicate malzeme birleştirme — case-insensitive
-          const { data: mats } = await supabase.from('uys_malzemeler').select('*')
-          const groups: Record<string, any[]> = {}
-          for (const m of (mats || [])) {
-            const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
-            if (!norm) continue
-            if (!groups[norm]) groups[norm] = []
-            groups[norm].push(m)
-          }
-          const duplicates = Object.entries(groups).filter(([, arr]) => arr.length > 1)
-          if (duplicates.length === 0) { toast.info('Duplicate malzeme bulunamadı'); return }
-          if (!await showConfirm(
-            `${duplicates.length} duplicate grup bulundu.\n\nHer grupta EN ESKİ kayıt tutulacak, diğerleri silinecek.\nBOM/Reçete/İE/Stok hareketlerindeki referanslar otomatik büyük harfe çevrilecek.\n\nDevam?`
-          )) return
-          const [{ data: bomFresh }, { data: rcFresh }, { data: woFresh }, { data: stokFresh }, { data: kesimFresh }] = await Promise.all([
-            supabase.from('uys_bom_trees').select('*'),
-            supabase.from('uys_recipes').select('*'),
-            supabase.from('uys_work_orders').select('*'),
-            supabase.from('uys_stok_hareketler').select('*'),
-            supabase.from('uys_kesim_planlari').select('*'),
-          ])
-          let merged = 0, updBom = 0, updRc = 0, updWo = 0, updStok = 0, updKesim = 0
-          for (const [normKod, arr] of duplicates) {
-            // En eski ID'yi tut
-            const sorted = [...arr].sort((a, b) => (a.id || '').localeCompare(b.id || ''))
-            const keep = sorted[0]
-            const dels = sorted.slice(1)
-            const newKod = (keep.kod || '').toLocaleUpperCase('tr-TR').trim()
-            const newAd = (keep.ad || '').toLocaleUpperCase('tr-TR')
-            // Tutulan kayıtı normalize et
-            if (newKod !== keep.kod || newAd !== keep.ad) {
-              await supabase.from('uys_malzemeler').update({ kod: newKod, ad: newAd }).eq('id', keep.id)
-            }
-            // Yardımcı: kod eşleşmesi (case-insensitive)
-            const kodMatch = (k: string | null | undefined) => (k || '').toLocaleUpperCase('tr-TR').trim() === normKod
-            const upAd = (a: string | null | undefined) => (a || '').toLocaleUpperCase('tr-TR')
-            // BOM cascade
-            for (const bt of (bomFresh || [])) {
-              let changed = false
-              const newRows = (bt.rows || []).map((r: any) => {
-                if (kodMatch(r.malkod)) { changed = true; return { ...r, malkod: newKod, malad: upAd(r.malad) } }
-                return r
-              })
-              const upd: Record<string, unknown> = {}
-              if (changed) upd.rows = newRows
-              if (kodMatch(bt.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(bt.mamul_ad); upd.ad = upAd(bt.ad) }
-              if (Object.keys(upd).length > 0) { await supabase.from('uys_bom_trees').update(upd).eq('id', bt.id); updBom++ }
-            }
-            // Recipe cascade
-            for (const rc of (rcFresh || [])) {
-              let changed = false
-              const newSat = (rc.satirlar || []).map((r: any) => {
-                if (kodMatch(r.malkod)) { changed = true; return { ...r, malkod: newKod, malad: upAd(r.malad) } }
-                return r
-              })
-              const upd: Record<string, unknown> = {}
-              if (changed) upd.satirlar = newSat
-              if (kodMatch(rc.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(rc.mamul_ad); upd.ad = upAd(rc.ad) }
-              if (Object.keys(upd).length > 0) { await supabase.from('uys_recipes').update(upd).eq('id', rc.id); updRc++ }
-            }
-            // İş Emirleri (hm dahil)
-            for (const wo of (woFresh || [])) {
-              const upd: Record<string, unknown> = {}
-              if (kodMatch(wo.malkod)) { upd.malkod = newKod; upd.malad = upAd(wo.malad) }
-              if (kodMatch(wo.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(wo.mamul_ad) }
-              const hmOld = wo.hm || []
-              const hmNew = hmOld.map((h: any) => kodMatch(h.malkod) ? { ...h, malkod: newKod, malad: upAd(h.malad) } : h)
-              if (JSON.stringify(hmOld) !== JSON.stringify(hmNew)) upd.hm = hmNew
-              if (Object.keys(upd).length > 0) { await supabase.from('uys_work_orders').update(upd).eq('id', wo.id); updWo++ }
-            }
-            // Stok hareketleri
-            for (const h of (stokFresh || [])) {
-              if (kodMatch(h.malkod)) {
-                await supabase.from('uys_stok_hareketler').update({ malkod: newKod, malad: upAd(h.malad) }).eq('id', h.id)
-                updStok++
-              }
-            }
-            // Kesim planları (satırlar içinde kesimler[].malkod olabilir)
-            for (const p of (kesimFresh || [])) {
-              let changed = false
-              const newSat = (p.satirlar || []).map((s: any) => {
-                const newKes = (s.kesimler || []).map((k: any) => {
-                  if (kodMatch(k.malkod)) { changed = true; return { ...k, malkod: newKod, malad: upAd(k.malad) } }
-                  return k
-                })
-                return { ...s, kesimler: newKes }
-              })
-              if (changed) { await supabase.from('uys_kesim_planlari').update({ satirlar: newSat }).eq('id', p.id); updKesim++ }
-            }
-            // Duplicate sil
-            for (const d of dels) {
-              await supabase.from('uys_malzemeler').delete().eq('id', d.id)
-              merged++
-            }
-          }
-          toast.success(`✓ ${merged} duplicate silindi · ${updBom} BOM, ${updRc} reçete, ${updWo} İE, ${updStok} stok, ${updKesim} kesim güncellendi`)
-          await loadAll()
-        }} className="ml-2 px-4 py-2 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20">
-          🔀 Duplicate Malzeme Birleştir
-        </button>
+        {!report && !running && (
+          <div className="text-xs text-zinc-500 italic">Sistemdeki tüm kritik akışları kontrol eder. Her hatalı kontrol için nedeni, önerilen aksiyonu ve mümkün olan yerlerde otomatik düzeltme butonu gösterir.</div>
+        )}
       </div>}
-
-      {/* Test Modu — Snapshot bazlı */}
       {can('data_test') && <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
         <div className="text-sm font-semibold text-zinc-300 mb-2">🧪 Test Ortamı</div>
         <p className="text-xs text-zinc-500 mb-3">Açıldığında mevcut verilerin anlık görüntüsü kaydedilir. Test sırasında eklenen tüm veriler tek tuşla silinir.</p>
