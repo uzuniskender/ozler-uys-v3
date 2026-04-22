@@ -15,6 +15,12 @@
  *   Sonuç: Supabase sessizce reject etti, üretim stok kaybı oldu.
  *
  * Bu audit deploy öncesi çalışırsa bu tür bug'lar üretim hattına ulaşmaz.
+ *
+ * ÜYSREV2 (v15.29 enhancement):
+ *   - .insert([{...}]) array literal desteği
+ *   - .insert(varName) değişken trace (const/let/var, .push, .map)
+ *   - Scope-aware: en yakın prior assignment kullanılır
+ *   - Untraced çağrılar WARNING (fail değil)
  */
 
 const fs = require('fs')
@@ -53,7 +59,6 @@ function readTableColumns() {
     while ((m = tableRegex.exec(content)) !== null) {
       const [, tableName, body] = m
       if (!tables[tableName]) tables[tableName] = new Set()
-      // Her satırda ilk kelime kolon adı (sadece belirteç satırları için)
       const lines = body.split('\n')
       for (const rawLine of lines) {
         const line = rawLine.trim()
@@ -62,14 +67,12 @@ function readTableColumns() {
             line.toUpperCase().startsWith('PRIMARY KEY') ||
             line.toUpperCase().startsWith('FOREIGN KEY') ||
             line.toUpperCase().startsWith('UNIQUE')) continue
-        // Kolon adı: alt çizgi / harfle başlayan ilk kelime
         const colMatch = line.match(/^([a-z_][a-z0-9_]*)/i)
         if (colMatch) tables[tableName].add(colMatch[1])
       }
     }
 
-    // ALTER TABLE public.xxx ADD COLUMN ..., ADD COLUMN ..., ...
-    // Önce ALTER TABLE bloklarını bul, sonra içindeki tüm ADD COLUMN'ları ayrı ayrı yakala
+    // ALTER TABLE public.xxx ADD COLUMN ...
     const alterBlockRegex = /ALTER TABLE[^;]*public\.(\w+)([^;]+?);/gi
     while ((m = alterBlockRegex.exec(content)) !== null) {
       const [, tableName, body] = m
@@ -102,9 +105,7 @@ function scanDir(dir, ext) {
 }
 
 /**
- * {...} bloğunun sonunu bulur (balanced), stringleri ve regex'i atlar.
- * openIdx: '{' karakterinin indeksi
- * Returns: closing '}' indeksi veya -1
+ * {...} bloğunun sonunu bulur (balanced), stringleri atlar.
  */
 function findMatchingBrace(src, openIdx) {
   let depth = 0
@@ -124,6 +125,27 @@ function findMatchingBrace(src, openIdx) {
   return -1
 }
 
+/**
+ * [...] bloğunun sonunu bulur (balanced).
+ */
+function findMatchingBracket(src, openIdx) {
+  let depth = 0
+  let inStr = false
+  let strChar = ''
+  for (let i = openIdx; i < src.length; i++) {
+    const ch = src[i]
+    const prev = i > 0 ? src[i-1] : ''
+    if (inStr) {
+      if (ch === strChar && prev !== '\\') inStr = false
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strChar = ch; continue }
+    if (ch === '[') depth++
+    else if (ch === ']') { depth--; if (depth === 0) return i }
+  }
+  return -1
+}
+
 // JavaScript literal/reserved değerler — shorthand sayılmamalı
 const JS_LITERALS = new Set([
   'true', 'false', 'null', 'undefined', 'NaN', 'Infinity',
@@ -132,7 +154,6 @@ const JS_LITERALS = new Set([
 
 /**
  * Bir object literal'in TOP-LEVEL key'lerini çıkarır.
- * body: '{' ve '}' arası içerik (dışındakiler dahil değil)
  */
 function extractTopLevelKeys(body) {
   const keys = new Set()
@@ -151,7 +172,6 @@ function extractTopLevelKeys(body) {
     if (ch === '{' || ch === '[' || ch === '(') { depth++; i++; continue }
     if (ch === '}' || ch === ']' || ch === ')') { depth--; i++; continue }
     if (depth === 0) {
-      // Spread operator: ...ident → key değil, atla
       if (ch === '.' && body.slice(i, i+3) === '...') {
         i += 3
         while (i < body.length && /[a-zA-Z0-9_$]/.test(body[i])) i++
@@ -164,16 +184,11 @@ function extractTopLevelKeys(body) {
         let k = j
         while (k < body.length && /\s/.test(body[k])) k++
         const nextCh = body[k]
-        // Full key: `ident:`
         if (nextCh === ':') {
           if (!JS_LITERALS.has(ident)) keys.add(ident)
-          // Value'yu atla — sonraki top-level `,` veya `}` bul
           i = skipValue(body, k + 1)
           continue
         }
-        // Shorthand: `ident,` veya `ident}` veya satır sonunda `ident\n,`
-        // AMA: Literal ise (true, false, null) atla
-        // SCREAMING_CASE (ALL_UPPER veya UPPER_UNDER) muhtemelen sabit/değişken, shorthand key değil
         const isScreamingCase = /^[A-Z][A-Z0-9_]*$/.test(ident)
         if ((nextCh === ',' || nextCh === '}' || k >= body.length) &&
             !JS_LITERALS.has(ident) &&
@@ -203,11 +218,6 @@ function extractTopLevelKeys(body) {
   return keys
 }
 
-/**
- * body'de startIdx'ten başlayarak bir VALUE'yu atla,
- * bir sonraki top-level `,` veya `}` pozisyonunu döndür.
- * String literal, template literal, nested obj/array/paren atlanır.
- */
 function skipValue(body, startIdx) {
   let depth = 0
   let inStr = false
@@ -232,19 +242,202 @@ function skipValue(body, startIdx) {
   return i
 }
 
+/**
+ * Array body içinde depth=0'daki tüm {...} object literal'lerini bulur ve
+ * her birinin top-level key'lerini union eder.
+ * Örn: [{ id: 1 }, { id: 2 }] → Set{'id'}
+ */
+function extractKeysFromArrayBody(body) {
+  const allKeys = new Set()
+  let depth = 0
+  let inStr = false
+  let strChar = ''
+  let i = 0
+  while (i < body.length) {
+    const ch = body[i]
+    const prev = i > 0 ? body[i-1] : ''
+    if (inStr) {
+      if (ch === strChar && prev !== '\\') inStr = false
+      i++; continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strChar = ch; i++; continue }
+    if (depth === 0 && ch === '{') {
+      const close = findMatchingBrace(body, i)
+      if (close > i) {
+        const objBody = body.slice(i + 1, close)
+        for (const k of extractTopLevelKeys(objBody)) allKeys.add(k)
+        i = close + 1
+        continue
+      }
+    }
+    if (ch === '[' || ch === '(' || ch === '{') { depth++; i++; continue }
+    if (ch === ']' || ch === ')' || ch === '}') { depth--; i++; continue }
+    i++
+  }
+  return allKeys
+}
+
+/**
+ * Bir ifadenin sonunu bulur (noktalı virgül, standalone newline).
+ */
+function findExprEnd(src, startIdx) {
+  let depth = 0
+  let inStr = false
+  let strChar = ''
+  for (let i = startIdx; i < src.length; i++) {
+    const ch = src[i]
+    const prev = i > 0 ? src[i-1] : ''
+    if (inStr) {
+      if (ch === strChar && prev !== '\\') inStr = false
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strChar = ch; continue }
+    if (ch === '(' || ch === '[' || ch === '{') { depth++; continue }
+    if (ch === ')' || ch === ']' || ch === '}') {
+      if (depth === 0) return i
+      depth--; continue
+    }
+    if (depth === 0 && ch === ';') return i
+    if (depth === 0 && ch === '\n') {
+      let k = i + 1
+      while (k < src.length && /[ \t\r]/.test(src[k])) k++
+      const nextCh = src[k]
+      if (nextCh === '.' || nextCh === ',' || nextCh === '+' || nextCh === ')' ||
+          nextCh === ']' || nextCh === '?' || nextCh === ':' || nextCh === '}') continue
+      return i
+    }
+  }
+  return src.length
+}
+
+/**
+ * Bir dosya içinde verilen değişken adının atandığı/push edildiği
+ * noktaları bulur — SCOPE-AWARE: beforePos'tan önceki EN YAKIN assignment'ı
+ * bulur ve aradaki push'ları toplar. Bu sayede aynı dosyada iki fonksiyonda
+ * aynı isimli değişken olsa bile karışmaz (chat service false positive fix).
+ *
+ * Desteklenen pattern'ler:
+ *   (const|let|var) <n> = { ... }
+ *   (const|let|var) <n> = [ { ... }, { ... } ]
+ *   (const|let|var) <n> = xxx.map(... => ({ ... }))
+ *   <n> = { ... } / [ { ... } ]       (reassignment)
+ *   <n>.push({ ... })                 (decl ile insert arasında)
+ */
+function traceVariableKeys(content, varName, beforePos) {
+  const keys = new Set()
+  let traced = false
+
+  const nameEsc = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  // 1. Assignment site'larını bul (sadece beforePos öncesi), en yakın olanı seç
+  // Regex: optional const/let/var + name + optional TS type annotation (: Type) + =
+  const assignRegex = new RegExp(
+    '(?:^|[^a-zA-Z0-9_$.])(?:(?:const|let|var)\\s+)?' + nameEsc + '(?:\\s*:[^=\\n]*)?\\s*=(?!=)\\s*',
+    'g'
+  )
+  let lastMatchEnd = -1
+  let m
+  while ((m = assignRegex.exec(content)) !== null) {
+    if (m.index >= beforePos) break
+    lastMatchEnd = m.index + m[0].length
+  }
+
+  if (lastMatchEnd < 0) {
+    return { keys, traced: false }
+  }
+
+  const declStart = lastMatchEnd
+  const ch = content[declStart]
+
+  if (ch === '{') {
+    const close = findMatchingBrace(content, declStart)
+    if (close > declStart) {
+      traced = true
+      const body = content.slice(declStart + 1, close)
+      for (const k of extractTopLevelKeys(body)) keys.add(k)
+    }
+  } else if (ch === '[') {
+    const close = findMatchingBracket(content, declStart)
+    if (close > declStart) {
+      traced = true
+      const body = content.slice(declStart + 1, close)
+      for (const k of extractKeysFromArrayBody(body)) keys.add(k)
+    }
+  } else {
+    // .map(... => ({ ... })) chain
+    const exprEnd = findExprEnd(content, declStart)
+    const exprSlice = content.slice(declStart, exprEnd)
+    const arrowIdx = exprSlice.indexOf('=>')
+    if (arrowIdx > 0) {
+      let p = arrowIdx + 2
+      while (p < exprSlice.length && /\s/.test(exprSlice[p])) p++
+      if (exprSlice[p] === '(') {
+        let q = p + 1
+        while (q < exprSlice.length && /\s/.test(exprSlice[q])) q++
+        if (exprSlice[q] === '{') {
+          const absOpen = declStart + q
+          const close = findMatchingBrace(content, absOpen)
+          if (close > absOpen) {
+            traced = true
+            const body = content.slice(absOpen + 1, close)
+            for (const k of extractTopLevelKeys(body)) keys.add(k)
+          }
+        }
+      }
+    }
+  }
+
+  // 2. declStart ile beforePos arasındaki push'ları topla
+  const pushRegex = new RegExp(
+    '(?:^|[^a-zA-Z0-9_$.])' + nameEsc + '\\s*\\.\\s*push\\s*\\(',
+    'g'
+  )
+  pushRegex.lastIndex = declStart
+  while ((m = pushRegex.exec(content)) !== null) {
+    if (m.index >= beforePos) break
+    const afterParen = m.index + m[0].length
+    let p = afterParen
+    while (p < content.length && /\s/.test(content[p])) p++
+    if (content[p] === '{') {
+      const close = findMatchingBrace(content, p)
+      if (close > p) {
+        traced = true
+        const body = content.slice(p + 1, close)
+        for (const k of extractTopLevelKeys(body)) keys.add(k)
+      }
+    }
+  }
+
+  // 3. Property assignment pattern: <var>.<key> = value
+  // (updates.malad = ad gibi — önce `const updates = {}` sonra field-field ekleme)
+  const propAssignRegex = new RegExp(
+    '(?:^|[^a-zA-Z0-9_$.])' + nameEsc + '\\s*\\.\\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*=(?!=)',
+    'g'
+  )
+  propAssignRegex.lastIndex = declStart
+  while ((m = propAssignRegex.exec(content)) !== null) {
+    if (m.index >= beforePos) break
+    const propName = m[1]
+    if (!JS_LITERALS.has(propName)) {
+      keys.add(propName)
+      traced = true
+    }
+  }
+
+  return { keys, traced }
+}
+
 function extractUsages() {
   const usages = []
+  const untraced = []
   const files = scanDir(path.join(ROOT, 'src'), ['.ts', '.tsx'])
 
   for (const file of files) {
     const content = fs.readFileSync(file, 'utf-8')
-    // supabase.from('tablo') yakalanır
     const fromRegex = /supabase\s*\.\s*from\s*\(\s*['"]([a-z_]+)['"]\s*\)/g
     let m
     while ((m = fromRegex.exec(content)) !== null) {
       const table = m[1]
-      // Bu `from()` sonrası METHOD chain'ini tara
-      // Bir sonraki `supabase.from` veya dosya sonuna kadar
       const startAfterFrom = m.index + m[0].length
       const nextFromRegex = /supabase\s*\.\s*from\s*\(/g
       nextFromRegex.lastIndex = startAfterFrom
@@ -253,33 +446,94 @@ function extractUsages() {
       const chainEnd = nextFrom > 0 ? nextFrom : content.length
       const chainSlice = content.slice(startAfterFrom, chainEnd)
 
-      // Zincirde .insert({...}) / .update({...}) / .upsert({...}) ara
       const callRegex = /\.(insert|update|upsert)\s*\(/g
       let c
       while ((c = callRegex.exec(chainSlice)) !== null) {
         const kind = c[1]
-        // `(` sonrası ilk non-whitespace karakter `{` mi?
         let p = c.index + c[0].length
         while (p < chainSlice.length && /\s/.test(chainSlice[p])) p++
-        if (chainSlice[p] !== '{') continue // Değişken adı iletilmiş, object literal değil
+        const ch = chainSlice[p]
+        const absCallPos = startAfterFrom + c.index
 
-        // Balanced `{...}` bul
-        const absOpen = startAfterFrom + p
-        const absClose = findMatchingBrace(content, absOpen)
-        if (absClose < 0) continue
-        const body = content.slice(absOpen + 1, absClose)
-        const keys = extractTopLevelKeys(body)
-        if (keys.size > 0) {
-          usages.push({
-            file: path.relative(ROOT, file),
-            table, kind,
-            cols: [...keys],
-          })
+        // CASE A: Inline object literal
+        if (ch === '{') {
+          const absOpen = startAfterFrom + p
+          const absClose = findMatchingBrace(content, absOpen)
+          if (absClose < 0) continue
+          const body = content.slice(absOpen + 1, absClose)
+          const keys = extractTopLevelKeys(body)
+          if (keys.size > 0) {
+            usages.push({
+              file: path.relative(ROOT, file),
+              table, kind, source: 'literal',
+              cols: [...keys],
+            })
+          }
+          continue
         }
+
+        // CASE B: Array literal
+        if (ch === '[') {
+          const absOpen = startAfterFrom + p
+          const absClose = findMatchingBracket(content, absOpen)
+          if (absClose < 0) continue
+          const body = content.slice(absOpen + 1, absClose)
+          const keys = extractKeysFromArrayBody(body)
+          if (keys.size > 0) {
+            usages.push({
+              file: path.relative(ROOT, file),
+              table, kind, source: 'array',
+              cols: [...keys],
+            })
+          }
+          continue
+        }
+
+        // CASE C: Identifier — değişken trace
+        if (/[a-zA-Z_$]/.test(ch)) {
+          let j = p
+          while (j < chainSlice.length && /[a-zA-Z0-9_$]/.test(chainSlice[j])) j++
+          const varName = chainSlice.slice(p, j)
+          let k = j
+          while (k < chainSlice.length && /\s/.test(chainSlice[k])) k++
+          const nextCh = chainSlice[k]
+          if (nextCh !== ')' && nextCh !== ',') {
+            const lineNo = content.slice(0, absCallPos).split('\n').length
+            untraced.push({
+              file: path.relative(ROOT, file),
+              table, kind, lineNo,
+              reason: 'karmaşık expression (değişken değil)',
+            })
+            continue
+          }
+          const { keys, traced } = traceVariableKeys(content, varName, absCallPos)
+          if (traced && keys.size > 0) {
+            usages.push({
+              file: path.relative(ROOT, file),
+              table, kind, source: 'var:' + varName,
+              cols: [...keys],
+            })
+          } else {
+            const lineNo = content.slice(0, absCallPos).split('\n').length
+            untraced.push({
+              file: path.relative(ROOT, file),
+              table, kind, lineNo, varName,
+              reason: 'değişken tanımı bulunamadı (başka modülden import veya karmaşık atama)',
+            })
+          }
+          continue
+        }
+
+        const lineNo = content.slice(0, absCallPos).split('\n').length
+        untraced.push({
+          file: path.relative(ROOT, file),
+          table, kind, lineNo,
+          reason: "beklenmeyen argüman: '" + ch + "'",
+        })
       }
     }
   }
-  return usages
+  return { usages, untraced }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -293,12 +547,19 @@ function main() {
   console.log('')
 
   const dbTables = readTableColumns()
-  const usages = extractUsages()
+  const { usages, untraced } = extractUsages()
 
   const tableCount = Object.keys(dbTables).length
   const colCount = Object.values(dbTables).reduce((a, s) => a + s.size, 0)
-  console.log(`📦 DB şeması: ${tableCount} tablo, toplam ${colCount} kolon`)
-  console.log(`🔍 Kod taraması: ${usages.length} insert/update/upsert çağrısı bulundu`)
+  const literalCount = usages.filter(u => u.source === 'literal').length
+  const arrayCount = usages.filter(u => u.source === 'array').length
+  const varCount = usages.filter(u => u.source && u.source.startsWith('var:')).length
+  console.log('📦 DB şeması: ' + tableCount + ' tablo, toplam ' + colCount + ' kolon')
+  console.log('🔍 Kod taraması: ' + usages.length + ' insert/update/upsert çağrısı analiz edildi')
+  console.log('   ↪ ' + literalCount + ' inline object, ' + arrayCount + ' array literal, ' + varCount + ' değişken trace')
+  if (untraced.length) {
+    console.log('   ↪ ' + untraced.length + ' çağrı trace edilemedi (aşağıda warning)')
+  }
   console.log('')
 
   const issues = []
@@ -309,12 +570,29 @@ function main() {
     }
     const dbCols = dbTables[u.table]
     for (const codeCol of u.cols) {
-      // camelCase ise snake_case dönüştür
       const snake = codeCol.includes('_') ? codeCol : camelToSnake(codeCol)
       if (!dbCols.has(snake) && !SYSTEM_COLUMNS.has(snake)) {
         issues.push({ ...u, problem: 'unknown_column', codeCol, expectedCol: snake })
       }
     }
+  }
+
+  // Untraced çağrıları warning olarak bas (fail değil)
+  if (untraced.length) {
+    console.log('\x1b[33m⚠ TRACE EDİLEMEYEN ÇAĞRILAR (elle gözden geçir):\x1b[0m')
+    const byFile = {}
+    for (const u of untraced) {
+      byFile[u.file] = byFile[u.file] || []
+      byFile[u.file].push(u)
+    }
+    for (const [file, list] of Object.entries(byFile)) {
+      console.log('\x1b[33m  ▸ ' + file + '\x1b[0m')
+      for (const u of list) {
+        const varInfo = u.varName ? " '" + u.varName + "'" : ''
+        console.log('    ⚠ Satır ' + u.lineNo + ': ' + u.table + ' [' + u.kind + ']' + varInfo + ' — ' + u.reason)
+      }
+    }
+    console.log('')
   }
 
   if (issues.length === 0) {
@@ -323,10 +601,9 @@ function main() {
     process.exit(0)
   }
 
-  console.log(`\x1b[31m🔴 ${issues.length} SORUN BULUNDU:\x1b[0m`)
+  console.log('\x1b[31m🔴 ' + issues.length + ' SORUN BULUNDU:\x1b[0m')
   console.log('')
 
-  // Gruplandır: önce tabloya göre
   const byTable = {}
   for (const i of issues) {
     byTable[i.table] = byTable[i.table] || []
@@ -334,15 +611,16 @@ function main() {
   }
 
   for (const [table, list] of Object.entries(byTable)) {
-    console.log(`\x1b[33m  ▸ ${table}\x1b[0m`)
+    console.log('\x1b[33m  ▸ ' + table + '\x1b[0m')
     for (const i of list) {
       if (i.problem === 'unknown_table') {
-        console.log(`    ❌ Bilinmeyen tablo (DB şemasında yok) — ${i.file}`)
+        console.log('    ❌ Bilinmeyen tablo (DB şemasında yok) — ' + i.file)
       } else {
         const hint = i.codeCol !== i.expectedCol
-          ? ` (${i.codeCol} → aranan DB kolonu: ${i.expectedCol})`
+          ? ' (' + i.codeCol + ' → aranan DB kolonu: ' + i.expectedCol + ')'
           : ''
-        console.log(`    ❌ Kolon yok: '${i.expectedCol}'${hint} — ${i.file} [${i.kind}]`)
+        const src = i.source && i.source.startsWith('var:') ? ' {' + i.source + '}' : ''
+        console.log('    ❌ Kolon yok: \'' + i.expectedCol + '\'' + hint + ' — ' + i.file + ' [' + i.kind + ']' + src)
       }
     }
     console.log('')

@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { useState, useMemo } from 'react'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -382,11 +382,15 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       urunler: kalemler,
     }
 
-    const { recipes: fullRecipes } = useStore.getState()
+    const { recipes: fullRecipes, workOrders: allWos, cuttingPlans: allPlans } = useStore.getState()
 
     if (initial?.id) {
       // Güncelleme — eski İE'leri sil, her kalem için yeniden üret
+      // ÜYSREV2 (v15.29): Önce eski İE'lerin woId'lerini yakala — kesim planı temizliği için.
+      // Delete sonrası cuttingPlanTemizle ile orphan kesimleri temizle (§14 Öncelik 1 kapanışı).
+      const eskiWoIds = allWos.filter(w => w.orderId === initial.id).map(w => w.id)
       await supabase.from('uys_work_orders').delete().eq('order_id', initial.id)
+      const cpResult = await cuttingPlanTemizle(eskiWoIds, allPlans as any)
       await supabase.from('uys_orders').update({ ...row, mrp_durum: 'bekliyor' }).eq('id', initial.id)
       // Sipariş revize oldu — eski rezervasyonları temizle (yeni hesapla tekrar oluşacak)
       await rezerveSil(initial.id)
@@ -394,7 +398,10 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       for (const k of kalemler) {
         if (k.rcId) { const c = await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
       }
-      toast.info(woTotal + ' iş emri güncellendi')
+      const temizlikNotu = cpResult.temizlenenKesim
+        ? ` · ${cpResult.temizlenenKesim} kesim temizlendi${cpResult.silinenPlan ? ` · ${cpResult.silinenPlan} plan silindi` : ''}`
+        : ''
+      toast.info(woTotal + ' iş emri güncellendi' + temizlikNotu)
     } else {
       const newId = uid()
       await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
