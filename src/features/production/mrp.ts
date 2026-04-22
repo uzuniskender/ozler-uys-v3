@@ -399,6 +399,119 @@ export async function rezerveSil(orderId: string): Promise<void> {
   await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
 }
 
+// ═══ KESİM PLANI TEMİZLEME HELPER — woId bazlı ═══
+// Verilen woId'lere ait kesimleri tüm planlardan çıkarır.
+// Bir satır tüm kesimlerini kaybederse satır silinir.
+// Bir plan tüm satırlarını kaybederse plan silinir.
+// Sipariş silme + sipariş revize akışlarında kullanılır.
+export async function cuttingPlanTemizle(
+  woIds: string[],
+  cuttingPlans: { id: string; satirlar: any[] }[]
+): Promise<{ guncellenenPlan: number; silinenPlan: number; temizlenenKesim: number }> {
+  if (!woIds.length) return { guncellenenPlan: 0, silinenPlan: 0, temizlenenKesim: 0 }
+  const woIdSet = new Set(woIds)
+  let guncellenen = 0, silinen = 0, temizlenen = 0
+
+  for (const plan of cuttingPlans) {
+    const origSatirlar = plan.satirlar || []
+    if (!origSatirlar.length) continue
+
+    const yeniSatirlar: any[] = []
+    let planDegisti = false
+    for (const satir of origSatirlar) {
+      const origKesimler = satir.kesimler || []
+      const yeniKesimler = origKesimler.filter((k: any) => !woIdSet.has(k.woId))
+      if (yeniKesimler.length !== origKesimler.length) {
+        planDegisti = true
+        temizlenen += origKesimler.length - yeniKesimler.length
+      }
+      if (yeniKesimler.length > 0) {
+        yeniSatirlar.push({ ...satir, kesimler: yeniKesimler })
+      }
+    }
+
+    if (yeniSatirlar.length === 0) {
+      // Plan tamamen boşaldı — sil
+      await supabase.from('uys_kesim_planlari').delete().eq('id', plan.id)
+      silinen++
+    } else if (planDegisti) {
+      // Plan güncellendi (hamAdet'e dokunulmuyor — manuel yeniden optimizasyon gerekebilir)
+      await supabase.from('uys_kesim_planlari').update({ satirlar: yeniSatirlar }).eq('id', plan.id)
+      guncellenen++
+    }
+  }
+  return { guncellenenPlan: guncellenen, silinenPlan: silinen, temizlenenKesim: temizlenen }
+}
+
+// ═══ SİPARİŞ SİLME ORCHESTRATOR — Faz B Parça 2C+ ═══
+// Tek fonksiyonda tüm zinciri orkestre eder:
+//  1. Üretim kontrolü — İE'lerde log varsa force=true gerekir (kullanıcı onayı)
+//  2. İş emirlerini sil
+//  3. Kesim planlarından bu siparişin kesimlerini çıkar (boşalan plan silinir)
+//  4. Açık tedarikleri (geldi=false) sil — gereksiz kaldılar
+//  5. Gelmiş tedariklerin (geldi=true) order_id bağını kopar — malzeme stokta serbest kalır
+//  6. Rezerveleri sil
+//  7. Siparişi sil
+// NOT: Stok hareketleri ve üretim logları DOKUNULMAZ. Üretilmiş miktar stokta kalır.
+// NOT: Çağırdıktan sonra mutlaka loadAll + rezerveleriSenkronla tetiklenmeli.
+export async function siparisSilKapsamli(
+  orderId: string,
+  state: {
+    workOrders: WorkOrder[]
+    logs: { woId: string; qty: number }[]
+    cuttingPlans: { id: string; satirlar: any[] }[]
+  },
+  options?: { force?: boolean }
+): Promise<{
+  ok: boolean
+  hata?: string
+  detay?: { kayitSayisi: number; toplamMiktar: number }
+  ozet?: { silinenIE: number; guncellenenPlan: number; silinenPlan: number; silinenAcikTedarik: number; kopanGelmisTedarik: number }
+}> {
+  if (!orderId) return { ok: false, hata: 'Sipariş ID boş' }
+
+  // 1. Üretim kontrolü
+  const woIds = state.workOrders.filter(w => w.orderId === orderId).map(w => w.id)
+  const uretilmis = state.logs.filter(l => woIds.includes(l.woId))
+  if (uretilmis.length > 0 && !options?.force) {
+    const toplamMiktar = uretilmis.reduce((a, l) => a + (l.qty || 0), 0)
+    return {
+      ok: false,
+      hata: 'Siparişte üretim başlamış',
+      detay: { kayitSayisi: uretilmis.length, toplamMiktar }
+    }
+  }
+
+  // 2. İş emirlerini sil
+  await supabase.from('uys_work_orders').delete().eq('order_id', orderId)
+
+  // 3. Kesim planlarını güncelle
+  const cpResult = await cuttingPlanTemizle(woIds, state.cuttingPlans)
+
+  // 4. Açık tedarikleri sil
+  const { count: acikCount } = await supabase.from('uys_tedarikler').delete({ count: 'exact' }).eq('order_id', orderId).eq('geldi', false)
+
+  // 5. Gelmiş tedariklerin sipariş bağını kopar
+  const { count: gelmisCount } = await supabase.from('uys_tedarikler').update({ order_id: null, siparis_no: null }, { count: 'exact' }).eq('order_id', orderId).eq('geldi', true)
+
+  // 6. Rezerveleri sil
+  await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
+
+  // 7. Siparişi sil
+  await supabase.from('uys_orders').delete().eq('id', orderId)
+
+  return {
+    ok: true,
+    ozet: {
+      silinenIE: woIds.length,
+      guncellenenPlan: cpResult.guncellenenPlan,
+      silinenPlan: cpResult.silinenPlan,
+      silinenAcikTedarik: acikCount || 0,
+      kopanGelmisTedarik: gelmisCount || 0,
+    }
+  }
+}
+
 // ═══ TÜM AKTİF SİPARİŞLER İÇİN REZERVE SENKRONİZASYONU — Faz B Parça 2B+2C ═══
 // TERMİN-FIFO ALOKASYON:
 // 1. Aktif siparişleri termine göre sıralar (erken termin önce)

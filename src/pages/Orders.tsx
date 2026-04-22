@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { useState, useMemo } from 'react'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -49,14 +49,30 @@ export function Orders() {
 
   async function selDeleteAll() {
     if (!selIds.size) return
-    if (!await showConfirm(`${selIds.size} sipariş SİLİNECEK. Devam?`)) return
+    if (!await showConfirm(`${selIds.size} sipariş SİLİNECEK.\n\nHer sipariş için İE + kesim plan + açık tedarik + rezerve temizlenecek. Üretim başlamışsa ayrıca onay sorulacak. Devam?`)) return
+
+    const s = useStore.getState()
+    let basariSayac = 0
+    let iptalSayac = 0
+    let hataSayac = 0
+
     for (const id of selIds) {
-      await supabase.from('uys_work_orders').delete().eq('order_id', id)
-      await supabase.from('uys_orders').delete().eq('id', id)
-      await rezerveSil(id)
+      let result = await siparisSilKapsamli(id, { workOrders: s.workOrders, logs: s.logs, cuttingPlans: s.cuttingPlans as any })
+      if (!result.ok && result.hata === 'Siparişte üretim başlamış') {
+        const d = result.detay!
+        const order = orders.find(o => o.id === id)
+        const devam = await showConfirm(`⚠ ${order?.siparisNo || id}: ÜRETİM BAŞLAMIŞ (${d.kayitSayisi} kayıt · ${d.toplamMiktar} adet). Yine de silinsin mi?`)
+        if (!devam) { iptalSayac++; continue }
+        result = await siparisSilKapsamli(id, { workOrders: s.workOrders, logs: s.logs, cuttingPlans: s.cuttingPlans as any }, { force: true })
+      }
+      if (result.ok) basariSayac++
+      else hataSayac++
     }
-    setSelIds(new Set()); loadAll(); toast.success(selIds.size + ' sipariş silindi')
+
+    setSelIds(new Set())
+    await loadAll()
     await triggerRezerveSync()
+    toast.success(`${basariSayac} sipariş silindi${iptalSayac ? ` · ${iptalSayac} iptal` : ''}${hataSayac ? ` · ${hataSayac} hata` : ''}`)
   }
 
   function orderPct(orderId: string): number {
@@ -103,13 +119,35 @@ export function Orders() {
     if (!error) { loadAll(); toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA') }
   }
   async function deleteOrder(id: string) {
-    if (!await showConfirm('Bu siparişi ve ilişkili iş emirlerini silmek istediğinize emin misiniz?')) return
-    await supabase.from('uys_work_orders').delete().eq('order_id', id)
-    await supabase.from('uys_orders').delete().eq('id', id)
-    await rezerveSil(id)
+    const order = orders.find(o => o.id === id)
+    if (!order) return
+    if (!await showConfirm(`"${order.siparisNo}" siparişini silmek istediğinize emin misiniz?\n\nİş emirleri, kesim plan kesimleri, açık tedarikler ve rezerveler temizlenecek. Gelmiş malzemeler serbest stokta kalacak.`)) return
+
+    const s = useStore.getState()
+    let result = await siparisSilKapsamli(id, { workOrders: s.workOrders, logs: s.logs, cuttingPlans: s.cuttingPlans as any })
+
+    // Üretim başladıysa: kullanıcıya onay sor, force ile tekrar dene
+    if (!result.ok && result.hata === 'Siparişte üretim başlamış') {
+      const d = result.detay!
+      const devam = await showConfirm(
+        `⚠ ÜRETİM BAŞLAMIŞ\n\n${d.kayitSayisi} üretim kaydı · toplam ${d.toplamMiktar} adet üretilmiş.\n\n` +
+        `Üretim logları ve stok hareketleri KORUNACAK — sadece sipariş, İE ve plan kayıtları silinecek.\n\n` +
+        `Yine de silmek istiyor musunuz?`
+      )
+      if (!devam) return
+      result = await siparisSilKapsamli(id, { workOrders: s.workOrders, logs: s.logs, cuttingPlans: s.cuttingPlans as any }, { force: true })
+    }
+
+    if (!result.ok) { toast.error('Silme hatası: ' + (result.hata || 'bilinmeyen')); return }
+
     logAction('Sipariş silindi', id)
-    loadAll(); toast.success('Sipariş silindi')
+    await loadAll()
     await triggerRezerveSync()
+
+    const o = result.ozet!
+    toast.success(
+      `Sipariş silindi — ${o.silinenIE} İE, ${o.guncellenenPlan + o.silinenPlan} plan etkilendi, ${o.silinenAcikTedarik} açık tedarik silindi, ${o.kopanGelmisTedarik} gelmiş tedarik serbest`
+    )
   }
 
   async function topluMRP() {
