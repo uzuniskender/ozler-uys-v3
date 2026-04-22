@@ -5,16 +5,18 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
-import type { BomTree } from '@/types'
+import type { BomTree, Recipe } from '@/types'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
+import { RecipeEditor } from './Recipes'
 
 export function BomTrees() {
-  const { bomTrees, recipes, workOrders, materials, loadAll } = useStore()
+  const { bomTrees, recipes, workOrders, materials, operations, loadAll } = useStore()
   const { can } = useAuth()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [receteFiltre, setReceteFiltre] = useState('')
@@ -177,11 +179,19 @@ export function BomTrees() {
           opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk',
         }
       })
+      const yeniRecId = uid()
       await supabase.from('uys_recipes').insert({
-        id: uid(), rc_kod: 'RC-' + bt.mamulKod, ad: bt.ad || bt.mamulAd,
+        id: yeniRecId, rc_kod: 'RC-' + bt.mamulKod, ad: bt.ad || bt.mamulAd,
         bom_id: bt.id, mamul_kod: bt.mamulKod, mamul_ad: bt.mamulAd || bt.ad, satirlar,
       })
-      loadAll(); toast.success(`"${bt.mamulKod}" reçetesi oluşturuldu — ${satirlar.length} satır`)
+      await loadAll()
+      toast.success(`"${bt.mamulKod}" reçetesi oluşturuldu — ${satirlar.length} satır`)
+      // Auto-open editor so user can fill operations + times
+      const yeniRec: Recipe = {
+        id: yeniRecId, rcKod: 'RC-' + bt.mamulKod, ad: bt.ad || bt.mamulAd || '',
+        bomId: bt.id, mamulKod: bt.mamulKod, mamulAd: bt.mamulAd || bt.ad || '', satirlar,
+      }
+      setEditingRecipe(yeniRec)
       return
     }
 
@@ -218,7 +228,7 @@ export function BomTrees() {
     silinen = mevcutSatirlar.length - (yeniSatirlar.length - eklenen)
 
     await supabase.from('uys_recipes').update({ satirlar: yeniSatirlar, bom_id: bt.id }).eq('id', existing.id)
-    loadAll()
+    await loadAll()
 
     const parts = [
       eklenen > 0 && `+${eklenen} eklendi`,
@@ -228,6 +238,8 @@ export function BomTrees() {
     toast.success(parts.length > 0
       ? `"${bt.mamulKod}" reçetesi senkronize edildi — ${parts.join(', ')} · Operasyon ve süreler korundu`
       : `"${bt.mamulKod}" reçetesi zaten güncel`)
+    // Auto-open editor so user can review/fill operations for new rows
+    setEditingRecipe({ ...existing, satirlar: yeniSatirlar, bomId: bt.id })
   }
 
   return (
@@ -291,6 +303,7 @@ export function BomTrees() {
       </div>
       {selected && <BomEditor bom={selected} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Ürün ağacı güncellendi') }} />}
       {showNew && <NewBomModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Ürün ağacı oluşturuldu') }} />}
+      {editingRecipe && <RecipeEditor recipe={editingRecipe} operations={operations} onClose={() => setEditingRecipe(null)} onSaved={() => { setEditingRecipe(null); loadAll(); toast.success('Reçete güncellendi') }} />}
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock, BookOpen } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
 import { analizReceteTumSatirlar, donusturBirim } from '@/features/production/sureAnaliz'
@@ -25,6 +25,19 @@ export function Recipes() {
     const q = search.toLowerCase()
     return recipes.filter(r => (r.rcKod + ' ' + r.ad + ' ' + r.mamulKod).toLowerCase().includes(q))
   }, [recipes, search])
+
+  // İstatistikler: toplam satır, süresiz reçete sayısı
+  const stats = useMemo(() => {
+    let toplamSatir = 0
+    let suresizRecete = 0
+    for (const r of recipes) {
+      const satirlar = r.satirlar || []
+      toplamSatir += satirlar.length
+      const hasSure = satirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+      if (satirlar.length > 0 && !hasSure) suresizRecete++
+    }
+    return { toplamSatir, suresizRecete }
+  }, [recipes])
 
   function toggleCheck(id: string) { setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   function toggleAll() { checkedIds.size === filtered.length ? setCheckedIds(new Set()) : setCheckedIds(new Set(filtered.map(r => r.id))) }
@@ -136,57 +149,194 @@ export function Recipes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div><h1 className="text-xl font-semibold">Reçeteler</h1><p className="text-xs text-zinc-500">{recipes.length} reçete{search ? ` · ${filtered.length} gösterilen` : ''}</p></div>
-        <div className="flex gap-2">
-          {can('recipe_delete') && checkedIds.size > 0 && <button onClick={deleteSelected} className="flex items-center gap-1 px-3 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-xs font-semibold hover:bg-red/20"><Trash2 size={12} /> Seçili Sil ({checkedIds.size})</button>}
-          {can('recipe_add') && bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 BOM'dan ({bomTrees.length})</button>}
-          <button onClick={exportRecipes} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> İndir</button>
-          {can('recipe_excel') && <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Yükle</button>}
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { if (e.target.files?.[0]) importExcel(e.target.files[0]); e.target.value = '' }} />
-          {can('recipe_add') && <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>}
+      {/* Başlık + istatistik pill'leri */}
+      <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold mb-1">Reçeteler</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] px-2 py-0.5 bg-bg-2 border border-border rounded-full text-zinc-300">
+              <span className="font-mono font-semibold text-accent">{recipes.length}</span> reçete
+            </span>
+            <span className="text-[11px] px-2 py-0.5 bg-bg-2 border border-border rounded-full text-zinc-400">
+              <span className="font-mono font-semibold text-zinc-200">{stats.toplamSatir}</span> bileşen
+            </span>
+            {stats.suresizRecete > 0 && (
+              <span className="text-[11px] px-2 py-0.5 bg-amber/10 border border-amber/25 rounded-full text-amber">
+                ⏱ <span className="font-mono font-semibold">{stats.suresizRecete}</span> süresiz
+              </span>
+            )}
+            {search && (
+              <span className="text-[11px] px-2 py-0.5 bg-accent/10 border border-accent/25 rounded-full text-accent">
+                {filtered.length} eşleşen
+              </span>
+            )}
+          </div>
+        </div>
+        {/* Eylemler — gruplanmış */}
+        <div className="flex gap-2 items-center flex-wrap">
+          {can('recipe_delete') && checkedIds.size > 0 && (
+            <button onClick={deleteSelected}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red/10 border border-red/25 text-red rounded-lg text-xs font-semibold hover:bg-red/20 transition-colors">
+              <Trash2 size={12} /> Seçili Sil ({checkedIds.size})
+            </button>
+          )}
+          {(can('recipe_delete') && checkedIds.size > 0) && <div className="w-px h-6 bg-border mx-1" />}
+          {can('recipe_add') && bomTrees.length > 0 && (
+            <button onClick={bomDanReceteOlustur}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20 transition-colors">
+              🌳 BOM&apos;dan ({bomTrees.length})
+            </button>
+          )}
+          <button onClick={exportRecipes}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+            <Download size={13} /> İndir
+          </button>
+          {can('recipe_excel') && (
+            <button onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+              <Upload size={13} /> Yükle
+            </button>
+          )}
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
+            onChange={e => { if (e.target.files?.[0]) importExcel(e.target.files[0]); e.target.value = '' }} />
+          {can('recipe_add') && (
+            <button onClick={() => setShowNew(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold shadow-sm transition-colors">
+              <Plus size={13} /> Yeni Reçete
+            </button>
+          )}
         </div>
       </div>
-      <div className="flex gap-2 mb-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Kod, ad veya mamul kodu ara..."
-            className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+
+      {/* Arama */}
+      <div className="flex gap-2 mb-3">
+        <div className="relative flex-1 max-w-md">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Kod, ad veya mamul kodu ara..."
+            className="w-full pl-9 pr-9 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors" />
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-200 hover:bg-bg-3"
+              title="Temizle">×</button>
+          )}
         </div>
       </div>
+
+      {/* Tablo */}
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
-          <table className="w-full text-xs">
-            <thead><tr className="border-b border-border text-zinc-500">
-              <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === filtered.length && filtered.length > 0} onChange={toggleAll} className="accent-accent" /></th>
-              <th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Reçete Adı</th><th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
-            <tbody>
-              {filtered.map(r => (
-                <tr key={r.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(r.id) ? 'bg-accent/5' : ''}`}>
-                  <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleCheck(r.id)} className="accent-accent" /></td>
-                  <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
-                    const yeni = await showPrompt('Reçete kodu değiştir', 'Yeni kod', r.rcKod)
-                    if (yeni && yeni.trim() !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Kod güncellendi') }
-                  }}>{r.rcKod || '—'} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
-                  <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameRecipe(r)}>{r.ad} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
-                  <td className="px-4 py-2 font-mono text-zinc-500 cursor-pointer hover:text-accent group" onClick={async () => {
-                    const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', r.mamulKod)
-                    if (yeni && yeni.trim() !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Mamul kodu güncellendi') }
-                  }}>{r.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
-                  <td className="px-4 py-2 text-right font-mono">{r.satirlar?.length || 0}</td>
-                  <td className="px-4 py-2 text-right">
-                    {can('recipe_add') && <button onClick={() => copyRecipe(r)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>}
-                    {can('recipe_edit') && <button onClick={() => setSelected(r)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>}
-                    {can('recipe_delete') && <button onClick={() => deleteRecipe(r.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-bg-2 border-b border-border">
+                <tr className="text-zinc-500">
+                  <th className="px-3 py-3 w-8">
+                    <input type="checkbox"
+                      checked={checkedIds.size === filtered.length && filtered.length > 0}
+                      onChange={toggleAll} className="accent-accent" />
+                  </th>
+                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Kod</th>
+                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Reçete Adı</th>
+                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Mamul Kodu</th>
+                  <th className="text-right px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Bileşen</th>
+                  <th className="text-center px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Süre</th>
+                  <th className="px-4 py-3 w-[1%]"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <div className="p-8 text-center">
-          <div className="text-zinc-600 text-sm mb-3">{search ? 'Aramayla eşleşen reçete yok' : 'Henüz reçete yok'}</div>
-          {!search && bomTrees.length > 0 && <button onClick={bomDanReceteOlustur} className="px-4 py-2 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20">🌳 {bomTrees.length} Ürün Ağacından Reçete Oluştur</button>}
-        </div>}
+              </thead>
+              <tbody>
+                {filtered.map((r, i) => {
+                  const satirlar = r.satirlar || []
+                  const hasSure = satirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+                  return (
+                    <tr key={r.id}
+                      className={`border-b border-border/25 transition-colors ${
+                        checkedIds.has(r.id)
+                          ? 'bg-accent/10 hover:bg-accent/15'
+                          : i % 2 === 0 ? 'hover:bg-bg-3/40' : 'bg-bg-3/10 hover:bg-bg-3/40'
+                      }`}>
+                      <td className="px-3 py-2.5">
+                        <input type="checkbox" checked={checkedIds.has(r.id)}
+                          onChange={() => toggleCheck(r.id)} className="accent-accent" />
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
+                        const yeni = await showPrompt('Reçete kodu değiştir', 'Yeni kod', r.rcKod)
+                        if (yeni && yeni.trim() !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Kod güncellendi') }
+                      }}>
+                        {r.rcKod || '—'} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-200 cursor-pointer hover:text-accent group" onClick={() => renameRecipe(r)}>
+                        {r.ad} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-500 cursor-pointer hover:text-accent group" onClick={async () => {
+                        const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', r.mamulKod)
+                        if (yeni && yeni.trim() !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Mamul kodu güncellendi') }
+                      }}>
+                        {r.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-zinc-300">{satirlar.length}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        {satirlar.length === 0 ? (
+                          <span className="text-[10px] text-zinc-600">—</span>
+                        ) : hasSure ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold">
+                            <Clock size={9} /> Var
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold">
+                            <Clock size={9} /> Yok
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          {can('recipe_add') && (
+                            <button onClick={() => copyRecipe(r)}
+                              title="Kopyala"
+                              className="px-2 py-1 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 transition-colors">
+                              <Copy size={10} className="inline" /> Kopyala
+                            </button>
+                          )}
+                          {can('recipe_edit') && (
+                            <button onClick={() => setSelected(r)}
+                              title="Düzenle"
+                              className="px-2 py-1 bg-bg-3 text-zinc-300 rounded text-[10px] hover:bg-accent/15 hover:text-accent transition-colors">
+                              <Pencil size={10} className="inline" /> Düzenle
+                            </button>
+                          )}
+                          {can('recipe_delete') && (
+                            <button onClick={() => deleteRecipe(r.id)}
+                              title="Sil"
+                              className="px-2 py-1 bg-bg-3 text-zinc-500 rounded text-[10px] hover:bg-red/15 hover:text-red transition-colors">
+                              <Trash2 size={10} className="inline" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-12 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-3 mb-3">
+              <BookOpen size={20} className="text-zinc-500" />
+            </div>
+            <div className="text-zinc-400 text-sm mb-1 font-medium">
+              {search ? 'Aramayla eşleşen reçete yok' : 'Henüz reçete yok'}
+            </div>
+            <div className="text-zinc-600 text-xs mb-4">
+              {search ? 'Farklı bir arama terimi deneyin' : 'Reçete oluşturmak için aşağıdaki seçeneklerden birini kullanabilirsin'}
+            </div>
+            {!search && bomTrees.length > 0 && (
+              <button onClick={bomDanReceteOlustur}
+                className="px-4 py-2 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20 transition-colors">
+                🌳 {bomTrees.length} Ürün Ağacından Reçete Oluştur
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {selected && <RecipeEditor recipe={selected} operations={operations} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Reçete güncellendi') }} />}
       {showNew && <NewRecipeModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Reçete oluşturuldu') }} />}
@@ -230,7 +380,7 @@ function NewRecipeModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   )
 }
 
-function RecipeEditor({ recipe, operations, onClose, onSaved }: {
+export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   recipe: Recipe; operations: { id: string; kod: string; ad: string }[]
   
   onClose: () => void; onSaved: () => void
