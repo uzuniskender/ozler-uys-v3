@@ -178,7 +178,12 @@ export function hesaplaMRP(
   mrpRezerve?: MrpRezerve[],
   currentOrderId?: string
 ): MRPRow[] {
+  // brutIhtiyac ANAHTARLARI case-insensitive (.trim().toLowerCase())
+  // ama her kaydın .malkod field'ı orijinal case'de saklanır (final çıktıda kullanmak için)
   const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
+
+  // Kapsam için ordIdSet — hem sipariş filtresi hem bağımsız YM filtresi hem cutting plan kapsamı kullanır
+  const ordIdSet = ordIds ? new Set(ordIds) : null
 
   // 1. Siparişlerin BOM patlatması
   const siparisler = ordIds === null
@@ -206,30 +211,38 @@ export function hesaplaMRP(
       console.log(`[MRP DEBUG] Sipariş ${o.id} kalem ${u.mamulKod} x${netAdet} → BOM sonuç:`, Object.keys(p).length, 'malzeme:', Object.keys(p))
       Object.keys(p).forEach(k => {
         const v = p[k]
-        if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: urunTermin }
-        else if (urunTermin && (!brutIhtiyac[k].termin || urunTermin < brutIhtiyac[k].termin)) brutIhtiyac[k].termin = urunTermin
-        brutIhtiyac[k].brut += v.miktar
+        const key = (k || '').trim().toLowerCase()
+        if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: urunTermin }
+        else if (urunTermin && (!brutIhtiyac[key].termin || urunTermin < brutIhtiyac[key].termin)) brutIhtiyac[key].termin = urunTermin
+        brutIhtiyac[key].brut += v.miktar
       })
     }
   }
 
-  // 2. Bağımsız YM İş Emirleri
+  // 2. Bağımsız YM İş Emirleri — KAPSAM FİLTRESİ: sipariş seçildiyse sadece o siparişlerin bağımsız YM'leri
   const ymIEs = workOrders.filter(w => {
     if (!w.bagimsiz || w.durum === 'iptal') return false
     if (secilenYMIds && !secilenYMIds.has(w.id)) return false
+    // Sipariş seçildiyse: sadece o siparişlerle bağlantılı bağımsız YM'ler (orderId eşleşmeli)
+    if (ordIdSet) {
+      if (!w.orderId || !ordIdSet.has(w.orderId)) return false
+    }
     return true
   })
+  console.log('[MRP DEBUG] Bağımsız YM İE sayısı:', ymIEs.length, '| IDs:', ymIEs.map(w => w.id))
   for (const w of ymIEs) {
     const kalan = w.hedef // simplified — ideally use logs to get actual remaining
     if (!kalan || !w.malkod) continue
     const wTermin = (w as any).termin || ''
     const p = bomPatlaNet(w.malkod, kalan, 0, {}, recipes, stokHareketler, materials)
+    console.log('[MRP DEBUG] Bağımsız YM İE', w.id, w.malkod, 'x', kalan, '→ BOM:', Object.keys(p).length, 'malzeme:', Object.keys(p))
     Object.keys(p).forEach(k => {
       if (k === w.malkod) return
       const v = p[k]
-      if (!brutIhtiyac[k]) brutIhtiyac[k] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: wTermin }
-      else if (wTermin && (!brutIhtiyac[k].termin || wTermin < brutIhtiyac[k].termin)) brutIhtiyac[k].termin = wTermin
-      brutIhtiyac[k].brut += v.miktar
+      const key = (k || '').trim().toLowerCase()
+      if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: wTermin }
+      else if (wTermin && (!brutIhtiyac[key].termin || wTermin < brutIhtiyac[key].termin)) brutIhtiyac[key].termin = wTermin
+      brutIhtiyac[key].brut += v.miktar
     })
   }
 
@@ -239,7 +252,6 @@ export function hesaplaMRP(
   // 4. KESİM PLANI OVERRIDE — v2 kritik özellik
   // Kesim planı varsa HM ihtiyacını BOM yerine gerçek bar sayısından al
   // KAPSAM FİLTRESİ: ordIds verilmişse sadece o siparişlerin İE'lerini içeren planları dahil et
-  const ordIdSet = ordIds ? new Set(ordIds) : null
   const secilenWoIds = ordIdSet
     ? new Set(workOrders.filter(w => ordIdSet.has(w.orderId)).map(w => w.id))
     : null
@@ -259,25 +271,27 @@ export function hesaplaMRP(
     const planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
     if (!planAdet) return
     console.log('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)
-    if (!brutIhtiyac[hmk]) brutIhtiyac[hmk] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
+    const key = (hmk || '').trim().toLowerCase()
+    if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
     // Kesim planı gerçek bar sayısını gösterir — BOM'u override et
-    brutIhtiyac[hmk].brut = planAdet
+    brutIhtiyac[key].brut = planAdet
   })
 
   // 5. Stok ve açık tedarik hesabı
   const sonuc: MRPRow[] = []
   Object.keys(brutIhtiyac).forEach(k => {
     const bi = brutIhtiyac[k]
-    const fizikselStok = getStok(k, stokHareketler)
+    // Stok sorguları orijinal malkod ile (stok hareketleri kart kodunu birebir tutar)
+    const fizikselStok = getStok(bi.malkod, stokHareketler)
     // Başka siparişlerin rezervesini düş (kendi siparişin hariç) — case-insensitive malkod eşleşmesi
-    const kLower = (k || '').trim().toLowerCase()
+    const kLower = (bi.malkod || '').trim().toLowerCase()
     const baskaRezerve = (mrpRezerve || [])
       .filter(r => (r.malkod || '').trim().toLowerCase() === kLower && r.orderId !== currentOrderId)
       .reduce((a, r) => a + r.miktar, 0)
     const stok = Math.max(0, fizikselStok - baskaRezerve)
-    // TÜM açık tedarikler (v2 mantığı — sadece aynı sipariş değil)
+    // TÜM açık tedarikler (v2 mantığı — sadece aynı sipariş değil) — case-insensitive
     const acikTedarik = tedarikler
-      .filter(t => t.malkod === k && !t.geldi)
+      .filter(t => (t.malkod || '').trim().toLowerCase() === kLower && !t.geldi)
       .reduce((a, t) => a + t.miktar, 0)
     const net = Math.max(0, Math.ceil(bi.brut - stok - acikTedarik))
     const durum: MRPRow['durum'] = (stok + acikTedarik) >= bi.brut ? 'yeterli' : net > 0 ? 'eksik' : 'yeterli'
@@ -285,10 +299,10 @@ export function hesaplaMRP(
     // YarıMamul filtreleme — üretilir, tedarik edilmez
     if (bi.tip === 'YarıMamul') return
 
-    sonuc.push({ malkod: k, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum, termin: bi.termin || '' })
+    sonuc.push({ malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum, termin: bi.termin || '' })
   })
 
-  console.log('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.keys(brutIhtiyac))
+  console.log('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.values(brutIhtiyac).map(b => b.malkod))
 
   return sonuc.sort((a, b) => {
     const s: Record<string, number> = { yok: 0, eksik: 1, yeterli: 2 }
