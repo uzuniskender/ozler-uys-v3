@@ -44,7 +44,7 @@ export function DataManagement() {
     setRunning(true)
     const kontroller: SaglikKontrolu[] = []
     try {
-      const [woRes, logRes, fireRes, stokRes, tedRes, matsRes, planRes, rezRes, orderRes, recRes] = await Promise.all([
+      const [woRes, logRes, fireRes, stokRes, tedRes, matsRes, planRes, rezRes, orderRes, recRes, bomRes] = await Promise.all([
         supabase.from('uys_work_orders').select('*'),
         supabase.from('uys_logs').select('*'),
         supabase.from('uys_fire_logs').select('*'),
@@ -55,6 +55,7 @@ export function DataManagement() {
         supabase.from('uys_mrp_rezerve').select('*'),
         supabase.from('uys_orders').select('*'),
         supabase.from('uys_recipes').select('*'),
+        supabase.from('uys_bom_trees').select('*'),
       ])
       const wos = woRes.data || []
       const logs = logRes.data || []
@@ -66,6 +67,7 @@ export function DataManagement() {
       const rezs = rezRes.data || []
       const orders = orderRes.data || []
       const recs = recRes.data || []
+      const boms = bomRes.data || []
 
       const aktifOrders = orders.filter((o: any) => o.durum !== 'kapalı' && o.durum !== 'iptal')
       const aktifOrderIds = new Set(aktifOrders.map((o: any) => o.id))
@@ -208,7 +210,8 @@ export function DataManagement() {
         detay: mrpSenkronsuz.length ? { siparisler: mrpSenkronsuz.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
       })
 
-      // 8. Duplicate malzeme kartı
+      // 8. Malzeme kartı tutarlılığı (kart duplicate + hareketlerde kart kodu varyasyonu)
+      // Alt-A: Kart duplicate (aynı normalize kod birden fazla kartla)
       const matGroup: Record<string, any[]> = {}
       mats.forEach((m: any) => {
         const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
@@ -217,14 +220,67 @@ export function DataManagement() {
         matGroup[norm].push(m)
       })
       const dupPairler = Object.entries(matGroup).filter(([, arr]) => arr.length > 1)
+
+      // Alt-B: Hareket/BOM/reçete/İE/kesim'de kart ile yazım farkı olan malkod
+      // (normalize ile kart'la eşleşiyor ama ham string uyuşmuyor → tutarsızlık)
+      const normKartMap = new Map<string, { kod: string; ad: string }>()
+      mats.forEach((m: any) => {
+        const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
+        if (!norm) return
+        if (!normKartMap.has(norm)) normKartMap.set(norm, { kod: m.kod, ad: m.ad })
+      })
+      const isVar = (raw: string | null | undefined) => {
+        if (!raw) return false
+        const norm = raw.trim().toLocaleUpperCase('tr-TR')
+        const k = normKartMap.get(norm)
+        return !!k && k.kod !== raw
+      }
+      const vStok = stoks.filter((h: any) => isVar(h.malkod)).length
+      let vBom = 0
+      boms.forEach((bt: any) => {
+        (bt.rows || []).forEach((r: any) => { if (isVar(r.malkod)) vBom++ })
+        if (isVar(bt.mamul_kod)) vBom++
+      })
+      let vRc = 0
+      recs.forEach((rc: any) => {
+        (rc.satirlar || []).forEach((r: any) => { if (isVar(r.malkod)) vRc++ })
+        if (isVar(rc.mamul_kod)) vRc++
+      })
+      let vWo = 0
+      wos.forEach((w: any) => {
+        if (isVar(w.malkod)) vWo++
+        if (isVar(w.mamul_kod)) vWo++
+        ;(w.hm || []).forEach((h: any) => { if (isVar(h.malkod)) vWo++ })
+      })
+      let vKes = 0
+      plans.forEach((p: any) => {
+        if (isVar(p.ham_malkod)) vKes++
+        ;(p.satirlar || []).forEach((s: any) => {
+          (s.kesimler || []).forEach((k: any) => { if (isVar(k.malkod)) vKes++ })
+        })
+      })
+      const vTotal = vStok + vBom + vRc + vWo + vKes
+      const hasIssue = dupPairler.length > 0 || vTotal > 0
+
       kontroller.push({
-        no: 8, ad: 'Duplicate malzeme kartı',
-        durum: dupPairler.length ? 'warn' : 'pass',
-        mesaj: dupPairler.length ? `${dupPairler.length} malzeme kodu birden fazla kartla kayıtlı` : `${mats.length} malzeme kartı tekil`,
-        neden: dupPairler.length ? 'Aynı malzeme küçük/büyük harfli olarak iki kez oluşturulmuş.' : undefined,
-        aksiyon: dupPairler.length ? 'Otomatik Düzelt — en çok stok hareketi olan ana kart kalır, diğerleri birleştirilir.' : undefined,
-        autoFixEtiket: dupPairler.length ? 'Duplicate kartları birleştir' : undefined,
-        autoFix: dupPairler.length ? async () => {
+        no: 8, ad: 'Malzeme kartı tutarlılığı',
+        durum: hasIssue ? 'warn' : 'pass',
+        mesaj: hasIssue
+          ? [
+              dupPairler.length ? `${dupPairler.length} duplicate kart` : '',
+              vTotal ? `${vTotal} kayıtta kart kodu yazım tutarsızlığı (stok:${vStok} · BOM:${vBom} · reçete:${vRc} · İE:${vWo} · kesim:${vKes})` : '',
+            ].filter(Boolean).join(' · ')
+          : `${mats.length} malzeme kartı tekil · tüm kayıtlar kart koduyla eşleşiyor`,
+        neden: hasIssue
+          ? dupPairler.length && vTotal
+            ? 'Aynı malzeme küçük/büyük harfli olarak iki kez oluşturulmuş ve bazı hareketler kart kodundan farklı yazımla kaydedilmiş.'
+            : dupPairler.length
+              ? 'Aynı malzeme küçük/büyük harfli olarak iki kez oluşturulmuş.'
+              : 'Bazı hareket/BOM/reçete kayıtlarında malkod yazımı kart kodundan farklı (ör. "BORU mm" vs kart "BORU MM"). Depolar sayfası bunları ayrı kalem gibi gösterir.'
+          : undefined,
+        aksiyon: hasIssue ? 'Otomatik Düzelt — duplicate kartlar birleştirilir, tüm kayıtlardaki malkod kart koduna eşitlenir.' : undefined,
+        autoFixEtiket: hasIssue ? (dupPairler.length && vTotal ? 'Kart + kayıtları birleştir' : dupPairler.length ? 'Duplicate kartları birleştir' : 'Kayıt malkod yazımını kart koduyla eşitle') : undefined,
+        autoFix: hasIssue ? async () => {
           const [{ data: bomFresh }, { data: rcFresh }, { data: woFresh }, { data: stokFresh }, { data: kesimFresh }] = await Promise.all([
             supabase.from('uys_bom_trees').select('*'),
             supabase.from('uys_recipes').select('*'),
@@ -233,6 +289,7 @@ export function DataManagement() {
             supabase.from('uys_kesim_planlari').select('*'),
           ])
           let merged = 0, updBom = 0, updRc = 0, updWo = 0, updStok = 0, updKesim = 0
+          // === Faz 1: Duplicate kartları birleştir (mevcut mantık) ===
           for (const [normKod, arr] of dupPairler) {
             const sorted = [...arr].sort((a: any, b: any) => (a.id || '').localeCompare(b.id || ''))
             const keep = sorted[0]
@@ -244,7 +301,6 @@ export function DataManagement() {
             }
             const kodMatch = (k: string | null | undefined) => (k || '').toLocaleUpperCase('tr-TR').trim() === normKod
             const upAd = (a: string | null | undefined) => (a || '').toLocaleUpperCase('tr-TR')
-            // BOM cascade (rows jsonb içinde malkod)
             for (const bt of (bomFresh || [])) {
               let changed = false
               const newRows = (bt.rows || []).map((r: any) => {
@@ -256,7 +312,6 @@ export function DataManagement() {
               if (kodMatch(bt.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(bt.mamul_ad); upd.ad = upAd(bt.ad) }
               if (Object.keys(upd).length > 0) { await supabase.from('uys_bom_trees').update(upd).eq('id', bt.id); updBom++ }
             }
-            // Recipe cascade (satirlar jsonb içinde malkod)
             for (const rc of (rcFresh || [])) {
               let changed = false
               const newSat = (rc.satirlar || []).map((r: any) => {
@@ -268,7 +323,6 @@ export function DataManagement() {
               if (kodMatch(rc.mamul_kod)) { upd.mamul_kod = newKod; upd.mamul_ad = upAd(rc.mamul_ad); upd.ad = upAd(rc.ad) }
               if (Object.keys(upd).length > 0) { await supabase.from('uys_recipes').update(upd).eq('id', rc.id); updRc++ }
             }
-            // İş Emirleri (hm jsonb dahil)
             for (const wo of (woFresh || [])) {
               const upd: Record<string, unknown> = {}
               if (kodMatch(wo.malkod)) { upd.malkod = newKod; upd.malad = upAd(wo.malad) }
@@ -278,14 +332,12 @@ export function DataManagement() {
               if (JSON.stringify(hmOld) !== JSON.stringify(hmNew)) upd.hm = hmNew
               if (Object.keys(upd).length > 0) { await supabase.from('uys_work_orders').update(upd).eq('id', wo.id); updWo++ }
             }
-            // Stok hareketleri (malkod kolon)
             for (const h of (stokFresh || [])) {
               if (kodMatch(h.malkod)) {
                 await supabase.from('uys_stok_hareketler').update({ malkod: newKod, malad: upAd(h.malad) }).eq('id', h.id)
                 updStok++
               }
             }
-            // Kesim planları (satirlar[].kesimler[].malkod)
             for (const p of (kesimFresh || [])) {
               let changed = false
               const newSat = (p.satirlar || []).map((s: any) => {
@@ -297,15 +349,120 @@ export function DataManagement() {
               })
               if (changed) { await supabase.from('uys_kesim_planlari').update({ satirlar: newSat }).eq('id', p.id); updKesim++ }
             }
-            // Duplicate sil
             for (const d of dels) {
               await supabase.from('uys_malzemeler').delete().eq('id', d.id)
               merged++
             }
           }
-          return `${merged} kart silindi · ${updBom} BOM · ${updRc} reçete · ${updWo} İE · ${updStok} stok · ${updKesim} kesim güncellendi`
+
+          // === Faz 2: Kart varyasyonlarını kart koduyla eşitle (yeni) ===
+          // Mats'i tazeleyelim (Faz 1 sonrası kart kodları değişmiş olabilir)
+          const { data: matsAfter } = await supabase.from('uys_malzemeler').select('*')
+          const normMap2 = new Map<string, { kod: string; ad: string }>()
+          ;(matsAfter || []).forEach((m: any) => {
+            const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
+            if (!norm) return
+            if (!normMap2.has(norm)) normMap2.set(norm, { kod: m.kod, ad: m.ad })
+          })
+          const canonFor = (raw: string | null | undefined) => {
+            if (!raw) return null
+            const norm = raw.trim().toLocaleUpperCase('tr-TR')
+            const k = normMap2.get(norm)
+            return (k && k.kod !== raw) ? k : null
+          }
+          let varStok = 0, varBom = 0, varRc = 0, varWo = 0, varKes = 0
+          // Faz 2 için yeniden fetch (Faz 1'den sonra state değişti)
+          const [{ data: bomF2 }, { data: rcF2 }, { data: woF2 }, { data: stokF2 }, { data: kesF2 }] = await Promise.all([
+            supabase.from('uys_bom_trees').select('*'),
+            supabase.from('uys_recipes').select('*'),
+            supabase.from('uys_work_orders').select('*'),
+            supabase.from('uys_stok_hareketler').select('*'),
+            supabase.from('uys_kesim_planlari').select('*'),
+          ])
+          // Stok hareketleri
+          for (const h of (stokF2 || [])) {
+            const c = canonFor(h.malkod)
+            if (c) {
+              await supabase.from('uys_stok_hareketler').update({ malkod: c.kod, malad: c.ad }).eq('id', h.id)
+              varStok++
+            }
+          }
+          // BOM — mamul_kod + rows[].malkod
+          for (const bt of (bomF2 || [])) {
+            let changed = false
+            const newRows = (bt.rows || []).map((r: any) => {
+              const c = canonFor(r.malkod)
+              if (c) { changed = true; return { ...r, malkod: c.kod, malad: c.ad } }
+              return r
+            })
+            const upd: Record<string, unknown> = {}
+            if (changed) upd.rows = newRows
+            const mc = canonFor(bt.mamul_kod)
+            if (mc) { upd.mamul_kod = mc.kod; upd.mamul_ad = mc.ad; changed = true }
+            if (Object.keys(upd).length > 0) { await supabase.from('uys_bom_trees').update(upd).eq('id', bt.id); varBom++ }
+          }
+          // Recipe — mamul_kod + satirlar[].malkod
+          for (const rc of (rcF2 || [])) {
+            let changed = false
+            const newSat = (rc.satirlar || []).map((r: any) => {
+              const c = canonFor(r.malkod)
+              if (c) { changed = true; return { ...r, malkod: c.kod, malad: c.ad } }
+              return r
+            })
+            const upd: Record<string, unknown> = {}
+            if (changed) upd.satirlar = newSat
+            const mc = canonFor(rc.mamul_kod)
+            if (mc) { upd.mamul_kod = mc.kod; upd.mamul_ad = mc.ad; changed = true }
+            if (Object.keys(upd).length > 0) { await supabase.from('uys_recipes').update(upd).eq('id', rc.id); varRc++ }
+          }
+          // İş emri — malkod, mamul_kod, hm[].malkod
+          for (const wo of (woF2 || [])) {
+            const upd: Record<string, unknown> = {}
+            const cM = canonFor(wo.malkod)
+            if (cM) { upd.malkod = cM.kod; upd.malad = cM.ad }
+            const cMM = canonFor(wo.mamul_kod)
+            if (cMM) { upd.mamul_kod = cMM.kod; upd.mamul_ad = cMM.ad }
+            const hmOld = wo.hm || []
+            let hmChanged = false
+            const hmNew = hmOld.map((h: any) => {
+              const c = canonFor(h.malkod)
+              if (c) { hmChanged = true; return { ...h, malkod: c.kod, malad: c.ad } }
+              return h
+            })
+            if (hmChanged) upd.hm = hmNew
+            if (Object.keys(upd).length > 0) { await supabase.from('uys_work_orders').update(upd).eq('id', wo.id); varWo++ }
+          }
+          // Kesim planları — ham_malkod + satirlar[].kesimler[].malkod
+          for (const p of (kesF2 || [])) {
+            const upd: Record<string, unknown> = {}
+            const cH = canonFor(p.ham_malkod)
+            if (cH) { upd.ham_malkod = cH.kod; upd.ham_malad = cH.ad }
+            let satChanged = false
+            const newSat = (p.satirlar || []).map((s: any) => {
+              const newKes = (s.kesimler || []).map((k: any) => {
+                const c = canonFor(k.malkod)
+                if (c) { satChanged = true; return { ...k, malkod: c.kod, malad: c.ad } }
+                return k
+              })
+              return { ...s, kesimler: newKes }
+            })
+            if (satChanged) upd.satirlar = newSat
+            if (Object.keys(upd).length > 0) { await supabase.from('uys_kesim_planlari').update(upd).eq('id', p.id); varKes++ }
+          }
+
+          const fazlar = []
+          if (merged > 0) fazlar.push(`${merged} kart birleşti`)
+          if (updBom || varBom) fazlar.push(`${updBom + varBom} BOM`)
+          if (updRc || varRc) fazlar.push(`${updRc + varRc} reçete`)
+          if (updWo || varWo) fazlar.push(`${updWo + varWo} İE`)
+          if (updStok || varStok) fazlar.push(`${updStok + varStok} stok`)
+          if (updKesim || varKes) fazlar.push(`${updKesim + varKes} kesim`)
+          return fazlar.length ? fazlar.join(' · ') + ' güncellendi' : 'Değişiklik yok'
         } : undefined,
-        detay: dupPairler.length ? { gruplar: dupPairler.map(([k, arr]) => ({ norm: k, sayim: arr.length })) } : undefined,
+        detay: hasIssue ? {
+          dupGruplar: dupPairler.map(([k, arr]) => ({ norm: k, sayim: arr.length })),
+          varyasyonlar: vTotal > 0 ? { stok: vStok, bom: vBom, recete: vRc, ie: vWo, kesim: vKes } : undefined,
+        } : undefined,
       })
 
       // 9. Orphan log/fire/stok hareketi
