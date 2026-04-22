@@ -7,7 +7,8 @@ import { showConfirm, showPrompt } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today, pctColor } from '@/lib/utils'
-import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, UserX, Cpu, Tag, CalendarX2, Bell } from 'lucide-react'
+import { AlertTriangle, Clock, Package, Flame, MessageSquare, Wrench, CheckCircle, XCircle, ArrowRight, Truck, Cpu, Tag, CalendarX2, Bell } from 'lucide-react'
+import { InactiveOperatorsCard } from '@/components/InactiveOperatorsCard'
 
 /* ── Akış Kartı ── */
 const FLOW_COLORS: Record<string, { text: string; border: string; borderHover: string; bg: string; ring: string }> = {
@@ -171,19 +172,11 @@ export function Dashboard() {
     ).length
   }, [aktifOrders, workOrders])
 
-  // ═══ #3: Giriş yapmayan operatörler ═══
-  const bugunLogOprIds = new Set(
-    logs.filter(l => l.tarih === todayStr).flatMap(l =>
-      (Array.isArray(l.operatorlar) ? l.operatorlar : []).map((o: any) => o.id)
-    )
-  )
-  const aktifOps = operators.filter(o => o.aktif !== false)
+  // ═══ #3: Giriş yapmayan operatörler — InactiveOperatorsCard component içinde hesaplanıyor ═══
   // Bugün izinli/raporlu operatörler (onaylanmış)
   const bugunIzinli = izinler.filter(iz =>
     iz.durum === 'onaylandi' && iz.baslangic <= todayStr && iz.bitis >= todayStr
   )
-  const izinliIds = new Set(bugunIzinli.map(iz => iz.opId))
-  const girmeyenler = aktifOps.filter(o => !bugunLogOprIds.has(o.id) && !izinliIds.has(o.id))
   // Onay bekleyen izin talepleri
   const bekleyenIzinler = izinler.filter(iz => iz.durum === 'bekliyor')
 
@@ -772,24 +765,9 @@ export function Dashboard() {
       )}
 
       {/* ═══ #3: Giriş Yapmayan Operatörler ═══ */}
-      {girmeyenler.length > 0 && (
-        <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2 border-b border-border text-sm font-semibold text-zinc-400 flex items-center gap-2 cursor-pointer" onClick={() => navigate('/operators')}>
-            <UserX size={14} className="text-orange-400" />
-            Bugün Giriş Yapmayan Operatörler
-            <span className="text-xs font-mono text-orange-400 ml-1">{girmeyenler.length}/{aktifOps.length - bugunIzinli.length}</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5 p-3">
-            {girmeyenler.slice(0, 30).map(o => (
-              <span key={o.id} className="text-[11px] px-2 py-0.5 bg-bg-3 rounded text-zinc-400 flex items-center gap-1">
-                {o.ad}
-                {o.bolum && <span className="text-[9px] text-zinc-600">({o.bolum})</span>}
-              </span>
-            ))}
-            {girmeyenler.length > 30 && <span className="text-[11px] text-zinc-600">+{girmeyenler.length - 30} daha</span>}
-          </div>
-        </div>
-      )}
+      <div className="mb-4">
+        <InactiveOperatorsCard />
+      </div>
 
       {/* ═══ #4: Duruşlu İstasyonlar ═══ */}
       {durusDetay.length > 0 && (
