@@ -9,6 +9,7 @@ import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 import { cuttingPlanTemizle, rezerveleriSenkronla, hesaplaMRP } from '@/features/production/mrp'
+import { tedarikStokId } from '@/lib/tedarikHelpers'
 
 // ═══ SAĞLIK RAPORU TİPLERİ ═══
 type SaglikDurum = 'pass' | 'warn' | 'fail'
@@ -121,9 +122,12 @@ export function DataManagement() {
       })
 
       // 4. Tedarik–Stok tutarlılığı (geldi ama stok yok)
+      // Case-insensitive match: malkod'lar normalize edilerek karşılaştırılır
+      const normalize = (s: string | null | undefined) => (s || '').trim().toLocaleUpperCase('tr-TR')
       const stokTedarikMap = new Set<string>()
-      stoks.filter((h: any) => h.tip === 'giris' && (h.aciklama || '').toLowerCase().includes('tedarik')).forEach((h: any) => stokTedarikMap.add(h.malkod))
-      const tedStokEksik = teds.filter((t: any) => t.geldi && !stokTedarikMap.has(t.malkod))
+      stoks.filter((h: any) => h.tip === 'giris' && (h.aciklama || '').toLowerCase().includes('tedarik'))
+        .forEach((h: any) => stokTedarikMap.add(normalize(h.malkod)))
+      const tedStokEksik = teds.filter((t: any) => t.geldi && !stokTedarikMap.has(normalize(t.malkod)))
       kontroller.push({
         no: 4, ad: 'Tedarik–Stok tutarlılığı',
         durum: tedStokEksik.length ? 'fail' : 'pass',
@@ -132,16 +136,17 @@ export function DataManagement() {
         aksiyon: tedStokEksik.length ? 'Malzeme fiziksel olarak geldiyse "🔧 Stok girişlerini yaz" tıklayın. Gelmediyse Tedarikler sayfasından "geldi" işaretini kaldırın.' : undefined,
         autoFixEtiket: tedStokEksik.length ? 'Stok girişlerini yaz' : undefined,
         autoFix: tedStokEksik.length ? async () => {
+          // Deterministik ID ile upsert — tıklamayı 2 kez yaparsa duplicate oluşmaz
           const kayitlar = tedStokEksik.map((t: any) => ({
-            id: uid(),
+            id: tedarikStokId(t.id),
             tarih: today(),
             malkod: t.malkod,
             malad: t.malad,
             miktar: t.miktar,
             tip: 'giris',
-            aciklama: `Tedarik (otomatik onarım${t.siparis_no ? ': ' + t.siparis_no : ''})`,
+            aciklama: `Tedarik girişi${t.siparis_no ? ' — ' + t.siparis_no : ''}${t.tedarikci_ad ? ' — ' + t.tedarikci_ad : ''}`,
           }))
-          const { error } = await supabase.from('uys_stok_hareketler').insert(kayitlar)
+          const { error } = await supabase.from('uys_stok_hareketler').upsert(kayitlar)
           if (error) return `Hata: ${error.message}`
           return `${kayitlar.length} stok girişi yazıldı`
         } : undefined,
@@ -259,7 +264,8 @@ export function DataManagement() {
           (s.kesimler || []).forEach((k: any) => { if (isVar(k.malkod)) vKes++ })
         })
       })
-      const vTotal = vStok + vBom + vRc + vWo + vKes
+      const vTed = teds.filter((t: any) => isVar(t.malkod)).length
+      const vTotal = vStok + vBom + vRc + vWo + vKes + vTed
       const hasIssue = dupPairler.length > 0 || vTotal > 0
 
       kontroller.push({
@@ -268,7 +274,7 @@ export function DataManagement() {
         mesaj: hasIssue
           ? [
               dupPairler.length ? `${dupPairler.length} duplicate kart` : '',
-              vTotal ? `${vTotal} kayıtta kart kodu yazım tutarsızlığı (stok:${vStok} · BOM:${vBom} · reçete:${vRc} · İE:${vWo} · kesim:${vKes})` : '',
+              vTotal ? `${vTotal} kayıtta kart kodu yazım tutarsızlığı (stok:${vStok} · BOM:${vBom} · reçete:${vRc} · İE:${vWo} · kesim:${vKes} · tedarik:${vTed})` : '',
             ].filter(Boolean).join(' · ')
           : `${mats.length} malzeme kartı tekil · tüm kayıtlar kart koduyla eşleşiyor`,
         neden: hasIssue
@@ -281,14 +287,15 @@ export function DataManagement() {
         aksiyon: hasIssue ? 'Otomatik Düzelt — duplicate kartlar birleştirilir, tüm kayıtlardaki malkod kart koduna eşitlenir.' : undefined,
         autoFixEtiket: hasIssue ? (dupPairler.length && vTotal ? 'Kart + kayıtları birleştir' : dupPairler.length ? 'Duplicate kartları birleştir' : 'Kayıt malkod yazımını kart koduyla eşitle') : undefined,
         autoFix: hasIssue ? async () => {
-          const [{ data: bomFresh }, { data: rcFresh }, { data: woFresh }, { data: stokFresh }, { data: kesimFresh }] = await Promise.all([
+          const [{ data: bomFresh }, { data: rcFresh }, { data: woFresh }, { data: stokFresh }, { data: kesimFresh }, { data: tedFresh }] = await Promise.all([
             supabase.from('uys_bom_trees').select('*'),
             supabase.from('uys_recipes').select('*'),
             supabase.from('uys_work_orders').select('*'),
             supabase.from('uys_stok_hareketler').select('*'),
             supabase.from('uys_kesim_planlari').select('*'),
+            supabase.from('uys_tedarikler').select('*'),
           ])
-          let merged = 0, updBom = 0, updRc = 0, updWo = 0, updStok = 0, updKesim = 0
+          let merged = 0, updBom = 0, updRc = 0, updWo = 0, updStok = 0, updKesim = 0, updTed = 0
           // === Faz 1: Duplicate kartları birleştir (mevcut mantık) ===
           for (const [normKod, arr] of dupPairler) {
             const sorted = [...arr].sort((a: any, b: any) => (a.id || '').localeCompare(b.id || ''))
@@ -349,6 +356,13 @@ export function DataManagement() {
               })
               if (changed) { await supabase.from('uys_kesim_planlari').update({ satirlar: newSat }).eq('id', p.id); updKesim++ }
             }
+            // Tedarikler (malkod kolon)
+            for (const t of (tedFresh || [])) {
+              if (kodMatch(t.malkod)) {
+                await supabase.from('uys_tedarikler').update({ malkod: newKod, malad: upAd(t.malad) }).eq('id', t.id)
+                updTed++
+              }
+            }
             for (const d of dels) {
               await supabase.from('uys_malzemeler').delete().eq('id', d.id)
               merged++
@@ -370,14 +384,15 @@ export function DataManagement() {
             const k = normMap2.get(norm)
             return (k && k.kod !== raw) ? k : null
           }
-          let varStok = 0, varBom = 0, varRc = 0, varWo = 0, varKes = 0
+          let varStok = 0, varBom = 0, varRc = 0, varWo = 0, varKes = 0, varTed = 0
           // Faz 2 için yeniden fetch (Faz 1'den sonra state değişti)
-          const [{ data: bomF2 }, { data: rcF2 }, { data: woF2 }, { data: stokF2 }, { data: kesF2 }] = await Promise.all([
+          const [{ data: bomF2 }, { data: rcF2 }, { data: woF2 }, { data: stokF2 }, { data: kesF2 }, { data: tedF2 }] = await Promise.all([
             supabase.from('uys_bom_trees').select('*'),
             supabase.from('uys_recipes').select('*'),
             supabase.from('uys_work_orders').select('*'),
             supabase.from('uys_stok_hareketler').select('*'),
             supabase.from('uys_kesim_planlari').select('*'),
+            supabase.from('uys_tedarikler').select('*'),
           ])
           // Stok hareketleri
           for (const h of (stokF2 || [])) {
@@ -449,6 +464,14 @@ export function DataManagement() {
             if (satChanged) upd.satirlar = newSat
             if (Object.keys(upd).length > 0) { await supabase.from('uys_kesim_planlari').update(upd).eq('id', p.id); varKes++ }
           }
+          // Tedarikler — malkod
+          for (const t of (tedF2 || [])) {
+            const c = canonFor(t.malkod)
+            if (c) {
+              await supabase.from('uys_tedarikler').update({ malkod: c.kod, malad: c.ad }).eq('id', t.id)
+              varTed++
+            }
+          }
 
           const fazlar = []
           if (merged > 0) fazlar.push(`${merged} kart birleşti`)
@@ -457,11 +480,12 @@ export function DataManagement() {
           if (updWo || varWo) fazlar.push(`${updWo + varWo} İE`)
           if (updStok || varStok) fazlar.push(`${updStok + varStok} stok`)
           if (updKesim || varKes) fazlar.push(`${updKesim + varKes} kesim`)
+          if (updTed || varTed) fazlar.push(`${updTed + varTed} tedarik`)
           return fazlar.length ? fazlar.join(' · ') + ' güncellendi' : 'Değişiklik yok'
         } : undefined,
         detay: hasIssue ? {
           dupGruplar: dupPairler.map(([k, arr]) => ({ norm: k, sayim: arr.length })),
-          varyasyonlar: vTotal > 0 ? { stok: vStok, bom: vBom, recete: vRc, ie: vWo, kesim: vKes } : undefined,
+          varyasyonlar: vTotal > 0 ? { stok: vStok, bom: vBom, recete: vRc, ie: vWo, kesim: vKes, tedarik: vTed } : undefined,
         } : undefined,
       })
 
