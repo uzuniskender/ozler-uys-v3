@@ -589,6 +589,7 @@ export function DataManagement() {
     { label: 'Kesim Planları', key: 'cuttingPlans', table: 'uys_kesim_planlari' },
     { label: 'Tedarikler', key: 'tedarikler', table: 'uys_tedarikler' },
     { label: 'MRP Rezerve', key: 'mrpRezerve', table: 'uys_mrp_rezerve' },
+    { label: 'Açık Bar Havuzu', key: 'acikBarlar', table: 'uys_acik_barlar' },
     { label: 'Tedarikçiler', key: 'tedarikciler', table: 'uys_tedarikciler' },
     { label: 'Duruş Kodları', key: 'durusKodlari', table: 'uys_durus_kodlari' },
     { label: 'Müşteriler', key: 'customers', table: 'uys_customers' },

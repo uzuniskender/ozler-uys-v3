@@ -1,17 +1,25 @@
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import type { WorkOrder, Recipe } from '@/types'
+import type { WorkOrder, Recipe, Material } from '@/types'
+import { isBarMaterialByKod } from './barModel'
 
 /**
  * #8: Stok Tüketim — Üretim yapıldığında HM bileşenlerini stoktan düş
  * wo.hm varsa oradan, yoksa reçeteden (recipes) alır
+ *
+ * v15.31 değişikliği:
+ *   Ham profil/boru/plaka (tip='Hammadde' + uzunluk>0) için orantılı düşüm
+ *   YAPILMAZ. Bu malzemeler barModel tarafından kesim planı satırı tamamlanınca
+ *   tam sayı olarak düşülür. Sarf/kimyasal/ayar mili gibi diğer HM'ler
+ *   mevcut orantılı yolda kalır.
  */
 export async function stokTuketimIsle(
   woId: string,
   qty: number,
   logId: string,
   workOrders: WorkOrder[],
-  recipes?: Recipe[]
+  recipes?: Recipe[],
+  materials?: Material[]
 ): Promise<number> {
   const wo = workOrders.find(w => w.id === woId)
   if (!wo || qty <= 0) return 0
@@ -21,6 +29,9 @@ export async function stokTuketimIsle(
   if (wo.hm?.length && wo.hedef) {
     // wo.hm'den hesapla
     for (const h of wo.hm) {
+      // v15.31 — bar modeline giren malzemeler atlanır (barModel'e bırakılır)
+      if (materials && isBarMaterialByKod(h.malkod, materials)) continue
+
       const perUnit = h.miktarTotal / wo.hedef
       const consume = Math.round(qty * perUnit * 100) / 100
       if (consume <= 0) continue
@@ -38,6 +49,9 @@ export async function stokTuketimIsle(
     if (rc?.satirlar?.length) {
       const hmRows = rc.satirlar.filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
       for (const s of hmRows) {
+        // v15.31 — bar modeline giren malzemeler atlanır
+        if (materials && isBarMaterialByKod(s.malkod || '', materials)) continue
+
         const consume = Math.round((s.miktar || 0) * (wo.mpm || 1) * qty * 100) / 100
         if (consume <= 0) continue
         rows.push({

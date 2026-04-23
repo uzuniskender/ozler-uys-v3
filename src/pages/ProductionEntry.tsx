@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle } from '@/features/production/stokTuketim'
+import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -208,7 +209,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   defaultOprId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, durusKodlari, stokHareketler, recipes } = useStore()
+  const { workOrders, logs, durusKodlari, stokHareketler, recipes, materials } = useStore()
   const { can } = useAuth()
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
@@ -362,9 +363,14 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     }
 
     // HM stok tüketimi — sağlam + fire = toplam harcanan malzeme
+    // v15.31: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
+    // Onlar barModelSync tarafından kesim planı satırı tamamlanınca tam sayı yazılır.
     const toplamTuketilen = q + f
     if (toplamTuketilen > 0 && hmSatirlar.length > 0) {
       for (const hm of hmSatirlar) {
+        // Bar modeline giren HM'ler burada atlanır
+        if (isBarMaterialByKod(hm.malkod, materials)) continue
+
         const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * toplamTuketilen
         if (hmMiktar > 0) {
           await supabase.from('uys_stok_hareketler').insert({
@@ -375,6 +381,20 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
           })
         }
       }
+    }
+
+    // v15.31: Bar Model tetikleyici — kesim planı satırı tamamlandıysa
+    // bar_acilis + acik_bar_giris yaz. İdempotent (deterministik id).
+    try {
+      const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useStore.getState()
+      // Freshly yazılan log store'a henüz gelmediyse hesaba katmak için manuel ekle
+      const freshLogs = [...logState, { id: logId, woId, qty: q, fire: f } as any]
+      const r = await barModelSync(woId, cpState, woState, freshLogs, materials)
+      if (r.barSayisi > 0) {
+        console.log(`[barModel] ${r.barSayisi} bar açıldı, ${r.acikBarSayisi} açık bar havuza girdi`)
+      }
+    } catch (err) {
+      console.error('[barModel] Sync hatası:', err)
     }
 
     // Fire kaydedildi — telafi İE otomatik açılmaz, yönetim Reports → Fire'dan onaylayacak
@@ -399,7 +419,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     logAction('Üretim girişi', w.ieNo + ' — ' + (parseInt(qty) || 0) + ' adet')
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {
-      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work'])
+      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar', 'uys_kesim_planlari'])
     } catch (e) { console.error('Post-save reload:', e) }
     onSaved()
   }
@@ -555,7 +575,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
   operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, recipes } = useStore()
+  const { workOrders, recipes, materials, cuttingPlans, logs } = useStore()
   const { can } = useAuth()
   const [rows, setRows] = useState<{ woId: string; qty: string; fire: string }[]>(
     acikWOs.slice(0, 20).map(w => ({ woId: w.id, qty: '', fire: '' }))
@@ -609,7 +629,16 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       }
 
       // HM tüketim — sağlam + fire (fire da hammadde harcar)
-      await stokTuketimIsle(r.woId, q + f, logId, workOrders, recipes)
+      // v15.31: materials geçilir ki bar-model HM'leri atlansın
+      await stokTuketimIsle(r.woId, q + f, logId, workOrders, recipes, materials)
+
+      // v15.31: Bar Model tetikleyici (toplu girişte de)
+      try {
+        const freshLogs = [...logs, { id: logId, woId: r.woId, qty: q, fire: f } as any]
+        await barModelSync(r.woId, cuttingPlans, workOrders, freshLogs, materials)
+      } catch (err) {
+        console.error('[barModel] Toplu sync hatası:', err)
+      }
 
       if (f > 0) {
         await supabase.from('uys_fire_logs').insert({

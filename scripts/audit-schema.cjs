@@ -33,6 +33,13 @@ const STORE_WHITELIST = new Set([
   'uys_chat_mentions',    // ÖzlerMsg v1
   'uys_chat_reactions',   // ÖzlerMsg v1
   'uys_chat_attachments', // ÖzlerMsg v1
+  'uys_v15_31_silinen_hareketler', // v15.31 bar model göç audit — runtime'da kullanılmaz, kanıt amaçlı
+])
+
+// DataManagement backup'a dahil etmesi gerekmeyen tablolar.
+// Örn: yalnızca göç/audit amaçlı, ömürlük tek-seferlik kayıtlar.
+const DATA_MGMT_WHITELIST = new Set([
+  'uys_v15_31_silinen_hareketler', // v15.31 göç audit — tek seferlik, backup zorunlu değil
 ])
 
 // ═══════════════════════════════════════════════════════════════
@@ -113,12 +120,14 @@ function main() {
   let errors = 0
 
   // 1. DataManagement eksikleri (backup/restore için kritik)
-  const dmMissing = sortedArray(new Set([...schema].filter(t => !dm.has(t))))
+  const dmMissing = sortedArray(new Set([...schema].filter(t => !dm.has(t) && !DATA_MGMT_WHITELIST.has(t))))
   if (dmMissing.length > 0) {
     console.log('\x1b[31m🔴 DataManagement `tables` listesinde EKSİK:\x1b[0m')
     dmMissing.forEach(t => console.log(`   ${t}`))
     console.log('   ↪ Bu tablolar JSON backup/restore dışında kalıyor.')
     console.log('   ↪ Fix: src/pages/DataManagement.tsx `tables` listesine ekle.')
+    console.log('   ↪ Eger bilerek backup disinda tutuluyorsa scripts/audit-schema.cjs')
+    console.log('     icindeki DATA_MGMT_WHITELIST listesine ekle.')
     console.log('')
     errors++
   } else {

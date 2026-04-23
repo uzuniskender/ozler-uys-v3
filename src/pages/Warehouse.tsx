@@ -10,10 +10,10 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Warehouse() {
-  const { stokHareketler, materials, loadAll } = useStore()
+  const { stokHareketler, materials, acikBarlar, loadAll } = useStore()
   const { can } = useAuth()
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'>('stok')
+  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'>('stok')
   const [showGiris, setShowGiris] = useState(false)
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
 
@@ -133,10 +133,11 @@ export function Warehouse() {
       </div>
 
       <div className="flex gap-1 mb-4">
-        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="stok">Anlık Stok</option>
           <option value="hareketler">Hareketler</option>
           <option value="sayim">Stok Sayım</option>
+          <option value="acikBarlar">Açık Bar Havuzu</option>
         </select>
       </div>
 
@@ -243,6 +244,58 @@ export function Warehouse() {
             </button>
           </div>
         )}
+
+        {tab === 'acikBarlar' && (() => {
+          // Ham malkod bazlı grupla + filtreye göre ara
+          const aktifler = acikBarlar.filter(a => a.durum === 'acik')
+          const q = search.trim().toLowerCase()
+          const filtered = q
+            ? aktifler.filter(a => (a.hamMalkod + ' ' + a.hamMalad).toLowerCase().includes(q))
+            : aktifler
+          const gruplu: Record<string, { hamMalkod: string; hamMalad: string; adet: number; toplamMm: number; barlar: typeof aktifler }> = {}
+          filtered.forEach(a => {
+            const k = a.hamMalkod
+            if (!gruplu[k]) gruplu[k] = { hamMalkod: k, hamMalad: a.hamMalad || k, adet: 0, toplamMm: 0, barlar: [] }
+            gruplu[k].adet++
+            gruplu[k].toplamMm += a.uzunlukMm
+            gruplu[k].barlar.push(a)
+          })
+          const rows = Object.values(gruplu).sort((a, b) => (a.hamMalad || '').localeCompare(b.hamMalad || '', 'tr'))
+          return (
+            <div>
+              <div className="px-4 py-2 bg-bg-3/40 border-b border-border text-[11px] text-zinc-500">
+                {aktifler.length} açık bar · {rows.length} ham malzeme · toplam {Math.round(aktifler.reduce((a, b) => a + b.uzunlukMm, 0))} mm
+              </div>
+              {!rows.length ? (
+                <div className="p-8 text-center text-zinc-500 text-xs">
+                  Açık bar havuzunda kayıt yok. Kesim planları tamamlandıkça artık barlar buraya düşer.
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-right px-4 py-2.5">Bar Adet</th><th className="text-right px-4 py-2.5">Toplam mm</th><th className="text-left px-4 py-2.5">Uzunluklar</th></tr></thead>
+                  <tbody>
+                    {rows.map(g => (
+                      <tr key={g.hamMalkod} className="border-b border-border/30 hover:bg-bg-3/30">
+                        <td className="px-4 py-2">
+                          <div className="font-mono text-accent text-[11px]">{g.hamMalkod}</div>
+                          <div className="text-zinc-500 text-[10px]">{g.hamMalad}</div>
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono font-semibold text-zinc-200">{g.adet}</td>
+                        <td className="px-4 py-2 text-right font-mono text-zinc-300">{Math.round(g.toplamMm)}</td>
+                        <td className="px-4 py-2 text-zinc-400 text-[10px]">
+                          {g.barlar.sort((a, b) => b.uzunlukMm - a.uzunlukMm).slice(0, 8).map(b => (
+                            <span key={b.id} className="inline-block mr-1.5 px-1.5 py-0.5 bg-bg-3 rounded font-mono">{Math.round(b.uzunlukMm)}</span>
+                          ))}
+                          {g.barlar.length > 8 && <span className="text-zinc-600">+{g.barlar.length - 8}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {showGiris && <StokGirisModal materials={materials} onClose={() => setShowGiris(false)} onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }} />}

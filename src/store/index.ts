@@ -5,7 +5,8 @@ import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem,
+  AcikBar
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -188,6 +189,20 @@ const M = {
     sonDegistirme: (r.son_degistirme || '') as string,
     kapatmaTarihi: (r.kapatma_tarihi || '') as string,
   }),
+  acikBar: (r: Record<string, unknown>): AcikBar => ({
+    id: r.id as string,
+    hamMalkod: (r.ham_malkod || '') as string,
+    hamMalad: (r.ham_malad || '') as string,
+    uzunlukMm: (r.uzunluk_mm as number) || 0,
+    kaynakPlanId: (r.kaynak_plan_id || '') as string,
+    kaynakSatirId: (r.kaynak_satir_id || '') as string,
+    barIndex: (r.bar_index as number) || 0,
+    olusmaTarihi: (r.olusma_tarihi || '') as string,
+    durum: (r.durum || 'acik') as AcikBar['durum'],
+    tuketimLogId: (r.tuketim_log_id || '') as string,
+    tuketimTarihi: (r.tuketim_tarihi || '') as string,
+    not: (r.not_ || '') as string,
+  }),
 }
 
 interface UYSStore {
@@ -200,6 +215,7 @@ interface UYSStore {
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
   izinler: Izin[]; kullanicilar: Kullanici[]; hmTipler: HmTip[]
   problemler: Problem[]
+  acikBarlar: AcikBar[]
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
@@ -234,6 +250,7 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
   { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
   { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
+  { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
 ]
 
 // Tablo adı → TABLE_MAP entry lookup (realtime için)
@@ -245,6 +262,7 @@ export const useStore = create<UYSStore>((set) => ({
   cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
   customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [], hmTipler: [],
   problemler: [],
+  acikBarlar: [],
   loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {

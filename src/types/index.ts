@@ -394,6 +394,22 @@ export interface Kullanici {
   aktif: boolean
 }
 
+// v15.31 — Bar Model: açık bar havuzu
+export interface AcikBar {
+  id: string
+  hamMalkod: string          // kaynak ham malzeme (BORU 6000 MM vs.)
+  hamMalad: string
+  uzunlukMm: number          // kalan uzunluk
+  kaynakPlanId: string       // uys_kesim_planlari.id
+  kaynakSatirId: string      // plan satir.id
+  barIndex: number           // satırdaki bar sırası (hamAdet>1 için)
+  olusmaTarihi: string
+  durum: 'acik' | 'tuketildi'
+  tuketimLogId: string       // tüketildiyse hangi log
+  tuketimTarihi: string
+  not: string
+}
+
 export interface Problem {
   id: string
   problem: string          // Problem tanımı (zorunlu)

@@ -217,6 +217,28 @@ CREATE TABLE IF NOT EXISTS public.uys_stok_hareketler (
 
 CREATE INDEX IF NOT EXISTS idx_uys_stok_malkod ON public.uys_stok_hareketler(malkod);
 
+-- 1.14.1 Açık Bar Havuzu (v15.31)
+-- Ham profil/boru kesilince kalan artık barlar. Tekrar kullanılabilir.
+CREATE TABLE IF NOT EXISTS public.uys_acik_barlar (
+  id text PRIMARY KEY,
+  ham_malkod text NOT NULL,
+  ham_malad text,
+  uzunluk_mm numeric NOT NULL DEFAULT 0,
+  kaynak_plan_id text,
+  kaynak_satir_id text,
+  bar_index integer DEFAULT 0,
+  olusma_tarihi text,
+  durum text NOT NULL DEFAULT 'acik',
+  tuketim_log_id text,
+  tuketim_tarihi text,
+  not_ text,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_acik_barlar_malkod ON public.uys_acik_barlar(ham_malkod);
+CREATE INDEX IF NOT EXISTS idx_acik_barlar_durum ON public.uys_acik_barlar(durum);
+CREATE INDEX IF NOT EXISTS idx_acik_barlar_plan ON public.uys_acik_barlar(kaynak_plan_id);
+
 -- 1.15 Kesim Planları
 CREATE TABLE IF NOT EXISTS public.uys_kesim_planlari (
   id text PRIMARY KEY,
