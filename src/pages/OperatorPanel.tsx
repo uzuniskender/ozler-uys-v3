@@ -7,6 +7,7 @@ import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-react'
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
+import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -645,7 +646,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   editLogId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, recipes, stokHareketler, activeWork } = useStore()
+  const { workOrders, logs, recipes, stokHareketler, activeWork, materials } = useStore()
   const w = workOrders.find(x => x.id === woId)
   const now = new Date()
   const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
@@ -847,13 +848,17 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         })
       }
       // HM tüketim — sağlam + fire = toplam harcanan
+      // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
+      // Onlar barModelSync tarafından kesim planı satırı tamamlanınca tam sayı yazılır.
       const editToplam = q + f
       if (editToplam > 0) {
         for (const hm of hmSatirlar) {
+          const hmKod = hm.malkod || hm.kod
+          if (isBarMaterialByKod(hmKod, materials)) continue
           const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * editToplam
           if (hmMiktar > 0) {
             await supabase.from('uys_stok_hareketler').insert({
-              id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
+              id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmMiktar,
               tip: 'cikis',
               aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''}) - düzenlendi`,
               tarih, log_id: editLogId, wo_id: woId,
@@ -890,13 +895,16 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         })
       }
       // HM tüketim — sağlam + fire = toplam harcanan
+      // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
       const yeniToplam2 = q + f
       if (yeniToplam2 > 0) {
         for (const hm of hmSatirlar) {
+          const hmKod = hm.malkod || hm.kod
+          if (isBarMaterialByKod(hmKod, materials)) continue
           const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * yeniToplam2
           if (hmMiktar > 0) {
             await supabase.from('uys_stok_hareketler').insert({
-              id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmMiktar,
+              id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmMiktar,
               tip: 'cikis',
               aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''})`,
               tarih, log_id: logId, wo_id: woId,
@@ -941,8 +949,21 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     }
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {
-      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work'])
+      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar'])
     } catch (e) { console.error('Post-save reload:', e) }
+    // v15.32: Bar Model tetikleyici — kesim planı satırı tamamlandıysa
+    // bar_acilis + acik_bar_giris yaz. İdempotent (deterministik id).
+    try {
+      const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useStore.getState()
+      const r = await barModelSync(woId, cpState, woState, logState, materials)
+      if (r.barSayisi > 0) {
+        console.log(`[barModel] ${r.barSayisi} bar açıldı, ${r.acikBarSayisi} açık bar havuza girdi`)
+        // Bar kayıtları yazıldıysa açık barları tekrar yükle
+        try { await useStore.getState().reloadTables(['uys_stok_hareketler', 'uys_acik_barlar']) } catch {}
+      }
+    } catch (err) {
+      console.error('[barModel] OperatorPanel sync hatası:', err)
+    }
     setSaving(false); clearDraft(); onSaved()
   }
 

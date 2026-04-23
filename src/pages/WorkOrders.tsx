@@ -11,6 +11,7 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
+import { isBarMaterialByKod } from '@/features/production/barModel'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
 
@@ -422,22 +423,25 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
     if (sh?.[0]) await supabase.from('uys_stok_hareketler').update({ miktar: yeniQty }).eq('id', sh[0].id)
 
     // HM stok hareketlerini güncelle (delta)
+    // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
     if (delta !== 0 && hmSatirlar.length > 0) {
       for (const hm of hmSatirlar) {
+        const hmKod = hm.malkod || hm.kod
+        if (isBarMaterialByKod(hmKod, materials)) continue
         const birAdet = (hm.miktar || 0) * (wo.mpm || 1)
         if (birAdet <= 0) continue
         const hmDelta = birAdet * Math.abs(delta)
         if (delta > 0) {
           // Arttı → ek HM tüketimi
           await supabase.from('uys_stok_hareketler').insert({
-            id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmDelta,
+            id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmDelta,
             tip: 'cikis', aciklama: wo.ieNo + ' düzeltme +' + delta,
             tarih: today(), log_id: l.id, wo_id: wo.id,
           })
         } else {
           // Azaldı → HM iadesi
           await supabase.from('uys_stok_hareketler').insert({
-            id: uid(), malkod: hm.malkod || hm.kod, malad: hm.malad || hm.ad, miktar: hmDelta,
+            id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmDelta,
             tip: 'giris', aciklama: wo.ieNo + ' düzeltme ' + delta,
             tarih: today(), log_id: l.id, wo_id: wo.id,
           })

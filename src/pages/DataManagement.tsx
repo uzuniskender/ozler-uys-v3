@@ -520,6 +520,56 @@ export function DataManagement() {
         aksiyon: recetesizAktif.length ? 'İlgili siparişleri açıp reçete atayın.' : undefined,
         detay: recetesizAktif.length ? { siparisler: recetesizAktif.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
       })
+
+      // 11. Bar Model tutarlılığı (v15.32) — tamamlanan kesim planı satırı için bar_acilis eksik mi?
+      // barModel.ts kuralı: ham (tip='Hammadde' && uzunluk>0) + satır %100 üretilmiş →
+      // hamAdet kadar bar_acilis kaydı (deterministik id: bar-open-{planId}-{satirId}-{i}) yazılmalı.
+      const barEksikler: Array<{ planId: string; satirId: string; hamMalkod: string; beklenen: number; mevcut: number }> = []
+      const barAcilisSet = new Set(stoks.filter((s: any) => s.tip === 'bar_acilis').map((s: any) => s.id))
+      for (const plan of plans) {
+        const hamMalkodRaw = (plan.ham_malkod || '') as string
+        if (!hamMalkodRaw) continue
+        const mat = mats.find((m: any) => (m.kod || '').trim().toLowerCase() === hamMalkodRaw.trim().toLowerCase())
+        if (!mat || mat.tip !== 'Hammadde' || (mat.uzunluk || 0) <= 0) continue
+        const satirlar = plan.satirlar || []
+        for (const satir of satirlar) {
+          if (!satir.id) continue
+          const hamAdet = satir.hamAdet || 0
+          if (hamAdet <= 0) continue
+          const kesimler = satir.kesimler || []
+          if (!kesimler.length) continue
+          let tamamlandi = true
+          for (const k of kesimler) {
+            const wo = wos.find((w: any) => w.id === k.woId)
+            if (!wo) { tamamlandi = false; break }
+            if (wo.durum === 'iptal') continue
+            const prod = logs.filter((l: any) => l.wo_id === wo.id).reduce((a: number, l: any) => a + (l.qty || 0), 0)
+            if (prod < (wo.hedef || 0)) { tamamlandi = false; break }
+          }
+          if (!tamamlandi) continue
+          let mevcut = 0
+          for (let i = 0; i < hamAdet; i++) {
+            if (barAcilisSet.has(`bar-open-${plan.id}-${satir.id}-${i}`)) mevcut++
+          }
+          if (mevcut < hamAdet) {
+            barEksikler.push({ planId: plan.id, satirId: satir.id, hamMalkod: hamMalkodRaw, beklenen: hamAdet, mevcut })
+          }
+        }
+      }
+      kontroller.push({
+        no: 11, ad: 'Bar Model tutarlılığı',
+        durum: barEksikler.length ? 'fail' : 'pass',
+        mesaj: barEksikler.length
+          ? `${barEksikler.length} tamamlanmış satırın bar_acilis kaydı eksik`
+          : `${plans.length} kesim planı taranıp bar_acilis tutarlı`,
+        neden: barEksikler.length
+          ? 'Üretim girişinde barModelSync tetiklenmemiş — OperatorPanel / ProductionEntry akışında bar-model entegrasyonu çalışmamış olabilir.'
+          : undefined,
+        aksiyon: barEksikler.length
+          ? 'İlgili WO\'lardan birine tekrar üretim girişi yapın — barModelSync idempotent olduğundan eksik bar_acilis kayıtlarını yazar. Ya da kod sürümünün canlıda olduğunu doğrulayın.'
+          : undefined,
+        detay: barEksikler.length ? { eksikler: barEksikler.slice(0, 20) } : undefined,
+      })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
       console.error(e)
@@ -532,7 +582,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.25', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.32', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')

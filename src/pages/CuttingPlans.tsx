@@ -3,7 +3,7 @@ import React, { useState } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import { showPrompt, showConfirm } from '@/lib/prompt'
+import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy } from '@/features/production/cutting'
 import type { WorkOrder } from '@/types'
@@ -33,16 +33,11 @@ export function CuttingPlans() {
   }
 
   // #10: Kesim artığını stoka gir
-  async function artikStokaGir(_planId: string, hamMalkod: string, hamMalad: string, artikBoy: number) {
-    if (artikBoy <= 0) return
-    const kod = await showPrompt('Artık malzeme kodu', '', hamMalkod + '-ARTIK')
-    if (!kod) return
-    await supabase.from('uys_stok_hareketler').insert({
-      id: uid(), tarih: today(), malkod: kod, malad: hamMalad + ' (kesim artığı)',
-      miktar: 1, tip: 'giris', aciklama: 'Kesim artığı — ' + artikBoy + 'mm',
-    })
-    toast.success('Artık stoka girildi: ' + artikBoy + 'mm')
-    loadAll()
+  // v15.32: DISABLE. Artıklar artık uys_acik_barlar havuzunda otomatik izleniyor.
+  // Bu fonksiyon çağrılsa da kullanıcıya bilgilendirme toast'u atar, stok yazmaz —
+  // aksi takdirde aynı artık hem stok hem havuz olarak çift kayıt olurdu.
+  async function artikStokaGir(_planId: string, _hamMalkod: string, _hamMalad: string, _artikBoy: number) {
+    toast.info('Artıklar artık "Açık Bar Havuzu"nda otomatik izleniyor — Depolar sayfasındaki yeni tabdan görebilirsiniz.', { duration: 5000 })
   }
 
   return (
@@ -296,14 +291,9 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
 
   async function stokaGir() {
     if (!stokGirisi) { onClose(); return }
-    // Kalan fire'ı hesapla (eklenen parçalardan sonra)
-    const kalanFire = plan?.satirlar?.[info.barIdx]?.fireMm ?? fireMm
-    if (kalanFire <= 10) { toast.info('Artık kalmadı'); onSaved(); return }
-    await supabase.from('uys_stok_hareketler').insert({
-      id: uid(), tarih: today(), malkod: artikKod, malad: info.hamMalad + ' (artık ' + kalanFire + 'mm)',
-      miktar: 1, tip: 'giris', aciklama: 'Kesim artığı — ' + kalanFire + 'mm',
-    })
-    toast.success('Artık stoka girildi: ' + kalanFire + 'mm')
+    // v15.32: DISABLE. Artıklar artık uys_acik_barlar havuzunda otomatik izleniyor.
+    // Manuel "artıkı stoka gir" akışı çift kayıt tehlikesi yarattığı için kapatıldı.
+    toast.info('Artıklar artık "Açık Bar Havuzu"nda otomatik izleniyor — manuel stoka giriş gerekmez.', { duration: 5000 })
     onSaved()
   }
 
