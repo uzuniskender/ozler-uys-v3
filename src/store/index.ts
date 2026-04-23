@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
+import { supabase, fetchAll } from '@/lib/supabase'
 import { setYetkiOverrides } from '@/lib/permissions'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
@@ -268,7 +268,7 @@ export const useStore = create<UYSStore>((set) => ({
   loadAll: async () => {
     set({ loading: true })
     try {
-      const results = await Promise.all(TABLE_MAP.map(t => supabase.from(t.table).select('*')))
+      const results = await Promise.all(TABLE_MAP.map(t => fetchAll(t.table)))
       const updates: Partial<UYSStore> = {}
       let ok = 0
       results.forEach((res, i) => {
@@ -305,7 +305,7 @@ export const useStore = create<UYSStore>((set) => ({
     const entries = tableNames.map(t => TABLE_LOOKUP[t]).filter(Boolean)
     if (!entries.length) return
     try {
-      const results = await Promise.all(entries.map(e => supabase.from(e.table).select('*')))
+      const results = await Promise.all(entries.map(e => fetchAll(e.table)))
       const updates: Record<string, unknown> = {}
       results.forEach((res, i) => {
         const e = entries[i]

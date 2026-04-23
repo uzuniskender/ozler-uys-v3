@@ -37,3 +37,25 @@ export const supabase = new Proxy(_supabase, {
     return typeof val === 'function' ? val.bind(target) : val
   }
 })
+
+// v15.33: Supabase varsayılan olarak 1000 satır limit uygular.
+// fetchAll sayfalar halinde 1000'lik bloklarda tüm satırları çeker.
+// Kullanım: const { data, error } = await fetchAll('uys_stok_hareketler')
+export async function fetchAll<T = any>(
+  table: string,
+  pageSize = 1000
+): Promise<{ data: T[]; error: any }> {
+  const all: T[] = []
+  let from = 0
+  // Güvenlik tavanı: 1M satıra kadar okur (pageSize 1000 ile 1000 tur)
+  for (let i = 0; i < 1000; i++) {
+    const to = from + pageSize - 1
+    const { data, error } = await supabase.from(table).select('*').range(from, to)
+    if (error) return { data: all, error }
+    if (!data || !data.length) break
+    all.push(...(data as T[]))
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return { data: all, error: null }
+}

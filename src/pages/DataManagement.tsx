@@ -3,7 +3,7 @@ import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permis
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
 import { useState, useEffect, Fragment } from 'react'
 import { useStore } from '@/store'
-import { supabase } from '@/lib/supabase'
+import { supabase, fetchAll } from '@/lib/supabase'
 import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -46,17 +46,17 @@ export function DataManagement() {
     const kontroller: SaglikKontrolu[] = []
     try {
       const [woRes, logRes, fireRes, stokRes, tedRes, matsRes, planRes, rezRes, orderRes, recRes, bomRes] = await Promise.all([
-        supabase.from('uys_work_orders').select('*'),
-        supabase.from('uys_logs').select('*'),
-        supabase.from('uys_fire_logs').select('*'),
-        supabase.from('uys_stok_hareketler').select('*'),
-        supabase.from('uys_tedarikler').select('*'),
-        supabase.from('uys_malzemeler').select('*'),
-        supabase.from('uys_kesim_planlari').select('*'),
-        supabase.from('uys_mrp_rezerve').select('*'),
-        supabase.from('uys_orders').select('*'),
-        supabase.from('uys_recipes').select('*'),
-        supabase.from('uys_bom_trees').select('*'),
+        fetchAll('uys_work_orders'),
+        fetchAll('uys_logs'),
+        fetchAll('uys_fire_logs'),
+        fetchAll('uys_stok_hareketler'),
+        fetchAll('uys_tedarikler'),
+        fetchAll('uys_malzemeler'),
+        fetchAll('uys_kesim_planlari'),
+        fetchAll('uys_mrp_rezerve'),
+        fetchAll('uys_orders'),
+        fetchAll('uys_recipes'),
+        fetchAll('uys_bom_trees'),
       ])
       const wos = woRes.data || []
       const logs = logRes.data || []
@@ -288,12 +288,12 @@ export function DataManagement() {
         autoFixEtiket: hasIssue ? (dupPairler.length && vTotal ? 'Kart + kayıtları birleştir' : dupPairler.length ? 'Duplicate kartları birleştir' : 'Kayıt malkod yazımını kart koduyla eşitle') : undefined,
         autoFix: hasIssue ? async () => {
           const [{ data: bomFresh }, { data: rcFresh }, { data: woFresh }, { data: stokFresh }, { data: kesimFresh }, { data: tedFresh }] = await Promise.all([
-            supabase.from('uys_bom_trees').select('*'),
-            supabase.from('uys_recipes').select('*'),
-            supabase.from('uys_work_orders').select('*'),
-            supabase.from('uys_stok_hareketler').select('*'),
-            supabase.from('uys_kesim_planlari').select('*'),
-            supabase.from('uys_tedarikler').select('*'),
+            fetchAll('uys_bom_trees'),
+            fetchAll('uys_recipes'),
+            fetchAll('uys_work_orders'),
+            fetchAll('uys_stok_hareketler'),
+            fetchAll('uys_kesim_planlari'),
+            fetchAll('uys_tedarikler'),
           ])
           let merged = 0, updBom = 0, updRc = 0, updWo = 0, updStok = 0, updKesim = 0, updTed = 0
           // === Faz 1: Duplicate kartları birleştir (mevcut mantık) ===
@@ -371,7 +371,7 @@ export function DataManagement() {
 
           // === Faz 2: Kart varyasyonlarını kart koduyla eşitle (yeni) ===
           // Mats'i tazeleyelim (Faz 1 sonrası kart kodları değişmiş olabilir)
-          const { data: matsAfter } = await supabase.from('uys_malzemeler').select('*')
+          const { data: matsAfter } = await fetchAll('uys_malzemeler')
           const normMap2 = new Map<string, { kod: string; ad: string }>()
           ;(matsAfter || []).forEach((m: any) => {
             const norm = (m.kod || '').trim().toLocaleUpperCase('tr-TR')
@@ -387,12 +387,12 @@ export function DataManagement() {
           let varStok = 0, varBom = 0, varRc = 0, varWo = 0, varKes = 0, varTed = 0
           // Faz 2 için yeniden fetch (Faz 1'den sonra state değişti)
           const [{ data: bomF2 }, { data: rcF2 }, { data: woF2 }, { data: stokF2 }, { data: kesF2 }, { data: tedF2 }] = await Promise.all([
-            supabase.from('uys_bom_trees').select('*'),
-            supabase.from('uys_recipes').select('*'),
-            supabase.from('uys_work_orders').select('*'),
-            supabase.from('uys_stok_hareketler').select('*'),
-            supabase.from('uys_kesim_planlari').select('*'),
-            supabase.from('uys_tedarikler').select('*'),
+            fetchAll('uys_bom_trees'),
+            fetchAll('uys_recipes'),
+            fetchAll('uys_work_orders'),
+            fetchAll('uys_stok_hareketler'),
+            fetchAll('uys_kesim_planlari'),
+            fetchAll('uys_tedarikler'),
           ])
           // Stok hareketleri
           for (const h of (stokF2 || [])) {
@@ -582,7 +582,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.32', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.33', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')
