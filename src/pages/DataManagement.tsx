@@ -640,6 +640,7 @@ export function DataManagement() {
     { label: 'Tedarikler', key: 'tedarikler', table: 'uys_tedarikler' },
     { label: 'MRP Rezerve', key: 'mrpRezerve', table: 'uys_mrp_rezerve' },
     { label: 'Açık Bar Havuzu', key: 'acikBarlar', table: 'uys_acik_barlar' },
+    { label: 'Yarım İşler', key: 'pendingFlows', table: 'uys_pending_flows' },
     { label: 'Tedarikçiler', key: 'tedarikciler', table: 'uys_tedarikciler' },
     { label: 'Duruş Kodları', key: 'durusKodlari', table: 'uys_durus_kodlari' },
     { label: 'Müşteriler', key: 'customers', table: 'uys_customers' },
@@ -1132,6 +1133,7 @@ const TEST_TABLES = [
   { key: 'sevkler', table: 'uys_sevkler', label: '🚛 Sevkiyatlar' },
   { key: 'operatorNotes', table: 'uys_operator_notes', label: '💬 Mesajlar' },
   { key: 'activeWork', table: 'uys_active_work', label: '▶ Aktif Çalışmalar' },
+  { key: 'pendingFlows', table: 'uys_pending_flows', label: '🔄 Yarım İşler' },
   { key: 'izinler', table: 'uys_izinler', label: '📅 İzinler' },
   { key: 'checklist', table: 'uys_checklist', label: '☑ Checklist' },
 ]
