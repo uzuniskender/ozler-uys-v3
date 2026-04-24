@@ -6,7 +6,7 @@ import type {
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem,
-  AcikBar
+  AcikBar, PendingFlow
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -211,6 +211,19 @@ const M = {
     hurdaKullaniciId: (r.hurda_kullanici_id || '') as string,
     hurdaKullaniciAd: (r.hurda_kullanici_ad || '') as string,
   }),
+  // v15.36 — PendingFlow
+  pendingFlow: (r: Record<string, unknown>): PendingFlow => ({
+    id: r.id as string,
+    flowType: (r.flow_type || 'siparis') as PendingFlow['flowType'],
+    currentStep: (r.current_step || 'siparis') as PendingFlow['currentStep'],
+    stateData: (r.state_data || {}) as PendingFlow['stateData'],
+    userId: (r.user_id || '') as string,
+    userAd: (r.user_ad || '') as string,
+    baslangic: (r.baslangic || '') as string,
+    sonAktivite: (r.son_aktivite || '') as string,
+    durum: (r.durum || 'aktif') as PendingFlow['durum'],
+    not: (r.not_ || '') as string,
+  }),
 }
 
 interface UYSStore {
@@ -224,6 +237,7 @@ interface UYSStore {
   izinler: Izin[]; kullanicilar: Kullanici[]; hmTipler: HmTip[]
   problemler: Problem[]
   acikBarlar: AcikBar[]
+  pendingFlows: PendingFlow[]   // v15.36
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
@@ -259,6 +273,7 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
   { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
   { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
+  { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
 ]
 
 // Tablo adı → TABLE_MAP entry lookup (realtime için)
@@ -271,6 +286,7 @@ export const useStore = create<UYSStore>((set) => ({
   customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [], hmTipler: [],
   problemler: [],
   acikBarlar: [],
+  pendingFlows: [],
   loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {

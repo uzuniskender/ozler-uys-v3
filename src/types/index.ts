@@ -433,3 +433,28 @@ export interface Problem {
   sonDegistirme: string    // ISO datetime
   kapatmaTarihi: string    // ISO date
 }
+
+// v15.36 — Yarım İş Takibi
+export type FlowType = 'siparis' | 'manuel_ie' | 'ym_ie'
+export type FlowStep = 'siparis' | 'kesim' | 'mrp' | 'tedarik' | 'tamamlandi' | 'iptal'
+export type FlowDurum = 'aktif' | 'tamamlandi' | 'iptal'
+
+export interface PendingFlow {
+  id: string
+  flowType: FlowType
+  currentStep: FlowStep
+  stateData: {
+    orderId?: string
+    siparisNo?: string
+    ieIds?: string[]
+    mrpSonuc?: { malkod: string; net: number }[]
+    tedarikIds?: string[]
+    baslik?: string   // UI'da gösterilecek kısa açıklama
+  }
+  userId: string
+  userAd: string
+  baslangic: string
+  sonAktivite: string
+  durum: FlowDurum
+  not: string
+}

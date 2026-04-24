@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign } from 'lucide-react'
+import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
+import { cancelFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
 
 interface TopbarProps {
   onMenuClick: () => void
@@ -12,15 +13,23 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
-  const { synced, loadAll } = useStore()
+  const { synced, loadAll, pendingFlows } = useStore()
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
+  const [showFlowModal, setShowFlowModal] = useState(false)
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
 
   // Chat bildirim sistemi — realtime subscription + unread count (tek yerde çağrılmalı)
   useChatNotifications()
   const chatUnread = useChatNotifStore(s => s.unreadCount)
   const chatMentions = useChatNotifStore(s => s.unreadMentionCount)
+
+  // v15.36 — Aktif yarım işler (sadece bu kullanıcıya ait)
+  const myUserId = user?.dbId || user?.email || user?.username || ''
+  const activeFlows = pendingFlows.filter(f =>
+    f.durum === 'aktif' && (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
+  )
+  const flowCount = activeFlows.length
 
   return (
     <>
@@ -40,6 +49,20 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
       {!isTestMode && (
         <button onClick={() => { localStorage.setItem('uys_test_mode', 'true'); window.location.reload() }}
           className="text-[10px] text-zinc-600 hover:text-amber px-2 py-0.5 rounded" title="Test modunu aç">🧪 Test</button>
+      )}
+
+      {/* v15.36 — Yarım iş ikonu + badge */}
+      {flowCount > 0 && (
+        <button
+          onClick={() => setShowFlowModal(true)}
+          className="relative text-amber hover:text-amber transition-colors"
+          title={`${flowCount} yarım iş`}
+        >
+          <Workflow size={16} />
+          <span className="absolute -top-1.5 -right-1.5 bg-amber text-black text-[9px] font-bold px-1 rounded-full min-w-[15px] text-center leading-[14px] ring-2 ring-bg-1">
+            {flowCount}
+          </span>
+        </button>
       )}
 
       {/* Chat ikonu + unread badge + mention badge (v15.17) */}
@@ -83,7 +106,75 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
     </header>
 
     {showPassModal && <PassModal onClose={() => setShowPassModal(false)} />}
+    {showFlowModal && <FlowModal flows={activeFlows} onClose={() => setShowFlowModal(false)} onAction={() => { loadAll(); setShowFlowModal(false) }} />}
     </>
+  )
+}
+
+// v15.36 — Yarım iş listesi + devam/iptal aksiyonları
+function FlowModal({ flows, onClose, onAction }: {
+  flows: import('@/types').PendingFlow[]
+  onClose: () => void
+  onAction: () => void
+}) {
+  async function iptal(flowId: string) {
+    if (!await new Promise<boolean>(res => {
+      const r = confirm('Bu akışı iptal et? Sipariş ve kesim planları silinmez, sadece akış bayrağı kapanır.')
+      res(r)
+    })) return
+    const ok = await cancelFlow(flowId)
+    if (ok) { toast.success('Akış iptal edildi'); onAction() }
+    else toast.error('İptal başarısız')
+  }
+  function devam(flowId: string, step: string) {
+    const hash = stepToRoute(step as any) + '?flow=' + flowId
+    window.location.hash = hash.startsWith('#') ? hash.slice(1) : hash
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-border">
+          <h2 className="text-sm font-semibold">Yarım İşler <span className="text-zinc-500 font-normal">({flows.length})</span></h2>
+          <p className="text-[11px] text-zinc-500 mt-0.5">Devam et veya iptal et</p>
+        </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-border/50">
+          {!flows.length && <div className="p-8 text-center text-zinc-500 text-xs">Yarım iş yok</div>}
+          {flows.map(f => (
+            <div key={f.id} className="p-3 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-zinc-200 truncate">
+                  {f.stateData.baslik || (f.stateData.siparisNo ? `Sipariş ${f.stateData.siparisNo}` : f.flowType)}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  Adım: <span className="text-amber">{stepLabel(f.currentStep)}</span>
+                  <span className="text-zinc-600 mx-1">·</span>
+                  {f.sonAktivite?.slice(0, 16).replace('T', ' ')}
+                </div>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => devam(f.id, f.currentStep)}
+                  className="px-2.5 py-1 bg-accent hover:bg-accent-hover text-white rounded text-[11px] font-semibold"
+                >
+                  Devam
+                </button>
+                <button
+                  onClick={() => iptal(f.id)}
+                  className="px-2.5 py-1 bg-bg-3 hover:bg-red/20 text-zinc-400 hover:text-red rounded text-[11px]"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-border flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">Kapat</button>
+        </div>
+      </div>
+    </div>
   )
 }
 

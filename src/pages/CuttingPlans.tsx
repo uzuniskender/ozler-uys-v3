@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -7,21 +8,57 @@ import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy, havuzdanYenidenOptimize } from '@/features/production/cutting'
 import type { WorkOrder, AcikBar } from '@/types'
-import { Trash2, Plus, Scissors, Zap, Search, Package } from 'lucide-react'
+import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
+import { advanceFlow } from '@/lib/pendingFlow'
 
 export function CuttingPlans() {
   const { cuttingPlans, materials, workOrders, operations, recipes, logs, acikBarlar, loadAll } = useStore()
   const { can, isGuest } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const activeFlowId = searchParams.get('flow') || ''  // v15.36 — flow akışı
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [artikInfo, setArtikInfo] = useState<{ planId: string; hamMalkod: string; hamMalad: string; fireMm: number; barIdx: number } | null>(null)
   const [showTamamlanan, setShowTamamlanan] = useState(false)
   // v15.35 — havuz önerisi: plan ID'leri kuyruğu (çoklu plan ardışık)
   const [havuzOneriQueue, setHavuzOneriQueue] = useState<string[]>([])
+  // v15.36 — flow'da otomatik plan hesabı bir kez çalışsın
+  const [flowAutoDone, setFlowAutoDone] = useState(false)
 
   const bekleyen = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
   const gosterilen = showTamamlanan ? cuttingPlans : bekleyen
+
+  // v15.36 — Flow akışında sayfa ilk açıldığında otomatik plan hesapla
+  useEffect(() => {
+    if (!activeFlowId || flowAutoDone || !can('cutting_add')) return
+    if (!workOrders.length || !recipes.length) return  // Store hazır olana kadar bekle
+    ;(async () => {
+      try {
+        const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
+        const cpMapped = cuttingPlans.map((p: any) => ({
+          id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy,
+          hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '',
+          tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0,
+        }))
+        const planlar = kesimPlanOlustur(workOrders, operations as any, recipes, materials, logsSimple, cpMapped as any)
+        if (planlar.length) {
+          await kesimPlanlariKaydet(planlar as any)
+          toast.success(`${planlar.length} kesim planı otomatik oluşturuldu`)
+          await loadAll()
+        } else {
+          toast.info('Kesim operasyonlu açık İE bulunamadı')
+        }
+      } catch (e) {
+        console.error('[flow] auto plan:', e)
+        toast.error('Otomatik plan hatası')
+      } finally {
+        setFlowAutoDone(true)
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFlowId, workOrders.length, recipes.length])
 
   async function deletePlan(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -44,6 +81,33 @@ export function CuttingPlans() {
 
   return (
     <div>
+      {/* v15.36 — Flow banner */}
+      {activeFlowId && (
+        <div className="mb-4 p-3 bg-amber/10 border border-amber/30 rounded-lg flex items-center justify-between">
+          <div className="text-xs">
+            <span className="font-semibold text-amber">🔄 Akış devam ediyor</span>
+            <span className="ml-2 text-zinc-400">Kesim planını kontrol et, yeni sipariş eklemek istersen aşağıdaki butonu kullan, yoksa MRP'ye geç.</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate('/siparisler?flow=' + activeFlowId)}
+              className="px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 rounded text-xs hover:bg-bg-3"
+            >
+              + Yeni Sipariş Ekle
+            </button>
+            <button
+              onClick={async () => {
+                await advanceFlow(activeFlowId, 'mrp')
+                navigate('/mrp?flow=' + activeFlowId)
+              }}
+              className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded text-xs font-semibold flex items-center gap-1"
+            >
+              MRP'ye Geç <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Kesim Planları</h1><p className="text-xs text-zinc-500">{cuttingPlans.length} plan · {bekleyen.length} bekleyen · {cuttingPlans.length - bekleyen.length} tamamlanan</p></div>
         <div className="flex gap-2">

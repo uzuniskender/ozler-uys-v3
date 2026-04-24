@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
 import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle } from '@/features/production/mrp'
 import { useStore } from '@/store'
@@ -12,6 +13,7 @@ import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, 
 import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
+import { getActiveFlow, startFlow, advanceFlow } from '@/lib/pendingFlow'
 
 // Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar.
 // Sipariş ekleme/revize/silme/kapatma, toplu MRP, tedarik değişimi sonrası çağrılmalı.
@@ -35,8 +37,11 @@ async function triggerRezerveSync() {
 }
 
 export function Orders() {
-  const { orders, workOrders, logs, recipes, cuttingPlans, materials, loadAll } = useStore()
-  const { can, isGuest } = useAuth()
+  const { orders, workOrders, logs, recipes, cuttingPlans, materials, pendingFlows, loadAll } = useStore()
+  const { can, isGuest, user } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const urlFlowId = searchParams.get('flow') || ''
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
@@ -44,6 +49,35 @@ export function Orders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
   const [showBulkImport, setShowBulkImport] = useState(false)
+
+  // v15.36 — Aktif yarım iş kontrolü (yeni sipariş tıklarken uyarı için)
+  const myUserId = user?.dbId || user?.email || user?.username || ''
+  const myActiveFlow = pendingFlows.find(f =>
+    f.durum === 'aktif' &&
+    (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
+  )
+
+  function handleNewOrderClick() {
+    // Yeni sipariş tıklandı — aktif flow varsa uyar
+    if (myActiveFlow && !urlFlowId) {
+      toast.warning(
+        `Tamamlanmamış akış var: ${myActiveFlow.stateData.baslik || 'Sipariş akışı'} (${myActiveFlow.currentStep}). ` +
+        `Önce onu tamamla veya Topbar'dan iptal et.`,
+        { duration: 6000 }
+      )
+      return
+    }
+    setEditOrder(null); setShowForm(true)
+  }
+
+  // v15.36 — Flow akışında "Yeni Sipariş Ekle" ile gelindi → formu otomatik aç
+  useEffect(() => {
+    if (urlFlowId && !showForm) {
+      setEditOrder(null)
+      setShowForm(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlFlowId])
 
   function selToggle(id: string) { setSelIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
 
@@ -213,7 +247,7 @@ export function Orders() {
           {can('orders_add') && <button onClick={() => setShowBulkImport(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
           {can('orders_mrp') && <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>}
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          {can('orders_add') && <button onClick={async () => { setEditOrder(null); setShowForm(true) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>}
+          {can('orders_add') && <button onClick={handleNewOrderClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>}
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -303,6 +337,10 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const activeFlowId = searchParams.get('flow') || ''  // Zaten bir flow içindeyse (örn. CuttingPlans'tan geri geldi)
+  const { user } = useAuth()
   const [siparisNo, setSiparisNo] = useState(initial?.siparisNo || '')
   const [musteri, setMusteri] = useState(initial?.musteri || '')
   const [genelNot, setGenelNot] = useState(initial?.not || '')
@@ -361,6 +399,10 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       if (!k.rcId) { setError(`${i + 1}. kalem için ürün / reçete seçilmedi`); return }
       if (!k.termin) { setError(`${i + 1}. kalem termini boş`); return }
       if (!k.adet || k.adet < 1) { setError(`${i + 1}. kalem adedi 1'den küçük`); return }
+      // v15.36 — Sıkı reçete kontrolü: reçete gerçekten var ve satırlı mı?
+      const rc = recipes.find(r => r.id === k.rcId)
+      if (!rc) { setError(`${i + 1}. kalem: "${k.mamulAd || k.mamulKod}" için reçete bulunamadı — silinmiş olabilir`); return }
+      if (!rc.satirlar?.length) { setError(`${i + 1}. kalem: "${k.mamulAd || k.mamulKod}" reçetesinde hiç satır yok — reçeteyi tamamla`); return }
     }
 
     setError('')
@@ -414,6 +456,43 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 
     logAction(initial ? 'Sipariş güncellendi' : 'Sipariş oluşturuldu', siparisNo.trim())
     setSaving(false)
+
+    // v15.36 — Yeni sipariş akışı: flow başlat + kesim planına yönlendir
+    // Revize/güncelleme için akış başlatma (sadece yeni sipariş)
+    if (!initial && user) {
+      const userId = user.dbId || user.email || user.username || ''
+      const userAd = user.username || ''
+      const orderIdToUse = (() => {
+        // save() içinde yeni sipariş için newId aynen kullanıldı ama dışarı çıkmadı.
+        // Burada DB'den en son oluşan siparişi bul (siparisNo + userId bazlı).
+        // Pratikte: sipariş no ile lookup — loadAll tetiklenince doğru görünür.
+        return ''  // flow başlatmaya siparisNo yeter şimdilik
+      })()
+
+      if (activeFlowId) {
+        // Zaten bir flow vardı (CuttingPlans'tan "yeni sipariş ekle" ile geldik) → aynı flow kalır
+        await advanceFlow(activeFlowId, 'kesim', { siparisNo: siparisNo.trim() })
+        toast.success('Sipariş eklendi — kesim planına dönülüyor')
+        onSaved()
+        navigate('/kesim-planlari?flow=' + activeFlowId)
+        return
+      } else {
+        // Yeni flow başlat
+        const flow = await startFlow({
+          flowType: 'siparis',
+          initialStep: 'kesim',
+          userId, userAd,
+          stateData: { siparisNo: siparisNo.trim(), orderId: orderIdToUse, baslik: `Sipariş ${siparisNo.trim()}` },
+        })
+        if (flow) {
+          toast.success('Sipariş oluşturuldu — kesim planına yönlendiriliyor')
+          onSaved()
+          navigate('/kesim-planlari?flow=' + flow.id)
+          return
+        }
+      }
+    }
+
     onSaved()
   }
 

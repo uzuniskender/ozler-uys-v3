@@ -637,6 +637,10 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
 
   async function save() {
     if (!malad.trim() || !hedef) { toast.error('Malzeme adı ve hedef zorunlu'); return }
+    // v15.36 — Sıkı reçete kontrolü: rcId VE reçete satırları olmalı
+    if (!rcId) { toast.error('Reçete seçilmeden İE açılamaz'); return }
+    if (!selectedRc) { toast.error('Reçete bulunamadı — listeden seç'); return }
+    if (!selectedRc.satirlar?.length) { toast.error('Seçilen reçetede hiç satır yok — reçeteyi tamamla'); return }
     const op = operations.find(o => o.id === opId)
     const ist = stations.find(s => s.id === istId)
     // HM dizisini reçeteden al

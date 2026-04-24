@@ -1,21 +1,27 @@
 import { useAuth } from '@/hooks/useAuth'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Download } from 'lucide-react'
+import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, type MRPRow } from '@/features/production/mrp'
+import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 
 export function MRP() {
   const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, mrpRezerve, loadAll } = useStore()
   const { can } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const activeFlowId = searchParams.get('flow') || ''  // v15.36 — flow akışı
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
   const [selectedYMs, setSelectedYMs] = useState<Set<string>>(new Set())
   const [sonuc, setSonuc] = useState<MRPRow[]>([])
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+  const [flowAutoDone, setFlowAutoDone] = useState(false)  // v15.36
 
   const [showTamamlanan, setShowTamamlanan] = useState(false)
   const [showYMTamamlanan, setShowYMTamamlanan] = useState(false)
@@ -149,8 +155,35 @@ export function MRP() {
     }
     if (ordIds.length) loadAll()
 
-    toast.success(result.length + ' kalem hesaplandı · ' + result.filter(r => r.durum === 'eksik').length + ' eksik')
+    const eksikSayi = result.filter(r => r.durum === 'eksik').length
+    toast.success(result.length + ' kalem hesaplandı · ' + eksikSayi + ' eksik')
+
+    // v15.36 — Flow akışında MRP'den tedarik adımına ilerle
+    if (activeFlowId) {
+      const eksikRows = result.filter(r => r.net > 0).map(r => ({ malkod: r.malkod, net: r.net }))
+      await advanceFlow(activeFlowId, 'tedarik', { mrpSonuc: eksikRows })
+      if (!eksikSayi) {
+        // Eksik yok — akış tamamlandı
+        await completeFlow(activeFlowId)
+        toast.success('Hiç eksik yok — akış tamamlandı', { duration: 4000 })
+      }
+    }
   }
+
+  // v15.36 — Flow auto-run: ?flow=xxx ile gelindi, sayfa açılışında otomatik hesapla
+  useEffect(() => {
+    if (!activeFlowId || flowAutoDone || hesaplandi) return
+    if (!orders.length || !workOrders.length) return  // Store hazır olana kadar bekle
+    // Tüm aktif sipariş + bağımsız YM seç
+    const ordIds = aktifOrders.map(o => o.id)
+    const ymIds = ymIEs.map(w => w.id)
+    setSelectedOrders(new Set(ordIds))
+    setSelectedYMs(new Set(ymIds))
+    setFlowAutoDone(true)
+    // Seçimleri state'e yazdıktan sonra bir frame bekleyip hesapla
+    setTimeout(() => { hesapla() }, 150)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFlowId, orders.length, workOrders.length])
 
   const eksikler = sonuc.filter(s => s.net > 0)
   const yeterliler = sonuc.filter(s => s.net <= 0)
@@ -177,6 +210,14 @@ export function MRP() {
     }
     loadAll(); setSelectedRows(new Set())
     toast.success(count + ' tedarik oluşturuldu')
+
+    // v15.36 — Flow sonlandır (tedarik oluşturuldu)
+    if (activeFlowId) {
+      await completeFlow(activeFlowId)
+      toast.success('Akış tamamlandı', { duration: 3000 })
+      // Ana sayfaya dön
+      setTimeout(() => { navigate('/') }, 1500)
+    }
   }
 
   function exportExcel() {
@@ -197,6 +238,20 @@ export function MRP() {
 
   return (
     <div>
+      {/* v15.36 — Flow banner */}
+      {activeFlowId && (
+        <div className="mb-4 p-3 bg-amber/10 border border-amber/30 rounded-lg flex items-center justify-between">
+          <div className="text-xs">
+            <span className="font-semibold text-amber">🔄 Akış devam ediyor — MRP</span>
+            <span className="ml-2 text-zinc-400">
+              {hesaplandi
+                ? `${eksikler.length} eksik malzeme — tedarik oluşturunca akış tamamlanır.`
+                : 'Otomatik hesaplanıyor...'}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">📊 MRP — Malzeme İhtiyaç Planlaması</h1>
           <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş · {ymIEs.length} YM İE</p></div>
