@@ -146,6 +146,9 @@ const M = {
     qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
     operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
     telafiWoId: (r.telafi_wo_id || '') as string,
+    // v15.34.3
+    tip: (r.tip || 'parca') as FireLog['tip'],
+    uzunlukMm: (r.uzunluk_mm as number) || 0,
   }),
   checklist: (r: Record<string, unknown>): ChecklistItem => ({
     id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],

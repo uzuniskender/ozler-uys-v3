@@ -511,18 +511,48 @@ function AcikBarHurdaModal({
 
     setLoading(true)
     try {
-      const { error } = await supabase
+      const now = new Date()
+      const nowIso = now.toISOString()
+      const tarihKisa = nowIso.slice(0, 10)  // YYYY-MM-DD (fire_logs.tarih formatı)
+      const sebepClean = sebep.trim()
+
+      // 1. uys_acik_barlar: durum + hurda alanları
+      const { error: e1 } = await supabase
         .from('uys_acik_barlar')
         .update({
           durum: 'hurda',
-          hurda_tarihi: new Date().toISOString(),
-          hurda_sebep: sebep.trim() || null,
+          hurda_tarihi: nowIso,
+          hurda_sebep: sebepClean || null,
           hurda_kullanici_id: currentUserId,
           hurda_kullanici_ad: currentUserAd,
         })
         .in('id', secilenBarlar.map(b => b.id))
 
-      if (error) { console.error('[hurda]', error); toast.error('Hurda işlemi başarısız: ' + error.message); return }
+      if (e1) { console.error('[hurda] acikBar update:', e1); toast.error('Hurda işlemi başarısız: ' + e1.message); return }
+
+      // 2. uys_fire_logs: her hurda bar için bir fire kaydı (tip='bar_hurda')
+      //    Rapor takibi için. qty=1 (bar adedi), uzunluk_mm dolu.
+      const fireRows = secilenBarlar.map(b => ({
+        id: uid(),
+        log_id: null,
+        wo_id: null,
+        tarih: tarihKisa,
+        malkod: b.hamMalkod,
+        malad: b.hamMalad,
+        qty: 1,
+        ie_no: '',
+        op_ad: currentUserAd,
+        operatorlar: [],
+        not_: sebepClean ? 'Açık bar hurda — ' + sebepClean : 'Açık bar hurda',
+        tip: 'bar_hurda',
+        uzunluk_mm: b.uzunlukMm,
+      }))
+      const { error: e2 } = await supabase.from('uys_fire_logs').insert(fireRows)
+      if (e2) {
+        // Hurda zaten kaydedildi, fire log başarısız ise uyar ama geri alma
+        console.error('[hurda] fire_log insert:', e2)
+        toast.warning('Hurda kaydedildi, fire log yazılamadı: ' + e2.message)
+      }
 
       toast.success(`${secilenBarlar.length} bar hurdaya gönderildi`)
       setSecimler(new Set())

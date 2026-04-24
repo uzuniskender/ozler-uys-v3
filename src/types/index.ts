@@ -350,6 +350,9 @@ export interface FireLog {
   operatorlar: LogOperator[]
   not: string
   telafiWoId?: string
+  // v15.34.3 — parça fire'ı ('parca') ile bar hurda ('bar_hurda') ayrımı
+  tip?: 'parca' | 'bar_hurda'
+  uzunlukMm?: number  // sadece tip='bar_hurda' için dolu
 }
 
 export interface ChecklistItem {

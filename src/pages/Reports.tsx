@@ -42,18 +42,22 @@ export function Reports() {
   ]
 
   const todayStr = today()
+  // v15.34.3 — Fire logları iki gruba ayır: parça fire vs bar hurda
+  const parcaFireLogs = useMemo(() => fireLogs.filter(f => f.tip !== 'bar_hurda'), [fireLogs])
+  const barHurdaLogs = useMemo(() => fireLogs.filter(f => f.tip === 'bar_hurda'), [fireLogs])
+
   const toplamUretim = logs.reduce((a, l) => a + l.qty, 0)
-  const toplamFire = fireLogs.reduce((a, f) => a + f.qty, 0)
+  const toplamFire = parcaFireLogs.reduce((a, f) => a + f.qty, 0)
   const bugunUretim = logs.filter(l => l.tarih === todayStr).reduce((a, l) => a + l.qty, 0)
-  const bugunFire = fireLogs.filter(f => f.tarih === todayStr).reduce((a, f) => a + f.qty, 0)
+  const bugunFire = parcaFireLogs.filter(f => f.tarih === todayStr).reduce((a, f) => a + f.qty, 0)
 
   // Son 14 gün günlük üretim
   const gunlukData = useMemo(() => {
     const map: Record<string, { tarih: string; uretim: number; fire: number }> = {}
     logs.forEach(l => { if (!map[l.tarih]) map[l.tarih] = { tarih: l.tarih, uretim: 0, fire: 0 }; map[l.tarih].uretim += l.qty })
-    fireLogs.forEach(f => { if (!map[f.tarih]) map[f.tarih] = { tarih: f.tarih, uretim: 0, fire: 0 }; map[f.tarih].fire += f.qty })
+    parcaFireLogs.forEach(f => { if (!map[f.tarih]) map[f.tarih] = { tarih: f.tarih, uretim: 0, fire: 0 }; map[f.tarih].fire += f.qty })
     return Object.values(map).sort((a, b) => a.tarih.localeCompare(b.tarih)).slice(-14)
-  }, [logs, fireLogs])
+  }, [logs, parcaFireLogs])
 
   // Operasyon bazlı
   const opData = useMemo(() => {
@@ -67,12 +71,21 @@ export function Reports() {
     return Object.values(map).sort((a, b) => b.hedef - a.hedef)
   }, [workOrders, logs])
 
-  // Fire operasyona göre dağılım
+  // Fire operasyona göre dağılım — sadece parça fire
   const firePieData = useMemo(() => {
     const map: Record<string, number> = {}
-    fireLogs.forEach(f => { const k = f.opAd || 'Tanımsız'; map[k] = (map[k] || 0) + f.qty })
+    parcaFireLogs.forEach(f => { const k = f.opAd || 'Tanımsız'; map[k] = (map[k] || 0) + f.qty })
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
-  }, [fireLogs])
+  }, [parcaFireLogs])
+
+  // v15.34.3 — Bar Hurda özeti
+  const barHurdaOzet = useMemo(() => {
+    const toplamBar = barHurdaLogs.length
+    const toplamMm = barHurdaLogs.reduce((a, f) => a + (f.uzunlukMm || 0), 0)
+    const bugunBar = barHurdaLogs.filter(f => f.tarih === todayStr).length
+    const bugunMm = barHurdaLogs.filter(f => f.tarih === todayStr).reduce((a, f) => a + (f.uzunlukMm || 0), 0)
+    return { toplamBar, toplamMm, bugunBar, bugunMm }
+  }, [barHurdaLogs, todayStr])
 
   // ═══ DETAYLI ÜRETİM RAPORU ═══
   // Lookup maps
@@ -218,7 +231,7 @@ export function Reports() {
             if (opData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opData), 'Operasyon Bazlı')
             // OEE
             const oeeRows = opData.map(d => {
-              const fire = fireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0)
+              const fire = parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0)
               const perf = d.hedef > 0 ? Math.round(d.uretim / d.hedef * 100) : 0
               const qual = d.uretim > 0 ? Math.round((d.uretim - fire) / d.uretim * 100) : 100
               return { Operasyon: d.op, Hedef: d.hedef, Üretim: d.uretim, Fire: fire, 'Performans %': perf, 'Kalite %': qual, 'OEE %': Math.round(perf * qual / 100) }
@@ -430,7 +443,7 @@ export function Reports() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold">Fire Detay</h3>
               {(() => {
-                const telafisiz = fireLogs.filter(f => f.qty > 0 && !f.telafiWoId).length
+                const telafisiz = parcaFireLogs.filter(f => f.qty > 0 && !f.telafiWoId).length
                 if (telafisiz === 0 || !can('reports_view')) return null
                 return (
                   <button
@@ -444,7 +457,7 @@ export function Reports() {
                       )
                       if (!ok) return
                       setTelafiRunning(true)
-                      const sonuc = await topluFireTelafi(fireLogs, workOrders)
+                      const sonuc = await topluFireTelafi(parcaFireLogs, workOrders)
                       setTelafiRunning(false)
                       if (sonuc.basarili > 0) toast.success(`${sonuc.basarili} telafi İE oluşturuldu`)
                       if (sonuc.hata > 0) toast.error(`${sonuc.hata} hata — konsol kontrol et`)
@@ -458,7 +471,7 @@ export function Reports() {
                 )
               })()}
             </div>
-            {fireLogs.length ? (
+            {parcaFireLogs.length ? (
               <div className="max-h-[400px] overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-bg-2 z-10">
@@ -471,7 +484,7 @@ export function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...fireLogs].sort((a, b) => b.tarih.localeCompare(a.tarih)).map(f => {
+                    {[...parcaFireLogs].sort((a, b) => b.tarih.localeCompare(a.tarih)).map(f => {
                       const telafiWo = f.telafiWoId ? workOrders.find(w => w.id === f.telafiWoId) : null
                       return (
                         <tr key={f.id} className="border-b border-border/30">
@@ -509,6 +522,58 @@ export function Reports() {
               </div>
             ) : <div className="p-8 text-center text-zinc-600">Fire kaydı yok</div>}
           </div>
+
+          {/* v15.34.3 — Bar Hurda alt bölümü */}
+          <div className="lg:col-span-2 bg-bg-2 border border-border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">Bar Hurda <span className="text-zinc-500 text-xs font-normal">(ham malzeme hurdası)</span></h3>
+              <div className="flex items-center gap-4 text-xs">
+                <div className="text-zinc-400">
+                  Toplam: <span className="text-zinc-200 font-semibold">{barHurdaOzet.toplamBar}</span> bar
+                  <span className="text-zinc-600"> · </span>
+                  <span className="text-zinc-300 font-mono">{Math.round(barHurdaOzet.toplamMm)}</span> mm
+                </div>
+                {barHurdaOzet.bugunBar > 0 && (
+                  <div className="text-red-400">
+                    Bugün: <span className="font-semibold">{barHurdaOzet.bugunBar}</span> bar
+                    <span className="text-zinc-600"> · </span>
+                    <span className="font-mono">{Math.round(barHurdaOzet.bugunMm)}</span> mm
+                  </div>
+                )}
+              </div>
+            </div>
+            {barHurdaLogs.length ? (
+              <div className="max-h-[320px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-bg-2 z-10">
+                    <tr className="border-b border-border text-zinc-500">
+                      <th className="text-left px-3 py-2">Tarih</th>
+                      <th className="text-left px-3 py-2">Ham Malzeme</th>
+                      <th className="text-right px-3 py-2">Uzunluk</th>
+                      <th className="text-left px-3 py-2">Kullanıcı</th>
+                      <th className="text-left px-3 py-2">Sebep</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...barHurdaLogs].sort((a, b) => b.tarih.localeCompare(a.tarih)).map(f => (
+                      <tr key={f.id} className="border-b border-border/30">
+                        <td className="px-3 py-1 font-mono text-zinc-500">{f.tarih}</td>
+                        <td className="px-3 py-1">
+                          <div className="font-mono text-accent text-[11px]">{f.malkod}</div>
+                          <div className="text-zinc-500 text-[10px]">{f.malad}</div>
+                        </td>
+                        <td className="px-3 py-1 text-right font-mono text-red">{Math.round(f.uzunlukMm || 0)} mm</td>
+                        <td className="px-3 py-1 text-zinc-300">{f.opAd || '-'}</td>
+                        <td className="px-3 py-1 text-zinc-400 text-[11px]">
+                          {(f.not || '').replace(/^Açık bar hurda( — )?/, '') || <span className="text-zinc-600 italic">sebepsiz</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="p-8 text-center text-zinc-600">Bar hurda kaydı yok</div>}
+          </div>
         </div>
       )}
 
@@ -538,7 +603,7 @@ export function Reports() {
       {tab === 'oee' && (() => {
         const oeeData = opData.map(d => {
           const perf = d.hedef > 0 ? Math.round(d.uretim / d.hedef * 100) : 0
-          const quality = d.uretim > 0 ? Math.round((d.uretim - (fireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0))) / d.uretim * 100) : 100
+          const quality = d.uretim > 0 ? Math.round((d.uretim - (parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0))) / d.uretim * 100) : 100
           const oee = Math.round(perf * quality / 100)
           return { ...d, perf, quality, oee }
         })
