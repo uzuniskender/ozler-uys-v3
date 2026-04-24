@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -9,10 +10,17 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
 import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/lib/tedarikHelpers'
+import { FlowProgress } from '@/components/FlowProgress'
 
 export function Procurement() {
-  const { tedarikler, tedarikciler, orders, loadAll } = useStore()
+  const { tedarikler, tedarikciler, orders, pendingFlows, loadAll } = useStore()
   const { can } = useAuth()
+  const [searchParams] = useSearchParams()
+  const activeFlowId = searchParams.get('flow') || ''
+  // v15.36 — Bu flow tamamlanmış mı? (Procurement'a tedarik sonrası yönlenildi)
+  const tamamlananFlow = activeFlowId
+    ? pendingFlows.find(f => f.id === activeFlowId && f.durum === 'tamamlandi')
+    : null
   const [search, setSearch] = useState('')
   const [durumFilter, setDurumFilter] = useState('bekliyor')
   const [showForm, setShowForm] = useState(false)
@@ -171,6 +179,23 @@ export function Procurement() {
 
   return (
     <div>
+      {/* v15.36 — Akış tamamlandı banner'ı */}
+      {tamamlananFlow && (
+        <div className="mb-4 p-3 bg-green/10 border border-green/30 rounded-lg">
+          <div className="text-xs">
+            <span className="font-semibold text-green">✓ Akış tamamlandı</span>
+            <span className="ml-2 text-zinc-300">
+              {tamamlananFlow.stateData.baslik} — oluşan tedarikler aşağıda. Tedarik geldiğinde "Geldi" ile işaretle, stok hareketi otomatik oluşur.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Aktif flow varsa progress (nadiren — tedarik adımı genelde MRP'de çözülür) */}
+      {activeFlowId && !tamamlananFlow && (
+        <FlowProgress flowId={activeFlowId} current="tedarik" />
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Tedarik Yönetimi</h1><p className="text-xs text-zinc-500">{tedarikler.length} kayıt · {toplamBekleyen} bekleyen</p></div>
         <div className="flex gap-2">

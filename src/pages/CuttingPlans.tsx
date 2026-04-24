@@ -11,6 +11,7 @@ import type { WorkOrder, AcikBar } from '@/types'
 import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { advanceFlow } from '@/lib/pendingFlow'
+import { FlowProgress } from '@/components/FlowProgress'
 
 export function CuttingPlans() {
   const { cuttingPlans, materials, workOrders, operations, recipes, logs, acikBarlar, loadAll } = useStore()
@@ -81,31 +82,31 @@ export function CuttingPlans() {
 
   return (
     <div>
-      {/* v15.36 — Flow banner */}
+      {/* v15.36 — Flow progress bar */}
       {activeFlowId && (
-        <div className="mb-4 p-3 bg-amber/10 border border-amber/30 rounded-lg flex items-center justify-between">
-          <div className="text-xs">
-            <span className="font-semibold text-amber">🔄 Akış devam ediyor</span>
-            <span className="ml-2 text-zinc-400">Kesim planını kontrol et, yeni sipariş eklemek istersen aşağıdaki butonu kullan, yoksa MRP'ye geç.</span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate('/orders?flow=' + activeFlowId)}
-              className="px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 rounded text-xs hover:bg-bg-3"
-            >
-              + Yeni Sipariş Ekle
-            </button>
-            <button
-              onClick={async () => {
-                await advanceFlow(activeFlowId, 'mrp')
-                navigate('/mrp?flow=' + activeFlowId)
-              }}
-              className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded text-xs font-semibold flex items-center gap-1"
-            >
-              MRP'ye Geç <ArrowRight size={12} />
-            </button>
-          </div>
-        </div>
+        <FlowProgress
+          flowId={activeFlowId}
+          current="kesim"
+          actions={
+            <>
+              <button
+                onClick={() => navigate('/orders?flow=' + activeFlowId)}
+                className="px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 rounded text-xs hover:bg-bg-3"
+              >
+                + Yeni Sipariş Ekle
+              </button>
+              <button
+                onClick={async () => {
+                  await advanceFlow(activeFlowId, 'mrp')
+                  navigate('/mrp?flow=' + activeFlowId)
+                }}
+                className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded text-xs font-semibold flex items-center gap-1"
+              >
+                MRP'ye Geç <ArrowRight size={12} />
+              </button>
+            </>
+          }
+        />
       )}
 
       <div className="flex items-center justify-between mb-4">
