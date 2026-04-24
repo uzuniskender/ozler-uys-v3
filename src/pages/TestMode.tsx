@@ -13,13 +13,20 @@ import {
   startTestRun, finishTestRun, cancelTestRun,
   getActiveTestRunId, cascadeDeleteTestRun,
 } from '@/lib/testRun'
+import { senaryo1, senaryo2, senaryo3, senaryo4, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
 
 export function TestMode() {
-  const { testRuns, loadAll } = useStore()
+  const { testRuns, recipes, loadAll } = useStore()
   const { can, user } = useAuth()
   const [aktifTestId, setAktifTestId] = useState<string>(getActiveTestRunId() || '')
   const [aciklama, setAciklama] = useState('')
   const [loading, setLoading] = useState(false)
+  // v15.37 Part 3 — Otomatik senaryo çalıştırma
+  const [recipeKod, setRecipeKod] = useState('YMH100265')
+  const [adet, setAdet] = useState(10)
+  const [canliLog, setCanliLog] = useState<SenaryoAdim[]>([])
+  const [sonRapor, setSonRapor] = useState<SenaryoRapor | null>(null)
+  const [calisan, setCalisan] = useState<string | null>(null)
 
   // Rehidrasyon: localStorage ↔ state senkron
   useEffect(() => {
@@ -127,6 +134,45 @@ export function TestMode() {
     }
   }
 
+  // v15.37 Part 3 — Senaryo çalıştırıcı
+  async function senaryoCalistir(num: 1 | 2 | 3 | 4) {
+    if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
+    if (!recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
+    setCalisan(`Senaryo ${num}`)
+    setCanliLog([])
+    setSonRapor(null)
+    const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : senaryo4
+    try {
+      const rapor = await fn({
+        recipeKod: recipeKod.trim(),
+        adet,
+        onLog: (adim) => setCanliLog(prev => [...prev, adim]),
+      })
+      setSonRapor(rapor)
+      toast[rapor.genelDurum === 'PASS' ? 'success' : rapor.genelDurum === 'KISMI' ? 'warning' : 'error'](
+        `Senaryo ${num} ${rapor.genelDurum} · ${rapor.adimlar.length} adım · ${rapor.toplamSureMs}ms`,
+        { duration: 7000 }
+      )
+    } catch (e: any) {
+      toast.error(`Senaryo ${num} KRİTİK HATA: ${e?.message || e}`, { duration: 10000 })
+      console.error('[senaryo]', e)
+    } finally {
+      setCalisan(null)
+    }
+  }
+
+  function raporIndir() {
+    if (!sonRapor) return
+    const json = JSON.stringify(sonRapor, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `rapor_${sonRapor.testRunId}_${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -137,6 +183,120 @@ export function TestMode() {
           </p>
         </div>
       </div>
+
+      {/* AKTİF TEST + SENARYO RUNNER */}
+      {aktifTest && (
+        <div className="mb-4 p-4 bg-bg-2 border border-border rounded-lg">
+          <h2 className="text-sm font-semibold mb-3">🤖 Otomatik Senaryo Çalıştırıcı</h2>
+
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 block mb-1">Reçete kodu veya mamul kodu</label>
+              <input
+                value={recipeKod}
+                onChange={e => setRecipeKod(e.target.value)}
+                placeholder="YMH100265"
+                list="recipe-options"
+                className="w-full px-3 py-2 bg-bg-1 border border-border rounded text-sm font-mono"
+              />
+              <datalist id="recipe-options">
+                {recipes.slice(0, 50).map(r => (
+                  <option key={r.id} value={r.mamulKod}>{r.mamulAd}</option>
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 block mb-1">Adet</label>
+              <input
+                type="number" min={1} max={99999}
+                value={adet}
+                onChange={e => setAdet(parseInt(e.target.value) || 1)}
+                className="w-full px-3 py-2 bg-bg-1 border border-border rounded text-sm font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {[1, 2, 3, 4].map(n => (
+              <button
+                key={n}
+                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4)}
+                disabled={!!calisan || loading}
+                className="px-3 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent rounded text-[11px] font-semibold text-left"
+              >
+                {calisan === `Senaryo ${n}` ? '⏳ ' : '🤖 '}
+                Senaryo {n}: {
+                  n === 1 ? 'Sipariş → tam akış' :
+                  n === 2 ? 'Manuel İE → tam akış' :
+                  n === 3 ? 'Sipariş + tedarik sil + 2. sipariş' :
+                  'İE + tedarik sil + 2. İE'
+                }
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CANLI LOG */}
+      {canliLog.length > 0 && (
+        <div className="mb-4 bg-bg-2 border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+            <h3 className="text-xs font-semibold">
+              📋 {calisan ? `${calisan} — çalışıyor...` : 'Son çalıştırma logu'}
+            </h3>
+            {sonRapor && (
+              <button
+                onClick={raporIndir}
+                className="px-3 py-1 bg-accent text-white rounded text-[10px] font-semibold"
+              >
+                📥 JSON İndir
+              </button>
+            )}
+          </div>
+          <div className="max-h-[300px] overflow-y-auto">
+            {canliLog.map((log, i) => (
+              <div
+                key={i}
+                className={`px-4 py-1.5 border-b border-border/30 text-[11px] flex items-start gap-2 ${
+                  log.durum === 'FAIL' ? 'bg-red/10' : log.durum === 'SKIP' ? 'bg-zinc-500/5' : ''
+                }`}
+              >
+                <span className={`shrink-0 font-bold ${
+                  log.durum === 'OK' ? 'text-green' :
+                  log.durum === 'FAIL' ? 'text-red' : 'text-zinc-500'
+                }`}>
+                  {log.durum === 'OK' ? '✓' : log.durum === 'FAIL' ? '✗' : '○'}
+                </span>
+                <span className="flex-1 text-zinc-300">{log.adim}</span>
+                {log.hata && <span className="text-red text-[10px] truncate max-w-[300px]">{log.hata}</span>}
+                {log.delil && !log.hata && (
+                  <span className="text-zinc-500 font-mono text-[10px] truncate max-w-[300px]">
+                    {JSON.stringify(log.delil).slice(0, 100)}
+                  </span>
+                )}
+                <span className="shrink-0 text-zinc-600 font-mono text-[10px]">{log.sureMs}ms</span>
+              </div>
+            ))}
+          </div>
+          {sonRapor && (
+            <div className="px-4 py-2 border-t border-border bg-bg-3/20 flex items-center gap-3">
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                sonRapor.genelDurum === 'PASS' ? 'bg-green/20 text-green' :
+                sonRapor.genelDurum === 'KISMI' ? 'bg-amber/20 text-amber' : 'bg-red/20 text-red'
+              }`}>
+                {sonRapor.genelDurum}
+              </span>
+              <span className="text-[10px] text-zinc-400">
+                {sonRapor.adimlar.length} adım · {sonRapor.toplamSureMs}ms
+              </span>
+              <span className="text-[10px] text-zinc-500">
+                {sonRapor.ozet.olusanSiparis}sip · {sonRapor.ozet.olusanIE}İE · {sonRapor.ozet.olusanKesimPlan}kp ·
+                {' '}{sonRapor.ozet.olusanTedarik}ted · {sonRapor.ozet.uretimLog}log
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AKTİF TEST BANNER */}
       {aktifTest ? (
