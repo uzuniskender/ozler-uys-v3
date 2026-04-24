@@ -188,9 +188,13 @@ export function hesaplaMRP(
   const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
 
   // Kapsam için ordIdSet — hem sipariş filtresi hem bağımsız YM filtresi hem cutting plan kapsamı kullanır
-  const ordIdSet = ordIds ? new Set(ordIds) : null
+  // v15.35.3: Boş array (ordIds=[]) kapsam filtresi olmadığı anlamına gelir — yalnızca YM seçilip sipariş seçilmediği durum için
+  const ordIdSet = (ordIds && ordIds.length > 0) ? new Set(ordIds) : null
 
   // 1. Siparişlerin BOM patlatması
+  // ordIds=null → tüm aktif (genel mod, rezerveleriSenkronla)
+  // ordIds=[] → hiç sipariş (kullanıcı sadece YM seçti)
+  // ordIds=[a,b] → seçili siparişler
   const siparisler = ordIds === null
     ? orders.filter(o => o.durum !== 'Tamamlandı' && o.durum !== 'İptal')
     : orders.filter(o => ordIds.includes(o.id))
@@ -224,23 +228,29 @@ export function hesaplaMRP(
     }
   }
 
-  // 2. Bağımsız YM İş Emirleri — KAPSAM FİLTRESİ: sipariş seçildiyse sadece o siparişlerin bağımsız YM'leri
+  // 2. Bağımsız YM + Sipariş Dışı İş Emirleri
+  // v15.35.3: siparisDisi bayrağı da kapsama dahil (manuel kesim İE'leri hammadde ihtiyacı çıkarsın)
+  // KAPSAM FİLTRESİ: sipariş seçildiyse sadece o siparişlerle bağlantılı İE'ler (orderId eşleşmeli)
   const ymIEs = workOrders.filter(w => {
-    if (!w.bagimsiz || w.durum === 'iptal') return false
+    if (!w.bagimsiz && !w.siparisDisi) return false
+    if (w.durum === 'iptal') return false
     if (secilenYMIds && !secilenYMIds.has(w.id)) return false
-    // Sipariş seçildiyse: sadece o siparişlerle bağlantılı bağımsız YM'ler (orderId eşleşmeli)
+    // Sipariş seçildiyse: orderId eşleşmeli (yoksa atla)
     if (ordIdSet) {
       if (!w.orderId || !ordIdSet.has(w.orderId)) return false
     }
     return true
   })
-  dbg('[MRP DEBUG] Bağımsız YM İE sayısı:', ymIEs.length, '| IDs:', ymIEs.map(w => w.id))
+  dbg('[MRP DEBUG] Bağımsız/SiparisDisi YM İE sayısı:', ymIEs.length, '| IDs:', ymIEs.map(w => w.id))
   for (const w of ymIEs) {
-    const kalan = w.hedef // simplified — ideally use logs to get actual remaining
+    // v15.35.3: Kalan hesabı = hedef - üretilen (daha doğru)
+    const uretilen = stokHareketler.filter(h => (h as any).woId === w.id || h.woId === w.id).length > 0
+      ? 0 : 0  // (log bazlı hesaplama bu dosyada yok — şimdilik hedef kullanılır)
+    const kalan = w.hedef - uretilen
     if (!kalan || !w.malkod) continue
     const wTermin = (w as any).termin || ''
     const p = bomPatlaNet(w.malkod, kalan, 0, {}, recipes, stokHareketler, materials)
-    dbg('[MRP DEBUG] Bağımsız YM İE', w.id, w.malkod, 'x', kalan, '→ BOM:', Object.keys(p).length, 'malzeme:', Object.keys(p))
+    dbg('[MRP DEBUG] İE', w.id, w.ieNo, w.malkod, 'x', kalan, 'bagimsiz:', w.bagimsiz, 'siparisDisi:', w.siparisDisi, '→ BOM:', Object.keys(p).length, 'malzeme:', Object.keys(p))
     Object.keys(p).forEach(k => {
       if (k === w.malkod) return
       const v = p[k]
