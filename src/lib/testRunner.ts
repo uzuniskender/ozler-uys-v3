@@ -746,12 +746,12 @@ async function _fireTelafiOlustur(state: RunnerState, fireLogId: string): Promis
   if (!origWo) throw new Error('Orijinal İE bulunamadı')
 
   const telafi = await fireTelafiIeOlustur(fireLog as any, origWo as any)
-  if (!telafi) throw new Error('Telafi İE oluşturulamadı')
+  if (!telafi) throw new Error('Telafi İE oluşturulamadı (fireTelafiIeOlustur null)')
 
   state.ozet.telafiIE++
-  state.ieIds.push(telafi.id)
+  state.ieIds.push(telafi.woId)  // v15.37.1 FIX: fireTelafiIeOlustur {woId, ieNo} döner, .id değil
   await loadAll()
-  return telafi.id
+  return telafi.woId
 }
 
 // ═══ SENARYO 5: FİRE + TELAFİ + DURUŞ ═══
