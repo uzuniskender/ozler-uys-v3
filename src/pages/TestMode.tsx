@@ -161,6 +161,83 @@ export function TestMode() {
     }
   }
 
+  // v15.37 Part 3 v2 — Senaryolar arası temizlik (sub test_run_id'yi temizle)
+  async function araTemizle() {
+    if (!aktifTestId) return
+    const onay = await showConfirm(
+      `Senaryolar arası temizlik: ${aktifTestId}_s1 / _s2 / _s3 / _s4 etiketli kayıtlar silinecek, parent test modu AÇIK kalır. Devam?`
+    )
+    if (!onay) return
+    setLoading(true)
+    try {
+      let toplam = 0
+      for (const suffix of ['s1', 's2', 's3', 's4']) {
+        const silinen = await cascadeDeleteTestRun(`${aktifTestId}_${suffix}`)
+        toplam += Object.values(silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
+      }
+      await loadAll()
+      toast.success(`Ara temizlik: ${toplam} kayıt silindi (parent açık)`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // v15.37 Part 3 v2 — 4 senaryoyu ardışık çalıştır, her biri arasında otomatik temizlik
+  async function tumSenaryolarCalistir() {
+    if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
+    if (!recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
+
+    const tumRaporlar: SenaryoRapor[] = []
+    setCanliLog([])
+    setSonRapor(null)
+
+    for (const num of [1, 2, 3, 4] as const) {
+      setCalisan(`Senaryo ${num}`)
+      const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : senaryo4
+      try {
+        const rapor = await fn({
+          recipeKod: recipeKod.trim(),
+          adet,
+          onLog: (adim) => setCanliLog(prev => [...prev, { ...adim, adim: `[S${num}] ${adim.adim}` }]),
+        })
+        tumRaporlar.push(rapor)
+        setSonRapor(rapor)
+
+        // Her senaryodan sonra o sub-run'ı temizle (bir sonrakinin stokunu etkilemesin)
+        if (num < 4) {
+          await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
+          await loadAll()
+          await new Promise(r => setTimeout(r, 500))
+        }
+      } catch (e: any) {
+        toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)
+        console.error('[senaryo]', e)
+      }
+    }
+    setCalisan(null)
+
+    // Toplu rapor indir
+    const tumRapor = {
+      baslangic: tumRaporlar[0]?.baslangic,
+      bitis: tumRaporlar[tumRaporlar.length - 1]?.bitis,
+      testRunId: aktifTestId,
+      adet,
+      recipeKod,
+      senaryolar: tumRaporlar,
+      genelDurum: tumRaporlar.every(r => r.genelDurum === 'PASS') ? 'ALL_PASS' : 'MIXED',
+    }
+    const json = JSON.stringify(tumRapor, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `toplu_rapor_${aktifTestId}_${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+
+    toast.success(`4 senaryo tamamlandı — ${tumRapor.genelDurum === 'ALL_PASS' ? 'TÜMÜ PASS' : 'KARIŞIK'}`, { duration: 10000 })
+  }
+
   function raporIndir() {
     if (!sonRapor) return
     const json = JSON.stringify(sonRapor, null, 2)
@@ -233,6 +310,25 @@ export function TestMode() {
                 }
               </button>
             ))}
+          </div>
+
+          {/* v2: Tümünü çalıştır + ara temizlik */}
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <button
+              onClick={tumSenaryolarCalistir}
+              disabled={!!calisan || loading}
+              className="px-3 py-2.5 bg-green/15 hover:bg-green/25 border border-green/40 text-green rounded text-[11px] font-bold"
+            >
+              {calisan ? '⏳ Çalışıyor: ' + calisan : '🚀 Tümünü Ardışık Çalıştır (her biri arasında temizlik)'}
+            </button>
+            <button
+              onClick={araTemizle}
+              disabled={!!calisan || loading}
+              className="px-3 py-2.5 bg-amber/10 hover:bg-amber/20 border border-amber/30 text-amber rounded text-[11px] font-semibold"
+              title="Senaryolar arası kayıtları temizle, test modu açık kalır"
+            >
+              🧹 Senaryolar Arası Temizlik
+            </button>
           </div>
         </div>
       )}

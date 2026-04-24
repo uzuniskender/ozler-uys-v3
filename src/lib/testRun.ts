@@ -126,7 +126,15 @@ export async function finishTestRun(testRunId: string, opts?: { cleanup?: boolea
 
   let silinen: Record<string, number> = {}
   if (cleanup) {
-    silinen = await cascadeDeleteTestRun(testRunId)
+    // v15.37 v2: Parent + sub-run'ları (s1, s2, s3, s4) hepsini temizle
+    const tumIds = [testRunId, `${testRunId}_s1`, `${testRunId}_s2`, `${testRunId}_s3`, `${testRunId}_s4`]
+    for (const id of tumIds) {
+      const part = await cascadeDeleteTestRun(id)
+      // Topla
+      for (const [tablo, n] of Object.entries(part)) {
+        silinen[tablo] = (silinen[tablo] || 0) + (n > 0 ? n : 0)
+      }
+    }
   }
 
   const { error } = await supabase.from(TABLE).update({
@@ -150,6 +158,11 @@ export async function cancelTestRun(testRunId: string): Promise<boolean> {
   setActiveTestRunId(null)
   if (error) { console.error('[testRun] cancel:', error); return false }
   return true
+}
+
+/** Kayıt olmadan sadece aktif test_run_id'yi geçici set et (senaryo runner içi) */
+export function tempSetActiveTestRunId(id: string | null): void {
+  setActiveTestRunId(id)
 }
 
 /**
