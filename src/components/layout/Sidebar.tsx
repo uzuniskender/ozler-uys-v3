@@ -6,7 +6,7 @@ import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -42,6 +42,7 @@ const NAV = [
   { label: 'SİSTEM', items: [
     { path: '/reports', label: 'Raporlar', icon: BarChart3, guest: true },
     { path: '/problem-takip', label: 'Problem Takip', icon: AlertOctagon, badge: 'problemlerOpen', guest: false },
+    { path: '/test-mode', label: 'Test Modu', icon: FlaskConical, badge: 'activeTest', guest: false },
     { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
     { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
   ]},
@@ -91,6 +92,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     if (key === 'problemlerOpen') {
       const acik = store.problemler.filter(p => p.durum !== 'Kapandı').length
       return acik > 0 ? String(acik) : ''
+    }
+    if (key === 'activeTest') {
+      const aktif = store.testRuns.filter(t => t.durum === 'aktif').length
+      return aktif > 0 ? 'AKTİF' : ''
     }
     const arr = (store as unknown as Record<string, unknown>)[key]
     if (Array.isArray(arr) && arr.length > 0) return String(arr.length)
@@ -150,6 +155,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                         item.badge === 'workOrders' ? 'bg-accent/15 text-accent' :
                         item.badge === 'cuttingPlans' ? 'bg-green/15 text-green' :
                         item.badge === 'problemlerOpen' ? 'bg-red/15 text-red' :
+                        item.badge === 'activeTest' ? 'bg-amber/25 text-amber font-bold animate-pulse' :
                         'bg-bg-3 text-zinc-400'
                       }`}>
                         {badge}

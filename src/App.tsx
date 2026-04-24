@@ -25,6 +25,7 @@ import { DowntimeCodes } from '@/pages/DowntimeCodes'
 import { Reports } from '@/pages/Reports'
 import { TestPanel } from '@/pages/TestPanel'
 import { DataManagement } from '@/pages/DataManagement'
+import { TestMode } from '@/pages/TestMode'
 import { Procurement } from '@/pages/Procurement'
 import { OperatorPanel } from '@/pages/OperatorPanel'
 import { Checklist } from '@/pages/Checklist'
@@ -64,6 +65,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/downtime-codes" element={<DowntimeCodes />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/test" element={<TestPanel />} />
+          <Route path="/test-mode" element={<TestMode />} />
           <Route path="/data" element={<DataManagement />} />
           <Route path="/procurement" element={<Procurement />} />
           <Route path="/checklist" element={<Checklist />} />
