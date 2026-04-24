@@ -13,7 +13,7 @@ export function Warehouse() {
   const { stokHareketler, materials, acikBarlar, loadAll } = useStore()
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'>('stok')
+  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'>('stok')
   const [showGiris, setShowGiris] = useState(false)
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [detayHam, setDetayHam] = useState<string | null>(null)  // v15.34 — açık bar detay modal
@@ -134,11 +134,12 @@ export function Warehouse() {
       </div>
 
       <div className="flex gap-1 mb-4">
-        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="stok">Anlık Stok</option>
           <option value="hareketler">Hareketler</option>
           <option value="sayim">Stok Sayım</option>
           <option value="acikBarlar">Açık Bar Havuzu</option>
+          <option value="hurda">Hurdaya Gönderilen</option>
         </select>
       </div>
 
@@ -293,6 +294,61 @@ export function Warehouse() {
                           <button onClick={() => setDetayHam(g.hamMalkod)} className="px-2 py-1 bg-bg-3 hover:bg-bg-3/70 text-zinc-300 hover:text-accent rounded text-[10px]">
                             Detay
                           </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )
+        })()}
+
+        {tab === 'hurda' && (() => {
+          // v15.34.2 — Hurdaya Gönderilen barlar. Düz liste, tarih azalan sıralı.
+          const hurdalar = [...acikBarlar]
+            .filter(a => a.durum === 'hurda')
+            .sort((a, b) => (b.hurdaTarihi || '').localeCompare(a.hurdaTarihi || ''))
+          const q = search.trim().toLowerCase()
+          const filtered = q
+            ? hurdalar.filter(a =>
+                (a.hamMalkod + ' ' + a.hamMalad + ' ' + (a.hurdaKullaniciAd || '') + ' ' + (a.hurdaSebep || ''))
+                  .toLowerCase().includes(q))
+            : hurdalar
+          const toplamMm = filtered.reduce((a, b) => a + (b.uzunlukMm || 0), 0)
+          return (
+            <div>
+              <div className="px-4 py-2 bg-bg-3/40 border-b border-border text-[11px] text-zinc-500">
+                {filtered.length} hurda bar · toplam {Math.round(toplamMm)} mm
+                {q && <span className="ml-2">({hurdalar.length} toplam)</span>}
+              </div>
+              {!filtered.length ? (
+                <div className="p-8 text-center text-zinc-500 text-xs">
+                  {hurdalar.length ? 'Arama kriterine uyan hurda yok.' : 'Hurda kaydı yok. Açık Bar Havuzu → Detay → "Hurdaya Gönder" ile hurda işaretlenir.'}
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500">
+                    <th className="text-left px-4 py-2.5">Ham Malzeme</th>
+                    <th className="text-right px-4 py-2.5">Uzunluk</th>
+                    <th className="text-left px-4 py-2.5">Hurda Tarihi</th>
+                    <th className="text-left px-4 py-2.5">Kullanıcı</th>
+                    <th className="text-left px-4 py-2.5">Sebep</th>
+                  </tr></thead>
+                  <tbody>
+                    {filtered.map(b => (
+                      <tr key={b.id} className="border-b border-border/30 hover:bg-bg-3/30">
+                        <td className="px-4 py-2">
+                          <div className="font-mono text-accent text-[11px]">{b.hamMalkod}</div>
+                          <div className="text-zinc-500 text-[10px]">{b.hamMalad}</div>
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-zinc-200">{Math.round(b.uzunlukMm)} mm</td>
+                        <td className="px-4 py-2 text-zinc-400 text-[11px] font-mono">
+                          {(b.hurdaTarihi || '').slice(0, 16).replace('T', ' ') || '-'}
+                        </td>
+                        <td className="px-4 py-2 text-zinc-300">{b.hurdaKullaniciAd || '-'}</td>
+                        <td className="px-4 py-2 text-zinc-400 text-[11px]">
+                          {b.hurdaSebep || <span className="text-zinc-600 italic">sebepsiz</span>}
                         </td>
                       </tr>
                     ))}
