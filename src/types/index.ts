@@ -395,6 +395,7 @@ export interface Kullanici {
 }
 
 // v15.31 — Bar Model: açık bar havuzu
+// v15.34 — hurda alanları
 export interface AcikBar {
   id: string
   hamMalkod: string          // kaynak ham malzeme (BORU 6000 MM vs.)
@@ -404,10 +405,15 @@ export interface AcikBar {
   kaynakSatirId: string      // plan satir.id
   barIndex: number           // satırdaki bar sırası (hamAdet>1 için)
   olusmaTarihi: string
-  durum: 'acik' | 'tuketildi'
+  durum: 'acik' | 'tuketildi' | 'hurda'
   tuketimLogId: string       // tüketildiyse hangi log
   tuketimTarihi: string
   not: string
+  // v15.34 — Hurda işareti
+  hurdaTarihi?: string
+  hurdaSebep?: string
+  hurdaKullaniciId?: string
+  hurdaKullaniciAd?: string
 }
 
 export interface Problem {

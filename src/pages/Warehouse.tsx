@@ -11,11 +11,12 @@ import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Warehouse() {
   const { stokHareketler, materials, acikBarlar, loadAll } = useStore()
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'>('stok')
   const [showGiris, setShowGiris] = useState(false)
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
+  const [detayHam, setDetayHam] = useState<string | null>(null)  // v15.34 — açık bar detay modal
 
   // Malzeme tipleri
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
@@ -272,7 +273,7 @@ export function Warehouse() {
                 </div>
               ) : (
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-right px-4 py-2.5">Bar Adet</th><th className="text-right px-4 py-2.5">Toplam mm</th><th className="text-left px-4 py-2.5">Uzunluklar</th></tr></thead>
+                  <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-right px-4 py-2.5">Bar Adet</th><th className="text-right px-4 py-2.5">Toplam mm</th><th className="text-left px-4 py-2.5">Uzunluklar</th><th className="text-right px-4 py-2.5 w-20"></th></tr></thead>
                   <tbody>
                     {rows.map(g => (
                       <tr key={g.hamMalkod} className="border-b border-border/30 hover:bg-bg-3/30">
@@ -288,6 +289,11 @@ export function Warehouse() {
                           ))}
                           {g.barlar.length > 8 && <span className="text-zinc-600">+{g.barlar.length - 8}</span>}
                         </td>
+                        <td className="px-4 py-2 text-right">
+                          <button onClick={() => setDetayHam(g.hamMalkod)} className="px-2 py-1 bg-bg-3 hover:bg-bg-3/70 text-zinc-300 hover:text-accent rounded text-[10px]">
+                            Detay
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -299,6 +305,17 @@ export function Warehouse() {
       </div>
 
       {showGiris && <StokGirisModal materials={materials} onClose={() => setShowGiris(false)} onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }} />}
+      {detayHam && (
+        <AcikBarHurdaModal
+          hamMalkod={detayHam}
+          barlar={acikBarlar.filter(b => b.hamMalkod === detayHam)}
+          canHurda={can('acikbar_hurda')}
+          currentUserId={user?.dbId || ''}
+          currentUserAd={user?.username || ''}
+          onClose={() => setDetayHam(null)}
+          onSaved={() => { loadAll() }}
+        />
+      )}
     </div>
   )
 }
@@ -377,6 +394,216 @@ function StokGirisModal({ materials, onClose, onSaved }: {
           onClose={() => setShowMatSearch(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ═══ AÇIK BAR HURDA MODALI — v15.34 ═══
+// Belirli bir ham malzemenin açık barlarını listeler, checkbox ile seçim,
+// toplu hurdaya gönderme. Hurdaya giden barlar uys_acik_barlar tablosunda
+// durum='hurda' + hurda_tarihi/sebep/kullanici alanları ile işaretlenir.
+function AcikBarHurdaModal({
+  hamMalkod, barlar, canHurda, currentUserId, currentUserAd, onClose, onSaved,
+}: {
+  hamMalkod: string
+  barlar: import('@/types').AcikBar[]
+  canHurda: boolean
+  currentUserId: string
+  currentUserAd: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [secimler, setSecimler] = useState<Set<string>>(new Set())
+  const [sebep, setSebep] = useState('')
+  const [hurdayiGoster, setHurdayiGoster] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const hamMalad = barlar[0]?.hamMalad || hamMalkod
+  const aktifSayi = barlar.filter(b => b.durum === 'acik').length
+  const hurdaSayi = barlar.filter(b => b.durum === 'hurda').length
+  const tuketilmisSayi = barlar.filter(b => b.durum === 'tuketildi').length
+
+  // Görüntülenecek liste: varsayılan sadece acik; toggle'la hurda da görünür
+  const gosterilecek = barlar
+    .filter(b => b.durum === 'acik' || (hurdayiGoster && b.durum === 'hurda'))
+    .sort((a, b) => {
+      // Açıklar önce, sonra uzunluk azalan
+      if (a.durum !== b.durum) return a.durum === 'acik' ? -1 : 1
+      return (b.uzunlukMm || 0) - (a.uzunlukMm || 0)
+    })
+
+  function toggleSec(id: string) {
+    const y = new Set(secimler)
+    if (y.has(id)) y.delete(id); else y.add(id)
+    setSecimler(y)
+  }
+  function tumAcikSec() {
+    setSecimler(new Set(gosterilecek.filter(b => b.durum === 'acik').map(b => b.id)))
+  }
+  function temizle() { setSecimler(new Set()) }
+
+  const secilenBarlar = barlar.filter(b => secimler.has(b.id) && b.durum === 'acik')
+  const toplamMm = secilenBarlar.reduce((a, b) => a + (b.uzunlukMm || 0), 0)
+
+  async function hurdayaGonder() {
+    if (!secilenBarlar.length) { toast.error('Seçim yok'); return }
+    if (!currentUserId) { toast.error('Kullanıcı oturumu tespit edilemedi'); return }
+    const onay = await showConfirm(
+      `${secilenBarlar.length} açık bar (${Math.round(toplamMm)} mm) hurdaya gönderilecek. Onaylıyor musun?`
+    )
+    if (!onay) return
+
+    setLoading(true)
+    try {
+      const { error } = await supabase
+        .from('uys_acik_barlar')
+        .update({
+          durum: 'hurda',
+          hurda_tarihi: new Date().toISOString(),
+          hurda_sebep: sebep.trim() || null,
+          hurda_kullanici_id: currentUserId,
+          hurda_kullanici_ad: currentUserAd,
+        })
+        .in('id', secilenBarlar.map(b => b.id))
+
+      if (error) { console.error('[hurda]', error); toast.error('Hurda işlemi başarısız: ' + error.message); return }
+
+      toast.success(`${secilenBarlar.length} bar hurdaya gönderildi`)
+      setSecimler(new Set())
+      setSebep('')
+      onSaved()
+      // Kalan açık bar yoksa modal'ı kapat
+      if (aktifSayi - secilenBarlar.length <= 0) onClose()
+    } catch (e: any) {
+      console.error('[hurda] exception:', e)
+      toast.error('Hurda işlemi başarısız: ' + (e?.message || 'bilinmeyen hata'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Başlık */}
+        <div className="px-6 py-4 border-b border-border">
+          <div className="font-mono text-accent text-sm">{hamMalkod}</div>
+          <div className="text-zinc-400 text-xs">{hamMalad}</div>
+          <div className="mt-1.5 text-[11px] text-zinc-500">
+            <span className="text-green">{aktifSayi} açık</span>
+            {hurdaSayi > 0 && <span> · <span className="text-red-400">{hurdaSayi} hurda</span></span>}
+            {tuketilmisSayi > 0 && <span> · <span className="text-zinc-500">{tuketilmisSayi} tüketilmiş</span></span>}
+          </div>
+        </div>
+
+        {/* Kontrol çubuğu */}
+        <div className="px-6 py-2.5 border-b border-border flex items-center justify-between text-[11px]">
+          <label className="flex items-center gap-2 text-zinc-400 cursor-pointer select-none">
+            <input type="checkbox" checked={hurdayiGoster} onChange={e => setHurdayiGoster(e.target.checked)} />
+            Hurdaya gidenleri de göster
+          </label>
+          {canHurda && aktifSayi > 0 && (
+            <div className="flex items-center gap-3">
+              <button onClick={tumAcikSec} className="text-accent hover:underline">Tüm açıkları seç</button>
+              <span className="text-zinc-600">·</span>
+              <button onClick={temizle} className="text-zinc-400 hover:underline">Temizle</button>
+            </div>
+          )}
+        </div>
+
+        {/* Tablo */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-bg-2 z-10">
+              <tr className="border-b border-border text-zinc-500">
+                {canHurda && <th className="w-10 px-3 py-2"></th>}
+                <th className="text-right px-3 py-2">Uzunluk</th>
+                <th className="text-left px-3 py-2">Oluşma</th>
+                <th className="text-left px-3 py-2">Kaynak Plan</th>
+                <th className="text-left px-3 py-2">Durum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gosterilecek.map(b => {
+                const isHurda = b.durum === 'hurda'
+                const secili = secimler.has(b.id)
+                return (
+                  <tr key={b.id} className={`border-b border-border/30 ${isHurda ? 'opacity-60' : 'hover:bg-bg-3/30'} ${secili ? 'bg-accent/5' : ''}`}>
+                    {canHurda && (
+                      <td className="px-3 py-1.5 text-center">
+                        {!isHurda ? (
+                          <input type="checkbox" checked={secili} onChange={() => toggleSec(b.id)} />
+                        ) : null}
+                      </td>
+                    )}
+                    <td className="text-right px-3 py-1.5 font-mono text-zinc-200">{Math.round(b.uzunlukMm)} mm</td>
+                    <td className="px-3 py-1.5 text-zinc-400">{b.olusmaTarihi || '-'}</td>
+                    <td className="px-3 py-1.5 text-zinc-500 font-mono text-[10px]">
+                      {b.kaynakPlanId ? '…' + b.kaynakPlanId.slice(-6) : '-'}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {isHurda ? (
+                        <span
+                          className="text-red-400 cursor-help"
+                          title={`${b.hurdaKullaniciAd || '?'} · ${b.hurdaTarihi?.slice(0, 16).replace('T', ' ') || ''}${b.hurdaSebep ? '\n' + b.hurdaSebep : ''}`}
+                        >
+                          HURDA
+                        </span>
+                      ) : (
+                        <span className="text-green">AÇIK</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {!gosterilecek.length && (
+                <tr>
+                  <td colSpan={canHurda ? 5 : 4} className="text-center py-8 text-zinc-500 text-xs">
+                    Kayıt yok
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Alt alan — sebep + aksiyon */}
+        {canHurda ? (
+          <div className="px-6 py-4 border-t border-border space-y-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Hurda sebebi (opsiyonel)</label>
+              <input
+                value={sebep}
+                onChange={e => setSebep(e.target.value)}
+                placeholder="Örn: Çok kısa, kullanılamaz"
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-zinc-400">
+                Seçili: <span className="text-zinc-200 font-semibold">{secilenBarlar.length}</span> bar
+                {secilenBarlar.length > 0 && (
+                  <> · <span className="text-zinc-300 font-mono">{Math.round(toplamMm)}</span> mm</>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">Kapat</button>
+                <button
+                  onClick={hurdayaGonder}
+                  disabled={!secilenBarlar.length || loading}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-bg-3 disabled:text-zinc-600 text-white rounded-lg text-xs font-semibold"
+                >
+                  {loading ? 'Gönderiliyor…' : 'Hurdaya Gönder'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="px-6 py-4 border-t border-border flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">Kapat</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

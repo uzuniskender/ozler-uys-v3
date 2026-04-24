@@ -202,6 +202,11 @@ const M = {
     tuketimLogId: (r.tuketim_log_id || '') as string,
     tuketimTarihi: (r.tuketim_tarihi || '') as string,
     not: (r.not_ || '') as string,
+    // v15.34 — hurda alanları
+    hurdaTarihi: (r.hurda_tarihi || '') as string,
+    hurdaSebep: (r.hurda_sebep || '') as string,
+    hurdaKullaniciId: (r.hurda_kullanici_id || '') as string,
+    hurdaKullaniciAd: (r.hurda_kullanici_ad || '') as string,
   }),
 }
 
