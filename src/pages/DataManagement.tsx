@@ -641,6 +641,7 @@ export function DataManagement() {
     { label: 'MRP Rezerve', key: 'mrpRezerve', table: 'uys_mrp_rezerve' },
     { label: 'Açık Bar Havuzu', key: 'acikBarlar', table: 'uys_acik_barlar' },
     { label: 'Yarım İşler', key: 'pendingFlows', table: 'uys_pending_flows' },
+    { label: 'Test Run\'ları', key: 'testRuns', table: 'uys_test_runs' },
     { label: 'Tedarikçiler', key: 'tedarikciler', table: 'uys_tedarikciler' },
     { label: 'Duruş Kodları', key: 'durusKodlari', table: 'uys_durus_kodlari' },
     { label: 'Müşteriler', key: 'customers', table: 'uys_customers' },

@@ -18,16 +18,53 @@ function guestBlock() {
   return Promise.resolve(BLOCKED)
 }
 
+// v15.37 — Test modu için insert/upsert'e test_run_id otomatik ekleme
+// Hangi tablolara eklenecek (SQL migration'da test_run_id kolonu olanlar)
+const TEST_RUN_TABLES = new Set([
+  'uys_orders', 'uys_work_orders', 'uys_logs', 'uys_stok_hareketler',
+  'uys_kesim_planlari', 'uys_tedarikler', 'uys_mrp_rezerve', 'uys_sevkler',
+  'uys_fire_logs', 'uys_acik_barlar', 'uys_active_work',
+])
+
+function getActiveTestRunId(): string | null {
+  try { return localStorage.getItem('uys_active_test_run_id') } catch { return null }
+}
+
+function attachTestRunId(table: string, payload: any): any {
+  const trId = getActiveTestRunId()
+  if (!trId || !TEST_RUN_TABLES.has(table)) return payload
+  if (Array.isArray(payload)) {
+    return payload.map(r => (r && typeof r === 'object' && !r.test_run_id) ? { ...r, test_run_id: trId } : r)
+  }
+  if (payload && typeof payload === 'object' && !payload.test_run_id) {
+    return { ...payload, test_run_id: trId }
+  }
+  return payload
+}
+
 // Proxy: from() çağrısını yakala, insert/update/delete/upsert'i engelle
 export const supabase = new Proxy(_supabase, {
   get(target, prop) {
     if (prop === 'from') {
       return (table: string) => {
         const original = target.from(table)
-        if (!_guestMode) return original
+        if (_guestMode) {
+          return new Proxy(original, {
+            get(t: any, p: string) {
+              if (['insert', 'update', 'delete', 'upsert'].includes(p)) return () => guestBlock()
+              return t[p]?.bind ? t[p].bind(t) : t[p]
+            }
+          })
+        }
+        // v15.37 — Aktif test run varsa insert/upsert'e test_run_id ekle
         return new Proxy(original, {
           get(t: any, p: string) {
-            if (['insert', 'update', 'delete', 'upsert'].includes(p)) return () => guestBlock()
+            if (p === 'insert') {
+              return (payload: any, opts?: any) => t.insert(attachTestRunId(table, payload), opts)
+            }
+            if (p === 'upsert') {
+              return (payload: any, opts?: any) => t.upsert(attachTestRunId(table, payload), opts)
+            }
             return t[p]?.bind ? t[p].bind(t) : t[p]
           }
         })

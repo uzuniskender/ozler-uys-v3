@@ -6,7 +6,7 @@ import type {
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem,
-  AcikBar, PendingFlow
+  AcikBar, PendingFlow, TestRun
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -224,6 +224,18 @@ const M = {
     durum: (r.durum || 'aktif') as PendingFlow['durum'],
     not: (r.not_ || '') as string,
   }),
+  // v15.37 — TestRun
+  testRun: (r: Record<string, unknown>): TestRun => ({
+    id: r.id as string,
+    baslangic: (r.baslangic || '') as string,
+    bitis: (r.bitis || '') as string,
+    durum: (r.durum || 'aktif') as TestRun['durum'],
+    userId: (r.user_id || '') as string,
+    userAd: (r.user_ad || '') as string,
+    aciklama: (r.aciklama || '') as string,
+    temizlenenKayitSayisi: (r.temizlenen_kayit_sayisi || {}) as TestRun['temizlenenKayitSayisi'],
+    not: (r.not_ || '') as string,
+  }),
 }
 
 interface UYSStore {
@@ -238,6 +250,7 @@ interface UYSStore {
   problemler: Problem[]
   acikBarlar: AcikBar[]
   pendingFlows: PendingFlow[]   // v15.36
+  testRuns: TestRun[]             // v15.37
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
@@ -274,6 +287,7 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
   { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
   { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
+  { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
 ]
 
 // Tablo adı → TABLE_MAP entry lookup (realtime için)
@@ -287,6 +301,7 @@ export const useStore = create<UYSStore>((set) => ({
   problemler: [],
   acikBarlar: [],
   pendingFlows: [],
+  testRuns: [],
   loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {

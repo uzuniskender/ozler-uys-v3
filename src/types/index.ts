@@ -458,3 +458,18 @@ export interface PendingFlow {
   durum: FlowDurum
   not: string
 }
+
+// v15.37 — Test Modu
+export type TestRunDurum = 'aktif' | 'tamamlandi' | 'iptal'
+
+export interface TestRun {
+  id: string                  // TEST_YYYYMMDD_NN
+  baslangic: string
+  bitis: string
+  durum: TestRunDurum
+  userId: string
+  userAd: string
+  aciklama: string
+  temizlenenKayitSayisi: Record<string, number>
+  not: string
+}
