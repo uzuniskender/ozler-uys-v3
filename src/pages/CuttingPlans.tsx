@@ -63,12 +63,28 @@ export function CuttingPlans() {
             loadAll()
             toast.success(parcalar || 'Değişiklik yok')
 
-            // v15.35 — Havuz önerisi: bu planların ham malzemelerinde havuzda açık bar VARSA sırayla öner
+            // v15.35 — Havuz önerisi: bu planların ham malzemelerinde havuzda KULLANILABILIR açık bar varsa sırayla öner
+            // v15.35.2 — Kullanılabilirlik ön-filtre: plandaki en küçük parça boyundan büyük/eşit bar yoksa modal gösterme
             const havuzlulanmisPlanIds: string[] = []
             for (const p of planlar) {
               if (p.durum !== 'bekliyor') continue
               const havuzAcik = acikBarlar.filter(a => a.durum === 'acik' && a.hamMalkod === p.hamMalkod)
-              if (havuzAcik.length > 0) havuzlulanmisPlanIds.push(p.id)
+              if (havuzAcik.length === 0) continue
+
+              // Plandaki en küçük parça boyunu bul (bekleyen satırlardaki kesimlerden)
+              let minParcaBoy = Infinity
+              for (const s of (p.satirlar || [])) {
+                if (s.durum && s.durum !== 'bekliyor') continue
+                for (const k of (s.kesimler || []) as any[]) {
+                  const pb = k.parcaBoy || 0
+                  if (pb > 0 && pb < minParcaBoy) minParcaBoy = pb
+                }
+              }
+              if (!isFinite(minParcaBoy)) continue  // parça boyu yok, öneri anlamsız
+
+              // En az bir havuz barı bu min parça boyunu kaldırıyor mu?
+              const uygunBar = havuzAcik.some(a => (a.uzunlukMm || 0) >= minParcaBoy)
+              if (uygunBar) havuzlulanmisPlanIds.push(p.id)
             }
             if (havuzlulanmisPlanIds.length > 0) {
               setHavuzOneriQueue(havuzlulanmisPlanIds)
@@ -235,6 +251,20 @@ export function CuttingPlans() {
         if (!plan) { setHavuzOneriQueue(q => q.slice(1)); return null }
         const havuzBarlari = acikBarlar.filter(a => a.durum === 'acik' && a.hamMalkod === plan.hamMalkod)
         if (!havuzBarlari.length) { setHavuzOneriQueue(q => q.slice(1)); return null }
+        // v15.35.2 — Uygun bar kontrolü (render güvencesi)
+        let minParcaBoy = Infinity
+        for (const s of (plan.satirlar || [])) {
+          if (s.durum && s.durum !== 'bekliyor') continue
+          for (const k of (s.kesimler || []) as any[]) {
+            const pb = k.parcaBoy || 0
+            if (pb > 0 && pb < minParcaBoy) minParcaBoy = pb
+          }
+        }
+        if (isFinite(minParcaBoy) && !havuzBarlari.some(a => (a.uzunlukMm || 0) >= minParcaBoy)) {
+          // Uygun bar yok — sessizce atla
+          setHavuzOneriQueue(q => q.slice(1))
+          return null
+        }
         return (
           <HavuzOneriModal
             plan={plan as any}
