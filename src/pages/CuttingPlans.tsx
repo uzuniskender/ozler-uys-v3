@@ -32,6 +32,7 @@ export function CuttingPlans() {
   const gosterilen = showTamamlanan ? cuttingPlans : bekleyen
 
   // v15.36 — Flow akışında sayfa ilk açıldığında otomatik plan hesapla
+  // v15.36.2 — Plan oluştuktan sonra otomatik MRP'ye ilerle (kullanıcı Kesim'e geri tıklayıp Yeni Sipariş ekleyebilir)
   useEffect(() => {
     if (!activeFlowId || flowAutoDone || !can('cutting_add')) return
     if (!workOrders.length || !recipes.length) return  // Store hazır olana kadar bekle
@@ -46,10 +47,16 @@ export function CuttingPlans() {
         const planlar = kesimPlanOlustur(workOrders, operations as any, recipes, materials, logsSimple, cpMapped as any)
         if (planlar.length) {
           await kesimPlanlariKaydet(planlar as any)
-          toast.success(`${planlar.length} kesim planı otomatik oluşturuldu`)
           await loadAll()
+          // v15.36.2 — Progress bar'ı "Kesim ✓" yap ve MRP'ye yönlendir
+          await advanceFlow(activeFlowId, 'mrp')
+          toast.success(`${planlar.length} kesim planı hazır — MRP'ye yönlendiriliyor`, { duration: 2500 })
+          setTimeout(() => navigate('/mrp?flow=' + activeFlowId), 1800)
         } else {
-          toast.info('Kesim operasyonlu açık İE bulunamadı')
+          toast.info('Kesim operasyonlu açık İE bulunamadı — MRP adımına geç')
+          // Plan oluşmasa bile akışı durdurma: MRP'ye geç
+          await advanceFlow(activeFlowId, 'mrp')
+          setTimeout(() => navigate('/mrp?flow=' + activeFlowId), 1500)
         }
       } catch (e) {
         console.error('[flow] auto plan:', e)
