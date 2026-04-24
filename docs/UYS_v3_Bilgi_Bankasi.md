@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.38** (Parça 5 — Yasak Kontrolleri + Senaryo 6)
+**Sürüm: v15.39** (SR #11 Havuz Satırı Adaptasyonu)
 
-Son Güncelleme: **25 Nisan 2026** (12. oturum — yasak kontrolleri)
+Son Güncelleme: **25 Nisan 2026** (13. oturum — SR #11 v2)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -38,37 +38,44 @@ Son Güncelleme: **25 Nisan 2026** (12. oturum — yasak kontrolleri)
 
 UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında kullanılan React tabanlı üretim yönetim sistemidir.
 
-Şu anki sürüm **v15.38**, 25 Nisan 2026 itibariyle canlıda. 24-25 Nis arası tamamlanan iş grupları:
+Şu anki sürüm **v15.39**, 25 Nisan 2026 itibariyle canlıda. 24-25 Nis arası tamamlanan iş grupları:
 - **v15.34–34.3**: Açık bar hurda yönetimi (modal, alt tab, fire_logs entegrasyon)
 - **v15.35–35.3**: Havuz önerisi (cutting seed + MRP siparisDisi fix)
 - **v15.36 → v15.36.2**: Tam akış wizard (Sipariş → Kesim → MRP → Tedarik + yarım iş takibi)
 - **v15.37**: Test Modu altyapısı — 5 senaryo runner, test_run_id etiketleme, cascade delete
-- **v15.38 (bugünün son işi)**: Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6 negatif test. `validations.ts` modülü, saf fonksiyonlar, admin bypass YOK.
+- **v15.38**: Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6 negatif test. `validations.ts` modülü, saf fonksiyonlar, admin bypass YOK.
+- **v15.39 (bugünün son işi)**: SR #11 Havuz Satırı Adaptasyonu. Sistem Sağlık Raporu'ndaki 11. kontrol artık havuz satırlarını (`satir.havuzBarId` dolu olanlar) ayrı işliyor — bar_acilis aramak yerine `uys_acik_barlar[havuzBarId].durum` kontrolü yapıyor. Üç eksik tipi ayrı raporlanıyor: normal eksik / havuz orphan / havuz açık kalmış.
 
 ---
 
 # 2. BİR SONRAKİ OTURUMA NOTLAR ⭐
 
-## ✅ TAMAMLANAN — Parça 5 (v15.38)
+## ✅ TAMAMLANAN — v15.38 + v15.39
 
-**"İzin Vermemeli" Yasak Kontrolleri — hepsi canlıda:**
+**v15.38: "İzin Vermemeli" Yasak Kontrolleri — canlıda:**
 
 1. ✅ **Stok olmadan üretim engeli** — `canProduceWO()` · admin bypass YOK
-   - `OperatorPanel.save()` içinde çağrılıyor. q+f > maxYapilabilir → hata.
 2. ✅ **Duruş süresi > iş süresi engeli** — `canDurus()`
-   - `OperatorPanel.save()` içinde. Çalışmasız duruş da engellenir.
 3. ✅ **Akış dışı silme/değiştirme engeli** — `canDeleteWO()`
-   - `WorkOrders.topluSil/deleteWO/deleteLog`. Log/stok/fire varsa silinmez.
-   - Log silme password ister.
 
 **Senaryo 6 (Negatif test)** — 10 adım (6 engel + 4 izin kontrolü).
 
+**v15.39: SR #11 Havuz Satırı Adaptasyonu — canlıda:**
+
+Sağlık Raporu'ndaki 11. kontrol güncellendi:
+- Normal satır (havuzBarId yok) → eski mantık (bar_acilis count)
+- Havuz satırı (havuzBarId dolu) → `uys_acik_barlar[havuzBarId].durum` kontrolü
+- 3 eksik tipi ayrı raporlanıyor:
+  - `normalEksikler` — bar_acilis yazılmamış satırlar
+  - `havuzOrphan` — havuzBarId uys_acik_barlar'da yok (bozuk referans)
+  - `havuzAcikKalan` — durum='acik' kalmış (acikBarTuket çağrılmamış)
+- Auto-fix YOK (havuz için yanlış işaret kalıcı veri kaybı riski)
+- Rapor version string: v15.39
+
 ## 🟡 Sıradaki Öncelik 1 — Orta Öncelikli
 
-- **SR #11 havuz adaptasyonu** hala bekliyor (Sistem Sağlık Raporu Bar Model tutarlılık)
 - **Pre-push hook npm PATH** — Git Bash PATH fix'i bekliyor
-- **Stok anomalisi**: Senaryo 5 raporunda `stokSnapshotBitis: -3`. Gerçek canlı stok etkilenmiyor (test izole), ama rapor okunabilirliği için incelenmeli.
-  - NOT: Bu v15.38'de çözülmedi çünkü `_uretimGirisi` test helper'ı UI save() yolundan geçmiyor, direkt DB insert yapıyor. Yasak 1 koruma sadece UI katmanında. Helper bypass **kasıtlı** — yoksa tüm senaryolar kırılırdı.
+- **Stok anomalisi**: Senaryo 5 raporunda `stokSnapshotBitis: -3`. Gerçek canlı stok etkilenmiyor (test izole), rapor okunabilirliği için açıklayıcı not eklenmeli.
 
 ## 🟢 Küçük İşler
 
@@ -235,6 +242,7 @@ UI (OperatorPanel.save, WorkOrders.deleteWO) ve testRunner (Senaryo 6) ortak kul
 | **v15.37** | **Test Modu altyapı + 5 Senaryo Runner** ⭐ |
 | v15.37.1 | Telafi ID fix (woId, .id değil) |
 | **v15.38** | **Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6** ⭐ |
+| **v15.39** | **SR #11 Havuz Satırı Adaptasyonu** (normal + havuzBarId ayrımı) ⭐ |
 
 ---
 
@@ -251,7 +259,8 @@ UI (OperatorPanel.save, WorkOrders.deleteWO) ve testRunner (Senaryo 6) ortak kul
 - ✓ TAMAM — Tam Akış Wizard (v15.36)
 - ✓ TAMAM — Test Modu + 5 Senaryo (v15.37)
 - ✓ TAMAM — **Parça 5: Yasak Kontrolleri** (stok/duruş/silme) + **Senaryo 6** (v15.38)
-- ⏸ SIRA — SR #11 havuz adaptasyonu, pre-push hook fix, stok anomalisi raporu
+- ✓ TAMAM — **SR #11 Havuz Satırı Adaptasyonu** (v15.39)
+- ⏸ SIRA — Pre-push hook fix, stok anomalisi raporu
 
 ---
 
@@ -271,7 +280,7 @@ Veri Yönetimi → 🩺 Rapor Oluştur. 11/11 PASS hedef.
 | 8 | Malzeme kartı tutarlılığı | ✓ | |
 | 9 | Orphan log/fire/stok | ✓ | |
 | 10 | BOM / Reçete eksik | — | |
-| 11 | Bar Model tutarlılığı | — | **v15.35 sonrası havuz satırı adaptasyonu bekliyor** |
+| 11 | Bar Model tutarlılığı | — | **v15.39: havuz satırı adaptasyonu TAMAM** ✅ |
 
 ---
 
@@ -476,7 +485,6 @@ Canlı Supabase'de izole test. Detay §9.
 Temiz.
 
 ## 🟡 Öncelik 1 — ORTA
-- SR #11 havuz adaptasyonu
 - Pre-push hook npm PATH
 - Stok anomalisi (Senaryo 5 -3 gösterimi, rapor okunabilirliği)
 
@@ -588,8 +596,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.38** — Parça 5: Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6 (negatif test).
+**v15.39** — SR #11 Havuz Satırı Adaptasyonu (normal + havuzBarId ayrımı, 3 eksik tipi raporlama).
 
 ---
 
-*Bu belge v15.38 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.39 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*

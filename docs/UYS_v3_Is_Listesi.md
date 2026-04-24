@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.38)
-**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅.
+**Son güncelleme:** 25 Nisan 2026 (v15.39)
+**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅. SR #11 havuz adaptasyonu TAMAM ✅ (v15.39).
 
 ---
 
@@ -92,8 +92,11 @@ Her test bitiminde otomatik JSON rapor indirilir. İçerik:
 
 Test bitince manuel olarak:
 - **Veri Yönetimi → 🩺 Rapor Oluştur** butonuna bas
-- 11 kontrol PASS etmeli
-- SR #11 (Bar Model tutarlılığı) havuz satırı adaptasyonu hala bekliyor
+- **11/11 PASS bekleniyor** (v15.39 ile SR #11 havuz satırı adaptasyonu tamamlandı ✅)
+- SR #11 artık 3 durumu ayrı raporluyor:
+  - Normal satır eksik bar_acilis (eski mantık)
+  - Havuz satırı orphan (havuzBarId uys_acik_barlar'da yok)
+  - Havuz satırı "tüketildi" işaretlenmemiş (durum='acik' kalmış)
 
 ---
 

@@ -45,7 +45,7 @@ export function DataManagement() {
     setRunning(true)
     const kontroller: SaglikKontrolu[] = []
     try {
-      const [woRes, logRes, fireRes, stokRes, tedRes, matsRes, planRes, rezRes, orderRes, recRes, bomRes] = await Promise.all([
+      const [woRes, logRes, fireRes, stokRes, tedRes, matsRes, planRes, rezRes, orderRes, recRes, bomRes, abRes] = await Promise.all([
         fetchAll('uys_work_orders'),
         fetchAll('uys_logs'),
         fetchAll('uys_fire_logs'),
@@ -57,6 +57,7 @@ export function DataManagement() {
         fetchAll('uys_orders'),
         fetchAll('uys_recipes'),
         fetchAll('uys_bom_trees'),
+        fetchAll('uys_acik_barlar'),   // v15.39 — SR #11 havuz satırı adaptasyonu için
       ])
       const wos = woRes.data || []
       const logs = logRes.data || []
@@ -69,6 +70,7 @@ export function DataManagement() {
       const orders = orderRes.data || []
       const recs = recRes.data || []
       const boms = bomRes.data || []
+      const acikBars = abRes.data || []   // v15.39
 
       const aktifOrders = orders.filter((o: any) => o.durum !== 'kapalı' && o.durum !== 'iptal')
       const aktifOrderIds = new Set(aktifOrders.map((o: any) => o.id))
@@ -521,11 +523,20 @@ export function DataManagement() {
         detay: recetesizAktif.length ? { siparisler: recetesizAktif.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
       })
 
-      // 11. Bar Model tutarlılığı (v15.32) — tamamlanan kesim planı satırı için bar_acilis eksik mi?
-      // barModel.ts kuralı: ham (tip='Hammadde' && uzunluk>0) + satır %100 üretilmiş →
-      // hamAdet kadar bar_acilis kaydı (deterministik id: bar-open-{planId}-{satirId}-{i}) yazılmalı.
-      const barEksikler: Array<{ planId: string; satirId: string; hamMalkod: string; beklenen: number; mevcut: number }> = []
+      // 11. Bar Model tutarlılığı (v15.39) — normal satır + havuz satırı kontrolü
+      // Kurallar (barModel.ts ile uyumlu):
+      //   • Normal satır (havuzBarId YOK) → bar_acilis stok hareketi olmalı
+      //     (deterministik id: bar-open-{planId}-{satirId}-{i}, i=0..hamAdet-1)
+      //   • Havuz satırı (havuzBarId DOLU) → bar_acilis YAZILMAZ (v15.35 kuralı).
+      //     Onun yerine uys_acik_barlar[havuzBarId] kaydı 'tuketildi' veya 'hurda'
+      //     durumunda olmalı. 'acik' kalmışsa acikBarTuket çağrılmamış demektir.
+      const normalEksikler: Array<{ planId: string; satirId: string; hamMalkod: string; beklenen: number; mevcut: number }> = []
+      const havuzOrphan: Array<{ planId: string; satirId: string; havuzBarId: string }> = []
+      const havuzAcikKalan: Array<{ planId: string; satirId: string; havuzBarId: string; durum: string }> = []
+
       const barAcilisSet = new Set(stoks.filter((s: any) => s.tip === 'bar_acilis').map((s: any) => s.id))
+      const abMap = new Map<string, any>(acikBars.map((a: any): [string, any] => [a.id, a]))
+
       for (const plan of plans) {
         const hamMalkodRaw = (plan.ham_malkod || '') as string
         if (!hamMalkodRaw) continue
@@ -534,10 +545,9 @@ export function DataManagement() {
         const satirlar = plan.satirlar || []
         for (const satir of satirlar) {
           if (!satir.id) continue
-          const hamAdet = satir.hamAdet || 0
-          if (hamAdet <= 0) continue
           const kesimler = satir.kesimler || []
           if (!kesimler.length) continue
+          // Satır %100 tamamlanmış mı?
           let tamamlandi = true
           for (const k of kesimler) {
             const wo = wos.find((w: any) => w.id === k.woId)
@@ -547,28 +557,55 @@ export function DataManagement() {
             if (prod < (wo.hedef || 0)) { tamamlandi = false; break }
           }
           if (!tamamlandi) continue
+
+          // v15.39 — Havuz satırı ayrımı
+          if (satir.havuzBarId) {
+            const ab = abMap.get(satir.havuzBarId)
+            if (!ab) {
+              havuzOrphan.push({ planId: plan.id, satirId: satir.id, havuzBarId: satir.havuzBarId })
+            } else if (ab.durum === 'acik') {
+              havuzAcikKalan.push({ planId: plan.id, satirId: satir.id, havuzBarId: satir.havuzBarId, durum: ab.durum })
+            }
+            // durum === 'tuketildi' veya 'hurda' → OK (sessiz)
+            continue
+          }
+
+          // Normal satır (eski mantık, bar_acilis count)
+          const hamAdet = satir.hamAdet || 0
+          if (hamAdet <= 0) continue
           let mevcut = 0
           for (let i = 0; i < hamAdet; i++) {
             if (barAcilisSet.has(`bar-open-${plan.id}-${satir.id}-${i}`)) mevcut++
           }
           if (mevcut < hamAdet) {
-            barEksikler.push({ planId: plan.id, satirId: satir.id, hamMalkod: hamMalkodRaw, beklenen: hamAdet, mevcut })
+            normalEksikler.push({ planId: plan.id, satirId: satir.id, hamMalkod: hamMalkodRaw, beklenen: hamAdet, mevcut })
           }
         }
       }
+
+      const toplamEksik = normalEksikler.length + havuzOrphan.length + havuzAcikKalan.length
+      const mesajParcalari: string[] = []
+      if (normalEksikler.length) mesajParcalari.push(`${normalEksikler.length} normal satır bar_acilis eksik`)
+      if (havuzOrphan.length) mesajParcalari.push(`${havuzOrphan.length} havuz satırı orphan (havuzBarId geçersiz)`)
+      if (havuzAcikKalan.length) mesajParcalari.push(`${havuzAcikKalan.length} havuz satırı tüketildi işaretlenmemiş`)
+
       kontroller.push({
         no: 11, ad: 'Bar Model tutarlılığı',
-        durum: barEksikler.length ? 'fail' : 'pass',
-        mesaj: barEksikler.length
-          ? `${barEksikler.length} tamamlanmış satırın bar_acilis kaydı eksik`
-          : `${plans.length} kesim planı taranıp bar_acilis tutarlı`,
-        neden: barEksikler.length
-          ? 'Üretim girişinde barModelSync tetiklenmemiş — OperatorPanel / ProductionEntry akışında bar-model entegrasyonu çalışmamış olabilir.'
+        durum: toplamEksik ? 'fail' : 'pass',
+        mesaj: toplamEksik
+          ? mesajParcalari.join(' · ')
+          : `${plans.length} kesim planı taranıp normal + havuz satırları tutarlı`,
+        neden: toplamEksik
+          ? 'Üretim girişinde barModelSync beklendiği gibi çalışmamış — normal satır için bar_acilis yazılmamış, havuz satırı için acikBarTuket update atılmamış veya havuzBarId geçersiz.'
           : undefined,
-        aksiyon: barEksikler.length
-          ? 'İlgili WO\'lardan birine tekrar üretim girişi yapın — barModelSync idempotent olduğundan eksik bar_acilis kayıtlarını yazar. Ya da kod sürümünün canlıda olduğunu doğrulayın.'
+        aksiyon: toplamEksik
+          ? 'Normal eksikler için ilgili WO\'ya tekrar üretim girişi yapın (barModelSync idempotent). Havuz problemleri için ilgili havuzBarId değerlerini uys_acik_barlar ile elle karşılaştırın — yanlış bar "tuketildi" işaretlemek kalıcı veri kaybıdır, auto-fix yok.'
           : undefined,
-        detay: barEksikler.length ? { eksikler: barEksikler.slice(0, 20) } : undefined,
+        detay: toplamEksik ? {
+          normalEksikler: normalEksikler.slice(0, 10),
+          havuzOrphan: havuzOrphan.slice(0, 10),
+          havuzAcikKalan: havuzAcikKalan.slice(0, 10),
+        } : undefined,
       })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
@@ -582,7 +619,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.33', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.39', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')
