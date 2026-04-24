@@ -10,10 +10,11 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
 import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/lib/tedarikHelpers'
+import { rezerveleriSenkronla } from '@/features/production/mrp'
 import { FlowProgress } from '@/components/FlowProgress'
 
 export function Procurement() {
-  const { tedarikler, tedarikciler, orders, pendingFlows, loadAll } = useStore()
+  const { tedarikler, tedarikciler, orders, workOrders, recipes, stokHareketler, cuttingPlans, materials, pendingFlows, loadAll } = useStore()
   const { can } = useAuth()
   const [searchParams] = useSearchParams()
   const activeFlowId = searchParams.get('flow') || ''
@@ -102,6 +103,18 @@ export function Procurement() {
     } else {
       console.log('[del] tedarikin order_id yok, sipariş güncellenmedi')
     }
+    // v15.36.1 — Rezerve state'i tedarik silince güncelle (MRP'de tutarlı sonuç için)
+    try {
+      const cpMapped = cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      await rezerveleriSenkronla(
+        orders as any, workOrders, recipes, stokHareketler,
+        tedarikler.filter(t => t.id !== id),  // silinen hariç
+        cpMapped, materials
+      )
+    } catch (e) { console.warn('[del] rezerve sync:', e) }
     loadAll(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
   }
 

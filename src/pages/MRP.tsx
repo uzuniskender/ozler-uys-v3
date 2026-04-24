@@ -181,19 +181,21 @@ export function MRP() {
   }
 
   // v15.36 — Flow auto-run: ?flow=xxx ile gelindi, sayfa açılışında otomatik hesapla
+  // v15.36.1 — Flow olmasa da sayfa ilk açılışında otomatik seç+hesapla (boş ekran önlenir)
   useEffect(() => {
-    if (!activeFlowId || flowAutoDone || hesaplandi) return
+    if (flowAutoDone || hesaplandi) return
     if (!orders.length || !workOrders.length) return  // Store hazır olana kadar bekle
-    // Tüm aktif sipariş + bağımsız YM seç
+    // Aktif sipariş + bağımsız YM seç
     const ordIds = aktifOrders.map(o => o.id)
     const ymIds = ymIEs.map(w => w.id)
+    if (!ordIds.length && !ymIds.length) return  // Seçilecek bir şey yoksa dokunma
     setSelectedOrders(new Set(ordIds))
     setSelectedYMs(new Set(ymIds))
     setFlowAutoDone(true)
     // Doğrudan override ile hesapla — state async, closure bug önlenir
     hesapla(ordIds, new Set(ymIds))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFlowId, orders.length, workOrders.length])
+  }, [orders.length, workOrders.length])
 
   const eksikler = sonuc.filter(s => s.net > 0)
   const yeterliler = sonuc.filter(s => s.net <= 0)
