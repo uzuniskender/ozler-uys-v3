@@ -25,3 +25,5 @@ test_cikti*.txt
 test3.txt
 playwright-report/
 test-results/
+
+uys_backup_*.json
