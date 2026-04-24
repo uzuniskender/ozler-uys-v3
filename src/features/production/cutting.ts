@@ -353,10 +353,13 @@ function boykesimOptimum(
 
   // Aynı kesim düzenindeki barları grupla
   // v15.35: havuz barları (havuzBarId taşıyan) asla gruplanmaz — her biri ayrı satır
+  // v15.35.1: 0 kesimli havuz barı satır oluşturmaz — havuzda kalsın (parça sığmadı)
   const gruplu: KesimSatir[] = []
   for (const bar of barlar) {
     // Havuz barı: her biri benzersiz → ayrı satır, hamAdet=1
     if (bar.havuzBarId) {
+      // v15.35.1: hiç parça sığmadıysa havuzda kalsın, plana eklemedik
+      if (bar.kesimler.length === 0) continue
       gruplu.push({
         id: uid(),
         hamAdet: 1,

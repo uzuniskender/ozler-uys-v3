@@ -640,12 +640,43 @@ function HavuzOneriModal({
   const bekleyenSatirlar = plan.satirlar.filter(s => !s.durum || s.durum === 'bekliyor')
   const kilitliSayi = plan.satirlar.length - bekleyenSatirlar.length
 
+  // v15.35.1 — Plandaki parça boyları + İE özeti
+  // Bekleyen satırlardaki kesimleri woId+parcaBoy bazında grupla
+  const parcaOzeti = (() => {
+    const map: Record<string, { ieNo: string; malad: string; parcaBoy: number; adet: number }> = {}
+    for (const s of bekleyenSatirlar) {
+      for (const k of s.kesimler || []) {
+        const key = (k.woId || '') + '|' + (k.parcaBoy || 0)
+        if (!map[key]) {
+          map[key] = { ieNo: k.ieNo || '', malad: k.malad || '', parcaBoy: k.parcaBoy || 0, adet: 0 }
+        }
+        map[key].adet += (k.adet || 0) * (s.hamAdet || 1)
+      }
+    }
+    return Object.values(map).sort((a, b) => b.parcaBoy - a.parcaBoy)
+  })()
+
+  // En küçük parça boyu — havuz bar kullanılabilirlik kriteri
+  const minParcaBoy = parcaOzeti.length > 0
+    ? Math.min(...parcaOzeti.map(p => p.parcaBoy).filter(p => p > 0))
+    : 0
+
+  // Havuz bar kullanılabilir mi (en küçük parçayı sığdırabiliyor mu)
+  function kullanilabilir(bar: import('@/types').AcikBar): boolean {
+    if (!minParcaBoy) return true  // plan boşsa hepsi potansiyel
+    return bar.uzunlukMm >= minParcaBoy
+  }
+
+  const kullanilabilirSayi = sortedBarlar.filter(kullanilabilir).length
+
   function toggle(id: string) {
     const y = new Set(secilen)
     if (y.has(id)) y.delete(id); else y.add(id)
     setSecilen(y)
   }
-  function tumunuSec() { setSecilen(new Set(sortedBarlar.map(b => b.id))) }
+  function tumKullanilabilirSec() {
+    setSecilen(new Set(sortedBarlar.filter(kullanilabilir).map(b => b.id)))
+  }
   function temizle() { setSecilen(new Set()) }
 
   async function uygula() {
@@ -675,9 +706,15 @@ function HavuzOneriModal({
 
       if (error) { console.error('[havuz] plan update:', error); toast.error('Plan güncellenemedi: ' + error.message); return }
 
-      const havuzSayisi = yeniSatirlar.filter(s => s.havuzBarId).length
+      // v15.35.1 — Kullanılan / havuzda kalan havuz bar sayısı
+      const havuzKullanilan = yeniSatirlar.filter(s => s.havuzBarId).length
+      const havuzAtlanan = secilenBarlar.length - havuzKullanilan
       const yeniBarSayisi = yeniSatirlar.filter(s => !s.havuzBarId).reduce((a, s) => a + (s.hamAdet || 0), 0)
-      toast.success(`Plan güncellendi: ${havuzSayisi} havuz barı + ${yeniBarSayisi} yeni bar`)
+      if (havuzAtlanan > 0) {
+        toast.success(`Plan güncellendi: ${havuzKullanilan} havuz barı kullanıldı (${havuzAtlanan} bar parça sığmadığı için havuzda kaldı) + ${yeniBarSayisi} yeni bar`, { duration: 6000 })
+      } else {
+        toast.success(`Plan güncellendi: ${havuzKullanilan} havuz barı + ${yeniBarSayisi} yeni bar`)
+      }
       onSaved()
     } catch (e: any) {
       console.error('[havuz] exception:', e)
@@ -704,13 +741,39 @@ function HavuzOneriModal({
           </div>
         </div>
 
-        {/* Info */}
+        {/* Info + Parça özeti */}
         <div className="px-6 py-3 bg-bg-2/50 border-b border-border text-[11px] text-zinc-400 leading-relaxed">
           Havuzda bu malzemeden <span className="text-zinc-200 font-semibold">{havuzBarlari.length}</span> açık bar var.
-          Seçersen plan yeniden hesaplanır ve seçilen havuz barları kullanılarak açılacak yeni bar sayısı azalır.
-          <br />
-          <span className="text-zinc-500">İstemezsen "Havuz Kullanma" de, plan mevcut haliyle kalır.</span>
+          Seçersen plan yeniden hesaplanır; havuz barlarına sığan parçalar önce onlardan kesilir.
+          {minParcaBoy > 0 && (
+            <span className="block mt-1">
+              Plandaki en küçük parça: <span className="text-zinc-200 font-mono">{minParcaBoy} mm</span>.
+              {' '}
+              <span className="text-zinc-300">{kullanilabilirSayi}</span>/{sortedBarlar.length} havuz barı yeterli boyutta.
+            </span>
+          )}
         </div>
+
+        {/* Parça listesi — bu plan ne kesiyor */}
+        {parcaOzeti.length > 0 && (
+          <div className="px-6 py-2 border-b border-border bg-bg-3/20">
+            <div className="text-[10px] text-zinc-500 mb-1">Bu plan şu İE'lerin parçalarını kesiyor:</div>
+            <div className="flex flex-wrap gap-1.5">
+              {parcaOzeti.slice(0, 6).map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-bg-2 border border-border/50 rounded text-[10px]">
+                  <span className="font-mono text-accent">{p.ieNo}</span>
+                  <span className="text-zinc-500">·</span>
+                  <span className="text-zinc-300 font-mono">{p.parcaBoy}mm</span>
+                  <span className="text-zinc-500">×</span>
+                  <span className="text-zinc-400">{p.adet}</span>
+                </span>
+              ))}
+              {parcaOzeti.length > 6 && (
+                <span className="text-[10px] text-zinc-600 self-center">+{parcaOzeti.length - 6} daha</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Kontrol */}
         <div className="px-6 py-2 border-b border-border flex items-center justify-between text-[11px]">
@@ -719,7 +782,9 @@ function HavuzOneriModal({
             {secilenBarlar.length > 0 && <> · <span className="text-zinc-300 font-mono">{Math.round(secilenMm)}</span> mm</>}
           </div>
           <div className="flex gap-3">
-            <button onClick={tumunuSec} className="text-accent hover:underline">Tümü</button>
+            <button onClick={tumKullanilabilirSec} className="text-accent hover:underline">
+              Kullanılabilirleri Seç
+            </button>
             <span className="text-zinc-600">·</span>
             <button onClick={temizle} className="text-zinc-400 hover:underline">Temizle</button>
           </div>
@@ -732,6 +797,7 @@ function HavuzOneriModal({
               <tr className="border-b border-border text-zinc-500">
                 <th className="w-10 px-3 py-2"></th>
                 <th className="text-right px-3 py-2">Uzunluk</th>
+                <th className="text-left px-3 py-2">Durum</th>
                 <th className="text-left px-3 py-2">Oluşma</th>
                 <th className="text-left px-3 py-2">Kaynak</th>
               </tr>
@@ -739,12 +805,22 @@ function HavuzOneriModal({
             <tbody>
               {sortedBarlar.map(b => {
                 const secili = secilen.has(b.id)
+                const uygun = kullanilabilir(b)
                 return (
-                  <tr key={b.id} className={`border-b border-border/30 ${secili ? 'bg-accent/5' : 'hover:bg-bg-3/30'}`}>
+                  <tr key={b.id} className={`border-b border-border/30 ${secili ? 'bg-accent/5' : 'hover:bg-bg-3/30'} ${!uygun ? 'opacity-60' : ''}`}>
                     <td className="px-3 py-1.5 text-center">
                       <input type="checkbox" checked={secili} onChange={() => toggle(b.id)} />
                     </td>
                     <td className="text-right px-3 py-1.5 font-mono text-zinc-200">{Math.round(b.uzunlukMm)} mm</td>
+                    <td className="px-3 py-1.5">
+                      {uygun ? (
+                        <span className="text-green text-[10px]">✓ yeterli</span>
+                      ) : (
+                        <span className="text-amber text-[10px]" title={`En küçük parça ${minParcaBoy}mm — bu bara sığmaz`}>
+                          ⚠ küçük
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 text-zinc-400">{b.olusmaTarihi || '-'}</td>
                     <td className="px-3 py-1.5 text-zinc-500 font-mono text-[10px]">
                       {b.kaynakPlanId ? '…' + b.kaynakPlanId.slice(-6) : '-'}
