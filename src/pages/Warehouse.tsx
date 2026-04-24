@@ -310,7 +310,7 @@ export function Warehouse() {
           hamMalkod={detayHam}
           barlar={acikBarlar.filter(b => b.hamMalkod === detayHam)}
           canHurda={can('acikbar_hurda')}
-          currentUserId={user?.dbId || ''}
+          currentUserId={user?.dbId || user?.email || user?.username || ''}
           currentUserAd={user?.username || ''}
           onClose={() => setDetayHam(null)}
           onSaved={() => { loadAll() }}
@@ -447,7 +447,7 @@ function AcikBarHurdaModal({
 
   async function hurdayaGonder() {
     if (!secilenBarlar.length) { toast.error('Seçim yok'); return }
-    if (!currentUserId) { toast.error('Kullanıcı oturumu tespit edilemedi'); return }
+    if (!currentUserAd) { toast.error('Kullanıcı adı tespit edilemedi. Yeniden giriş yap.'); return }
     const onay = await showConfirm(
       `${secilenBarlar.length} açık bar (${Math.round(toplamMm)} mm) hurdaya gönderilecek. Onaylıyor musun?`
     )
