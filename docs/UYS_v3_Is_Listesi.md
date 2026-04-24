@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.39)
-**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅. SR #11 havuz adaptasyonu TAMAM ✅ (v15.39).
+**Son güncelleme:** 25 Nisan 2026 (v15.40)
+**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅. SR #11 havuz adaptasyonu TAMAM ✅ (v15.39, 11/11 PASS). Pre-push hook TAMAM ✅ (v15.40).
 
 ---
 

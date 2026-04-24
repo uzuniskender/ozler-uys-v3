@@ -1,0 +1,61 @@
+#!/bin/bash
+# UYS v3 pre-push hook
+# Installed via: git config core.hooksPath scripts/git-hooks
+#
+# Runs: audit-schema + audit-columns + tsc --noEmit
+# Bypass (only if intentional): git push --no-verify
+
+set -e
+
+# --- PATH fix for Git Bash on Windows ---
+# Git Bash doesn't inherit PowerShell's PATH, so Node.js needs explicit append.
+export PATH="$PATH:/c/Program Files/nodejs:/c/Program Files (x86)/nodejs"
+
+# npm global install paths for both known dev machines
+for user_dir in "/c/Users/Iskender" "/c/Users/iskender.uzun"; do
+  if [ -d "$user_dir/AppData/Roaming/npm" ]; then
+    export PATH="$PATH:$user_dir/AppData/Roaming/npm"
+  fi
+done
+
+# --- Sanity check: node available ---
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-push] ERROR: node not found in PATH."
+  echo "[pre-push] PATH=$PATH"
+  echo "[pre-push] Add your Node.js install dir to the hook's PATH export."
+  echo "[pre-push] Bypass (if urgent): git push --no-verify"
+  exit 1
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# --- 1. Schema audit ---
+echo "[pre-push] (1/3) audit-schema..."
+if ! node scripts/audit-schema.cjs; then
+  echo "[pre-push] FAIL: schema audit."
+  echo "[pre-push] Fix the schema mismatch or commit the missing sql/*.sql file."
+  echo "[pre-push] Bypass (if intentional): git push --no-verify"
+  exit 1
+fi
+
+# --- 2. Column audit ---
+echo "[pre-push] (2/3) audit-columns..."
+if ! node scripts/audit-columns.cjs; then
+  echo "[pre-push] FAIL: column audit."
+  echo "[pre-push] Code inserts/updates a column missing from the DB schema."
+  echo "[pre-push] Bypass (if intentional): git push --no-verify"
+  exit 1
+fi
+
+# --- 3. TypeScript type check ---
+echo "[pre-push] (3/3) tsc --noEmit..."
+if ! npx --no-install tsc --noEmit; then
+  echo "[pre-push] FAIL: TypeScript errors."
+  echo "[pre-push] Fix type errors before pushing."
+  echo "[pre-push] Bypass (if intentional): git push --no-verify"
+  exit 1
+fi
+
+echo "[pre-push] OK - all 3 checks passed."
+exit 0

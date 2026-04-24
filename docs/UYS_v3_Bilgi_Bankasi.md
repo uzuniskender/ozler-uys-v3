@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.39** (SR #11 Havuz Satırı Adaptasyonu)
+**Sürüm: v15.40** (Pre-push Hook — core.hooksPath ile versiyonlu)
 
-Son Güncelleme: **25 Nisan 2026** (13. oturum — SR #11 v2)
+Son Güncelleme: **25 Nisan 2026** (14. oturum — pre-push hook fix)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -44,38 +44,24 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.36 → v15.36.2**: Tam akış wizard (Sipariş → Kesim → MRP → Tedarik + yarım iş takibi)
 - **v15.37**: Test Modu altyapısı — 5 senaryo runner, test_run_id etiketleme, cascade delete
 - **v15.38**: Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6 negatif test. `validations.ts` modülü, saf fonksiyonlar, admin bypass YOK.
-- **v15.39 (bugünün son işi)**: SR #11 Havuz Satırı Adaptasyonu. Sistem Sağlık Raporu'ndaki 11. kontrol artık havuz satırlarını (`satir.havuzBarId` dolu olanlar) ayrı işliyor — bar_acilis aramak yerine `uys_acik_barlar[havuzBarId].durum` kontrolü yapıyor. Üç eksik tipi ayrı raporlanıyor: normal eksik / havuz orphan / havuz açık kalmış.
+- **v15.39**: SR #11 Havuz Satırı Adaptasyonu. Sistem Sağlık Raporu'ndaki 11. kontrol artık havuz satırlarını (`satir.havuzBarId` dolu olanlar) ayrı işliyor — bar_acilis aramak yerine `uys_acik_barlar[havuzBarId].durum` kontrolü yapıyor. Üç eksik tipi ayrı raporlanıyor: normal eksik / havuz orphan / havuz açık kalmış. **Canlıda doğrulandı: 11/11 PASS.**
+- **v15.40 (bugünün son işi)**: Pre-push hook fix. `scripts/git-hooks/pre-push` repoda versionable — `git config core.hooksPath scripts/git-hooks` ile aktive ediliyor. Hook içinde Git Bash PATH fix (Node.js standart konumu + npm global), 3 adım: audit-schema + audit-columns + tsc --noEmit. İki makine için de çalışır (Iskender + iskender.uzun paths).
 
 ---
 
 # 2. BİR SONRAKİ OTURUMA NOTLAR ⭐
 
-## ✅ TAMAMLANAN — v15.38 + v15.39
+## ✅ TAMAMLANAN — v15.38 + v15.39 + v15.40
 
-**v15.38: "İzin Vermemeli" Yasak Kontrolleri — canlıda:**
+**v15.38: Yasak Kontrolleri** — stok/duruş/silme engeli, Senaryo 6 (10/10 OK).
 
-1. ✅ **Stok olmadan üretim engeli** — `canProduceWO()` · admin bypass YOK
-2. ✅ **Duruş süresi > iş süresi engeli** — `canDurus()`
-3. ✅ **Akış dışı silme/değiştirme engeli** — `canDeleteWO()`
+**v15.39: SR #11 Havuz Adaptasyonu** — normal + havuz ayrımı, 3 eksik tipi. **11/11 PASS doğrulandı** (timestamp 2026-04-24T21:15).
 
-**Senaryo 6 (Negatif test)** — 10 adım (6 engel + 4 izin kontrolü).
+**v15.40: Pre-push Hook** — `scripts/git-hooks/pre-push` repoda versionable. `core.hooksPath` ile aktive. 3 check: audit-schema, audit-columns, tsc --noEmit. PATH fix: Git Bash `/c/Program Files/nodejs` + npm global (iki makine paths).
 
-**v15.39: SR #11 Havuz Satırı Adaptasyonu — canlıda:**
+## 🟡 Sıradaki Öncelik
 
-Sağlık Raporu'ndaki 11. kontrol güncellendi:
-- Normal satır (havuzBarId yok) → eski mantık (bar_acilis count)
-- Havuz satırı (havuzBarId dolu) → `uys_acik_barlar[havuzBarId].durum` kontrolü
-- 3 eksik tipi ayrı raporlanıyor:
-  - `normalEksikler` — bar_acilis yazılmamış satırlar
-  - `havuzOrphan` — havuzBarId uys_acik_barlar'da yok (bozuk referans)
-  - `havuzAcikKalan` — durum='acik' kalmış (acikBarTuket çağrılmamış)
-- Auto-fix YOK (havuz için yanlış işaret kalıcı veri kaybı riski)
-- Rapor version string: v15.39
-
-## 🟡 Sıradaki Öncelik 1 — Orta Öncelikli
-
-- **Pre-push hook npm PATH** — Git Bash PATH fix'i bekliyor
-- **Stok anomalisi**: Senaryo 5 raporunda `stokSnapshotBitis: -3`. Gerçek canlı stok etkilenmiyor (test izole), rapor okunabilirliği için açıklayıcı not eklenmeli.
+- **Stok anomalisi raporu** (Senaryo 5 -3 gösterimi). Gerçek veri sorunu değil, rapor okunabilirliği için. Tavsiye: Senaryo 5 raporuna açıklayıcı not eklemek (`_uretimGirisi` test bypass — UI katmanında koruma mevcut).
 
 ## 🟢 Küçük İşler
 
@@ -243,6 +229,7 @@ UI (OperatorPanel.save, WorkOrders.deleteWO) ve testRunner (Senaryo 6) ortak kul
 | v15.37.1 | Telafi ID fix (woId, .id değil) |
 | **v15.38** | **Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6** ⭐ |
 | **v15.39** | **SR #11 Havuz Satırı Adaptasyonu** (normal + havuzBarId ayrımı) ⭐ |
+| **v15.40** | **Pre-push Hook** (core.hooksPath ile versionable) ⭐ |
 
 ---
 
@@ -259,8 +246,9 @@ UI (OperatorPanel.save, WorkOrders.deleteWO) ve testRunner (Senaryo 6) ortak kul
 - ✓ TAMAM — Tam Akış Wizard (v15.36)
 - ✓ TAMAM — Test Modu + 5 Senaryo (v15.37)
 - ✓ TAMAM — **Parça 5: Yasak Kontrolleri** (stok/duruş/silme) + **Senaryo 6** (v15.38)
-- ✓ TAMAM — **SR #11 Havuz Satırı Adaptasyonu** (v15.39)
-- ⏸ SIRA — Pre-push hook fix, stok anomalisi raporu
+- ✓ TAMAM — **SR #11 Havuz Satırı Adaptasyonu** (v15.39) — 11/11 PASS doğrulandı
+- ✓ TAMAM — **Pre-push hook** (v15.40) — core.hooksPath ile versiyonlu
+- ⏸ SIRA — Stok anomalisi raporu (Senaryo 5 -3 gösterim notu)
 
 ---
 
@@ -468,8 +456,12 @@ patch/
 ## Prebuild hook
 `npm run build` öncesi audit otomatik.
 
-## pre-push hook (v15.35, BOZUK)
-`.git/hooks/pre-push` — push öncesi `npm run audit` + `tsc --noEmit`. Şu an Git Bash npm PATH bulamıyor. Fix bekliyor.
+## pre-push hook (v15.40, ÇALIŞIYOR ✅)
+**Kaynak:** `scripts/git-hooks/pre-push` (repoda versionable).
+**Aktivasyon:** `git config core.hooksPath scripts/git-hooks` — makine başına bir kez, ya manuel ya `scripts/install-hooks.ps1` ile.
+**Kapsam:** 3 check — `node scripts/audit-schema.cjs`, `node scripts/audit-columns.cjs`, `npx --no-install tsc --noEmit`.
+**PATH fix:** Git Bash için `/c/Program Files/nodejs` + npm global dizinleri. İki makine (Iskender + iskender.uzun) için de çalışır.
+**Bypass:** `git push --no-verify` — her zaman mümkün, acil durumlar için.
 
 ## Playwright E2E (v15.15)
 Test Supabase **cowgxwmhlogmswatbltz** (Frankfurt). 9/9 test yeşil.
@@ -485,7 +477,6 @@ Canlı Supabase'de izole test. Detay §9.
 Temiz.
 
 ## 🟡 Öncelik 1 — ORTA
-- Pre-push hook npm PATH
 - Stok anomalisi (Senaryo 5 -3 gösterimi, rapor okunabilirliği)
 
 ## 🟢 Küçük iyileştirmeler
@@ -557,6 +548,8 @@ ozler-uys-v3/
 │   ├── 20260424_v15_36_pending_flows.sql
 │   └── 20260424_v15_37_test_mode.sql   ⭐ YENİ
 ├── scripts/audit-schema.cjs, audit-columns.cjs
+├── scripts/git-hooks/pre-push              ⭐ v15.40 YENİ (versioned hook)
+├── scripts/install-hooks.ps1               ⭐ v15.40 YENİ
 ├── src/
 │   ├── features/production/
 │   │   ├── mrp.ts                   # v15.35+35.3
@@ -596,8 +589,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.39** — SR #11 Havuz Satırı Adaptasyonu (normal + havuzBarId ayrımı, 3 eksik tipi raporlama).
+**v15.40** — Pre-push Hook (core.hooksPath ile versionable, audit + tsc).
 
 ---
 
-*Bu belge v15.39 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.40 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
