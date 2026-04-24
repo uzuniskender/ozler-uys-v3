@@ -146,7 +146,7 @@ export function stepToRoute(step: FlowStep): string {
     case 'siparis': return '#/orders'
     case 'kesim':   return '#/cutting'
     case 'mrp':     return '#/mrp'
-    case 'tedarik': return '#/procurement'
+    case 'tedarik': return '#/mrp'     // v15.36 FIX: tedarik oluşturma MRP sayfasında — /procurement'ta değil
     default:        return '#/'
   }
 }

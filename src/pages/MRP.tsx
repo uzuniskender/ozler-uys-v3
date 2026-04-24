@@ -194,10 +194,15 @@ export function MRP() {
   const eksikler = sonuc.filter(s => s.net > 0)
   const yeterliler = sonuc.filter(s => s.net <= 0)
 
-  async function topluTedarikOlustur() {
-    const secili = sonuc.filter(s => selectedRows.has(s.malkod) && s.net > 0)
+  async function topluTedarikOlustur(overrideMalkods?: string[]) {
+    // v15.36: overrideMalkods ile "Tümünü Tedarik Et" butonu (state closure bug'ı önler)
+    const secili = overrideMalkods
+      ? sonuc.filter(s => overrideMalkods.includes(s.malkod) && s.net > 0)
+      : sonuc.filter(s => selectedRows.has(s.malkod) && s.net > 0)
     if (!secili.length) { toast.error('Tedarik oluşturulacak malzeme seçin'); return }
-    if (!await showConfirm(`${secili.length} malzeme için tedarik oluşturulacak. Devam?`)) return
+    if (!overrideMalkods) {
+      if (!await showConfirm(`${secili.length} malzeme için tedarik oluşturulacak. Devam?`)) return
+    }
     let count = 0
     for (const s of secili) {
       // Aynı malkod için zaten açık tedarik var mı?
@@ -217,12 +222,11 @@ export function MRP() {
     loadAll(); setSelectedRows(new Set())
     toast.success(count + ' tedarik oluşturuldu')
 
-    // v15.36 — Flow sonlandır (tedarik oluşturuldu)
+    // v15.36 — Flow sonlandır (tedarik oluşturuldu) + Procurement sayfasına git
     if (activeFlowId) {
       await completeFlow(activeFlowId)
-      toast.success('Akış tamamlandı', { duration: 3000 })
-      // Ana sayfaya dön
-      setTimeout(() => { navigate('/') }, 1500)
+      toast.success('Akış tamamlandı — tedarik listesine yönlendiriliyor', { duration: 3000 })
+      setTimeout(() => { navigate('/procurement') }, 1200)
     }
   }
 
@@ -246,15 +250,29 @@ export function MRP() {
     <div>
       {/* v15.36 — Flow banner */}
       {activeFlowId && (
-        <div className="mb-4 p-3 bg-amber/10 border border-amber/30 rounded-lg flex items-center justify-between">
+        <div className="mb-4 p-3 bg-amber/10 border border-amber/30 rounded-lg flex items-center justify-between gap-3">
           <div className="text-xs">
             <span className="font-semibold text-amber">🔄 Akış devam ediyor — MRP</span>
             <span className="ml-2 text-zinc-400">
               {hesaplandi
-                ? `${eksikler.length} eksik malzeme — tedarik oluşturunca akış tamamlanır.`
+                ? (eksikler.length > 0
+                    ? `${eksikler.length} eksik malzeme var. Aşağıdan seç ve "Toplu Tedarik" veya sağdaki "Tümünü Tedarik Et" ile akışı bitir.`
+                    : 'Eksik yok — akış otomatik tamamlandı.')
                 : 'Otomatik hesaplanıyor...'}
             </span>
           </div>
+          {hesaplandi && eksikler.length > 0 && (
+            <button
+              onClick={async () => {
+                if (!await showConfirm(`Tüm ${eksikler.length} eksik malzeme için tedarik oluşturulsun mu?`)) return
+                // v15.36: override ile direkt çağır (state closure bug önlenir)
+                await topluTedarikOlustur(eksikler.map(e => e.malkod))
+              }}
+              className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap"
+            >
+              ⚡ Tümünü Tedarik Et <ArrowRight size={12} />
+            </button>
+          )}
         </div>
       )}
 
