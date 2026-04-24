@@ -90,7 +90,7 @@ export function CuttingPlans() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => navigate('/siparisler?flow=' + activeFlowId)}
+              onClick={() => navigate('/orders?flow=' + activeFlowId)}
               className="px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 rounded text-xs hover:bg-bg-3"
             >
               + Yeni Sipariş Ekle

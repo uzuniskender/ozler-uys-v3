@@ -127,14 +127,20 @@ export function MRP() {
     }
   }
 
-  async function hesapla() {
-    if (!selectedOrders.size && !selectedYMs.size) { toast.error('Sipariş veya YM İE seçin'); return }
-    const ordIds = [...selectedOrders]
+  async function hesapla(overrideOrderIds?: string[], overrideYMs?: Set<string>) {
+    // v15.36: override parametreleri auto-run için (state async olduğundan state'e güvenilemez)
+    const useOverride = overrideOrderIds !== undefined
+    const ordIds = useOverride ? overrideOrderIds : [...selectedOrders]
+    const ymSet = useOverride
+      ? (overrideYMs && overrideYMs.size > 0 ? overrideYMs : null)
+      : (selectedYMs.size > 0 ? selectedYMs : null)
+
+    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş veya YM İE seçin'); return }
+
     const cpMapped = cuttingPlans.map((p: any) => ({
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
-    const ymSet = selectedYMs.size > 0 ? selectedYMs : null
     const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve)
     setSonuc(result)
     setHesaplandi(true)
@@ -148,9 +154,9 @@ export function MRP() {
       await rezerveYaz(oid, tekResult)
     }
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle
-    if (selectedYMs.size > 0) {
+    if (ymSet && ymSet.size > 0) {
       const prev = new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[])
-      selectedYMs.forEach(id => prev.add(id))
+      ymSet.forEach(id => prev.add(id))
       localStorage.setItem('uys_mrp_done_ym', JSON.stringify([...prev]))
     }
     if (ordIds.length) loadAll()
@@ -180,8 +186,8 @@ export function MRP() {
     setSelectedOrders(new Set(ordIds))
     setSelectedYMs(new Set(ymIds))
     setFlowAutoDone(true)
-    // Seçimleri state'e yazdıktan sonra bir frame bekleyip hesapla
-    setTimeout(() => { hesapla() }, 150)
+    // Doğrudan override ile hesapla — state async, closure bug önlenir
+    hesapla(ordIds, new Set(ymIds))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFlowId, orders.length, workOrders.length])
 

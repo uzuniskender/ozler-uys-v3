@@ -143,10 +143,10 @@ export async function cancelFlow(flowId: string, not?: string): Promise<boolean>
 /** Step → route map (Topbar badge "devam et"e basınca nereye gidilecek) */
 export function stepToRoute(step: FlowStep): string {
   switch (step) {
-    case 'siparis': return '#/siparisler'
-    case 'kesim':   return '#/kesim-planlari'
+    case 'siparis': return '#/orders'
+    case 'kesim':   return '#/cutting'
     case 'mrp':     return '#/mrp'
-    case 'tedarik': return '#/tedarik'
+    case 'tedarik': return '#/procurement'
     default:        return '#/'
   }
 }

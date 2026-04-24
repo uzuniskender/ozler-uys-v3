@@ -704,7 +704,7 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
       if (flow) {
         toast.success('İE oluşturuldu — kesim planına yönlendiriliyor')
         onSaved()
-        navigate('/kesim-planlari?flow=' + flow.id)
+        navigate('/cutting?flow=' + flow.id)
         return
       }
     }

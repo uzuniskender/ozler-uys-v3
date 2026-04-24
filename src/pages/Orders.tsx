@@ -13,7 +13,7 @@ import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, 
 import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
-import { getActiveFlow, startFlow, advanceFlow } from '@/lib/pendingFlow'
+import { startFlow, advanceFlow } from '@/lib/pendingFlow'
 
 // Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar.
 // Sipariş ekleme/revize/silme/kapatma, toplu MRP, tedarik değişimi sonrası çağrılmalı.
@@ -426,6 +426,8 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 
     const { recipes: fullRecipes, workOrders: allWos, cuttingPlans: allPlans } = useStore.getState()
 
+    let createdOrderId = ''  // v15.36: yeni sipariş için DB id — flow state'ine yazılacak
+
     if (initial?.id) {
       // Güncelleme — eski İE'leri sil, her kalem için yeniden üret
       // ÜYSREV2 (v15.29): Önce eski İE'lerin woId'lerini yakala — kesim planı temizliği için.
@@ -446,6 +448,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       toast.info(woTotal + ' iş emri güncellendi' + temizlikNotu)
     } else {
       const newId = uid()
+      createdOrderId = newId
       await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
       let woTotal = 0
       for (const k of kalemler) {
@@ -462,19 +465,13 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     if (!initial && user) {
       const userId = user.dbId || user.email || user.username || ''
       const userAd = user.username || ''
-      const orderIdToUse = (() => {
-        // save() içinde yeni sipariş için newId aynen kullanıldı ama dışarı çıkmadı.
-        // Burada DB'den en son oluşan siparişi bul (siparisNo + userId bazlı).
-        // Pratikte: sipariş no ile lookup — loadAll tetiklenince doğru görünür.
-        return ''  // flow başlatmaya siparisNo yeter şimdilik
-      })()
 
       if (activeFlowId) {
         // Zaten bir flow vardı (CuttingPlans'tan "yeni sipariş ekle" ile geldik) → aynı flow kalır
         await advanceFlow(activeFlowId, 'kesim', { siparisNo: siparisNo.trim() })
         toast.success('Sipariş eklendi — kesim planına dönülüyor')
         onSaved()
-        navigate('/kesim-planlari?flow=' + activeFlowId)
+        navigate('/cutting?flow=' + activeFlowId)
         return
       } else {
         // Yeni flow başlat
@@ -482,12 +479,12 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
           flowType: 'siparis',
           initialStep: 'kesim',
           userId, userAd,
-          stateData: { siparisNo: siparisNo.trim(), orderId: orderIdToUse, baslik: `Sipariş ${siparisNo.trim()}` },
+          stateData: { siparisNo: siparisNo.trim(), orderId: createdOrderId, baslik: `Sipariş ${siparisNo.trim()}` },
         })
         if (flow) {
           toast.success('Sipariş oluşturuldu — kesim planına yönlendiriliyor')
           onSaved()
-          navigate('/kesim-planlari?flow=' + flow.id)
+          navigate('/cutting?flow=' + flow.id)
           return
         }
       }
