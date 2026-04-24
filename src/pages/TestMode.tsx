@@ -13,7 +13,7 @@ import {
   startTestRun, finishTestRun, cancelTestRun,
   getActiveTestRunId, cascadeDeleteTestRun,
 } from '@/lib/testRun'
-import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
+import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
 
 export function TestMode() {
   const { testRuns, recipes, loadAll } = useStore()
@@ -134,17 +134,23 @@ export function TestMode() {
     }
   }
 
-  // v15.37 Part 3 — Senaryo çalıştırıcı
-  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5) {
+  // v15.37 Part 3 — Senaryo çalıştırıcı (v15.38: Senaryo 6 dahil)
+  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5 | 6) {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
-    if (!recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
+    if (num !== 6 && !recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
     setCalisan(`Senaryo ${num}`)
     setCanliLog([])
     setSonRapor(null)
-    const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : num === 4 ? senaryo4 : senaryo5
+    const fn =
+      num === 1 ? senaryo1 :
+      num === 2 ? senaryo2 :
+      num === 3 ? senaryo3 :
+      num === 4 ? senaryo4 :
+      num === 5 ? senaryo5 :
+      senaryo6
     try {
       const rapor = await fn({
-        recipeKod: recipeKod.trim(),
+        recipeKod: recipeKod.trim() || 'N/A',  // Senaryo 6 reçeteye dokunmaz
         adet,
         onLog: (adim) => setCanliLog(prev => [...prev, adim]),
       })
@@ -171,7 +177,7 @@ export function TestMode() {
     setLoading(true)
     try {
       let toplam = 0
-      for (const suffix of ['s1', 's2', 's3', 's4', 's5']) {
+      for (const suffix of ['s1', 's2', 's3', 's4', 's5', 's6']) {
         const silinen = await cascadeDeleteTestRun(`${aktifTestId}_${suffix}`)
         toplam += Object.values(silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
       }
@@ -182,21 +188,27 @@ export function TestMode() {
     }
   }
 
-  // v15.37 Part 3 v2 — 4 senaryoyu ardışık çalıştır, her biri arasında otomatik temizlik
+  // v15.37 Part 3 v2 / v15.38 — 6 senaryoyu ardışık çalıştır, her biri arasında otomatik temizlik
   async function tumSenaryolarCalistir() {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
-    if (!recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
+    if (!recipeKod.trim()) { toast.error('Reçete kodu gir (Senaryo 1-5 için gerekli)'); return }
 
     const tumRaporlar: SenaryoRapor[] = []
     setCanliLog([])
     setSonRapor(null)
 
-    for (const num of [1, 2, 3, 4, 5] as const) {
+    for (const num of [1, 2, 3, 4, 5, 6] as const) {
       setCalisan(`Senaryo ${num}`)
-      const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : num === 4 ? senaryo4 : senaryo5
+      const fn =
+        num === 1 ? senaryo1 :
+        num === 2 ? senaryo2 :
+        num === 3 ? senaryo3 :
+        num === 4 ? senaryo4 :
+        num === 5 ? senaryo5 :
+        senaryo6
       try {
         const rapor = await fn({
-          recipeKod: recipeKod.trim(),
+          recipeKod: recipeKod.trim() || 'N/A',
           adet,
           onLog: (adim) => setCanliLog(prev => [...prev, { ...adim, adim: `[S${num}] ${adim.adim}` }]),
         })
@@ -206,7 +218,7 @@ export function TestMode() {
         // v15.37 Part 3 v3: Her senaryodan sonra sub-run temizlik (son dahil)
         await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
         await loadAll()
-        if (num < 5) await new Promise(r => setTimeout(r, 500))
+        if (num < 6) await new Promise(r => setTimeout(r, 500))
       } catch (e: any) {
         toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)
         console.error('[senaryo]', e)
@@ -292,20 +304,25 @@ export function TestMode() {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4, 5].map(n => (
+            {[1, 2, 3, 4, 5, 6].map(n => (
               <button
                 key={n}
-                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5)}
+                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5 | 6)}
                 disabled={!!calisan || loading}
-                className="px-3 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent rounded text-[11px] font-semibold text-left"
+                className={
+                  n === 6
+                    ? "px-3 py-2 bg-red/10 hover:bg-red/20 border border-red/30 text-red rounded text-[11px] font-semibold text-left"
+                    : "px-3 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent rounded text-[11px] font-semibold text-left"
+                }
               >
-                {calisan === `Senaryo ${n}` ? '⏳ ' : '🤖 '}
+                {calisan === `Senaryo ${n}` ? '⏳ ' : n === 6 ? '⛔ ' : '🤖 '}
                 Senaryo {n}: {
                   n === 1 ? 'Sipariş → tam akış' :
                   n === 2 ? 'Manuel İE → tam akış' :
                   n === 3 ? 'Sipariş + tedarik sil + 2. sipariş' :
                   n === 4 ? 'İE + tedarik sil + 2. İE' :
-                  'Fire + Telafi + Duruş'
+                  n === 5 ? 'Fire + Telafi + Duruş' :
+                  'Negatif — Yasak Kontrolleri'
                 }
               </button>
             ))}

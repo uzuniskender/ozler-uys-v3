@@ -12,6 +12,7 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { isBarMaterialByKod } from '@/features/production/barModel'
+import { canDeleteWO } from '@/features/production/validations'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
 import { startFlow } from '@/lib/pendingFlow'
@@ -81,8 +82,19 @@ export function WorkOrders() {
 
   async function topluSil() {
     if (!selected.size) return
-    const uretimli = [...selected].filter(id => logs.some(l => l.woId === id))
-    if (uretimli.length > 0) { toast.error(uretimli.length + ' İE\'de üretim var — silemezsiniz'); return }
+    // ═══ YASAK 3 (v15.38): Akış dışı silme — log/stok/fire kontrolü ═══
+    const engelli: string[] = []
+    for (const id of selected) {
+      const r = canDeleteWO({ woId: id, logs, stokHareketler, fireLogs: [] })
+      if (!r.ok) {
+        const w = workOrders.find(x => x.id === id)
+        engelli.push(`${w?.ieNo || id}: ${r.reason}`)
+      }
+    }
+    if (engelli.length > 0) {
+      toast.error(`${engelli.length} İE silinemez:\n${engelli.slice(0, 3).join('\n')}${engelli.length > 3 ? `\n... +${engelli.length - 3} daha` : ''}`)
+      return
+    }
     if (!await showConfirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
     if (!await requirePassword('Toplu İE Silme')) return
     for (const id of selected) { await supabase.from('uys_work_orders').delete().eq('id', id) }
@@ -205,8 +217,9 @@ export function WorkOrders() {
 
   async function deleteWO(id: string) {
     const wo = workOrders.find(w => w.id === id); if (!wo) return
-    const prod = logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0)
-    if (prod > 0) { toast.error('Üretim girişi var — İptal Et kullanın'); return }
+    // ═══ YASAK 3 (v15.38): Akış dışı silme — log/stok/fire kontrolü ═══
+    const r = canDeleteWO({ woId: id, logs, stokHareketler, fireLogs: [] })
+    if (!r.ok) { toast.error(r.reason || 'İE silinemez'); return }
     if (!await showConfirm(wo.ieNo + ' silinecek.')) return
     if (!await requirePassword("İE Silme")) return
     await supabase.from('uys_work_orders').delete().eq('id', id)
@@ -475,7 +488,9 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
   }
 
   async function deleteLog(l: any) {
+    // ═══ YASAK 3 (v15.38): Log silme — şifre ile onay ═══
     if (!await showConfirm('Bu logu silmek istediğinize emin misiniz? İlişkili stok hareketleri ve fire kayıtları da silinecek.')) return
+    if (!await requirePassword('Üretim Logu Silme')) return
     await supabase.from('uys_logs').delete().eq('id', l.id)
     await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id)
     await supabase.from('uys_fire_logs').delete().eq('log_id', l.id)

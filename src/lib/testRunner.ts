@@ -14,6 +14,7 @@ import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cut
 import { hesaplaMRP, rezerveYaz } from '@/features/production/mrp'
 import { markTedarikGeldi } from './tedarikHelpers'
 import { fireTelafiIeOlustur } from '@/features/production/fireTelafi'
+import { canProduceWO, canDurus, canDeleteWO } from '@/features/production/validations'
 import { useStore } from '@/store'
 import type { Recipe } from '@/types'
 
@@ -853,5 +854,102 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
     }
 
     return finalize(state, 'Senaryo 5: Sipariş → Fire + Duruş → Telafi İE → Telafi Üretim', t0)
+  })
+}
+
+// ═══ SENARYO 6 — Negatif Test (Parça 5 / v15.38) ═══
+// Yasak kontrollerini test eder. Her alt adım validation fonksiyonunu
+// sahte veriyle çağırır — engel dönmesi bekleniyor. Engel DÖNMEZSE FAIL.
+// Stok/DB manipülasyonu yok; saf validation testi.
+
+export async function senaryo6(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S6', async (state, t0) => {
+    // ═══ 6a — YASAK 1: Stok olmadan üretim engeli ═══
+    await adim(state, '1. YASAK 1 — Stok 0 iken üretim denemesi (engel beklenir)', async () => {
+      const r = canProduceWO({ q: 5, f: 0, maxYapilabilir: 0 })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Stok 0 iken üretime izin verildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '2. YASAK 1 — Kısmi stok (5 gerekli, 2 mevcut → engel beklenir)', async () => {
+      const r = canProduceWO({ q: 5, f: 0, maxYapilabilir: 2 })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Yetersiz stokta üretime izin verildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '3. YASAK 1 — Stok yeterli (2 gerekli, 5 mevcut → İZİN beklenir)', async () => {
+      const r = canProduceWO({ q: 2, f: 0, maxYapilabilir: 5 })
+      if (!r.ok) throw new Error('BEKLENMEYEN ENGEL: Stok yeterliyken engellendi: ' + r.reason)
+      return { izin: true }
+    }, ctx)
+
+    // ═══ 6b — YASAK 2: Duruş > iş süresi engeli ═══
+    await adim(state, '4. YASAK 2 — Duruş (500dk) > çalışma (60dk) denemesi (engel beklenir)', async () => {
+      const r = canDurus({ toplamDurusDk: 500, toplamCalismaDk: 60, hasDurus: true })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Aşırı duruşa izin verildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '5. YASAK 2 — Duruş var ama çalışma saatleri boş (engel beklenir)', async () => {
+      const r = canDurus({ toplamDurusDk: 30, toplamCalismaDk: 0, hasDurus: true })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Çalışmasız duruşa izin verildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '6. YASAK 2 — Duruş makul (30dk) / çalışma (480dk) → İZİN beklenir', async () => {
+      const r = canDurus({ toplamDurusDk: 30, toplamCalismaDk: 480, hasDurus: true })
+      if (!r.ok) throw new Error('BEKLENMEYEN ENGEL: Makul duruş engellendi: ' + r.reason)
+      return { izin: true }
+    }, ctx)
+
+    // ═══ 6c — YASAK 3: Akış dışı silme engeli ═══
+    await adim(state, '7. YASAK 3 — Bağlı logu olan İE silme (engel beklenir)', async () => {
+      const r = canDeleteWO({
+        woId: 'test-wo-1',
+        logs: [{ woId: 'test-wo-1', qty: 5, fire: 1 }],
+        stokHareketler: [],
+        fireLogs: [],
+      })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Loglu İE silinebildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '8. YASAK 3 — Stok hareketi olan İE silme (engel beklenir)', async () => {
+      const r = canDeleteWO({
+        woId: 'test-wo-2',
+        logs: [],
+        stokHareketler: [{ wo_id: 'test-wo-2' } as any],
+        fireLogs: [],
+      })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Stok hareketli İE silinebildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '9. YASAK 3 — Fire logu olan İE silme (engel beklenir)', async () => {
+      const r = canDeleteWO({
+        woId: 'test-wo-3',
+        logs: [],
+        stokHareketler: [],
+        fireLogs: [{ wo_id: 'test-wo-3' } as any],
+      })
+      if (r.ok) throw new Error('BEKLENEN ENGEL ÇALIŞMADI: Fire loglu İE silinebildi')
+      return { engellendi: true, sebep: r.reason, meta: r.meta }
+    }, ctx)
+
+    await adim(state, '10. YASAK 3 — Boş İE (log/stok/fire yok → İZİN beklenir)', async () => {
+      const r = canDeleteWO({
+        woId: 'test-wo-4',
+        logs: [],
+        stokHareketler: [],
+        fireLogs: [],
+      })
+      if (!r.ok) throw new Error('BEKLENMEYEN ENGEL: Boş İE silinemedi: ' + r.reason)
+      return { izin: true }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 6: Negatif Test — Yasak Kontrolleri (Stok/Duruş/Silme)', t0)
   })
 }

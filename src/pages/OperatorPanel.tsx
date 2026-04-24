@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-react'
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
+import { canProduceWO, canDurus } from '@/features/production/validations'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -826,7 +827,18 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       if (!o.bas || !o.bit) return a
       return a + Math.max(0, (parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1])) - (parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1])))
     }, 0)
-    if (toplamCalisma > 0 && toplamDurusDk > toplamCalisma) { toast.error('Duruş (' + toplamDurusDk + 'dk) çalışmayı (' + toplamCalisma + 'dk) aşamaz'); return }
+
+    // ═══ YASAK 2 (v15.38): Duruş süresi kontrolü ═══
+    const durusKontrol = canDurus({
+      toplamDurusDk,
+      toplamCalismaDk: toplamCalisma,
+      hasDurus,
+    })
+    if (!durusKontrol.ok) { toast.error(durusKontrol.reason || 'Duruş kontrolü hatası'); return }
+
+    // ═══ YASAK 1 (v15.38): Stok kontrolü — sıkı, admin dahil bypass yok ═══
+    const stokKontrol = canProduceWO({ q, f, maxYapilabilir: maxUretim })
+    if (!stokKontrol.ok) { toast.error(stokKontrol.reason || 'Stok yetersiz'); return }
 
     setSaving(true)
     const logId = editLogId || uid()
