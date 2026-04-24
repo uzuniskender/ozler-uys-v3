@@ -126,8 +126,10 @@ export async function finishTestRun(testRunId: string, opts?: { cleanup?: boolea
 
   let silinen: Record<string, number> = {}
   if (cleanup) {
-    // v15.37 v2: Parent + sub-run'ları (s1, s2, s3, s4) hepsini temizle
-    const tumIds = [testRunId, `${testRunId}_s1`, `${testRunId}_s2`, `${testRunId}_s3`, `${testRunId}_s4`]
+    // v15.37 v2: Parent + sub-run'ları (s1, s2, s3, s4, s5) hepsini temizle
+    const tumIds = [testRunId,
+      `${testRunId}_s1`, `${testRunId}_s2`, `${testRunId}_s3`,
+      `${testRunId}_s4`, `${testRunId}_s5`]
     for (const id of tumIds) {
       const part = await cascadeDeleteTestRun(id)
       // Topla

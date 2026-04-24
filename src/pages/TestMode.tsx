@@ -13,7 +13,7 @@ import {
   startTestRun, finishTestRun, cancelTestRun,
   getActiveTestRunId, cascadeDeleteTestRun,
 } from '@/lib/testRun'
-import { senaryo1, senaryo2, senaryo3, senaryo4, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
+import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
 
 export function TestMode() {
   const { testRuns, recipes, loadAll } = useStore()
@@ -135,13 +135,13 @@ export function TestMode() {
   }
 
   // v15.37 Part 3 — Senaryo çalıştırıcı
-  async function senaryoCalistir(num: 1 | 2 | 3 | 4) {
+  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5) {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
     if (!recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
     setCalisan(`Senaryo ${num}`)
     setCanliLog([])
     setSonRapor(null)
-    const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : senaryo4
+    const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : num === 4 ? senaryo4 : senaryo5
     try {
       const rapor = await fn({
         recipeKod: recipeKod.trim(),
@@ -171,7 +171,7 @@ export function TestMode() {
     setLoading(true)
     try {
       let toplam = 0
-      for (const suffix of ['s1', 's2', 's3', 's4']) {
+      for (const suffix of ['s1', 's2', 's3', 's4', 's5']) {
         const silinen = await cascadeDeleteTestRun(`${aktifTestId}_${suffix}`)
         toplam += Object.values(silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
       }
@@ -191,9 +191,9 @@ export function TestMode() {
     setCanliLog([])
     setSonRapor(null)
 
-    for (const num of [1, 2, 3, 4] as const) {
+    for (const num of [1, 2, 3, 4, 5] as const) {
       setCalisan(`Senaryo ${num}`)
-      const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : senaryo4
+      const fn = num === 1 ? senaryo1 : num === 2 ? senaryo2 : num === 3 ? senaryo3 : num === 4 ? senaryo4 : senaryo5
       try {
         const rapor = await fn({
           recipeKod: recipeKod.trim(),
@@ -203,12 +203,10 @@ export function TestMode() {
         tumRaporlar.push(rapor)
         setSonRapor(rapor)
 
-        // Her senaryodan sonra o sub-run'ı temizle (bir sonrakinin stokunu etkilemesin)
-        if (num < 4) {
-          await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
-          await loadAll()
-          await new Promise(r => setTimeout(r, 500))
-        }
+        // v15.37 Part 3 v3: Her senaryodan sonra sub-run temizlik (son dahil)
+        await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
+        await loadAll()
+        if (num < 5) await new Promise(r => setTimeout(r, 500))
       } catch (e: any) {
         toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)
         console.error('[senaryo]', e)
@@ -294,10 +292,10 @@ export function TestMode() {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4].map(n => (
+            {[1, 2, 3, 4, 5].map(n => (
               <button
                 key={n}
-                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4)}
+                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5)}
                 disabled={!!calisan || loading}
                 className="px-3 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent rounded text-[11px] font-semibold text-left"
               >
@@ -306,7 +304,8 @@ export function TestMode() {
                   n === 1 ? 'Sipariş → tam akış' :
                   n === 2 ? 'Manuel İE → tam akış' :
                   n === 3 ? 'Sipariş + tedarik sil + 2. sipariş' :
-                  'İE + tedarik sil + 2. İE'
+                  n === 4 ? 'İE + tedarik sil + 2. İE' :
+                  'Fire + Telafi + Duruş'
                 }
               </button>
             ))}

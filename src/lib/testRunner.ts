@@ -13,6 +13,7 @@ import { buildWorkOrders } from '@/features/production/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cutting'
 import { hesaplaMRP, rezerveYaz } from '@/features/production/mrp'
 import { markTedarikGeldi } from './tedarikHelpers'
+import { fireTelafiIeOlustur } from '@/features/production/fireTelafi'
 import { useStore } from '@/store'
 import type { Recipe } from '@/types'
 
@@ -47,6 +48,9 @@ export interface SenaryoRapor {
     stokHareket: number
     stokGiris: number
     stokCikis: number
+    fireLog: number
+    telafiIE: number
+    durusKaydi: number
   }
   stokSnapshotBaslangic: Record<string, number>
   stokSnapshotBitis: Record<string, number>
@@ -82,6 +86,7 @@ function initState(testRunId: string, parentId: string): RunnerState {
       olusanSiparis: 0, olusanIE: 0, olusanKesimPlan: 0,
       olusanTedarik: 0, geldiTedarik: 0, silinenTedarik: 0,
       uretimLog: 0, stokHareket: 0, stokGiris: 0, stokCikis: 0,
+      fireLog: 0, telafiIE: 0, durusKaydi: 0,
     },
     ieIds: [], kesimPlanIds: [], tedarikIds: [], logIds: [],
     ilgiliHamMalkodlar: new Set(),
@@ -659,5 +664,194 @@ export async function senaryo4(ctx: RunnerContext): Promise<SenaryoRapor> {
     }
 
     return finalize(state, 'Senaryo 4: İE → Tedarik sil → 2. İE → Konsolidasyon → Üretim', t0)
+  })
+}
+
+// ═══ FİRE + DURUŞ ÖZEL YARDIMCILAR ═══
+
+/** Fire'lı üretim girişi — qty adet başarılı + fire adet fire */
+async function _uretimGirisiFire(
+  state: RunnerState,
+  qty: number,
+  fireAdet: number,
+  durusMinler: number[] = [],
+): Promise<{ logId: string; fireLogId?: string }> {
+  const store = useStore.getState()
+  if (!state.ieIds.length) throw new Error('İE yok')
+  const firstWoId = state.ieIds[0]
+  const wo = store.workOrders.find(w => w.id === firstWoId)
+  if (!wo) throw new Error('İE bulunamadı')
+
+  const durusKodlari = store.durusKodlari
+  const duruslar = durusMinler.map((dk, i) => ({
+    kod: durusKodlari[i % durusKodlari.length]?.kod || 'DUR-X',
+    ad: durusKodlari[i % durusKodlari.length]?.ad || 'Duruş',
+    sure: dk,
+  }))
+  state.ozet.durusKaydi += duruslar.length
+
+  const lId = uid()
+  const { error } = await supabase.from('uys_logs').insert({
+    id: lId, wo_id: firstWoId, tarih: today(),
+    qty, fire: fireAdet,
+    operatorlar: [{ id: 'test-op', ad: 'TEST OP' }],
+    duruslar, not_: 'Test fire/duruş',
+    malkod: wo.malkod, ie_no: wo.ieNo,
+    operator_id: null, vardiya: 'normal',
+  })
+  if (error) throw new Error('Log insert: ' + error.message)
+  state.logIds.push(lId)
+  state.ozet.uretimLog++
+
+  // HM çıkış hareketleri (qty + fire = toplam HM kullanımı)
+  const toplamKullanim = qty + fireAdet
+  for (const h of (wo.hm || [])) {
+    const cikisMiktar = (h.miktarTotal / wo.hedef) * toplamKullanim
+    if (cikisMiktar <= 0) continue
+    await supabase.from('uys_stok_hareketler').insert({
+      id: uid(), tarih: today(),
+      malkod: h.malkod, malad: h.malad,
+      miktar: cikisMiktar, tip: 'cikis',
+      log_id: lId, wo_id: firstWoId,
+      aciklama: 'Test üretim HM çıkışı (fire dahil)',
+    })
+    state.ozet.stokCikis++
+    state.ozet.stokHareket++
+  }
+
+  // Fire kaydı
+  let fireLogId: string | undefined
+  if (fireAdet > 0) {
+    fireLogId = uid()
+    await supabase.from('uys_fire_logs').insert({
+      id: fireLogId, log_id: lId, wo_id: firstWoId,
+      tarih: today(), malkod: wo.malkod, malad: wo.malad,
+      qty: fireAdet, ie_no: wo.ieNo, op_ad: 'TEST OP',
+      operatorlar: [{ id: 'test-op', ad: 'TEST OP' }],
+      not_: 'Test fire', tip: 'parca',
+    })
+    state.ozet.fireLog++
+  }
+
+  await loadAll()
+  return { logId: lId, fireLogId }
+}
+
+/** Fire'dan telafi İE'si oluştur */
+async function _fireTelafiOlustur(state: RunnerState, fireLogId: string): Promise<string | null> {
+  const store = useStore.getState()
+  const fireLog = store.fireLogs.find(f => f.id === fireLogId)
+  if (!fireLog) throw new Error('Fire logu bulunamadı: ' + fireLogId)
+  const origWo = store.workOrders.find(w => w.id === fireLog.woId)
+  if (!origWo) throw new Error('Orijinal İE bulunamadı')
+
+  const telafi = await fireTelafiIeOlustur(fireLog as any, origWo as any)
+  if (!telafi) throw new Error('Telafi İE oluşturulamadı')
+
+  state.ozet.telafiIE++
+  state.ieIds.push(telafi.id)
+  await loadAll()
+  return telafi.id
+}
+
+// ═══ SENARYO 5: FİRE + TELAFİ + DURUŞ ═══
+
+export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S5', async (state, t0) => {
+    await adim(state, '1. Sipariş oluştur', async () => {
+      const oid = await _createOrder(state, ctx, 'S5')
+      snapshotStok(state)
+      return { orderId: oid, ieCount: state.ieIds.length, hammaddeler: [...state.ilgiliHamMalkodlar] }
+    }, ctx)
+
+    await wait(200)
+    await adim(state, '2. Kesim planı', async () => await _createCuttingPlans(state), ctx)
+
+    await wait(200)
+    const mrp = await adim(state, '3. MRP + tedarik', async () =>
+      await _runMRPAndCreateTedarik(state), ctx) as any
+
+    if (mrp?.tedarik > 0) {
+      await wait(200)
+      await adim(state, '4. Teslim al', async () => ({
+        geldiSayisi: await _teslimAl(state),
+      }), ctx)
+    } else {
+      adimSkip(state, '4. Teslim', 'Tedarik yok', ctx)
+    }
+
+    // FİRE'LI ÜRETİM — qty=6, fire=2, 2 duruş (15dk + 10dk)
+    await wait(200)
+    const uretim = await adim(state, '5. Fire\'lı üretim (6 adet + 2 fire + 2 duruş)', async () => {
+      if (!state.ieIds.length) throw new Error('Üretecek İE yok')
+      const r = await _uretimGirisiFire(state, 6, 2, [15, 10])
+      return { logId: r.logId, fireLogId: r.fireLogId, durus: 2 }
+    }, ctx) as any
+
+    // Fire loglandı mı kontrol
+    await wait(200)
+    await adim(state, '5.1 Fire logu doğrulama', async () => {
+      const store = useStore.getState()
+      const fire = store.fireLogs.find(f => f.id === uretim.fireLogId)
+      if (!fire) throw new Error('Fire logu DB\'de yok')
+      if (fire.qty !== 2) throw new Error(`Fire miktarı yanlış: beklenen 2, bulundu ${fire.qty}`)
+      return { fireId: fire.id, qty: fire.qty, tip: (fire as any).tip }
+    }, ctx)
+
+    // Duruş kaydı kontrol (log.duruslar jsonb)
+    await adim(state, '5.2 Duruş kaydı doğrulama', async () => {
+      const store = useStore.getState()
+      const log = store.logs.find(l => l.id === uretim.logId)
+      if (!log) throw new Error('Log bulunamadı')
+      const durus = (log as any).duruslar || []
+      if (durus.length !== 2) throw new Error(`Duruş sayısı yanlış: beklenen 2, bulundu ${durus.length}`)
+      const toplamSure = durus.reduce((a: number, d: any) => a + (d.sure || 0), 0)
+      return { durusSayi: durus.length, toplamDurusMin: toplamSure, kodlar: durus.map((d: any) => d.kod) }
+    }, ctx)
+
+    // TELAFİ İE OLUŞTUR
+    await wait(200)
+    const telafi = await adim(state, '6. Fire telafi İE oluştur', async () => {
+      const telafiId = await _fireTelafiOlustur(state, uretim.fireLogId)
+      return { telafiIE_Id: telafiId }
+    }, ctx) as any
+
+    // Telafi İE için kesim planı + MRP
+    if (telafi?.telafiIE_Id) {
+      await wait(200)
+      await adim(state, '7. Telafi İE için kesim planı', async () => await _createCuttingPlans(state), ctx)
+
+      await wait(200)
+      await adim(state, '8. Telafi MRP hesapla', async () => {
+        // Telafi İE'si mevcut stoktan karşılanabilir (yeni tedarik gerekmeyebilir)
+        const store = useStore.getState()
+        const cpMapped = store.cuttingPlans.map((p: any) => ({
+          hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+          gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+        }))
+        const ordIds = state.orderId ? [state.orderId] : []
+        const result = hesaplaMRP(
+          ordIds, store.orders as any, store.workOrders, store.recipes,
+          store.stokHareketler, store.tedarikler, cpMapped, store.materials,
+          null, store.mrpRezerve
+        )
+        return { mrpKalem: result.length, eksik: result.filter(r => r.net > 0).length }
+      }, ctx)
+
+      // Telafi üretim (normal)
+      await wait(200)
+      await adim(state, '9. Telafi İE üretim (2 adet, fire\'sız)', async () => {
+        const origIeId = state.ieIds[0]
+        state.ieIds[0] = telafi.telafiIE_Id  // Telafi İE'yi aktif yap
+        const n = await _uretimGirisi(state, 2)
+        state.ieIds[0] = origIeId  // eski haline getir
+        return { logSayisi: n }
+      }, ctx)
+    }
+
+    return finalize(state, 'Senaryo 5: Sipariş → Fire + Duruş → Telafi İE → Telafi Üretim', t0)
   })
 }
