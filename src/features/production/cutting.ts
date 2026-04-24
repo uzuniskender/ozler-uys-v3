@@ -12,6 +12,7 @@ interface KesimKesim {
 interface KesimSatir {
   id: string; hamAdet: number; fireMm: number
   kesimler: KesimKesim[]; durum: string
+  havuzBarId?: string    // v15.35 — satır havuz barından üretiliyorsa dolu, hamAdet=1
 }
 
 interface KesimPlanSonuc {
@@ -225,18 +226,20 @@ export function kesimPlanOlustur(
 
 // Boy kesim optimizasyonu — Decreasing First Fit + Fire Doldurma
 // mevcutSatirlar verilirse: mevcut bar'lar seed olarak kullanılır, yeni ihtiyaçlar önce onların fire'ına sığdırılır
+// v15.35: havuzBarlari verilirse → açık bar havuzundan bar'lar seed edilir (her biri ayrı satır, gruplanmaz)
 function boykesimOptimum(
   g: { hamMalkod: string; hamBoy: number; ihtiyaclar: { woId: string; ieNo: string; malkod: string; malad: string; parcaBoy: number; parcaEn: number; adet: number }[] },
   allWOs: WorkOrder[],
   materials: Material[],
   logs: { woId: string; qty: number }[],
-  mevcutSatirlar?: KesimSatir[]
+  mevcutSatirlar?: KesimSatir[],
+  havuzBarlari?: { id: string; uzunlukMm: number }[]
 ): KesimSatir[] {
   const hamBoy = g.hamBoy || 6000
   const ihtiyaclar = g.ihtiyaclar.slice().sort((a, b) => (b.parcaBoy || 0) - (a.parcaBoy || 0))
 
   // Bar listesi — mevcut satırlar varsa bar'lara patlat (hamAdet kadar)
-  const barlar: { kalan: number; kesimler: KesimKesim[]; kilitli?: boolean }[] = []
+  const barlar: { kalan: number; kesimler: KesimKesim[]; kilitli?: boolean; havuzBarId?: string }[] = []
   if (mevcutSatirlar?.length) {
     for (const s of mevcutSatirlar) {
       // Başlayan/tamamlanan satırlar kilitli — fire'ına dokunma, kesim düzenini koru
@@ -246,8 +249,23 @@ function boykesimOptimum(
           kalan: kilitli ? 0 : (s.fireMm || 0),
           kesimler: JSON.parse(JSON.stringify(s.kesimler)),
           kilitli,
+          // Havuz satırı ise havuzBarId korunur (hamAdet=1 olduğu için tek kez eklenir)
+          havuzBarId: s.havuzBarId,
         })
       }
+    }
+  }
+
+  // v15.35 — Açık bar havuzu seed: her havuz barı ayrı bar olarak eklenir
+  // kalan = uzunlukMm, kesimler = [] (boş), havuzBarId ile işaretli
+  if (havuzBarlari?.length) {
+    for (const ab of havuzBarlari) {
+      if ((ab.uzunlukMm || 0) <= 0) continue
+      barlar.push({
+        kalan: ab.uzunlukMm,
+        kesimler: [],
+        havuzBarId: ab.id,
+      })
     }
   }
 
@@ -334,10 +352,24 @@ function boykesimOptimum(
   }
 
   // Aynı kesim düzenindeki barları grupla
+  // v15.35: havuz barları (havuzBarId taşıyan) asla gruplanmaz — her biri ayrı satır
   const gruplu: KesimSatir[] = []
   for (const bar of barlar) {
+    // Havuz barı: her biri benzersiz → ayrı satır, hamAdet=1
+    if (bar.havuzBarId) {
+      gruplu.push({
+        id: uid(),
+        hamAdet: 1,
+        fireMm: bar.kalan,
+        kesimler: JSON.parse(JSON.stringify(bar.kesimler)),
+        durum: bar.kilitli ? 'basladi' : 'bekliyor',
+        havuzBarId: bar.havuzBarId,
+      })
+      continue
+    }
     const anahtar = bar.kesimler.map(k => k.woId + ':' + k.parcaBoy + ':' + k.adet).sort().join('|') + '#' + (bar.kilitli ? 'LOCK' : 'OK')
     const mev = gruplu.find(g => {
+      if (g.havuzBarId) return false  // havuz satırlarıyla birleşme
       const gAnahtar = g.kesimler.map(k => k.woId + ':' + k.parcaBoy + ':' + k.adet).sort().join('|') + '#' + (g.durum === 'bekliyor' ? 'OK' : 'LOCK')
       return gAnahtar === anahtar
     })
@@ -346,6 +378,69 @@ function boykesimOptimum(
   }
 
   return gruplu
+}
+
+// ═══ HAVUZ ÖNERİSİ — v15.35 ═══
+// Verilen mevcut planı, seçilen havuz barları ile yeniden optimize eder.
+// Plan satırlarından YENİ (havuzBarId'siz + bekliyor) satırlar atılır, onlardaki
+// ihtiyaçlar + seçilen havuz barları optimizer'a gönderilir. KİLİTLİ satırlar
+// (başlayan/tamamlanan) ve varsa eski havuz satırları korunur.
+//
+// Dönüş: yeni satırlar (plan.satirlar yerine yazılabilir).
+export function havuzdanYenidenOptimize(
+  plan: KesimPlanSonuc,
+  secilenHavuzBarlari: { id: string; uzunlukMm: number }[],
+  workOrders: WorkOrder[],
+  materials: Material[],
+  logs: { woId: string; qty: number }[]
+): KesimSatir[] {
+  const hmM = findMaterialByKod(materials, plan.hamMalkod)
+  if (!hmM) { console.warn('[havuz] ham malzeme bulunamadı:', plan.hamMalkod); return plan.satirlar }
+
+  // Mevcut satırları ayır: kilitli (dokunma) + yeni açılan (yeniden optimize)
+  const kilitliSatirlar: KesimSatir[] = []
+  const yenidenKesim: { woId: string; ieNo: string; malkod: string; malad: string; parcaBoy: number; parcaEn: number; adet: number }[] = []
+
+  for (const s of plan.satirlar) {
+    const kilitli = !!(s.durum && s.durum !== 'bekliyor')
+    if (kilitli) {
+      kilitliSatirlar.push(s)
+      continue
+    }
+    // Bekliyor durumundaki satırlardaki kesimleri ihtiyaç olarak topla
+    // (hem eski havuz satırları hem yeni bar satırları — hepsi yeniden hesaplanacak)
+    for (const k of s.kesimler) {
+      yenidenKesim.push({
+        woId: k.woId, ieNo: k.ieNo,
+        malkod: k.malkod, malad: k.malad,
+        parcaBoy: k.parcaBoy || 0, parcaEn: k.parcaEn || 0,
+        adet: (k.adet || 0) * (s.hamAdet || 1),  // grupluysa hamAdet kadar çarp
+      })
+    }
+  }
+
+  // İhtiyaçları woId+malkod bazında birleştir (boykesimOptimum bekliyor)
+  const ihtiyacMap: Record<string, typeof yenidenKesim[0]> = {}
+  for (const it of yenidenKesim) {
+    const k = it.woId + '|' + it.malkod
+    if (!ihtiyacMap[k]) ihtiyacMap[k] = { ...it, adet: 0 }
+    ihtiyacMap[k].adet += it.adet
+  }
+  const ihtiyaclar = Object.values(ihtiyacMap)
+
+  if (!ihtiyaclar.length) {
+    // Tüm satırlar kilitliyse dokunma
+    return plan.satirlar
+  }
+
+  const yeniSatirlar = boykesimOptimum(
+    { hamMalkod: plan.hamMalkod, hamBoy: plan.hamBoy, ihtiyaclar },
+    workOrders, materials, logs,
+    kilitliSatirlar,          // kilitli satırlar seed (kilitli=true olarak işaretlenir)
+    secilenHavuzBarlari,       // havuz barları seed
+  )
+
+  return yeniSatirlar
 }
 
 // Kesim planlarını Supabase'e kaydet

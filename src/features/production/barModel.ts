@@ -69,6 +69,7 @@ interface KesimSatir {
     tamamlandi?: number
   }>
   durum?: string
+  havuzBarId?: string   // v15.35 — havuz barından üretiliyorsa
 }
 
 /**
@@ -106,7 +107,7 @@ export async function barModelSync(
   workOrders: WorkOrder[],
   logs: ProductionLog[],
   materials: Material[]
-): Promise<{ barSayisi: number; acikBarSayisi: number }> {
+): Promise<{ barSayisi: number; acikBarSayisi: number; havuzTuketim: number }> {
   let barSayisi = 0
   let acikBarSayisi = 0
 
@@ -117,10 +118,11 @@ export async function barModelSync(
     )
   )
 
-  if (!ilgiliPlanlar.length) return { barSayisi, acikBarSayisi }
+  if (!ilgiliPlanlar.length) return { barSayisi, acikBarSayisi, havuzTuketim: 0 }
 
   const stokRows: Record<string, unknown>[] = []
   const acikBarRows: Record<string, unknown>[] = []
+  const havuzTuketimleri: string[] = []   // v15.35 — tüketilecek havuz bar ID'leri
   const tarih = today()
 
   for (const plan of ilgiliPlanlar) {
@@ -139,6 +141,35 @@ export async function barModelSync(
       const hamAdet = satir.hamAdet || 0
       if (hamAdet <= 0) continue
 
+      // v15.35 — Havuz barı satırı mı?
+      // Havuzdan çekilen satırlarda bar_acilis YAZILMAZ (yeni bar açılmıyor, havuzdan tüketildi).
+      // Havuz barı 'tuketildi' olarak işaretlenir; kalan fire varsa YENİ açık bar oluşur.
+      if (satir.havuzBarId) {
+        // Havuz bar tüketildi
+        havuzTuketimleri.push(satir.havuzBarId)
+        // Kalan fire'dan yeni açık bar (deterministik ID ile idempotent)
+        const fireMm = satir.fireMm || 0
+        if (fireMm > 0) {
+          acikBarRows.push({
+            id: acikBarKayitId(plan.id, satir.id, 0),
+            ham_malkod: hamMalkod,
+            ham_malad: hamMalad,
+            uzunluk_mm: fireMm,
+            kaynak_plan_id: plan.id,
+            kaynak_satir_id: satir.id,
+            bar_index: 0,
+            olusma_tarihi: tarih,
+            durum: 'acik',
+            tuketim_log_id: null,
+            tuketim_tarihi: null,
+            not_: 'Havuzdan türedi',
+          })
+          acikBarSayisi++
+        }
+        continue  // bar_acilis yazma, eski mantığa girme
+      }
+
+      // Normal: yeni bar açılışı
       // Her bar için kayıt üret (idempotent)
       for (let i = 0; i < hamAdet; i++) {
         // Bar açılışı — ham maldan −1 (uys_stok_hareketler)
@@ -194,7 +225,21 @@ export async function barModelSync(
     if (e2) console.error('[barModel] Açık bar upsert:', e2)
   }
 
-  return { barSayisi, acikBarSayisi }
+  // v15.35 — Havuz bar tüketim batch update
+  if (havuzTuketimleri.length) {
+    const { error: e3 } = await supabase
+      .from('uys_acik_barlar')
+      .update({
+        durum: 'tuketildi',
+        tuketim_log_id: tetikleyiciWoId,   // WO ID (log yerine; idempotency)
+        tuketim_tarihi: tarih,
+      })
+      .in('id', havuzTuketimleri)
+      .eq('durum', 'acik')   // yalnızca hala açık olanlar (idempotent; zaten tüketildi veya hurda ise dokunma)
+    if (e3) console.error('[barModel] Havuz tüketim:', e3)
+  }
+
+  return { barSayisi, acikBarSayisi, havuzTuketim: havuzTuketimleri.length }
 }
 
 // ═══ AÇIK BAR HAVUZU — STOK HESABI ═══

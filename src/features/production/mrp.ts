@@ -272,8 +272,10 @@ export function hesaplaMRP(
 
     if (secilenWoIds) {
       // Seçili siparişlerin kesimlerine düşen hamAdet payını topla
+      // v15.35: havuz barlarından (havuzBarId taşıyan satırlar) yeni sipariş gerekmez → dahil etme
       let toplamPay = 0
       for (const s of (p.satirlar || [])) {
+        if ((s as any).havuzBarId) continue
         const kesimler: any[] = (s as any).kesimler || []
         const toplamKesimAdet = kesimler.reduce((a, k) => a + (k.adet || 0), 0)
         if (toplamKesimAdet === 0) continue
@@ -287,10 +289,13 @@ export function hesaplaMRP(
       dbg('[MRP DEBUG] Plan:', hmk, '| kapsam pay:', toplamPay.toFixed(3), '→ planAdet:', planAdet)
       if (planAdet <= 0) return // Bu plan seçili siparişlerle ilgisiz
     } else {
-      // Genel hesap (ordIds=null): planın tamamı
-      planAdet = p.gerekliAdet || (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
+      // Genel hesap (ordIds=null): planın tamamı — havuz satırları hariç
+      // v15.35: gerekliAdet'e güvenmek yerine satırlardan hesapla, havuz satırlarını filtrele
+      planAdet = (p.satirlar || [])
+        .filter((s: any) => !s.havuzBarId)
+        .reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
       if (!planAdet) return
-      dbg('[MRP DEBUG] Plan:', hmk, '| genel → planAdet:', planAdet)
+      dbg('[MRP DEBUG] Plan:', hmk, '| genel → planAdet:', planAdet, '(havuz satırları hariç)')
     }
 
     dbg('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)

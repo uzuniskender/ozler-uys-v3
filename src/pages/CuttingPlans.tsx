@@ -5,18 +5,20 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy } from '@/features/production/cutting'
-import type { WorkOrder } from '@/types'
-import { Trash2, Plus, Scissors, Zap, Search } from 'lucide-react'
+import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy, havuzdanYenidenOptimize } from '@/features/production/cutting'
+import type { WorkOrder, AcikBar } from '@/types'
+import { Trash2, Plus, Scissors, Zap, Search, Package } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function CuttingPlans() {
-  const { cuttingPlans, materials, workOrders, operations, recipes, logs, loadAll } = useStore()
+  const { cuttingPlans, materials, workOrders, operations, recipes, logs, acikBarlar, loadAll } = useStore()
   const { can, isGuest } = useAuth()
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [artikInfo, setArtikInfo] = useState<{ planId: string; hamMalkod: string; hamMalad: string; fireMm: number; barIdx: number } | null>(null)
   const [showTamamlanan, setShowTamamlanan] = useState(false)
+  // v15.35 — havuz önerisi: plan ID'leri kuyruğu (çoklu plan ardışık)
+  const [havuzOneriQueue, setHavuzOneriQueue] = useState<string[]>([])
 
   const bekleyen = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
   const gosterilen = showTamamlanan ? cuttingPlans : bekleyen
@@ -58,7 +60,19 @@ export function CuttingPlans() {
             const birlestirilen = planlar.length - yeniSayi
             await kesimPlanlariKaydet(planlar as any)
             const parcalar = [yeniSayi > 0 && `${yeniSayi} yeni plan`, birlestirilen > 0 && `${birlestirilen} plana İE eklendi`].filter(Boolean).join(' · ')
-            loadAll(); toast.success(parcalar || 'Değişiklik yok')
+            loadAll()
+            toast.success(parcalar || 'Değişiklik yok')
+
+            // v15.35 — Havuz önerisi: bu planların ham malzemelerinde havuzda açık bar VARSA sırayla öner
+            const havuzlulanmisPlanIds: string[] = []
+            for (const p of planlar) {
+              if (p.durum !== 'bekliyor') continue
+              const havuzAcik = acikBarlar.filter(a => a.durum === 'acik' && a.hamMalkod === p.hamMalkod)
+              if (havuzAcik.length > 0) havuzlulanmisPlanIds.push(p.id)
+            }
+            if (havuzlulanmisPlanIds.length > 0) {
+              setHavuzOneriQueue(havuzlulanmisPlanIds)
+            }
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs font-semibold hover:bg-green/20"><Zap size={13} /> Otomatik Plan</button>}
           {can('cutting_add') && <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Scissors size={13} /> Manuel Plan</button>}
         </div>
@@ -215,6 +229,24 @@ export function CuttingPlans() {
 
       {showCreate && <KesimOlusturModal materials={materials} workOrders={workOrders} onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); loadAll(); toast.success('Kesim planları oluşturuldu') }} />}
       {artikInfo && <ArtikOneriModal info={artikInfo} materials={materials} workOrders={workOrders} operations={operations} recipes={recipes} logs={logs} onClose={() => setArtikInfo(null)} onSaved={() => { setArtikInfo(null); loadAll() }} />}
+      {havuzOneriQueue.length > 0 && (() => {
+        const planId = havuzOneriQueue[0]
+        const plan = cuttingPlans.find(p => p.id === planId)
+        if (!plan) { setHavuzOneriQueue(q => q.slice(1)); return null }
+        const havuzBarlari = acikBarlar.filter(a => a.durum === 'acik' && a.hamMalkod === plan.hamMalkod)
+        if (!havuzBarlari.length) { setHavuzOneriQueue(q => q.slice(1)); return null }
+        return (
+          <HavuzOneriModal
+            plan={plan as any}
+            havuzBarlari={havuzBarlari}
+            workOrders={workOrders}
+            materials={materials}
+            logs={logs}
+            onClose={() => setHavuzOneriQueue(q => q.slice(1))}
+            onSaved={() => { loadAll(); setHavuzOneriQueue(q => q.slice(1)) }}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -576,6 +608,172 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
           onClose={() => setShowMatSearch(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ═══ HAVUZ ÖNERİ MODALI — v15.35 ═══
+// Otomatik plan oluşturulduktan sonra, eğer ham malzemede havuzda açık bar
+// varsa kullanıcıya gösterilir. Kullanıcı hangi havuz barlarını kullanmak
+// istediğini seçer → optimizer yeniden çalışır, plan güncellenir.
+function HavuzOneriModal({
+  plan, havuzBarlari, workOrders, materials, logs, onClose, onSaved,
+}: {
+  plan: { id: string; hamMalkod: string; hamMalad: string; hamBoy: number; hamEn: number; kesimTip: string; durum: string; satirlar: any[]; gerekliAdet: number; tarih: string }
+  havuzBarlari: import('@/types').AcikBar[]
+  workOrders: any[]
+  materials: any[]
+  logs: any[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  // Varsayılan: en uzun havuz barları seçili (kesime en uygun olanlar)
+  const sortedBarlar = [...havuzBarlari].sort((a, b) => b.uzunlukMm - a.uzunlukMm)
+  const [secilen, setSecilen] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(false)
+
+  const secilenBarlar = sortedBarlar.filter(b => secilen.has(b.id))
+  const secilenMm = secilenBarlar.reduce((a, b) => a + (b.uzunlukMm || 0), 0)
+
+  // Plan'ın mevcut durumu
+  const toplamHamAdet = plan.satirlar.reduce((a, s) => a + (s.hamAdet || 0), 0)
+  const bekleyenSatirlar = plan.satirlar.filter(s => !s.durum || s.durum === 'bekliyor')
+  const kilitliSayi = plan.satirlar.length - bekleyenSatirlar.length
+
+  function toggle(id: string) {
+    const y = new Set(secilen)
+    if (y.has(id)) y.delete(id); else y.add(id)
+    setSecilen(y)
+  }
+  function tumunuSec() { setSecilen(new Set(sortedBarlar.map(b => b.id))) }
+  function temizle() { setSecilen(new Set()) }
+
+  async function uygula() {
+    if (!secilenBarlar.length) { toast.error('En az bir havuz barı seç'); return }
+
+    setLoading(true)
+    try {
+      // cutting.ts havuzdanYenidenOptimize fonksiyonu ile plan satırlarını güncelle
+      const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
+      const yeniSatirlar = havuzdanYenidenOptimize(
+        plan as any,
+        secilenBarlar.map(b => ({ id: b.id, uzunlukMm: b.uzunlukMm })),
+        workOrders,
+        materials,
+        logsSimple,
+      )
+
+      // Planı güncelle — yeni satırlar + gerekliAdet (havuz satırları hariç)
+      const yeniGerekliAdet = yeniSatirlar.filter(s => !s.havuzBarId).reduce((a, s) => a + (s.hamAdet || 0), 0)
+      const { error } = await supabase
+        .from('uys_kesim_planlari')
+        .update({
+          satirlar: yeniSatirlar,
+          gerekli_adet: yeniGerekliAdet,
+        })
+        .eq('id', plan.id)
+
+      if (error) { console.error('[havuz] plan update:', error); toast.error('Plan güncellenemedi: ' + error.message); return }
+
+      const havuzSayisi = yeniSatirlar.filter(s => s.havuzBarId).length
+      const yeniBarSayisi = yeniSatirlar.filter(s => !s.havuzBarId).reduce((a, s) => a + (s.hamAdet || 0), 0)
+      toast.success(`Plan güncellendi: ${havuzSayisi} havuz barı + ${yeniBarSayisi} yeni bar`)
+      onSaved()
+    } catch (e: any) {
+      console.error('[havuz] exception:', e)
+      toast.error('İşlem başarısız: ' + (e?.message || 'bilinmeyen hata'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Başlık */}
+        <div className="px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Package size={16} className="text-amber" />
+            <h2 className="text-sm font-semibold">Havuz Önerisi</h2>
+          </div>
+          <div className="mt-1 font-mono text-accent text-xs">{plan.hamMalkod}</div>
+          <div className="text-zinc-400 text-[11px]">{plan.hamMalad}</div>
+          <div className="mt-2 text-[11px] text-zinc-500">
+            Plan: <span className="text-zinc-300 font-mono">{toplamHamAdet} yeni bar</span> açılacak
+            {kilitliSayi > 0 && <span className="ml-2 text-amber">({kilitliSayi} kilitli satır korunur)</span>}
+          </div>
+        </div>
+
+        {/* Info */}
+        <div className="px-6 py-3 bg-bg-2/50 border-b border-border text-[11px] text-zinc-400 leading-relaxed">
+          Havuzda bu malzemeden <span className="text-zinc-200 font-semibold">{havuzBarlari.length}</span> açık bar var.
+          Seçersen plan yeniden hesaplanır ve seçilen havuz barları kullanılarak açılacak yeni bar sayısı azalır.
+          <br />
+          <span className="text-zinc-500">İstemezsen "Havuz Kullanma" de, plan mevcut haliyle kalır.</span>
+        </div>
+
+        {/* Kontrol */}
+        <div className="px-6 py-2 border-b border-border flex items-center justify-between text-[11px]">
+          <div className="text-zinc-400">
+            Seçili: <span className="text-zinc-200 font-semibold">{secilenBarlar.length}</span>/{sortedBarlar.length}
+            {secilenBarlar.length > 0 && <> · <span className="text-zinc-300 font-mono">{Math.round(secilenMm)}</span> mm</>}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={tumunuSec} className="text-accent hover:underline">Tümü</button>
+            <span className="text-zinc-600">·</span>
+            <button onClick={temizle} className="text-zinc-400 hover:underline">Temizle</button>
+          </div>
+        </div>
+
+        {/* Liste */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-bg-2 z-10">
+              <tr className="border-b border-border text-zinc-500">
+                <th className="w-10 px-3 py-2"></th>
+                <th className="text-right px-3 py-2">Uzunluk</th>
+                <th className="text-left px-3 py-2">Oluşma</th>
+                <th className="text-left px-3 py-2">Kaynak</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedBarlar.map(b => {
+                const secili = secilen.has(b.id)
+                return (
+                  <tr key={b.id} className={`border-b border-border/30 ${secili ? 'bg-accent/5' : 'hover:bg-bg-3/30'}`}>
+                    <td className="px-3 py-1.5 text-center">
+                      <input type="checkbox" checked={secili} onChange={() => toggle(b.id)} />
+                    </td>
+                    <td className="text-right px-3 py-1.5 font-mono text-zinc-200">{Math.round(b.uzunlukMm)} mm</td>
+                    <td className="px-3 py-1.5 text-zinc-400">{b.olusmaTarihi || '-'}</td>
+                    <td className="px-3 py-1.5 text-zinc-500 font-mono text-[10px]">
+                      {b.kaynakPlanId ? '…' + b.kaynakPlanId.slice(-6) : '-'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Alt aksiyon */}
+        <div className="px-6 py-4 border-t border-border flex justify-between items-center">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:bg-bg-3/70"
+          >
+            Havuz Kullanma
+          </button>
+          <button
+            onClick={uygula}
+            disabled={!secilenBarlar.length || loading}
+            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-bg-3 disabled:text-zinc-600 text-white rounded-lg text-xs font-semibold"
+          >
+            {loading ? 'Hesaplanıyor…' : `Seçilenleri Kullan (${secilenBarlar.length})`}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
