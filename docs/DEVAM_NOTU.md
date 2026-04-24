@@ -1,47 +1,53 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.40 sonrası)
-**Son canlı sürüm:** v15.40 (Pre-push Hook — core.hooksPath ile versiyonlu)
+**Tarih:** 25 Nisan 2026 (v15.40.1 hotfix sonrası)
+**Son canlı sürüm:** v15.40.1 (Pre-push Hook Hotfix — tsc + .gitattributes)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
-Yeni Claude'a şu mesajı ver:
-
 ```
 UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/UYS_v3_Is_Listesi.md oku.
-Son iş: v15.40 pre-push hook (TAMAM). Sırada stok anomalisi raporu (küçük iş).
+Son iş: v15.40.1 pre-push hook hotfix (tsc + .gitattributes) TAMAM. Sırada stok anomalisi raporu.
 ```
 
 ---
 
-## Son Durum (v15.40)
+## v15.40.1 Hotfix — Neyin Düzeltildi
 
-**Pre-push Hook TAMAM:**
-- Yeni dosya: `scripts/git-hooks/pre-push` (bash, LF, executable)
-  - 3 check: audit-schema, audit-columns, tsc --noEmit
-  - PATH fix: `/c/Program Files/nodejs` + npm global (Iskender + iskender.uzun paths)
-  - Başarısız olursa net hata + `--no-verify` bypass açıklaması
-- Yeni dosya: `scripts/install-hooks.ps1` — `git config core.hooksPath scripts/git-hooks` çalıştırır
-- Eski `.git/hooks/pre-push` artık kullanılmıyor (core.hooksPath baskın)
+### Sorun 1: tsc çağrısı
+`npx --no-install tsc` → npx "tsc" adını npm registry'deki eski bir pakete (`tsc@2.0.4`) çözümlüyordu, gerçek TypeScript değil. Çünkü TypeScript paketinin binary adı `tsc` ama paket adı `typescript`.
 
-**Aktivasyon (her makinede bir kez):**
-- `scripts/install-hooks.ps1` çalıştır, **veya**
-- Manuel: `git config core.hooksPath scripts/git-hooks`
+**Çözüm:** Hook artık `./node_modules/.bin/tsc` (veya `.cmd`) doğrudan çağırıyor. Fallback: global `tsc`.
 
-**Apply scripti v15.40 bunu otomatik yapıyor** — Iskender makinesinde hook aktif.
-Diğer makinede (iskender.uzun): `git pull` + `scripts/install-hooks.ps1` bir kez.
+### Sorun 2: CRLF bozulması
+Git `core.autocrlf=true` (Windows varsayılan) hook dosyasını checkout'ta CRLF'ye dönüştürüyor → Git Bash bash shebang'i okuyamıyor → `\r: command not found` tarzı hatalar.
 
-**Doğrulama:**
+**Çözüm:** `.gitattributes` dosyası eklendi:
+- `scripts/git-hooks/*` ve `*.sh` → `eol=lf`
+- `*.ps1` → `eol=crlf`
+- Binary uzantılar → `binary`
+
+Apply scripti `git add --renormalize .` çağırır — mevcut dosyalar .gitattributes kurallarına göre normalize edilir.
+
+---
+
+## Doğrulama (Apply + push sonrası)
+
 ```powershell
-# Hook aktif mi?
-git config --get core.hooksPath
-# Beklenen: scripts/git-hooks
-
-# Test (commit yok, dry-run):
 git push --dry-run
-# 3 check çalışmalı, OK dönmeli
+```
+
+Beklenen çıktı:
+```
+[pre-push] (1/3) audit-schema...
+  ✓ AUDIT BAŞARILI
+[pre-push] (2/3) audit-columns...
+  ✓ TEMİZ
+[pre-push] (3/3) tsc --noEmit...
+  (no errors)
+[pre-push] OK - all 3 checks passed.
 ```
 
 ---
@@ -49,48 +55,47 @@ git push --dry-run
 ## Sırada (Öncelik Sırasına Göre)
 
 ### 1. Stok anomalisi raporu (Senaryo 5 -3 gösterimi) 🟢
-- **Sorun:** Senaryo 5 raporunda `stokSnapshotBitis: -3` görünüyor. Gerçek canlı stok etkilenmiyor (test izole, cascade delete temiz).
-- **Kök neden:** `_uretimGirisi` test helper'ı UI save() yolundan geçmiyor → doğrudan DB insert. `canProduceWO` yasak kontrolü bypass'lı (kasıtlı — yoksa tüm senaryolar kırılırdı).
-- **Çözüm:** Sadece rapor metnine açıklayıcı not eklemek:
-  - `src/lib/testRunner.ts` içinde Senaryo 5'in adım raporunda ek bir meta alanı: `bypassNotu: "Test helper UI validation'ı bypass eder — gerçek üretim akışı yasak kontrollü"`
-  - `TestMode.tsx` rapor gösteriminde bu notu küçük bir info badge olarak göster
-- **Tahmini iş:** 15-30 dk. Kod değişikliği minimal.
+- Sadece rapor metni düzenleme. 15-30 dk.
+- `src/lib/testRunner.ts` — Senaryo 5 adım raporunda `bypassNotu` meta alanı
+- `TestMode.tsx` — bu notu info badge olarak göster
 
-### 2. Küçük işler (backlog)
-- [ ] Manuel plan'da havuz önerisi (v15.35 eksik)
-- [ ] Hurda geri alma UI
-- [ ] Havuz geri alma UI (admin only)
-- [ ] Toplu senaryo farklı reçetelerle
+### 2. audit-columns trace edilemeyen 4 çağrı 🟢
+Pre-push hook bu 4 noktayı trace edemiyor. Kolon mismatch var mı diye elle bakılmalı:
+- `src\features\production\autoChain.ts:64` — `uys_work_orders [upsert]`
+- `src\lib\testRun.ts:172` — `uys_orders [insert]`
+- `src\pages\Operators.tsx:206` — `uys_izinler [insert]` (değişken başka modülden)
+- `src\pages\Procurement.tsx:127` — `uys_tedarikler [update]` (değişken başka modülden)
+
+### 3. Küçük işler
+- Manuel plan'da havuz önerisi
+- Hurda geri alma UI
+- Havuz geri alma UI
+- Toplu senaryo farklı reçetelerle
 
 ---
 
-## Önemli Komutlar
+## Komutlar
 
-**Patch uygulama:**
+**Hotfix apply:**
 ```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-40
+cd $env:USERPROFILE\Downloads\patch-v15-40-1
 powershell -ExecutionPolicy Bypass -File .\apply.ps1
 ```
 
-**Git push (bu sefer --no-verify gerekli — ilk commit hook'u kuruyor):**
+**Commit + push (`--no-verify` gerekli — hook henüz bozuk durumda):**
 ```powershell
 cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
 $env:GIT_PAGER = "cat"
-git add -A scripts/ docs/
-git commit -m "v15.40: pre-push hook versioned via core.hooksPath"
+git add -A
+git commit -m "v15.40.1: hotfix - pre-push tsc fix + .gitattributes LF enforce"
 git push --no-verify
 ```
 
-**Sonraki push'lar:** `--no-verify` GEREKMEZ. Hook otomatik çalışır.
-
-**Hook bypass (acil durumlarda):** `git push --no-verify`
-
-**Diğer makinede (iskender.uzun):**
+**Sonraki push test:**
 ```powershell
-git pull --rebase
-powershell -ExecutionPolicy Bypass -File .\scripts\install-hooks.ps1
+git push --dry-run   # 3/3 OK beklenir
 ```
 
 ---
 
-**v15.40 patch'i hazır, repoda.**
+**v15.40.1 patch'i hazır.**

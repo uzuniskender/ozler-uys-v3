@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.40** (Pre-push Hook — core.hooksPath ile versiyonlu)
+**Sürüm: v15.40.1** (Pre-push Hook Hotfix — tsc + .gitattributes)
 
-Son Güncelleme: **25 Nisan 2026** (14. oturum — pre-push hook fix)
+Son Güncelleme: **25 Nisan 2026** (14. oturum — hook hotfix)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -45,7 +45,8 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.37**: Test Modu altyapısı — 5 senaryo runner, test_run_id etiketleme, cascade delete
 - **v15.38**: Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6 negatif test. `validations.ts` modülü, saf fonksiyonlar, admin bypass YOK.
 - **v15.39**: SR #11 Havuz Satırı Adaptasyonu. Sistem Sağlık Raporu'ndaki 11. kontrol artık havuz satırlarını (`satir.havuzBarId` dolu olanlar) ayrı işliyor — bar_acilis aramak yerine `uys_acik_barlar[havuzBarId].durum` kontrolü yapıyor. Üç eksik tipi ayrı raporlanıyor: normal eksik / havuz orphan / havuz açık kalmış. **Canlıda doğrulandı: 11/11 PASS.**
-- **v15.40 (bugünün son işi)**: Pre-push hook fix. `scripts/git-hooks/pre-push` repoda versionable — `git config core.hooksPath scripts/git-hooks` ile aktive ediliyor. Hook içinde Git Bash PATH fix (Node.js standart konumu + npm global), 3 adım: audit-schema + audit-columns + tsc --noEmit. İki makine için de çalışır (Iskender + iskender.uzun paths).
+- **v15.40**: Pre-push hook fix. `scripts/git-hooks/pre-push` repoda versionable — `git config core.hooksPath scripts/git-hooks` ile aktive ediliyor. Hook içinde Git Bash PATH fix (Node.js standart konumu + npm global), 3 adım: audit-schema + audit-columns + tsc --noEmit. İki makine için de çalışır (Iskender + iskender.uzun paths).
+- **v15.40.1 (hotfix)**: İki düzeltme. (1) Hook içindeki tsc çağrısı `npx --no-install tsc` yerine doğrudan `./node_modules/.bin/tsc` kullanıyor — `npx` "tsc" adını npm registry'deki yanlış pakete (eski `tsc@2.0.4`) çözümlüyordu. (2) `.gitattributes` dosyası eklendi: `scripts/git-hooks/*` ve `*.sh` LF zorunlu, `*.ps1` CRLF. Bu sayede hook dosyası Windows checkout'ta CRLF'ye dönüşüp bash shebang'i kırmıyor.
 
 ---
 
@@ -230,6 +231,7 @@ UI (OperatorPanel.save, WorkOrders.deleteWO) ve testRunner (Senaryo 6) ortak kul
 | **v15.38** | **Parça 5 — Yasak Kontrolleri (stok/duruş/silme) + Senaryo 6** ⭐ |
 | **v15.39** | **SR #11 Havuz Satırı Adaptasyonu** (normal + havuzBarId ayrımı) ⭐ |
 | **v15.40** | **Pre-push Hook** (core.hooksPath ile versionable) ⭐ |
+| v15.40.1 | Hotfix: tsc `./node_modules/.bin/tsc` + `.gitattributes` LF enforce |
 
 ---
 
@@ -456,11 +458,13 @@ patch/
 ## Prebuild hook
 `npm run build` öncesi audit otomatik.
 
-## pre-push hook (v15.40, ÇALIŞIYOR ✅)
+## pre-push hook (v15.40 + v15.40.1 hotfix, ÇALIŞIYOR ✅)
 **Kaynak:** `scripts/git-hooks/pre-push` (repoda versionable).
 **Aktivasyon:** `git config core.hooksPath scripts/git-hooks` — makine başına bir kez, ya manuel ya `scripts/install-hooks.ps1` ile.
-**Kapsam:** 3 check — `node scripts/audit-schema.cjs`, `node scripts/audit-columns.cjs`, `npx --no-install tsc --noEmit`.
+**Kapsam:** 3 check — `node scripts/audit-schema.cjs`, `node scripts/audit-columns.cjs`, `./node_modules/.bin/tsc --noEmit`.
 **PATH fix:** Git Bash için `/c/Program Files/nodejs` + npm global dizinleri. İki makine (Iskender + iskender.uzun) için de çalışır.
+**tsc çağrısı kritik not:** `npx --no-install tsc` KULLANILMAZ — npx "tsc" adını registry'deki yanlış pakete (eski `tsc@2.0.4`) çözümlüyor. Doğrudan `./node_modules/.bin/tsc` kullanılmalı.
+**LF zorunluluğu:** `.gitattributes` dosyası `scripts/git-hooks/*` için `eol=lf` belirliyor. Windows checkout CRLF'ye dönüştürürse hook bash shebang'i kırılır.
 **Bypass:** `git push --no-verify` — her zaman mümkün, acil durumlar için.
 
 ## Playwright E2E (v15.15)
@@ -589,8 +593,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.40** — Pre-push Hook (core.hooksPath ile versionable, audit + tsc).
+**v15.40.1** — Pre-push Hook hotfix (tsc doğru çağrı + .gitattributes LF enforce).
 
 ---
 
-*Bu belge v15.40 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.40.1 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*

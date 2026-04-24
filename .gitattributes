@@ -1,0 +1,13 @@
+# Git hooks must stay LF — CRLF breaks bash shebang on Windows (Git Bash).
+scripts/git-hooks/*  text eol=lf
+*.sh                 text eol=lf
+
+# PowerShell scripts prefer CRLF on Windows.
+*.ps1                text eol=crlf
+
+# Binary files — never touch.
+*.zip                binary
+*.png                binary
+*.jpg                binary
+*.jpeg               binary
+*.pdf                binary

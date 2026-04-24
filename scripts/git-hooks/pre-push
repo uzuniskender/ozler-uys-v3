@@ -49,8 +49,28 @@ if ! node scripts/audit-columns.cjs; then
 fi
 
 # --- 3. TypeScript type check ---
+# DO NOT use `npx --no-install tsc` — npx resolves "tsc" to the wrong
+# registry package (tsc@2.0.4, unrelated) instead of local TypeScript.
+# Use local node_modules/.bin/tsc directly.
 echo "[pre-push] (3/3) tsc --noEmit..."
-if ! npx --no-install tsc --noEmit; then
+
+TSC_BIN=""
+if [ -x "./node_modules/.bin/tsc" ]; then
+  TSC_BIN="./node_modules/.bin/tsc"
+elif [ -x "./node_modules/.bin/tsc.cmd" ]; then
+  TSC_BIN="./node_modules/.bin/tsc.cmd"
+elif command -v tsc >/dev/null 2>&1; then
+  TSC_BIN="tsc"
+fi
+
+if [ -z "$TSC_BIN" ]; then
+  echo "[pre-push] ERROR: tsc not found."
+  echo "[pre-push] Expected local install: ./node_modules/.bin/tsc"
+  echo "[pre-push] Run 'npm install' first, or bypass: git push --no-verify"
+  exit 1
+fi
+
+if ! "$TSC_BIN" --noEmit; then
   echo "[pre-push] FAIL: TypeScript errors."
   echo "[pre-push] Fix type errors before pushing."
   echo "[pre-push] Bypass (if intentional): git push --no-verify"
