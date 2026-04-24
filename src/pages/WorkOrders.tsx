@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -14,10 +14,11 @@ import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { isBarMaterialByKod } from '@/features/production/barModel'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
+import { startFlow } from '@/lib/pendingFlow'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, materials, loadAll } = useStore()
-  const { can, isGuest } = useAuth()
+  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, materials, pendingFlows, loadAll } = useStore()
+  const { can, isGuest, user } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['siparis', 'ym']))
@@ -25,6 +26,25 @@ export function WorkOrders() {
   const [detailWO, setDetailWO] = useState<string | null>(null)
   const [highlightLogId, setHighlightLogId] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
+
+  // v15.36 — Aktif yarım iş kontrolü (yeni İE tıklarken uyarı için)
+  const myUserId = user?.dbId || user?.email || user?.username || ''
+  const myActiveFlow = pendingFlows.find(f =>
+    f.durum === 'aktif' &&
+    (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
+  )
+
+  function handleNewIEClick() {
+    if (myActiveFlow) {
+      toast.warning(
+        `Tamamlanmamış akış var: ${myActiveFlow.stateData.baslik || 'Akış'} (${myActiveFlow.currentStep}). ` +
+        `Önce onu tamamla veya Topbar'dan iptal et.`,
+        { duration: 6000 }
+      )
+      return
+    }
+    setShowNewIE(true)
+  }
 
   // URL'den ?ie=X&log=Y → detail modal aç + log highlight
   useEffect(() => {
@@ -240,7 +260,7 @@ export function WorkOrders() {
             }
             if (count > 0) { loadAll(); toast.success(count + ' İE durumu güncellendi') } else toast.info('Tüm durumlar güncel')
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">🔄 Durumları Güncelle</button>
-          {can('wo_add') && <button onClick={() => setShowNewIE(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>}
+          {can('wo_add') && <button onClick={handleNewIEClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>}
         </div>
       </div>
 
@@ -579,6 +599,8 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const { materials, stations } = useStore()
+  const { user } = useAuth()
+  const navigate = useNavigate()
   const [rcId, setRcId] = useState('')
   const [malkod, setMalkod] = useState('')
   const [malad, setMalad] = useState('')
@@ -648,19 +670,45 @@ function NewIEModal({ operations, orders, recipes, onClose, onSaved }: {
       malkod: s.malkod, malad: s.malad,
       miktarTotal: s.miktar * (parseInt(hedef) || 1)
     }))
-    await supabase.from('uys_work_orders').insert({
-      id: uid(), order_id: orderId || null, rc_id: rcId || null,
+    const newIeNo = `IE-MANUAL-${Date.now().toString(36).toUpperCase()}`
+    const newId = uid()
+    const { error } = await supabase.from('uys_work_orders').insert({
+      id: newId, order_id: orderId || null, rc_id: rcId || null,
       sira: 1, kirno: '1',
       op_id: opId || null, op_kod: op?.kod || '', op_ad: op?.ad || '',
       ist_id: istId || null, ist_kod: ist?.kod || '', ist_ad: ist?.ad || '',
       malkod: malkod.trim(), malad: malad.trim(),
       hedef: parseInt(hedef) || 0, mpm: 1,
       hm: hm.length ? hm : [],
-      ie_no: `IE-MANUAL-${Date.now().toString(36).toUpperCase()}`,
+      ie_no: newIeNo,
       durum: 'bekliyor', bagimsiz: !orderId, siparis_disi: !orderId,
       mamul_kod: malkod.trim(), mamul_ad: malad.trim(),
       not_: not_, olusturma: today()
     })
+
+    if (error) { console.error('[WorkOrders] insert:', error); toast.error('İE kaydedilemedi: ' + error.message); return }
+
+    // v15.36 — Manuel İE için akış başlat: kesim planı → MRP → tedarik
+    if (user && !orderId) {  // sipariş dışı bağımsız İE ise akış anlamlı
+      const userId = user.dbId || user.email || user.username || ''
+      const userAd = user.username || ''
+      const flow = await startFlow({
+        flowType: 'manuel_ie',
+        initialStep: 'kesim',
+        userId, userAd,
+        stateData: {
+          ieIds: [newId],
+          baslik: `Manuel İE ${newIeNo} (${malad.trim().slice(0, 40)})`,
+        },
+      })
+      if (flow) {
+        toast.success('İE oluşturuldu — kesim planına yönlendiriliyor')
+        onSaved()
+        navigate('/kesim-planlari?flow=' + flow.id)
+        return
+      }
+    }
+
     onSaved()
   }
 
