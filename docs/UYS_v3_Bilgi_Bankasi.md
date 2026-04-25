@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.47.2** (Hotfix — durum string mismatch + §18.3 Durum String Konvansiyonu)
+**Sürüm: v15.47.3** (statusUtils yayılım + 'beklemede' bug fix + §18.3 güncellemesi)
 
-Son Güncelleme: **25 Nisan 2026** (21. oturum hotfix #2 — Topbar mantık düzeltmesi)
+Son Güncelleme: **25 Nisan 2026** (21. oturum hotfix #3 — kapsam genişletme)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -59,6 +59,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.47**: Üretim Zinciri Faz 1 + Faz 5 başlangıcı (`docs/is_emri/03_UretimZinciri.md`). 3 küçük parça tek patch'te: (1) **DB veri modeli** — `uys_kesim_planlari`'ya 4 yeni kolon (`ham_en`, `ham_kalinlik`, `fire_kg`, `artik_malzeme_kod`), `uys_tedarikler`'e 2 yeni kolon (`auto_olusturuldu`, `mrp_calculation_id`), yeni tablo `uys_mrp_calculations` (her MRP run snapshot'ı için JSONB alanlar: `brut_ihtiyac`, `stok_durumu`, `acik_tedarik`, `net_ihtiyac`). Bu altyapı Faz 2-4 (kesim optimizasyon + MRP modal + autoZincir) için hazır. Migration idempotent + RAISE NOTICE ile doğrulama. (2) **2 yeni RBAC aksiyonu** — MRP grubuna `tedarik_auto` ve `auto_chain_run` eklendi (planlama default). `mrp_calculate` ve `cutting_optimize` zaten mevcut (`mrp_calc`, `cutting_add`), duplicate yaratılmadı. (3) **Üst bar zincir göstergeleri** — Topbar.tsx'e 3 tıklanabilir badge: `[KESİM 🔴 N]` (kesim operasyonu olan, plana atanmamış İE sayısı), `[MRP 🟡 N]` (mrpDurum != 'tamamlandi' aktif sipariş sayısı), `[TEDARİK 🟢 N]` (geldi=false bekleyen tedarik sayısı). Renk: 0=yeşil, 1-5=sarı, 6+=kırmızı. `useMemo` ile cache'li, ilgili 4 store array değişince yeniden hesaplanır. Tıklayınca filtreli sayfaya yönlendirir (`#/cutting`, `#/orders`, `#/procurement`). Mobile'de gizli (`hidden md:flex` — küçük ekranda yer kalmıyor).
 - **v15.47.1 (hotfix + konvansiyon)**: Push sırasında audit-schema FAIL verdi — yeni `uys_mrp_calculations` tablosu store ve DataManagement listesinde olmadığı için. Whitelist'lere yorumlu giriş eklendi (Faz 3'te modal kendi fetch edecek, backup gereksiz çünkü snapshot yeniden hesaplanabilir). **Asıl önemli:** Bu durum gelecekte 5+ kez tekrar gelecekti (İş Emri #2, #4, #5, #6 hepsinde yeni tablolar geliyor). Bilgi Bankası §18.2 "Yeni Tablo Konvansiyonu" bölümü eklendi: her yeni migration'a 2 satırlık intent yorumu (BACKUP: evet/hayır + STORE: hangi sürümde eklenecek), karar matrisi (4 farklı tablo tipine göre nereye girer), kontrol listesi. Bir sonraki tablo geldiğinde bu konvansiyon takip edilirse aynı sıkıntı yaşanmaz.
 - **v15.47.2 (hotfix #2 + konvansiyon)**: v15.47'deki Topbar MRP badge'i 12 gösterdi ama gerçek 0 olmalıydı. SQL doğrulamasıyla ortaya çıktı: `uys_orders.durum` eski siparişlerde `'kapalı'`, `mrp_durum` ise `'tamam'` (kısa form). Topbar mantığı sadece `'iptal'/'tamamlandi'` filtresi kullanıyordu, bu eski string'leri kaçırıyordu. **Çözüm:** `src/lib/statusUtils.ts` yeni dosya — 4 helper (`isOrderActive`, `isOrderMrpPending`, `isWorkOrderOpen`, `isCuttingPlanActive`, `isProcurementPending`) tüm bilinen string varyantlarını normalize ediyor. Topbar artık bu helper'ları kullanıyor; mantık 2 satıra düştü. Aynı helper'lar gelecekte başka sayfalarda da kullanılabilir, tutarlılık sağlanır. **Asıl önemli:** DB seviyesinde 4 farklı "tamamlandı" kavramı varyantı tespit edildi (`'tamamlandi'`, `'tamam'`, `'kapalı'`, `'kapali'`). Bilgi Bankası §18.3 "Durum String Konvansiyonu" eklendi — her tablo için kullanılan durum string'leri belge edildi, DB-wide migrate riskli olduğu için kod seviyesinde normalize stratejisi açıklandı, gelecek için yeni durum eklerken kontrol listesi eklendi.
+- **v15.47.3 (hotfix #3 + yayılım)**: statusUtils.ts yayılımı 4 sayfaya — kapsam audit'i sırasında **gerçek bir bug** ortaya çıktı: WorkOrders.tsx'te `'beklemede'` (paused) durumu var ama Topbar `isWorkOrderOpen` helper'ı sadece `'tamamlandi'/'iptal'` filtreliyordu. **Sonuç:** Paused İE'ler "açık" sayılıyor, KESİM badge'inde false positive sayım yapıyordu. Düzeltme: `WO_CLOSED_OR_PAUSED_STATES` 3'lü set (`'tamamlandi'`, `'iptal'`, `'beklemede'`) → paused İE'ler artık plana alınmıyor. **2 yeni helper:** `isCuttingPlanPending(cp)` (CuttingPlans liste için), `isAcikBarAvailable(b)` (havuz önerisi için — gelecekte de kullanılır). **2 sayfa refactor:** `Procurement.tsx` 5 yer (filtered, markGeldiBulk, toggleSelectAll, toplamBekleyen, bulk select checkbox — `!t.geldi` → `isProcurementPending(t)`), `CuttingPlans.tsx` 7 yer (3 wo durum filtresi → `!isWorkOrderOpen(w)`, 3 acikBar durum kontrolü → `isAcikBarAvailable(a)`, 1 plan durum filtresi → `isCuttingPlanPending`). `Orders.tsx` ve `WorkOrders.tsx` çoğunlukla insert/update payload veya UI eşleştirme, helper'a sokmak gereksizdi (bilerek dokunulmadı). §18.3 DB snapshot tablosu güncellendi — 3 yeni keşif: `uys_work_orders.durum`'da `'beklemede'`, `uys_orders.mrp_durum`'da `'eksik'`/`'calistirildi'`, `uys_acik_barlar.durum` (yeni satır: `'acik'`/`'tuketildi'`/`'hurda'`).
 
 ---
 
@@ -785,7 +786,7 @@ Bu 4 madde sırası takip edilirse "schema FAIL" hatası tekrarlanmaz.
 
 DB seviyesinde tablolar arasında durum string'leri tutarsız. Aynı kavramı (örn. "tamamlandı") farklı tablolar farklı yazıyor. v15.47'de bu Topbar MRP badge'inde false positive yaratttı (12 göstermek yerine 0 olması gerekirdi).
 
-## Mevcut Durum (DB Snapshot — v15.47.2 itibariyle)
+## Mevcut Durum (DB Snapshot — v15.47.2 itibariyle, v15.47.3 ile genişletildi)
 
 Aşağıdaki sorgu ile gerçek string'ler tespit edildi:
 
@@ -795,13 +796,14 @@ FROM public.uys_orders GROUP BY durum
 UNION ALL ... (5 tablo için)
 ```
 
-| Tablo | Durum string'leri |
-|---|---|
-| `uys_orders.durum` | `'kapalı'` (10), `(boş)` (2) |
-| `uys_orders.mrp_durum` | `'tamam'` (6), `'bekliyor'` (6) |
-| `uys_work_orders.durum` | `'tamamlandi'` (60), `'bekliyor'` (15) |
-| `uys_kesim_planlari.durum` | `'tamamlandi'` (25), `'bekliyor'` (11) |
-| `uys_tedarikler.durum` | `'geldi'` (68) — sadece geldi olanlar; bekleyenlerde durum boş |
+| Tablo | Durum string'leri | Kaynak |
+|---|---|---|
+| `uys_orders.durum` | `'kapalı'` (10), `(boş)` (2) | DB sorgusu (v15.47.2) |
+| `uys_orders.mrp_durum` | `'tamam'`, `'bekliyor'`, `'eksik'`, `'calistirildi'` | DB sorgusu + Orders.tsx:281 (v15.47.3 audit) |
+| `uys_work_orders.durum` | `'tamamlandi'`, `'bekliyor'`, **`'beklemede'`** ⚠️ | DB sorgusu + WorkOrders.tsx (v15.47.3 audit — paused durumu) |
+| `uys_kesim_planlari.durum` | `'tamamlandi'` (25), `'bekliyor'` (11) | DB sorgusu |
+| `uys_tedarikler.durum` | `'geldi'` (68) — bekleyenlerde durum boş | DB sorgusu |
+| `uys_acik_barlar.durum` | `'acik'`, `'tuketildi'`, `'hurda'` | Store mapper + barModel.ts (v15.47.3 audit) |
 
 ## Tutarsızlıklar
 
@@ -824,15 +826,17 @@ DB-wide migrate (örn. `'tamam'` → `'tamamlandi'`, `'kapalı'` → `'tamamland
 ## Helper Fonksiyonları
 
 ```typescript
-// statusUtils.ts
+// statusUtils.ts (v15.47.2 + v15.47.3 genişletmesi)
 isOrderActive(o)           // sipariş aktif mi (kapalı/iptal/tamamlandi değil)
 isOrderMrpPending(o)       // MRP bekleniyor mu (mrp_durum 'tamam'|'tamamlandi' değil)
-isWorkOrderOpen(w)         // İE açık mı
+isWorkOrderOpen(w)         // İE açık mı — v15.47.3: 'beklemede' (paused) da kapalı sayılır
 isCuttingPlanActive(cp)    // kesim planı iptal değil mi
+isCuttingPlanPending(cp)   // v15.47.3 — plan tamamlanmamış (liste/sayım için)
 isProcurementPending(t)    // tedarik bekleniyor mu (geldi=false ve iptal değil)
+isAcikBarAvailable(b)      // v15.47.3 — açık bar havuzda kullanılabilir mi
 ```
 
-Her helper içeride **bilinen tüm varyantları kontrol ediyor** (`'tamam' OR 'tamamlandi'`, `'kapalı' OR 'kapali' OR 'tamamlandi' OR 'iptal'` gibi).
+Her helper içeride **bilinen tüm varyantları kontrol ediyor** (`'tamam' OR 'tamamlandi'`, `'kapalı' OR 'kapali' OR 'tamamlandi' OR 'iptal'`, WorkOrder için `'tamamlandi' OR 'iptal' OR 'beklemede'`).
 
 ## Yeni Yer / Yeni Durum Eklerken Kontrol Listesi
 
@@ -864,7 +868,7 @@ Bu konuyu kapsamlı çözmek için iki yol var:
 ---
 
 ## Son canlı sürüm
-**v15.47.2** — Hotfix: durum string mismatch + §18.3 Durum String Konvansiyonu.
+**v15.47.3** — statusUtils yayılım + 'beklemede' bug fix + §18.3 güncellemesi.
 
 ---
 

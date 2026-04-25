@@ -8,6 +8,7 @@ import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy, havuzdanYenidenOptimize } from '@/features/production/cutting'
 import type { WorkOrder, AcikBar } from '@/types'
+import { isWorkOrderOpen, isCuttingPlanPending, isAcikBarAvailable } from '@/lib/statusUtils'
 import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { advanceFlow } from '@/lib/pendingFlow'
@@ -28,7 +29,8 @@ export function CuttingPlans() {
   // v15.36 — flow'da otomatik plan hesabı bir kez çalışsın
   const [flowAutoDone, setFlowAutoDone] = useState(false)
 
-  const bekleyen = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
+  // v15.47.3: isCuttingPlanPending — 'tamamlandi' ve 'iptal' dışı her şey bekliyor sayılır
+  const bekleyen = cuttingPlans.filter(isCuttingPlanPending)
   const gosterilen = showTamamlanan ? cuttingPlans : bekleyen
 
   // v15.36 — Flow akışında sayfa ilk açıldığında otomatik plan hesapla
@@ -140,7 +142,7 @@ export function CuttingPlans() {
             const havuzlulanmisPlanIds: string[] = []
             for (const p of planlar) {
               if (p.durum !== 'bekliyor') continue
-              const havuzAcik = acikBarlar.filter(a => a.durum === 'acik' && a.hamMalkod === p.hamMalkod)
+              const havuzAcik = acikBarlar.filter(a => isAcikBarAvailable(a) && a.hamMalkod === p.hamMalkod)
               if (havuzAcik.length === 0) continue
 
               // Plandaki en küçük parça boyunu bul (bekleyen satırlardaki kesimlerden)
@@ -172,7 +174,7 @@ export function CuttingPlans() {
         const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap(s => (s.kesimler || []).map((k: { woId?: string }) => k.woId))))
         const oneriler = workOrders.filter(w => {
           if (planliWoIds.has(w.id)) return false
-          if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+          if (!isWorkOrderOpen(w)) return false  // v15.47.3: 'beklemede' (paused) İE'ler de plana alınmaz
           const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
           if (prod >= w.hedef) return false
           return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
@@ -324,7 +326,7 @@ export function CuttingPlans() {
         // loadAll sonrası store güncel — store'dan plan'ı al
         const yeniPlan = useStore.getState().cuttingPlans.find((p: any) => p.id === yeniPlanId) as any
         if (!yeniPlan || yeniPlan.durum !== 'bekliyor') return
-        const havuzAcik = useStore.getState().acikBarlar.filter((a: any) => a.durum === 'acik' && a.hamMalkod === yeniPlan.hamMalkod)
+        const havuzAcik = useStore.getState().acikBarlar.filter((a: any) => isAcikBarAvailable(a) && a.hamMalkod === yeniPlan.hamMalkod)
         if (havuzAcik.length === 0) return
         // Plandaki en küçük parça boyu (bekleyen satırların kesimleri)
         let minParcaBoy = Infinity
@@ -345,7 +347,7 @@ export function CuttingPlans() {
         const planId = havuzOneriQueue[0]
         const plan = cuttingPlans.find(p => p.id === planId)
         if (!plan) { setHavuzOneriQueue(q => q.slice(1)); return null }
-        const havuzBarlari = acikBarlar.filter(a => a.durum === 'acik' && a.hamMalkod === plan.hamMalkod)
+        const havuzBarlari = acikBarlar.filter(a => isAcikBarAvailable(a) && a.hamMalkod === plan.hamMalkod)
         if (!havuzBarlari.length) { setHavuzOneriQueue(q => q.slice(1)); return null }
         // v15.35.2 — Uygun bar kontrolü (render güvencesi)
         let minParcaBoy = Infinity
@@ -397,7 +399,7 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
   // Aynı HM'yi kullanan, fire'a sığabilecek açık İE'ler
   const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
   const uygunIEler = workOrders.filter(w => {
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    if (!isWorkOrderOpen(w)) return false  // v15.47.3: 'beklemede' (paused) İE'ler de plana alınmaz
     if (ekliParcalar.some((k: any) => k.woId === w.id)) return false // Zaten planda
     const prod = logs.filter((l: any) => l.woId === w.id).reduce((a: number, l: any) => a + l.qty, 0)
     if (prod >= w.hedef) return false
@@ -544,7 +546,7 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   // Bu HM'yi kullanan açık İE'ler
   const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
   const uygunIEler = workOrders.filter(w => {
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    if (!isWorkOrderOpen(w)) return false  // v15.47.3: 'beklemede' (paused) İE'ler de plana alınmaz
     const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
     if (prod >= w.hedef) return false
     const wOp = operations.find(o => o.id === w.opId)

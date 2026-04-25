@@ -18,7 +18,7 @@
  * Daha fazla bilgi: docs/UYS_v3_Bilgi_Bankasi.md §18.3 Durum String Konvansiyonu
  */
 
-import type { Order, WorkOrder, CuttingPlan, Tedarik } from '@/types'
+import type { Order, WorkOrder, CuttingPlan, Tedarik, AcikBar } from '@/types'
 
 // ─── ORDERS (siparişler) ─────────────────────────────────────────
 
@@ -59,17 +59,25 @@ export function isOrderMrpPending(o: Order): boolean {
 // ─── WORK ORDERS (iş emirleri) ───────────────────────────────────
 
 /**
- * Bir İE'nin "kapanmış" olduğunu kabul eden tüm string'ler.
- * Modern kod tutarlı: 'tamamlandi' veya 'iptal'.
+ * Bir İE'nin "kapanmış veya duraklatılmış" olduğunu kabul eden tüm string'ler.
+ * - 'tamamlandi' — bitirilmiş
+ * - 'iptal'      — iptal edilmiş
+ * - 'beklemede'  — duraklatılmış (paused) — operatör tarafından beklemeye alınmış,
+ *                  şu an üretilmiyor; plana yeniden alınmamalı
+ *
+ * v15.47.3: 'beklemede' eklendi. Önceden Topbar KESİM badge'i paused İE'leri
+ * "açık" sayıp false positive üretiyordu (WorkOrders.tsx satır 168, 543'te
+ * 'beklemede' kullanılıyor — Devam Et butonu için).
  */
-const WO_CLOSED_STATES = new Set(['tamamlandi', 'iptal'])
+const WO_CLOSED_OR_PAUSED_STATES = new Set(['tamamlandi', 'iptal', 'beklemede'])
 
 /**
  * İş emri hala açık mı? (üretilebilir, plana girilebilir)
+ * 'beklemede' durumu da AÇIK SAYILMAZ — paused İE'ye plan oluşturulmamalı.
  */
 export function isWorkOrderOpen(w: WorkOrder): boolean {
   const d = (w.durum || '').toLowerCase().trim()
-  return !WO_CLOSED_STATES.has(d)
+  return !WO_CLOSED_OR_PAUSED_STATES.has(d)
 }
 
 // ─── CUTTING PLANS (kesim planları) ──────────────────────────────
@@ -86,6 +94,37 @@ const CP_CLOSED_STATES = new Set(['iptal'])
 export function isCuttingPlanActive(cp: CuttingPlan): boolean {
   const d = (cp.durum || '').toLowerCase().trim()
   return !CP_CLOSED_STATES.has(d)
+}
+
+/**
+ * Bir kesim planının "tamamlanmamış" olduğu — yani üretim bekleniyor.
+ * v15.47.3: CuttingPlans listeleme/sayım için. 'iptal' veya 'tamamlandi'
+ * dışı her şey pending sayılır.
+ */
+const CP_PENDING_OR_ACTIVE = new Set(['bekliyor', 'devam', '', 'planlandi'])
+
+export function isCuttingPlanPending(cp: CuttingPlan): boolean {
+  const d = (cp.durum || '').toLowerCase().trim()
+  // 'tamamlandi' ve 'iptal' kesin kapalı — pending değil
+  if (d === 'tamamlandi' || d === 'iptal') return false
+  // Geri kalan her şey pending (boş string, 'bekliyor', 'devam', 'planlandi' vs.)
+  return CP_PENDING_OR_ACTIVE.has(d) || d === ''
+}
+
+// ─── ACIK BAR (havuz) ────────────────────────────────────────────
+
+/**
+ * Bir açık barın "havuzda kullanılabilir" olduğu durum.
+ * uys_acik_barlar.durum 3 değer alır:
+ * - 'acik'      — havuzda, kullanıma hazır
+ * - 'tuketildi' — bir log'da tüketildi
+ * - 'hurda'     — hurdaya gönderildi
+ *
+ * v15.47.3: AcikBar kullanan sayfalarda (CuttingPlans havuz önerisi vb.)
+ * doğrudan `b.durum === 'acik'` yerine bu helper.
+ */
+export function isAcikBarAvailable(b: AcikBar): boolean {
+  return (b.durum || '').toLowerCase().trim() === 'acik'
 }
 
 // ─── TEDARIKLER (tedarik/satınalma) ──────────────────────────────

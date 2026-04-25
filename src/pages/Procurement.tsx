@@ -12,6 +12,7 @@ import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown }
 import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/lib/tedarikHelpers'
 import { rezerveleriSenkronla } from '@/features/production/mrp'
 import { FlowProgress } from '@/components/FlowProgress'
+import { isProcurementPending } from '@/lib/statusUtils'
 
 export function Procurement() {
   const { tedarikler, tedarikciler, orders, workOrders, recipes, stokHareketler, cuttingPlans, materials, pendingFlows, loadAll } = useStore()
@@ -30,7 +31,10 @@ export function Procurement() {
 
   const filtered = useMemo(() => {
     return tedarikler.filter(t => {
-      if (durumFilter === 'bekliyor' && t.geldi) return false
+      // v15.47.3: durumFilter UI tercihi — bekliyor/geldi spesifik filtre.
+      // isProcurementPending helper'ı (geldi=false + iptal değil) durumFilter='bekliyor'
+      // ile birebir eşleşir; iptal edilenler 'bekliyor' filtresinden de düşer.
+      if (durumFilter === 'bekliyor' && !isProcurementPending(t)) return false
       if (durumFilter === 'geldi' && !t.geldi) return false
       if (search) {
         const q = search.toLowerCase()
@@ -56,7 +60,8 @@ export function Procurement() {
   }
 
   async function markGeldiBulk() {
-    const bekleyenler = [...selectedIds].map(id => tedarikler.find(t => t.id === id)).filter(t => t && !t.geldi) as typeof tedarikler
+    // v15.47.3: isProcurementPending helper'ı — geldi=false + iptal değil
+    const bekleyenler = [...selectedIds].map(id => tedarikler.find(t => t.id === id)).filter(t => t && isProcurementPending(t)) as typeof tedarikler
     if (!bekleyenler.length) { toast.info('Seçili bekleyen tedarik yok'); return }
     if (!await showConfirm(`${bekleyenler.length} tedarik "geldi" olarak işaretlenecek ve stok girişleri yapılacak. Devam?`)) return
     for (const ted of bekleyenler) {
@@ -74,7 +79,8 @@ export function Procurement() {
     })
   }
   function toggleSelectAll() {
-    const bekleyenIds = filtered.filter(t => !t.geldi).map(t => t.id)
+    // v15.47.3: isProcurementPending — geldi=false + iptal değil
+    const bekleyenIds = filtered.filter(isProcurementPending).map(t => t.id)
     if (selectedIds.size === bekleyenIds.length && bekleyenIds.every(id => selectedIds.has(id))) {
       setSelectedIds(new Set())
     } else {
@@ -188,7 +194,8 @@ export function Procurement() {
     input.click()
   }
 
-  const toplamBekleyen = tedarikler.filter(t => !t.geldi).length
+  // v15.47.3: isProcurementPending — geldi=false + iptal değil. Önceden sadece !geldi sayılırdı.
+  const toplamBekleyen = tedarikler.filter(isProcurementPending).length
 
   return (
     <div>
@@ -253,9 +260,9 @@ export function Procurement() {
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-bg-2 z-10"><tr className="border-b border-border text-zinc-500">
               <th className="w-8 px-3 py-2.5">
-                {can('ted_geldi') && filtered.some(t => !t.geldi) && (
+                {can('ted_geldi') && filtered.some(isProcurementPending) && (
                   <input type="checkbox"
-                    checked={filtered.filter(t => !t.geldi).length > 0 && filtered.filter(t => !t.geldi).every(t => selectedIds.has(t.id))}
+                    checked={filtered.filter(isProcurementPending).length > 0 && filtered.filter(isProcurementPending).every(t => selectedIds.has(t.id))}
                     onChange={toggleSelectAll}
                     className="accent-accent"
                     title="Bekleyen tüm tedarikleri seç/bırak"
