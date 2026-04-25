@@ -315,7 +315,31 @@ export function CuttingPlans() {
         ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz kesim planı yok</div>}
       </div>
 
-      {showCreate && <KesimOlusturModal materials={materials} workOrders={workOrders} onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); loadAll(); toast.success('Kesim planları oluşturuldu') }} />}
+      {showCreate && <KesimOlusturModal materials={materials} workOrders={workOrders} onClose={() => setShowCreate(false)} onSaved={async (yeniPlanId?: string) => {
+        setShowCreate(false)
+        await loadAll()
+        toast.success('Kesim planı oluşturuldu')
+        // v15.44 — Manuel plan'da da havuz önerisi tarama (otomatik plan'daki mantığın aynısı)
+        if (!yeniPlanId) return
+        // loadAll sonrası store güncel — store'dan plan'ı al
+        const yeniPlan = useStore.getState().cuttingPlans.find((p: any) => p.id === yeniPlanId) as any
+        if (!yeniPlan || yeniPlan.durum !== 'bekliyor') return
+        const havuzAcik = useStore.getState().acikBarlar.filter((a: any) => a.durum === 'acik' && a.hamMalkod === yeniPlan.hamMalkod)
+        if (havuzAcik.length === 0) return
+        // Plandaki en küçük parça boyu (bekleyen satırların kesimleri)
+        let minParcaBoy = Infinity
+        for (const s of (yeniPlan.satirlar || [])) {
+          if (s.durum && s.durum !== 'bekliyor') continue
+          for (const k of (s.kesimler || []) as any[]) {
+            const pb = k.parcaBoy || 0
+            if (pb > 0 && pb < minParcaBoy) minParcaBoy = pb
+          }
+        }
+        if (!isFinite(minParcaBoy)) return
+        // En az bir havuz barı bu min parça boyunu kaldırıyor mu?
+        const uygunBar = havuzAcik.some((a: any) => (a.uzunlukMm || 0) >= minParcaBoy)
+        if (uygunBar) setHavuzOneriQueue([yeniPlanId])
+      }} />}
       {artikInfo && <ArtikOneriModal info={artikInfo} materials={materials} workOrders={workOrders} operations={operations} recipes={recipes} logs={logs} onClose={() => setArtikInfo(null)} onSaved={() => { setArtikInfo(null); loadAll() }} />}
       {havuzOneriQueue.length > 0 && (() => {
         const planId = havuzOneriQueue[0]
@@ -505,7 +529,7 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
 function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   materials: import('@/types').Material[]
   workOrders: WorkOrder[]
-  onClose: () => void; onSaved: () => void
+  onClose: () => void; onSaved: (planId?: string) => void
 }) {
   const { operations, recipes, logs, cuttingPlans } = useStore()
   const [hamMalkod, setHamMalkod] = useState('')
@@ -595,12 +619,14 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
         return { woId: ie?.id || '', ieNo: k.ieNo, malkod: ie?.malkod || '', malad: k.malad, parcaBoy: k.parcaBoy, adet: k.adet, tamamlandi: 0 }
       })
     }))
+    // v15.44 — yeni plan ID'sini sakla → onSaved'e ilet → parent havuz önerisi tarayabilsin
+    const yeniPlanId = uid()
     await supabase.from('uys_kesim_planlari').insert({
-      id: uid(), ham_malkod: hamMalkod, ham_malad: seciliHM?.ad || hamMalkod,
+      id: yeniPlanId, ham_malkod: hamMalkod, ham_malad: seciliHM?.ad || hamMalkod,
       ham_boy: hamBoy, ham_en: 0, kesim_tip: 'boy',
       durum: 'bekliyor', satirlar, gerekli_adet: toplamBar, tarih: today(),
     })
-    onSaved()
+    onSaved(yeniPlanId)
   }
 
   const COLORS = ['#4f9cf9', '#f97b4f', '#6fcf97', '#bb6bd9', '#f2c94c', '#56ccf2']

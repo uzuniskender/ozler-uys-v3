@@ -8,12 +8,13 @@ import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
+import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/production/barModel'
 
 export function Warehouse() {
   const { stokHareketler, materials, acikBarlar, loadAll } = useStore()
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'>('stok')
+  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
   const [showGiris, setShowGiris] = useState(false)
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [detayHam, setDetayHam] = useState<string | null>(null)  // v15.34 — açık bar detay modal
@@ -134,12 +135,13 @@ export function Warehouse() {
       </div>
 
       <div className="flex gap-1 mb-4">
-        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="stok">Anlık Stok</option>
           <option value="hareketler">Hareketler</option>
           <option value="sayim">Stok Sayım</option>
           <option value="acikBarlar">Açık Bar Havuzu</option>
           <option value="hurda">Hurdaya Gönderilen</option>
+          <option value="tuketildi">Tüketilmiş Bar</option>
         </select>
       </div>
 
@@ -306,6 +308,7 @@ export function Warehouse() {
 
         {tab === 'hurda' && (() => {
           // v15.34.2 — Hurdaya Gönderilen barlar. Düz liste, tarih azalan sıralı.
+          // v15.44 — Admin'e "Geri Al" butonu eklendi (acikbar_hurda_geri_al yetkisi).
           const hurdalar = [...acikBarlar]
             .filter(a => a.durum === 'hurda')
             .sort((a, b) => (b.hurdaTarihi || '').localeCompare(a.hurdaTarihi || ''))
@@ -316,6 +319,27 @@ export function Warehouse() {
                   .toLowerCase().includes(q))
             : hurdalar
           const toplamMm = filtered.reduce((a, b) => a + (b.uzunlukMm || 0), 0)
+          const canHurdaGeriAl = can('acikbar_hurda_geri_al')
+          const currentUserId = user?.dbId || user?.email || user?.username || ''
+          const currentUserAd = user?.username || ''
+
+          async function geriAlHurda(barId: string, malkod: string, uzunluk: number) {
+            if (!currentUserAd) { toast.error('Kullanıcı adı tespit edilemedi. Yeniden giriş yap.'); return }
+            const onay = await showConfirm(
+              `${malkod} (${Math.round(uzunluk)} mm) hurdadan geri alınacak.\n\n` +
+              `Bar tekrar açık havuza dönecek. Fire log'undaki kayıt KORUNUR ` +
+              `("İPTAL" notu eklenir, audit trail bozulmaz).\n\nDevam edilsin mi?`
+            )
+            if (!onay) return
+            const ok = await acikBarHurdadanGeriAl(barId, currentUserId, currentUserAd)
+            if (ok) {
+              toast.success('Hurda geri alındı, bar açık havuza döndü')
+              loadAll()
+            } else {
+              toast.error('Geri alma başarısız — konsola bak')
+            }
+          }
+
           return (
             <div>
               <div className="px-4 py-2 bg-bg-3/40 border-b border-border text-[11px] text-zinc-500">
@@ -334,6 +358,7 @@ export function Warehouse() {
                     <th className="text-left px-4 py-2.5">Hurda Tarihi</th>
                     <th className="text-left px-4 py-2.5">Kullanıcı</th>
                     <th className="text-left px-4 py-2.5">Sebep</th>
+                    <th className="text-right px-4 py-2.5 w-24">İşlem</th>
                   </tr></thead>
                   <tbody>
                     {filtered.map(b => (
@@ -350,6 +375,109 @@ export function Warehouse() {
                         <td className="px-4 py-2 text-zinc-400 text-[11px]">
                           {b.hurdaSebep || <span className="text-zinc-600 italic">sebepsiz</span>}
                         </td>
+                        <td className="px-4 py-2 text-right">
+                          {canHurdaGeriAl ? (
+                            <button
+                              onClick={() => geriAlHurda(b.id, b.hamMalkod, b.uzunlukMm)}
+                              title="Hurdadan geri al — bar açık havuza döner"
+                              className="px-2 py-1 bg-amber/10 hover:bg-amber/20 border border-amber/30 text-amber rounded text-[10px] font-semibold">
+                              ↩ Geri Al
+                            </button>
+                          ) : (
+                            <span className="text-zinc-600 text-[10px]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )
+        })()}
+        {tab === 'tuketildi' && (() => {
+          // v15.44 — Tüketilmiş barlar. 'tuketildi' durumlu açık barlar.
+          // Admin'e "Geri Al" butonu (acikbar_havuz_geri_al yetkisi).
+          // NOT: Stok hareketlerine dokunulmaz — yanlış işaretleme senaryosu için.
+          const tuketilenler = [...acikBarlar]
+            .filter(a => a.durum === 'tuketildi')
+            .sort((a, b) => (b.tuketimTarihi || '').localeCompare(a.tuketimTarihi || ''))
+          const q = search.trim().toLowerCase()
+          const filtered = q
+            ? tuketilenler.filter(a =>
+                (a.hamMalkod + ' ' + a.hamMalad + ' ' + (a.tuketimLogId || ''))
+                  .toLowerCase().includes(q))
+            : tuketilenler
+          const toplamMm = filtered.reduce((a, b) => a + (b.uzunlukMm || 0), 0)
+          const canHavuzGeriAl = can('acikbar_havuz_geri_al')
+          const currentUserId = user?.dbId || user?.email || user?.username || ''
+          const currentUserAd = user?.username || ''
+
+          async function geriAlTuketim(barId: string, malkod: string, uzunluk: number) {
+            if (!currentUserAd) { toast.error('Kullanıcı adı tespit edilemedi. Yeniden giriş yap.'); return }
+            const onay = await showConfirm(
+              `${malkod} (${Math.round(uzunluk)} mm) tüketim geri alınacak.\n\n` +
+              `⚠ DİKKAT: Stok hareketlerine DOKUNULMAZ.\n` +
+              `Eğer üretim gerçekten yapıldıysa stok zaten düşmüştür; otomatik geri alma double-counting yaratır.\n` +
+              `Yanlış işaretleme senaryosu için tasarlandı.\n` +
+              `Manuel düzeltme gerekirse Stok sayfasından yapın.\n\n` +
+              `Devam edilsin mi?`
+            )
+            if (!onay) return
+            const ok = await acikBarTuketimGeriAl(barId, currentUserId, currentUserAd)
+            if (ok) {
+              toast.success('Tüketim geri alındı, bar açık havuza döndü')
+              loadAll()
+            } else {
+              toast.error('Geri alma başarısız — konsola bak')
+            }
+          }
+
+          return (
+            <div>
+              <div className="px-4 py-2 bg-bg-3/40 border-b border-border text-[11px] text-zinc-500">
+                {filtered.length} tüketilmiş bar · toplam {Math.round(toplamMm)} mm
+                {q && <span className="ml-2">({tuketilenler.length} toplam)</span>}
+              </div>
+              {!filtered.length ? (
+                <div className="p-8 text-center text-zinc-500 text-xs">
+                  {tuketilenler.length ? 'Arama kriterine uyan tüketilmiş bar yok.' : 'Tüketilmiş bar kaydı yok. Açık barlar üretim sırasında havuzdan çekildiğinde tüketilmiş olarak işaretlenir.'}
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500">
+                    <th className="text-left px-4 py-2.5">Ham Malzeme</th>
+                    <th className="text-right px-4 py-2.5">Uzunluk</th>
+                    <th className="text-left px-4 py-2.5">Tüketim Tarihi</th>
+                    <th className="text-left px-4 py-2.5">Tüketen Log/WO</th>
+                    <th className="text-right px-4 py-2.5 w-24">İşlem</th>
+                  </tr></thead>
+                  <tbody>
+                    {filtered.map(b => (
+                      <tr key={b.id} className="border-b border-border/30 hover:bg-bg-3/30">
+                        <td className="px-4 py-2">
+                          <div className="font-mono text-accent text-[11px]">{b.hamMalkod}</div>
+                          <div className="text-zinc-500 text-[10px]">{b.hamMalad}</div>
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-zinc-200">{Math.round(b.uzunlukMm)} mm</td>
+                        <td className="px-4 py-2 text-zinc-400 text-[11px] font-mono">
+                          {(b.tuketimTarihi || '').slice(0, 16).replace('T', ' ') || '-'}
+                        </td>
+                        <td className="px-4 py-2 text-zinc-400 text-[10px] font-mono truncate max-w-[200px]">
+                          {b.tuketimLogId || <span className="text-zinc-600 italic">-</span>}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          {canHavuzGeriAl ? (
+                            <button
+                              onClick={() => geriAlTuketim(b.id, b.hamMalkod, b.uzunlukMm)}
+                              title="Tüketimi geri al — bar açık havuza döner. Stok hareketleri dokunulmaz."
+                              className="px-2 py-1 bg-amber/10 hover:bg-amber/20 border border-amber/30 text-amber rounded text-[10px] font-semibold">
+                              ↩ Geri Al
+                            </button>
+                          ) : (
+                            <span className="text-zinc-600 text-[10px]">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -359,8 +487,6 @@ export function Warehouse() {
           )
         })()}
       </div>
-
-      {showGiris && <StokGirisModal materials={materials} onClose={() => setShowGiris(false)} onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }} />}
       {detayHam && (
         <AcikBarHurdaModal
           hamMalkod={detayHam}
@@ -532,8 +658,10 @@ function AcikBarHurdaModal({
 
       // 2. uys_fire_logs: her hurda bar için bir fire kaydı (tip='bar_hurda')
       //    Rapor takibi için. qty=1 (bar adedi), uzunluk_mm dolu.
+      //    v15.44: ID deterministik 'fire-bar-hurda-' + acikBarId →
+      //    geri alma sırasında bulunabilir + idempotent (tekrar hurda et = aynı kayıt).
       const fireRows = secilenBarlar.map(b => ({
-        id: uid(),
+        id: 'fire-bar-hurda-' + b.id,
         log_id: null,
         wo_id: null,
         tarih: tarihKisa,
@@ -547,7 +675,9 @@ function AcikBarHurdaModal({
         tip: 'bar_hurda',
         uzunluk_mm: b.uzunlukMm,
       }))
-      const { error: e2 } = await supabase.from('uys_fire_logs').insert(fireRows)
+      const { error: e2 } = await supabase
+        .from('uys_fire_logs')
+        .upsert(fireRows, { onConflict: 'id' })   // upsert: geri al + tekrar hurda senaryosunda idempotent
       if (e2) {
         // Hurda zaten kaydedildi, fire log başarısız ise uyar ama geri alma
         console.error('[hurda] fire_log insert:', e2)

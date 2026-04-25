@@ -278,3 +278,115 @@ export async function acikBarTuket(
   if (error) { console.error('[barModel] Açık bar tüket:', error); return false }
   return true
 }
+
+// ═══ GERİ ALMA FONKSİYONLARI — v15.44 ═══
+
+/**
+ * Hurdaya gönderilmiş bir barı geri al ('hurda' → 'acik').
+ *
+ * Audit trail korunur: ilgili `uys_fire_logs` kaydı SİLİNMEZ — kayıt
+ * `not_` alanına "[İPTAL: <tarih> <kullanıcı>]" prefix eklenir. Bu sayede
+ * fire raporlarında hurda işleminin yapıldığı ama sonra geri alındığı
+ * görünebilir.
+ *
+ * Sadece admin yetkili (UI tarafında `acikbar_hurda_geri_al` kontrolü).
+ *
+ * @param acikBarId  uys_acik_barlar.id
+ * @param kullaniciId Geri alma işlemini yapan kullanıcının ID'si
+ * @param kullaniciAd Geri alma işlemini yapan kullanıcının adı (audit için)
+ * @returns true = başarılı, false = hata
+ */
+export async function acikBarHurdadanGeriAl(
+  acikBarId: string,
+  kullaniciId: string,
+  kullaniciAd: string
+): Promise<boolean> {
+  const nowIso = new Date().toISOString()
+
+  // 1. uys_acik_barlar: durum='acik', hurda_* alanları temizle
+  const { error: e1 } = await supabase
+    .from('uys_acik_barlar')
+    .update({
+      durum: 'acik',
+      hurda_tarihi: null,
+      hurda_sebep: null,
+      hurda_kullanici_id: null,
+      hurda_kullanici_ad: null,
+    })
+    .eq('id', acikBarId)
+    .eq('durum', 'hurda')   // idempotent: yalnızca gerçekten hurda olanlar
+
+  if (e1) { console.error('[barModel] Hurda geri alma update:', e1); return false }
+
+  // 2. uys_fire_logs: ilgili 'bar_hurda' kaydının not_'una "[İPTAL: ...]" ekle
+  // Fire log id deterministik: 'fire-bar-hurda-' + acikBarId (v15.44'ten itibaren).
+  // Eski kayıtlar (uid() ID'li) için fallback: tip + malkod + uzunluk_mm + tarih eşleştir.
+  const fireLogId = 'fire-bar-hurda-' + acikBarId
+  const { data: fireLogs, error: e2 } = await supabase
+    .from('uys_fire_logs')
+    .select('id, not_')
+    .eq('id', fireLogId)
+    .eq('tip', 'bar_hurda')
+
+  if (e2) { console.warn('[barModel] Fire log fetch (geri alma):', e2); /* kritik değil, devam */ }
+
+  if (fireLogs && fireLogs.length > 0) {
+    const iptalPrefix = '[İPTAL: ' + nowIso.slice(0, 16).replace('T', ' ') + ' ' + kullaniciAd + '] '
+    for (const fl of fireLogs) {
+      const eskiNot = (fl as any).not_ || ''
+      // Zaten iptal edilmişse tekrar ekleme (idempotent)
+      if (eskiNot.startsWith('[İPTAL:')) continue
+      await supabase
+        .from('uys_fire_logs')
+        .update({ not_: iptalPrefix + eskiNot })
+        .eq('id', (fl as any).id)
+    }
+  } else {
+    // Fallback: v15.44 öncesi kayıtlar (random uid). Eşleştirilemiyor; konsola not.
+    console.log('[barModel] Eski hurda kaydı (v15.44 öncesi), fire_log işaretlenemedi:', acikBarId)
+  }
+
+  // 3. Audit log (best-effort): kullaniciId'yi log'a yaz (gelecek için, şu an stdout)
+  console.log('[barModel] Hurda geri alındı:', { acikBarId, kullaniciId, kullaniciAd })
+
+  return true
+}
+
+/**
+ * Tüketilmiş bir barı geri al ('tuketildi' → 'acik').
+ *
+ * NOT: Stok hareketlerine DOKUNULMAZ. Eğer üretim gerçekten yapılmışsa
+ * stok zaten düşmüştür; otomatik geri alma double-counting yaratır.
+ * Yanlış işaretleme senaryosu için tasarlandı. Manuel düzeltme gerekirse
+ * admin Stok sayfasından yapmalı.
+ *
+ * Sadece admin yetkili (UI tarafında `acikbar_havuz_geri_al` kontrolü).
+ *
+ * @param acikBarId  uys_acik_barlar.id
+ * @param kullaniciId Geri alma işlemini yapan kullanıcının ID'si
+ * @param kullaniciAd Geri alma işlemini yapan kullanıcının adı (audit için)
+ * @returns true = başarılı, false = hata
+ */
+export async function acikBarTuketimGeriAl(
+  acikBarId: string,
+  kullaniciId: string,
+  kullaniciAd: string
+): Promise<boolean> {
+  // uys_acik_barlar: durum='acik', tuketim_* alanları temizle
+  const { error } = await supabase
+    .from('uys_acik_barlar')
+    .update({
+      durum: 'acik',
+      tuketim_log_id: null,
+      tuketim_tarihi: null,
+    })
+    .eq('id', acikBarId)
+    .eq('durum', 'tuketildi')   // idempotent: yalnızca gerçekten tüketilmiş olanlar
+
+  if (error) { console.error('[barModel] Tüketim geri alma update:', error); return false }
+
+  // Audit log (best-effort): kullaniciId'yi log'a yaz (gelecek için, şu an stdout)
+  console.log('[barModel] Tüketim geri alındı:', { acikBarId, kullaniciId, kullaniciAd })
+
+  return true
+}

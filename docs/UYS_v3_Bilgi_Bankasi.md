@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.43** (audit-columns yorum temizleyici — false positive elimine)
+**Sürüm: v15.44** (Geri alma UI'ları + manuel plan havuz önerisi)
 
-Son Güncelleme: **25 Nisan 2026** (17. oturum — audit aracı iyileştirme)
+Son Güncelleme: **25 Nisan 2026** (18. oturum — UI iyileştirme paketi)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -50,6 +50,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.41**: Stok anomalisi rapor düzeltmesi. Test senaryolarında `_uretimGirisi` ve `_uretimGirisiFire` helper'ları doğrudan DB'ye insert yapıyor, UI'daki `OperatorPanel.save()` → `canProduceWO()` yolunu atlıyor. Bu sebeple rapora `-3 stok` gibi anomalik değerler düşebiliyor (özellikle Senaryo 5'te fire dahil 8 hammadde tüketimi sebebiyle). Rapor okunabilirliğini artırmak için `SenaryoAdim` tipine opsiyonel `bypassNotu?: string` alanı eklendi; `adim()` helper'ına opsiyonel `meta` parametresi eklendi. 6 üretim adımı (S1 #5, S2 #5, S3 #10, S4 #10, S5 #5 fire, S5 #9 telafi) artık `BYPASS_NOTU_URETIM` sabit metnini taşıyor. `TestMode.tsx` canlı log render'ı bypassNotu varsa adım kartının altında ℹ️ ikonu + gri italik açıklama satırı gösteriyor. JSON raporda da alan korunuyor → arşivlenen rapor okuyucusu kasıtlı bypass'ı görebiliyor. **Hiçbir mantık değişmedi** — yalnız tip + UI metadata; PASS/FAIL kararları, validation kuralları, helper davranışları aynı.
 - **v15.42**: `uys_work_orders.termin` kolonu eklendi. audit-columns 4 trace incelemesi sırasında ortaya çıktı — `autoChain.ts:64` her İE oluşturulurken `termin: termin || null` yazıyordu ama DB'de kolon yoktu, Supabase silent reject ediyordu. Bilgi Bankası §5.2 "Her İE kendi terminine sahip" hedefi DB seviyesinde desteklenmiyordu. Migration (`sql/20260425_v15_42_wo_termin.sql`): (1) `ALTER TABLE uys_work_orders ADD COLUMN termin text`, (2) Geriye dönük backfill — mevcut İE'lerin terminini `uys_orders.termin` alanından kopyalar (order_id join). Kod değişikliği YOK — autoChain.ts zaten doğru yazıyordu, artık DB'ye değer iletiliyor. İE bağımsız termini şu andan itibaren persist ediliyor. Doğrulama: 75 İE total, 15 backfill (siparişin termini vardı), 60 terminsiz (test/sipariş termini boştu).
 - **v15.43**: `audit-columns.cjs` yorum temizleyici. Önceki sürümde `supabase.from(...)` regex'i JSDoc/inline yorumları kod sanıp false positive trace warning üretiyordu (örn. `testRun.ts:172` JSDoc içindeki kullanım örneği). Yeni `stripComments()` state machine helper'ı: (1) Block yorum `/* ... */` → boşluğa, (2) Line yorum `// ...` → boşluğa, (3) String literal'ler (`'`, `"`, `` ` ``) korunur — URL'lerdeki `//` ve template literal içindeki yorum benzeri içerik etkilenmez, (4) Newline'lar korunur — satır numaraları ve regex offset'leri bozulmaz. `extractUsages()` artık strip'lenmiş içerik üzerinde çalışır; tüm aşağıdaki regex/parser otomatik yorum-bağımsız hale geldi. Beklenen sonuç: trace warning sayısı 4'ten 3'e düşer (testRun.ts:172 listede olmaz).
+- **v15.44**: Üç UI işi tek patch — geri alma ve manuel plan havuz önerisi. (1) **Hurda geri alma UI**: Warehouse.tsx "Hurdaya Gönderilen" alt tab'ında her satıra "↩ Geri Al" butonu (admin only, RBAC: `acikbar_hurda_geri_al`). `barModel.ts.acikBarHurdadanGeriAl()` durumu 'hurda' → 'acik' yapar, hurda_* alanlarını temizler. fire_logs SİLİNMEZ — kayıt `not_` alanına `[İPTAL: tarih kullanıcı]` prefix eklenir → audit trail korunur. fire_log id'si artık deterministik (`'fire-bar-hurda-' + acikBarId`) → idempotent + geri alma sırasında bulunabilir. (2) **Havuz geri alma UI**: yeni "Tüketilmiş Bar" alt tab'ı. Admin'e "↩ Geri Al" butonu (RBAC: `acikbar_havuz_geri_al`). `acikBarTuketimGeriAl()` durumu 'tuketildi' → 'acik' yapar, tuketim_* alanlarını temizler. **Stok hareketlerine DOKUNULMAZ** — eğer üretim gerçekten yapıldıysa stok zaten düşmüştür, otomatik geri alma double-counting yaratır. Yanlış işaretleme senaryosu için tasarlandı. Confirm dialog'da net uyarı. (3) **Manuel plan'da havuz önerisi**: KesimOlusturModal `kaydet()` artık yeni planId'yi `onSaved(planId)` callback'ine iletiyor. Parent CuttingPlans bu ID ile otomatik plan'daki havuz tarama mantığının aynısını çalıştırıyor (en küçük parça boyu vs. havuz bar uzunluğu kontrolü). Uygun havuz barı varsa HavuzOneriModal açılır. Schema değişikliği YOK, kod-only patch.
 
 ---
 
@@ -69,18 +70,18 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 
 **v15.43: audit-columns yorum temizleyici** — `stripComments()` state machine helper. JSDoc içindeki örnek `supabase.from(...)` çağrıları artık false positive üretmiyor. Beklenen: 4 trace warning → 3.
 
+**v15.44: Geri alma UI'ları + manuel plan havuz önerisi** — 3 küçük iş tek patch. Hurda geri alma + havuz geri alma (admin only, audit trail korunur). Manuel plan kaydet sonrası havuz önerisi modal'ı (otomatik plan'la eşit deneyim).
+
 ## 🟡 Sıradaki Öncelik
 
 Belirgin bir blocker yok. Olası yönler:
 
-- Manuel plan'da havuz önerisi (v15.35 eksik)
-- Hurda geri alma UI
-- Havuz geri alma UI
 - Toplu senaryo farklı reçetelerle çalıştırılabilir
+- Operator + Admin için test kapsamı (S1-S5 tüm rollerde tekrar)
 
 ## 🟢 Küçük İşler
 
-- Operator + Admin için test kapsamı (S1-S5 tüm rolllerde tekrar)
+- (Backlog temizlendi)
 
 ---
 
@@ -605,8 +606,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.43** — audit-columns yorum temizleyici (false positive elimine).
+**v15.44** — Geri alma UI'ları (hurda + havuz, admin only, audit trail korunur) + manuel plan havuz önerisi.
 
 ---
 
-*Bu belge v15.43 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.44 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*

@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.43)
-**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅. SR #11 havuz adaptasyonu TAMAM ✅ (v15.39, 11/11 PASS). Pre-push hook TAMAM ✅ (v15.40 + v15.40.1, 3/3 PASS). Stok anomalisi raporu TAMAM ✅ (v15.41, bypassNotu sistemi). uys_work_orders.termin kolonu TAMAM ✅ (v15.42, migration + backfill). audit-columns yorum temizleyici TAMAM ✅ (v15.43).
+**Son güncelleme:** 25 Nisan 2026 (v15.44)
+**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici TAMAM ✅. v15.44: hurda geri alma + havuz geri alma + manuel plan havuz önerisi TAMAM ✅. Backlog'da blocker yok.
 
 ---
 
