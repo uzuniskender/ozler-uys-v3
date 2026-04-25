@@ -1,84 +1,57 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.48a sonrası)
-**Son canlı sürüm:** v15.48a (İş Emri #3 Faz 2 algoritma katmanı)
+**Tarih:** 25 Nisan 2026 (v15.48b1 sonrası)
+**Son canlı sürüm:** v15.48b1 (Otomatik Plan önizleme modal'ı)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/UYS_v3_Is_Listesi.md + docs/is_emri/03_UretimZinciri.md (Faz 2 bölümü) oku.
-Son iş: v15.48a algoritma katmanı (test + artik fonksiyonu). Sıradaki: v15.48b UI katmanı.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/is_emri/03_UretimZinciri.md (Faz 2 sonu) oku.
+Son iş: v15.48b1 Otomatik Plan onay modal. Sıradaki: v15.48b2 artık malzeme UI VEYA v15.49 MRP modal.
 ```
 
 ---
 
-## v15.48a — Ne Yapıldı
+## v15.48b1 — Ne Yapıldı
 
-### 1. Vitest Altyapısı (yeni)
-Daha önce sadece Playwright (E2E) vardı. Birim test yoktu. Şimdi:
-- `package.json`: `vitest@^3.2.4` devDep
-- 2 yeni script: `test:unit` (run), `test:unit:watch` (sürekli)
-- `vitest.config.ts` yeni dosya: alias `@/` resolver, node env, sadece `src/**/*.test.ts`
+### Sürpriz Keşif
+`pages/CuttingPlans.tsx`'teki "Otomatik Plan" butonu zaten vardı, ama doğrudan DB'ye kaydediyordu. Kullanıcı önizleme yapamıyordu.
 
-### 2. artikMalzemelerOlustur() — Yeni Export
-`src/features/production/cutting.ts` sonuna eklendi.
+### Çözüm: 3 Adımlı Akış
+1. **Algoritma çalışır** (`kesimPlanOlustur()`) — DB'ye yazmadan
+2. **Sonuç modal'ı açılır** — yeni `OtoPlanSonucModal`:
+   - Üst banner: plan sayısı + toplam fire % (renk: <%5 yeşil, 5-15 sarı, >15 kırmızı)
+   - Her plan kartı: HM kod/ad, gerekli bar adet, plan-bazlı fire %
+   - Plan içi tablo: Bar (×N), Kesimler (İE no + parça boyu × adet), Fire mm
+3. **Kullanıcı:**
+   - "Kaydet" → `kesimPlanlariKaydet()` + havuz önerisi tarama (mevcut akış)
+   - "İptal" → hiçbir şey değişmez
 
-```typescript
-export interface ArtikSuggest {
-  hamMalkod: string
-  hamMalad: string
-  uzunlukMm: number
-  adet: number
-  onerilenKod: string  // 'ARTIK-S275-1240'
-  onerilenAd: string   // 'ARTIK S275 (1240mm)'
-}
-export function artikMalzemelerOlustur(plan, ESIK_MM = 50): ArtikSuggest[]
-```
+### Akıllı Filtre
+"Tüm açık İE'ler zaten planda" senaryosunda modal açılmaz, doğrudan toast bilgilendirir.
 
-Plan'ın `tamamlandi` durumlu satırlarındaki fire'ları tarar, ≥50mm olanları aday yapar. Aynı malkod+uzunluk için adet birleştirir. **DB'ye yazmaz** — sadece öneri listesi döner. v15.48b UI tarafı kullanıcıya gösterip onaylanırsa Material kartı yaratacak.
-
-### 3. cutting.test.ts — 5 Senaryo / 17 Test
-- getParcaBoy/getHamBoy util'leri (uzunluk vs boy+en, ad parsing, case-insensitive)
-- Boş/null plan defansif
-- Eşik filtresi (default 50mm + custom 100mm)
-- Aynı uzunluk adet birleştirme
-- Fractional fire yuvarlama (1240.7 → 1241)
-- Kod/ad formatı doğrulama
-- ArtikSuggest tip uyumu
-
-### 4. Mevcut Algoritma Tespiti
-İş Emri #3 Faz 2 spec'inin %80'i ZATEN YAPILMIŞ — `cutting.ts.boykesimOptimum()` best-fit + 3 aşamalı fire optimize + havuz desteği + plan birleştirme. Bu sürüm sadece **güvenlik ağı** (test) + **artık öneri** (helper) ekledi.
+### Etkilenmeyen
+- Algoritma (`boykesimOptimum`, `kesimPlanOlustur`) dokunulmadı
+- Manuel Plan akışı (`KesimOlusturModal`) aynı
+- `kesimPlanlariKaydet()` aynı
+- Schema değişikliği YOK
 
 ---
 
-## ⚠️ ÖNEMLİ — Apply Sonrası `npm install` Şart
+## Sırada — İki Yol
 
-Vitest yeni dependency. Apply sonra:
+### Yol A: v15.48b2 — Artık Malzeme UI (~30 dk)
+Plan tamamlandığında `artikMalzemelerOlustur()` (v15.48a'da yazıldı) kullanılarak fire ≥50mm parçalar için Material kartı oluşturma akışı:
+- "Plan Tamamlandı" sonrası modal: artık adayları listesi (kod, ad, uzunluk, adet)
+- Kullanıcı checkbox ile seçer + "Oluştur"
+- DB'ye Material insert + stok hareketi (giriş, açıklama 'Kesim artığı')
 
-```powershell
-cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
-npm install
-npm run test:unit
-```
+### Yol B: v15.49 — MRP Modal (Faz 3, ~1.5 saat)
+İş Emri #3'ün asıl üretim planlama parçası. **Faz B Parça 2 (MRP termin-gruplu) ile entegre edilirse daha verimli** (`docs/faz_b_plan.md`).
 
-**17 test yeşil bekleniyor.** Yeşilse devam (push), kırmızı varsa duraklat.
-
----
-
-## Sırada — v15.48b: UI Katmanı
-
-İş Emri #3 Faz 2'nin geri kalanı:
-- `pages/CuttingPlans.tsx`'e "⚙ Plan Oluştur" butonu (yeni)
-- WO selector modal (kaç WO için plan, örnekler)
-- `kesimPlanOlustur()` + `kesimPlanlariKaydet()` çağırma
-- Sonuç modal (planlanan satırlar tablosu + total fire % + artık önerileri)
-- "Kaydet" → DB'ye `cutting_plans` insert (mevcut akış)
-- Plan birleştirme mantığı zaten `boykesimOptimum`'da var (mevcutSatirlar parametresi)
-- Kesim artığı tamamlandığında → `artikMalzemelerOlustur` çağır + UI ile Material kartı oluştur
-
-**Tahmini:** 1.5-2 saat, bir oturum yetmeyebilir. v15.48b'yi kendi içinde 2-3 küçük patch'e bölmek gerekebilir.
+### Yol C: Bugünlük yeter (12 sürüm rekor)
 
 ---
 
@@ -86,33 +59,27 @@ npm run test:unit
 
 **Apply:**
 ```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-48a
+cd $env:USERPROFILE\Downloads\patch-v15-48b1
 powershell -ExecutionPolicy Bypass -File .\apply.ps1
 ```
 
-**npm install + test (apply sonrası ZORUNLU):**
+**Commit + push:**
 ```powershell
 cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
-npm install
-npm run test:unit
-```
-
-**Commit + push** (testler yeşilse):
-```powershell
 $env:GIT_PAGER = "cat"
 git pull
 git add -A
-git commit -m "v15.48a: vitest altyapisi + artikMalzemelerOlustur + cutting.test.ts"
+git commit -m "v15.48b1: otomatik plan onizleme modal"
 git push
 ```
 
-3/3 yeşil bekleniyor.
+3/3 yeşil bekleniyor. Kod-only.
 
 **Push sonrası temizlik:**
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\patch-v15-48a.zip","$env:USERPROFILE\Downloads\patch-v15-48a" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\patch-v15-48b1.zip","$env:USERPROFILE\Downloads\patch-v15-48b1" -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ---
 
-**v15.48a patch'i hazır.**
+**v15.48b1 patch'i hazır.**

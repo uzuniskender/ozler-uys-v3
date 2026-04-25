@@ -28,6 +28,13 @@ export function CuttingPlans() {
   const [havuzOneriQueue, setHavuzOneriQueue] = useState<string[]>([])
   // v15.36 — flow'da otomatik plan hesabı bir kez çalışsın
   const [flowAutoDone, setFlowAutoDone] = useState(false)
+  // v15.48b1 — Otomatik plan modallari
+  const [showOtoOnay, setShowOtoOnay] = useState(false)
+  const [otoSonuc, setOtoSonuc] = useState<{
+    yeniPlanlar: Array<{ id: string; hamMalkod: string; hamMalad: string; hamBoy: number; gerekliAdet: number; satirlar: Array<{ fireMm: number; hamAdet: number; kesimler: Array<{ ieNo: string; malkod: string; parcaBoy: number; adet: number }> }> }>
+    toplamFire: number
+    toplamUzunluk: number
+  } | null>(null)
 
   // v15.47.3: isCuttingPlanPending — 'tamamlandi' ve 'iptal' dışı her şey bekliyor sayılır
   const bekleyen = cuttingPlans.filter(isCuttingPlanPending)
@@ -124,45 +131,52 @@ export function CuttingPlans() {
           <button onClick={() => setShowTamamlanan(!showTamamlanan)} className={`px-3 py-1.5 rounded-lg text-xs border ${showTamamlanan ? 'bg-green/10 border-green/25 text-green' : 'bg-bg-2 border-border text-zinc-500'}`}>
             {showTamamlanan ? '✓ Tamamlananlar Görünür' : '○ Tamamlananları Göster'}
           </button>
-          {can('cutting_add') && <button onClick={async () => {
+          {can('cutting_add') && <button onClick={() => {
+            // v15.48b1 — Doğrudan kaydetmek yerine önce ÖNİZLEME modal'ı aç
             const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
             const cpMapped = cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
             const eskiIdSet = new Set(cuttingPlans.map((p: any) => p.id))
             const planlar = kesimPlanOlustur(workOrders, operations as any, recipes, materials, logsSimple, cpMapped as any)
             if (!planlar.length) { toast.info('Kesim operasyonlu açık İE bulunamadı'); return }
-            const yeniSayi = planlar.filter(p => !eskiIdSet.has(p.id)).length
-            const birlestirilen = planlar.length - yeniSayi
-            await kesimPlanlariKaydet(planlar as any)
-            const parcalar = [yeniSayi > 0 && `${yeniSayi} yeni plan`, birlestirilen > 0 && `${birlestirilen} plana İE eklendi`].filter(Boolean).join(' · ')
-            loadAll()
-            toast.success(parcalar || 'Değişiklik yok')
-
-            // v15.35 — Havuz önerisi: bu planların ham malzemelerinde havuzda KULLANILABILIR açık bar varsa sırayla öner
-            // v15.35.2 — Kullanılabilirlik ön-filtre: plandaki en küçük parça boyundan büyük/eşit bar yoksa modal gösterme
-            const havuzlulanmisPlanIds: string[] = []
-            for (const p of planlar) {
-              if (p.durum !== 'bekliyor') continue
-              const havuzAcik = acikBarlar.filter(a => isAcikBarAvailable(a) && a.hamMalkod === p.hamMalkod)
-              if (havuzAcik.length === 0) continue
-
-              // Plandaki en küçük parça boyunu bul (bekleyen satırlardaki kesimlerden)
-              let minParcaBoy = Infinity
+            // Sadece YENİ veya satır eklenen planları önizle
+            const yeniPlanlar = planlar.filter(p => {
+              if (!eskiIdSet.has(p.id)) return true  // tamamen yeni
+              const eski: any = cuttingPlans.find((cp: any) => cp.id === p.id)
+              if (!eski) return true
+              // Satır sayısı veya kesim sayısı arttıysa değişti
+              const eskiKesim = (eski.satirlar || []).reduce((a: number, s: any) => a + (s.kesimler || []).length, 0)
+              const yeniKesim = (p.satirlar || []).reduce((a, s) => a + (s.kesimler || []).length, 0)
+              return yeniKesim !== eskiKesim || (p.satirlar?.length || 0) !== (eski.satirlar?.length || 0)
+            })
+            if (!yeniPlanlar.length) { toast.info('Tüm açık İE\'ler zaten planda'); return }
+            // Toplam fire ve kullanılan uzunluk hesabı
+            let toplamFire = 0
+            let toplamUzunluk = 0
+            for (const p of yeniPlanlar) {
               for (const s of (p.satirlar || [])) {
-                if (s.durum && s.durum !== 'bekliyor') continue
-                for (const k of (s.kesimler || []) as any[]) {
-                  const pb = k.parcaBoy || 0
-                  if (pb > 0 && pb < minParcaBoy) minParcaBoy = pb
-                }
+                toplamFire += (s.fireMm || 0) * (s.hamAdet || 1)
+                toplamUzunluk += (p.hamBoy || 0) * (s.hamAdet || 1)
               }
-              if (!isFinite(minParcaBoy)) continue  // parça boyu yok, öneri anlamsız
-
-              // En az bir havuz barı bu min parça boyunu kaldırıyor mu?
-              const uygunBar = havuzAcik.some(a => (a.uzunlukMm || 0) >= minParcaBoy)
-              if (uygunBar) havuzlulanmisPlanIds.push(p.id)
             }
-            if (havuzlulanmisPlanIds.length > 0) {
-              setHavuzOneriQueue(havuzlulanmisPlanIds)
-            }
+            setOtoSonuc({
+              yeniPlanlar: yeniPlanlar.map(p => ({
+                id: p.id,
+                hamMalkod: p.hamMalkod,
+                hamMalad: p.hamMalad,
+                hamBoy: p.hamBoy,
+                gerekliAdet: p.gerekliAdet || 0,
+                satirlar: (p.satirlar || []).map(s => ({
+                  fireMm: s.fireMm || 0,
+                  hamAdet: s.hamAdet || 1,
+                  kesimler: (s.kesimler || []).map((k: any) => ({
+                    ieNo: k.ieNo, malkod: k.malkod, parcaBoy: k.parcaBoy, adet: k.adet,
+                  })),
+                })),
+              })),
+              toplamFire,
+              toplamUzunluk,
+            })
+            setShowOtoOnay(true)
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs font-semibold hover:bg-green/20"><Zap size={13} /> Otomatik Plan</button>}
           {can('cutting_add') && <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Scissors size={13} /> Manuel Plan</button>}
         </div>
@@ -343,6 +357,46 @@ export function CuttingPlans() {
         if (uygunBar) setHavuzOneriQueue([yeniPlanId])
       }} />}
       {artikInfo && <ArtikOneriModal info={artikInfo} materials={materials} workOrders={workOrders} operations={operations} recipes={recipes} logs={logs} onClose={() => setArtikInfo(null)} onSaved={() => { setArtikInfo(null); loadAll() }} />}
+      {showOtoOnay && otoSonuc && (
+        <OtoPlanSonucModal
+          sonuc={otoSonuc}
+          onClose={() => { setShowOtoOnay(false); setOtoSonuc(null) }}
+          onConfirm={async () => {
+            // Kullanıcı onayladı — DB'ye yaz (mevcut akış aynı, sadece önizleme sonrası)
+            const logsSimple = logs.map(l => ({ woId: l.woId, qty: l.qty }))
+            const cpMapped = cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
+            const eskiIdSet = new Set(cuttingPlans.map((p: any) => p.id))
+            const planlar = kesimPlanOlustur(workOrders, operations as any, recipes, materials, logsSimple, cpMapped as any)
+            const yeniSayi = planlar.filter(p => !eskiIdSet.has(p.id)).length
+            const birlestirilen = planlar.length - yeniSayi
+            await kesimPlanlariKaydet(planlar as any)
+            const parcalar = [yeniSayi > 0 && `${yeniSayi} yeni plan`, birlestirilen > 0 && `${birlestirilen} plana İE eklendi`].filter(Boolean).join(' · ')
+            setShowOtoOnay(false)
+            setOtoSonuc(null)
+            loadAll()
+            toast.success(parcalar || 'Değişiklik yok')
+            // Havuz önerisi tarama (mevcut akış)
+            const havuzlulanmisPlanIds: string[] = []
+            for (const p of planlar) {
+              if (p.durum !== 'bekliyor') continue
+              const havuzAcik = acikBarlar.filter(a => isAcikBarAvailable(a) && a.hamMalkod === p.hamMalkod)
+              if (havuzAcik.length === 0) continue
+              let minParcaBoy = Infinity
+              for (const s of (p.satirlar || [])) {
+                if (s.durum && s.durum !== 'bekliyor') continue
+                for (const k of (s.kesimler || []) as any[]) {
+                  const pb = k.parcaBoy || 0
+                  if (pb > 0 && pb < minParcaBoy) minParcaBoy = pb
+                }
+              }
+              if (!isFinite(minParcaBoy)) continue
+              const uygunBar = havuzAcik.some(a => (a.uzunlukMm || 0) >= minParcaBoy)
+              if (uygunBar) havuzlulanmisPlanIds.push(p.id)
+            }
+            if (havuzlulanmisPlanIds.length > 0) setHavuzOneriQueue(havuzlulanmisPlanIds)
+          }}
+        />
+      )}
       {havuzOneriQueue.length > 0 && (() => {
         const planId = havuzOneriQueue[0]
         const plan = cuttingPlans.find(p => p.id === planId)
@@ -977,6 +1031,145 @@ function HavuzOneriModal({
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-bg-3 disabled:text-zinc-600 text-white rounded-lg text-xs font-semibold"
           >
             {loading ? 'Hesaplanıyor…' : `Seçilenleri Kullan (${secilenBarlar.length})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v15.48b1 — Otomatik Plan Sonuç (Önizleme) Modal'ı
+// ═══════════════════════════════════════════════════════════════
+//
+// "Otomatik Plan" butonu önce kesimPlanOlustur() çağırıp sonucu bu modal'da
+// gösterir. Kullanıcı önizler, "Kaydet" derse parent onConfirm() ile DB'ye
+// yazar; "İptal" derse hiçbir şey değişmez.
+//
+// İçerik:
+// - Plan sayısı + toplam fire mm + toplam kullanılan uzunluk + fire %
+// - Her plan için: HM kod, gerekli bar adet, satır özetleri
+// - Her satır: hamAdet × hamBoy, içindeki kesimler (İE no + parça boyu × adet)
+// - Fire renklendirme: <%5 yeşil, 5-15 sarı, >15 kırmızı
+function OtoPlanSonucModal({ sonuc, onClose, onConfirm }: {
+  sonuc: {
+    yeniPlanlar: Array<{ id: string; hamMalkod: string; hamMalad: string; hamBoy: number; gerekliAdet: number; satirlar: Array<{ fireMm: number; hamAdet: number; kesimler: Array<{ ieNo: string; malkod: string; parcaBoy: number; adet: number }> }> }>
+    toplamFire: number
+    toplamUzunluk: number
+  }
+  onClose: () => void
+  onConfirm: () => void | Promise<void>
+}) {
+  const [kaydediliyor, setKaydediliyor] = useState(false)
+  const fireYuzde = sonuc.toplamUzunluk > 0
+    ? (sonuc.toplamFire / sonuc.toplamUzunluk * 100)
+    : 0
+  const fireRenk = fireYuzde < 5 ? 'text-green' : fireYuzde < 15 ? 'text-amber' : 'text-red'
+
+  async function kaydet() {
+    setKaydediliyor(true)
+    try {
+      await onConfirm()
+    } finally {
+      setKaydediliyor(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Zap size={14} className="text-green" /> Otomatik Plan Önizleme
+            </h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              {sonuc.yeniPlanlar.length} plan · {Math.round(sonuc.toplamUzunluk / 1000)} m kullanım ·{' '}
+              <span className={`font-mono font-semibold ${fireRenk}`}>
+                fire %{fireYuzde.toFixed(1)} ({Math.round(sonuc.toplamFire)} mm)
+              </span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-border/30">
+          {sonuc.yeniPlanlar.map(p => {
+            const planFire = p.satirlar.reduce((a, s) => a + (s.fireMm || 0) * (s.hamAdet || 1), 0)
+            const planUzunluk = p.hamBoy * p.gerekliAdet
+            const planFireYuzde = planUzunluk > 0 ? planFire / planUzunluk * 100 : 0
+            const planFireRenk = planFireYuzde < 5 ? 'text-green' : planFireYuzde < 15 ? 'text-amber' : 'text-red'
+            return (
+              <div key={p.id} className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="font-mono text-accent text-xs">{p.hamMalkod}</div>
+                    <div className="text-[11px] text-zinc-500">{p.hamMalad}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[11px] text-zinc-500">
+                      {p.gerekliAdet} bar × {p.hamBoy} mm
+                    </div>
+                    <div className={`text-[11px] font-mono font-semibold ${planFireRenk}`}>
+                      fire %{planFireYuzde.toFixed(1)} ({Math.round(planFire)} mm)
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-border/50 text-zinc-500">
+                        <th className="text-left px-3 py-1.5">Bar</th>
+                        <th className="text-left px-3 py-1.5">Kesimler</th>
+                        <th className="text-right px-3 py-1.5">Fire (mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.satirlar.map((s, i) => (
+                        <tr key={i} className="border-b border-border/20 last:border-0">
+                          <td className="px-3 py-1.5 font-mono text-zinc-300">×{s.hamAdet}</td>
+                          <td className="px-3 py-1.5">
+                            {s.kesimler.length === 0 ? (
+                              <span className="text-zinc-600 italic">(boş)</span>
+                            ) : (
+                              <span className="text-zinc-300">
+                                {s.kesimler.map((k, ki) => (
+                                  <span key={ki}>
+                                    {ki > 0 && <span className="text-zinc-600 mx-1">·</span>}
+                                    <span className="text-amber">{k.ieNo}</span>
+                                    <span className="text-zinc-500"> {k.parcaBoy}mm × {k.adet}</span>
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono text-zinc-400">
+                            {Math.round(s.fireMm || 0)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="px-5 py-3 border-t border-border flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={kaydediliyor}
+            className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs disabled:opacity-50"
+          >
+            İptal
+          </button>
+          <button
+            onClick={kaydet}
+            disabled={kaydediliyor}
+            className="px-4 py-2 bg-green hover:bg-green/80 disabled:opacity-50 text-black rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            {kaydediliyor ? 'Kaydediliyor…' : <><Zap size={12} /> Kaydet ({sonuc.yeniPlanlar.length} plan)</>}
           </button>
         </div>
       </div>

@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.48a)
-**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları + statusUtils yayılım TAMAM ✅. v15.48a: vitest altyapısı + cutting.test.ts (5 senaryo / 17 test) + artikMalzemelerOlustur(). Sıradaki: v15.48b (Kesim Plan Oluştur UI butonu + modal + artık kart UI).
+**Son güncelleme:** 25 Nisan 2026 (v15.48b1)
+**Durum:** v15.48a algoritma katmanı + 12 birim test ✅. v15.48b1: Otomatik Plan önizleme modal'ı ✅. Sıradaki: v15.48b2 (artık malzeme UI), v15.49 (MRP modal — Faz B P2 entegre), v15.50 (autoZincir).
 
 ---
 
