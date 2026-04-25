@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
@@ -13,7 +13,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
-  const { synced, loadAll, pendingFlows } = useStore()
+  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, operations } = useStore()
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
   const [showFlowModal, setShowFlowModal] = useState(false)
@@ -30,6 +30,57 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
     f.durum === 'aktif' && (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
   const flowCount = activeFlows.length
+
+  // ─── v15.47 — Üretim Zinciri durum göstergeleri ─────────────────
+  // KESİM: Kesim operasyonu içeren, durum != 'iptal'/'tamamlandi', kesim planı atanmamış İE sayısı
+  // MRP: mrp_durum != 'tamamlandi' olan aktif sipariş sayısı
+  // TEDARİK: durum == 'bekliyor' (geldi=false) tedarik sayısı
+  const zincirCounts = useMemo(() => {
+    // Kesim operasyon ID seti (operasyon kodu/adı 'KESIM' içerenler)
+    const kesimOpIds = new Set(
+      operations.filter(o =>
+        (o.kod || '').toUpperCase().includes('KESIM') ||
+        (o.ad || '').toLocaleUpperCase('tr-TR').includes('KESİM') ||
+        (o.ad || '').toUpperCase().includes('KESIM')
+      ).map(o => o.id)
+    )
+    // Plana atanmış WO ID seti
+    const planliWoIds = new Set<string>()
+    for (const cp of cuttingPlans) {
+      if (cp.durum === 'iptal') continue
+      for (const s of (cp.satirlar || [])) {
+        for (const k of (s.kesimler || [])) {
+          if (k.woId) planliWoIds.add(k.woId)
+        }
+      }
+    }
+    const kesim = workOrders.filter(w => {
+      if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+      if (!kesimOpIds.has(w.opId)) return false
+      return !planliWoIds.has(w.id)
+    }).length
+
+    const mrp = orders.filter(o =>
+      o.durum !== 'iptal' && o.durum !== 'tamamlandi' &&
+      o.mrpDurum !== 'tamamlandi'
+    ).length
+
+    const tedarik = tedarikler.filter(t =>
+      !t.geldi && t.durum !== 'iptal' && t.durum !== 'tamamlandi'
+    ).length
+
+    return { kesim, mrp, tedarik }
+  }, [workOrders, orders, cuttingPlans, tedarikler, operations])
+
+  // Renk eşiği: 0=yeşil, 1-5=sarı, 6+=kırmızı
+  function badgeColor(n: number): string {
+    if (n === 0) return 'bg-green/10 text-green border-green/30'
+    if (n <= 5) return 'bg-amber/10 text-amber border-amber/30'
+    return 'bg-red/10 text-red border-red/30'
+  }
+  function navTo(hash: string) {
+    window.location.hash = hash
+  }
 
   return (
     <>
@@ -50,6 +101,37 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
         <button onClick={() => { localStorage.setItem('uys_test_mode', 'true'); window.location.reload() }}
           className="text-[10px] text-zinc-600 hover:text-amber px-2 py-0.5 rounded" title="Test modunu aç">🧪 Test</button>
       )}
+
+      {/* v15.47 — Üretim Zinciri durum badge'leri */}
+      <div className="hidden md:flex items-center gap-1.5">
+        <button
+          onClick={() => navTo('/cutting')}
+          className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 ${badgeColor(zincirCounts.kesim)}`}
+          title={`${zincirCounts.kesim} İE kesim planı bekliyor`}
+        >
+          <Scissors size={10} />
+          <span className="font-semibold">KESİM</span>
+          <span className="font-bold tabular-nums">{zincirCounts.kesim}</span>
+        </button>
+        <button
+          onClick={() => navTo('/orders')}
+          className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 ${badgeColor(zincirCounts.mrp)}`}
+          title={`${zincirCounts.mrp} sipariş MRP bekliyor`}
+        >
+          <Calculator size={10} />
+          <span className="font-semibold">MRP</span>
+          <span className="font-bold tabular-nums">{zincirCounts.mrp}</span>
+        </button>
+        <button
+          onClick={() => navTo('/procurement')}
+          className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 ${badgeColor(zincirCounts.tedarik)}`}
+          title={`${zincirCounts.tedarik} tedarik bekliyor`}
+        >
+          <Truck size={10} />
+          <span className="font-semibold">TEDARİK</span>
+          <span className="font-bold tabular-nums">{zincirCounts.tedarik}</span>
+        </button>
+      </div>
 
       {/* v15.36 — Yarım iş ikonu + badge */}
       {flowCount > 0 && (

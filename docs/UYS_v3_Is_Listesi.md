@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.46)
-**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları TAMAM ✅. v15.45: İndirilenler Hijyen Kuralı + Faz B planı repoya. v15.46: 6 iş emri + master backlog `docs/is_emri/` altında. **Sıradaki büyük işler:** (a) Faz B Parça 2/3, (b) Master backlog'tan iş emirlerinden biri.
+**Son güncelleme:** 25 Nisan 2026 (v15.47)
+**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları TAMAM ✅. v15.45: Hijyen Kuralı + Faz B planı. v15.46: 6 iş emri + master backlog. v15.47: İş Emri #3 Faz 1+5 (DB veri modeli + Topbar zincir göstergeleri). **Sıradaki büyük işler:** v15.48 (Kesim Optimizasyon), v15.49 (MRP Modal — Faz B P2 ile entegre), v15.50 (autoZincir).
 
 ---
 

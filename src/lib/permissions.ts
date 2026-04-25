@@ -31,6 +31,8 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
   { group: 'MRP', actions: [
     { key: 'mrp_calc', label: 'MRP hesaplama' }, { key: 'mrp_supply', label: 'Tedarik oluşturma' },
     { key: 'mrp_template', label: 'Şablon indirme' },
+    { key: 'tedarik_auto', label: 'Otomatik tedarik (autoZincir)' },
+    { key: 'auto_chain_run', label: 'autoZincir başlatma' },
   ]},
   { group: 'Reçeteler', actions: [
     { key: 'recipe_add', label: 'Ekleme' }, { key: 'recipe_edit', label: 'Düzenleme' },
@@ -108,6 +110,8 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   prod_entry:['uretim_sor','planlama'], prod_bulk:[], prod_fire:['uretim_sor','planlama'], prod_opr:['uretim_sor','planlama'], prod_durus:['uretim_sor','planlama'],
   cutting_add:['planlama'], cutting_edit:['planlama'], cutting_delete:['planlama'], cutting_artik:['planlama'], cutting_done:['planlama'],
   mrp_calc:['planlama'], mrp_supply:['planlama'], mrp_template:['planlama'],
+  tedarik_auto:['planlama'],   // v15.47 — autoZincir tetiklediğinde otomatik tedarik
+  auto_chain_run:['planlama'], // v15.47 — autoZincir başlatma yetkisi
   recipe_add:['planlama'], recipe_edit:['planlama'], recipe_delete:['planlama'], recipe_excel:['planlama'],
   bom_add:['planlama'], bom_edit:['planlama'], bom_delete:['planlama'], bom_excel:['planlama'],
   mat_add:['planlama','depocu'], mat_edit:['planlama','depocu'], mat_delete:['planlama'], mat_excel:['planlama','depocu'],
