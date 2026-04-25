@@ -14,7 +14,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
-  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, operations } = useStore()
+  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler } = useStore()
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
   const [showFlowModal, setShowFlowModal] = useState(false)
@@ -38,14 +38,16 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   //   normalize edilmiş statusUtils helper'larıyla yakalanıyor.
   //   Bkz: docs/UYS_v3_Bilgi_Bankasi.md §18.3 Durum String Konvansiyonu
   const zincirCounts = useMemo(() => {
-    // Kesim operasyon ID seti (operasyon kodu/adı 'KESIM' içerenler)
-    const kesimOpIds = new Set(
-      operations.filter(o =>
-        (o.kod || '').toUpperCase().includes('KESIM') ||
-        (o.ad || '').toLocaleUpperCase('tr-TR').includes('KESİM') ||
-        (o.ad || '').toUpperCase().includes('KESIM')
-      ).map(o => o.id)
-    )
+    // v15.50a.6 — Kesim operasyon tespiti: CuttingPlans.tsx'teki kesimOps listesi ile birebir.
+    // Eski kod sadece 'KESIM' arıyordu, "KESME LAZER" gibi operasyonları kaçırıyordu.
+    // Tüm kesim varyantları: 'KESİM', 'KESME', 'KES' (kök), '+ kesim makineleri'.
+    // opAd üzerinden direkt arama — operations tablosuna bağımlılık yok, opId boş bile olsa çalışır.
+    const KESIM_OPS = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
+    const isKesimWO = (w: typeof workOrders[0]) => {
+      const opAd = (w.opAd || '').toLocaleUpperCase('tr-TR')
+      return KESIM_OPS.some(k => opAd.includes(k))
+    }
+
     // Plana atanmış WO ID seti (sadece iptal olmamış planlar)
     const planliWoIds = new Set<string>()
     for (const cp of cuttingPlans) {
@@ -58,7 +60,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
     }
     const kesim = workOrders.filter(w => {
       if (!isWorkOrderOpen(w)) return false
-      if (!kesimOpIds.has(w.opId)) return false
+      if (!isKesimWO(w)) return false
       return !planliWoIds.has(w.id)
     }).length
 
@@ -66,7 +68,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
     const tedarik = tedarikler.filter(isProcurementPending).length
 
     return { kesim, mrp, tedarik }
-  }, [workOrders, orders, cuttingPlans, tedarikler, operations])
+  }, [workOrders, orders, cuttingPlans, tedarikler])
 
   // Renk eşiği: 0=yeşil, 1-5=sarı, 6+=kırmızı
   function badgeColor(n: number): string {
