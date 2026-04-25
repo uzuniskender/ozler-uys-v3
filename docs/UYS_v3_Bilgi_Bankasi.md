@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.41** (Stok Anomalisi Rapor Düzeltmesi — bypassNotu sistemi)
+**Sürüm: v15.42** (uys_work_orders.termin kolonu + backfill)
 
-Son Güncelleme: **25 Nisan 2026** (15. oturum — rapor okunabilirliği)
+Son Güncelleme: **25 Nisan 2026** (16. oturum — DB schema fix)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -48,12 +48,13 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.40**: Pre-push hook fix. `scripts/git-hooks/pre-push` repoda versionable — `git config core.hooksPath scripts/git-hooks` ile aktive ediliyor. Hook içinde Git Bash PATH fix (Node.js standart konumu + npm global), 3 adım: audit-schema + audit-columns + tsc --noEmit. İki makine için de çalışır (Iskender + iskender.uzun paths).
 - **v15.40.1 (hotfix)**: İki düzeltme. (1) Hook içindeki tsc çağrısı `npx --no-install tsc` yerine doğrudan `./node_modules/.bin/tsc` kullanıyor — `npx` "tsc" adını npm registry'deki yanlış pakete (eski `tsc@2.0.4`) çözümlüyordu. (2) `.gitattributes` dosyası eklendi: `scripts/git-hooks/*` ve `*.sh` LF zorunlu, `*.ps1` CRLF. Bu sayede hook dosyası Windows checkout'ta CRLF'ye dönüşüp bash shebang'i kırmıyor.
 - **v15.41**: Stok anomalisi rapor düzeltmesi. Test senaryolarında `_uretimGirisi` ve `_uretimGirisiFire` helper'ları doğrudan DB'ye insert yapıyor, UI'daki `OperatorPanel.save()` → `canProduceWO()` yolunu atlıyor. Bu sebeple rapora `-3 stok` gibi anomalik değerler düşebiliyor (özellikle Senaryo 5'te fire dahil 8 hammadde tüketimi sebebiyle). Rapor okunabilirliğini artırmak için `SenaryoAdim` tipine opsiyonel `bypassNotu?: string` alanı eklendi; `adim()` helper'ına opsiyonel `meta` parametresi eklendi. 6 üretim adımı (S1 #5, S2 #5, S3 #10, S4 #10, S5 #5 fire, S5 #9 telafi) artık `BYPASS_NOTU_URETIM` sabit metnini taşıyor. `TestMode.tsx` canlı log render'ı bypassNotu varsa adım kartının altında ℹ️ ikonu + gri italik açıklama satırı gösteriyor. JSON raporda da alan korunuyor → arşivlenen rapor okuyucusu kasıtlı bypass'ı görebiliyor. **Hiçbir mantık değişmedi** — yalnız tip + UI metadata; PASS/FAIL kararları, validation kuralları, helper davranışları aynı.
+- **v15.42**: `uys_work_orders.termin` kolonu eklendi. audit-columns 4 trace incelemesi sırasında ortaya çıktı — `autoChain.ts:64` her İE oluşturulurken `termin: termin || null` yazıyordu ama DB'de kolon yoktu, Supabase silent reject ediyordu. Bilgi Bankası §5.2 "Her İE kendi terminine sahip" hedefi DB seviyesinde desteklenmiyordu. Migration (`sql/20260425_v15_42_wo_termin.sql`): (1) `ALTER TABLE uys_work_orders ADD COLUMN termin text`, (2) Geriye dönük backfill — mevcut İE'lerin terminini `uys_orders.termin` alanından kopyalar (order_id join). Kod değişikliği YOK — autoChain.ts zaten doğru yazıyordu, artık DB'ye değer iletiliyor. İE bağımsız termini şu andan itibaren persist ediliyor.
 
 ---
 
 # 2. BİR SONRAKİ OTURUMA NOTLAR ⭐
 
-## ✅ TAMAMLANAN — v15.38 + v15.39 + v15.40 + v15.41
+## ✅ TAMAMLANAN — v15.38 → v15.42
 
 **v15.38: Yasak Kontrolleri** — stok/duruş/silme engeli, Senaryo 6 (10/10 OK).
 
@@ -63,20 +64,21 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 
 **v15.41: Stok Anomalisi Rapor Düzeltmesi** — `SenaryoAdim.bypassNotu` alanı + `BYPASS_NOTU_URETIM` sabiti. 6 üretim adımına bypass notu işlendi. UI'da ℹ️ + gri italik alt satır. JSON raporda da yer alır.
 
+**v15.42: uys_work_orders.termin kolonu** — audit-columns 4 trace incelemesinden çıktı. autoChain.ts zaten yazıyordu, DB'de kolon eksikti. Migration ile eklendi + backfill yapıldı.
+
 ## 🟡 Sıradaki Öncelik
 
-- **audit-columns trace edilemeyen 4 çağrı** elle gözden geçir:
-  - `src\features\production\autoChain.ts:64` — `uys_work_orders [upsert]`
-  - `src\lib\testRun.ts:172` — `uys_orders [insert]`
-  - `src\pages\Operators.tsx:206` — `uys_izinler [insert]`
-  - `src\pages\Procurement.tsx:127` — `uys_tedarikler [update]`
+Belirgin bir blocker yok. Olası yönler:
 
-## 🟢 Küçük İşler
-
+- audit-columns aracını JSDoc yorum satırlarını skip edecek şekilde iyileştir (testRun.ts:172 false positive sebepti)
 - Manuel plan'da havuz önerisi (v15.35 eksik)
 - Hurda geri alma UI
 - Havuz geri alma UI
 - Toplu senaryo farklı reçetelerle çalıştırılabilir
+
+## 🟢 Küçük İşler
+
+- Operator + Admin için test kapsamı (S1-S5 tüm rolllerde tekrar)
 
 ---
 
@@ -488,7 +490,7 @@ Canlı Supabase'de izole test. Detay §9.
 Temiz.
 
 ## 🟡 Öncelik 1 — ORTA
-- audit-columns 4 trace edilemeyen çağrı (elle gözden geçir, kolon mismatch var mı)
+Temiz.
 
 ## 🟢 Küçük iyileştirmeler
 - Havuz geri alma UI
@@ -557,7 +559,8 @@ ozler-uys-v3/
 │   ├── 20260424_v15_34_hurda.sql
 │   ├── 20260424_v15_34_fire_tip.sql
 │   ├── 20260424_v15_36_pending_flows.sql
-│   └── 20260424_v15_37_test_mode.sql   ⭐ YENİ
+│   ├── 20260424_v15_37_test_mode.sql
+│   └── 20260425_v15_42_wo_termin.sql      ⭐ v15.42 YENİ
 ├── scripts/audit-schema.cjs, audit-columns.cjs
 ├── scripts/git-hooks/pre-push              ⭐ v15.40 YENİ (versioned hook)
 ├── scripts/install-hooks.ps1               ⭐ v15.40 YENİ
@@ -600,8 +603,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.41** — Stok anomalisi rapor düzeltmesi (bypassNotu sistemi + UI ℹ️ rendering).
+**v15.42** — uys_work_orders.termin kolonu (audit-columns 4 trace incelemesi sonucu).
 
 ---
 
-*Bu belge v15.41 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.42 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
