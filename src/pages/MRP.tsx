@@ -26,7 +26,10 @@ export function MRP() {
 
   const [showTamamlanan, setShowTamamlanan] = useState(false)
   const [showYMTamamlanan, setShowYMTamamlanan] = useState(false)
-  const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('eksik')
+  // v15.50a.3 — Default 'tum': hesap sonrasi tum satirlar gorunur (eksik+yeterli).
+  // Kullanici "X eksik" rozetine tiklayarak filtreleyebilir. Eski default 'eksik'
+  // 0 eksik durumda bos tablo gosteriyordu, kullanici "MRP yapildi mi?" karisikliga dusuyordu.
+  const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('tum')
 
   // MRP tamamlanmış YM İE'leri (localStorage'da tutuluyor)
   const mrpDoneYMs = useMemo(() => {
@@ -459,6 +462,17 @@ export function MRP() {
                 })}
               </tbody>
             </table>
+            {/* v15.50a.3 — Filtre sebebiyle bos tablo durumunda kullaniciyi yonlendir */}
+            {sonuc.length > 0 && sonuc.filter(s => viewFilter === 'tum' ? true : viewFilter === 'eksik' ? s.net > 0 : s.net <= 0).length === 0 && (
+              <div className="p-4 text-center text-xs text-zinc-500">
+                {viewFilter === 'eksik' && eksikler.length === 0 && (
+                  <>✓ Hiç eksik yok. <button onClick={() => setViewFilter('tum')} className="text-accent hover:underline">Tüm satırları göster</button> veya <button onClick={() => setViewFilter('yeterli')} className="text-green hover:underline">{yeterliler.length} yeterli kalemi</button> görüntüle.</>
+                )}
+                {viewFilter === 'yeterli' && yeterliler.length === 0 && (
+                  <>Yeterli kalem yok. <button onClick={() => setViewFilter('tum')} className="text-accent hover:underline">Tüm satırları göster</button>.</>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
