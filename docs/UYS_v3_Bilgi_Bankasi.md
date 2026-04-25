@@ -924,12 +924,114 @@ Yeni bir kesim/fire akışı yazıyorsan:
 
 ---
 
-## Son canlı sürüm
-**v15.49b** — Master Backlog ilerleme paneli (görsel özet).
+# 19. MRP Filtre Sözleşmesi (v15.50a serisi) ⭐ YENİ
+
+## Tek Kural
+
+> **Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP'de net > 0 satırı var.**
+
+`mrp_durum` kolonu, açık tedarik listesi, üretim yüzdesi — **filter kararında kullanılmaz**. Sadece bilgi rozeti olarak gösterilebilir.
+
+## Akış (Buket modeli)
+
+MRP = stok eksikliği dedektörü. Akış basit:
+1. Sipariş gelir
+2. Hesaplama yapılır (BOM patlatma + stok düşürme + açık tedarik düşürme + diğer rezerveler)
+3. **net > 0** olan kalemler eksiktir → liste'de görünür
+4. Tedarik açılır (depoda veya yolda) → stok yetiyor → liste'den çıkar
+5. Tedarik silinirse → stok tekrar yetmez → liste'ye geri döner (otomatik)
+
+Hiçbir aşamada `mrp_durum` kolonuna gerek yok — gerçek dünya `hesaplaMRP` sonucunda gizli.
+
+## Implementation (v15.50a.5+, MRP.tsx)
+
+```typescript
+const ORDER_ARCHIVED_STATES = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
+
+const orderHasEksik = useMemo(() => {
+  const map: Record<string, boolean> = {}
+  for (const o of orders) {
+    if (ORDER_ARCHIVED_STATES.has(o.durum || '')) { map[o.id] = false; continue }
+    const sonuc = hesaplaMRP([o.id], orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id)
+    map[o.id] = sonuc.some(r => r.net > 0)
+  }
+  return map
+}, [orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
+
+const aktifOrders = useMemo(() => {
+  return orders.filter(o => {
+    if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return showTamamlanan
+    const eksikVar = orderHasEksik[o.id] ?? false
+    return showTamamlanan ? !eksikVar : eksikVar
+  })
+}, [orders, orderHasEksik, showTamamlanan])
+```
+
+## Toggle (Arşiv)
+
+`+ Arşiv (X)` toggle'ı **iki tip kayıt birden** gösterir:
+- Kilitli siparişler (durum=kapalı/iptal/tamamlandı)
+- Açık ama net=0 olan siparişler (stok yeterli, MRP işi yok)
+
+## Test Senaryoları (10/10 PASS)
+
+| # | durum | mrp_durum | Tedarik | Hesap net | Sonuç |
+|---|---|---|---|---|---|
+| 1 | `''` | `''` | yok | >0 | **Görünür** |
+| 2 | `''` | `'bekliyor'` | yok | >0 | **Görünür** |
+| 3 | `''` | `'eksik'` | yok | >0 | **Görünür** |
+| 4 | `''` | `'tamam'` | VAR | =0 | **Gizli** |
+| 5 | `''` | `'tamamlandi'` | VAR | =0 | **Gizli** |
+| 6 | `'kapalı'` | herhangi | herhangi | herhangi | **Gizli** (kilit) |
+| 7 | `'iptal'` | `''` | yok | herhangi | **Gizli** (kilit) |
+| 8 | `'Tamamlandı'` | `'tamam'` | VAR | =0 | **Gizli** (kilit) |
+| 9 | `''` | `'tamam'` | VAR | =0 | **Gizli** (doğrulama) |
+| 10 | `''` | `'tamam'` | YOK (silindi) | >0 | **GÖRÜNÜR** ⭐ kritik |
+
+S10: Tedarik silindiğinde MRP otomatik açılır.
+
+## §18.3 İlişkisi
+
+`statusUtils.ts`'de `isOrderArchived(o)` helper'ı **yok** (sadece `isOrderActive` var, `''` davranışı belirsiz). MRP.tsx şu anda inline blacklist set kullanıyor. İleride helper eklenebilir:
+
+```typescript
+export function isOrderArchived(o: Order): boolean {
+  const ARCHIVED = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
+  return ARCHIVED.has((o.durum || '').trim())
+}
+```
+
+Sonra MRP.tsx ve diğer kullanım yerleri helper'a refactor.
+
+## Acil UX Serisi Özeti (25 Nis 2026)
+
+7 patch ile MRP UX katmanı temizlendi:
+- **v15.50a** — Termin gruplama core (4/4 PASS) + stok pool FIFO bug fix
+- **v15.50a.1** — onClick event leak (Hesapla button bypass bug'ı)
+- **v15.50a.2** — MRP filtre v1 (mrp_durum yoksay) — yanlış yorum, revize edildi
+- **v15.50a.3** — viewFilter default 'tum' (boş tablo bug'ı)
+- **v15.50a.4** — 5 aşama tablo (yanlış sözleşme yorumu) — revize edildi
+- **v15.50a.5** — TEK KURAL (net>0) — doğru sözleşme, kanıtlandı
+- **v15.50a.6** — Topbar KESİM badge keyword fix (KESME LAZER yakalanmıyordu)
+
+## Önemli Ders
+
+**Sözleşmeyi yanlış sentezledim.** Müşteri net kural verdiğinde **birebir** uygulamak gerekir. "Sade tek kural" çıkarmaya çalışmak yanlış yola sürükler. Doğru süreç:
+1. Müşteriden kuralı tablo halinde al
+2. Test fixture'ı tablodaki **her satır** için yaz
+3. Patch yazmadan önce tabloyu **birebir** koda çevir
+4. Patch teslim mesajında "uygulanan kural" tablosu göster
+
+**Hijyen kuralı:** Yeni MRP davranışı patch'inde önce §19 sözleşmesini oku, dokunulan filter mantığı kuralı bozmuyor mu kontrol et.
 
 ---
 
-*Bu belge v15.47 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+## Son canlı sürüm
+**v15.50a.6** — Topbar KESİM badge fix (UX serisi tamamlandı).
+
+---
+
+*Bu belge v15.50a.6 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
 
 ---
 

@@ -1,121 +1,115 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.49b sonrası — günün son patchi)
-**Son canlı sürüm:** v15.49b (Master Backlog ilerleme paneli)
+**Tarih:** 25 Nisan 2026 (v15.50a.6 sonrası — UX serisi kapanışı)
+**Son canlı sürüm:** v15.50a.6
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi) + docs/is_emri/00_BACKLOG_Master.md (üstteki ilerleme paneli) oku.
-Son iş: v15.49b ilerleme paneli. Sıradaki: v15.49 MRP modal (Faz 3) — Faz B Parça 2 ile entegre.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §19 MRP Filtre Sözleşmesi + §18 ailesi 4 kalıcı kural) + docs/is_emri/00_BACKLOG_Master.md (üstteki ilerleme paneli) oku.
+Son iş: v15.50a serisi (7 patch) ile MRP UX 3 kritik bug çözüldü, hesap layer'ı kanıtlandı.
+Sıradaki: v15.50b (Faz 3 MRP Modal) — İş Emri #3'ün orijinal planı.
 ```
 
 ---
 
-## v15.49b — Ne Yapıldı
+## Bugünün Final Raporu — 7 Sürüm (v15.50a serisi)
 
-`docs/is_emri/00_BACKLOG_Master.md` dosyasının başına 3 görsel özet bölüm eklendi:
+| Sürüm | Konu | Doğrulama |
+|---|---|---|
+| v15.50a   | hesaplaMRP termin gruplama + stok pool FIFO            | 4/4 birim test PASS |
+| v15.50a.1 | MRP.tsx onClick event leak (Hesapla bypass) hotfix     | Manuel canlı |
+| v15.50a.2 | MRP filtre v1 (mrp_durum yoksay) — REVİZE              | 11/11 → revize |
+| v15.50a.3 | MRP tablo viewFilter default 'tum' (boş tablo fix)     | Manuel canlı |
+| v15.50a.4 | MRP filtre 5 aşama (yanlış sözleşme) — REVİZE          | 10/10 → revize |
+| v15.50a.5 | MRP filtre TEK KURAL (net>0) — DOĞRU SÖZLEŞME          | Canlı + 11/11 |
+| v15.50a.6 | Topbar KESİM badge keyword fix (KESME LAZER yakalama)  | Canlı |
 
-1. **📊 Genel İlerleme** — ASCII progress bar ile 10 büyük önerinin durumu (3 ✅ / 1 🟢 / 6 🟡)
-2. **📅 Son Sürümler** — 25 Nisan'da gelen 15 sürümün master backlog'a etkisi
-3. **📚 §18 Ailesi** — 4 kalıcı operasyonel kural tek tabloda
-
-Mevcut "Kullanım" + "10 Öneri" tablosu + "21 maddelik orijinal backlog" + diğer bölümler aynen kalır.
-
-**Amaç:** Yeni oturum başında durumu 30 saniyede kavrayabilmek. "Ne yapıldı, ne kaldı, hangi kurallar var" hızlıca görünür.
-
----
-
-## Bugünün Final Raporu — 16 Sürüm
-
-| Sürüm | Konu |
-|---|---|
-| v15.40.1 | Pre-push hook hotfix |
-| v15.41 | Stok anomalisi rapor (bypassNotu) |
-| v15.42 | uys_work_orders.termin kolonu |
-| v15.43 | audit-columns yorum temizleyici |
-| v15.44 | Hurda + havuz geri alma + manuel havuz önerisi |
-| v15.45 | §18 İndirilenler Hijyen Kuralı |
-| v15.46 | İş emirleri arşivi |
-| v15.47 | Üretim Zinciri Faz 1+5 (DB + Topbar) |
-| v15.47.1 | §18.2 Yeni Tablo Konvansiyonu |
-| v15.47.2 | §18.3 Durum String Konvansiyonu |
-| v15.47.3 | statusUtils yayılım + 'beklemede' bug fix |
-| v15.48a | Vitest + cuttingArtik + 12 birim test |
-| v15.48b1 | Otomatik Plan önizleme modal |
-| v15.48 | Faz 2 KAPANIŞ + §18.4 Artık Yönetimi |
-| v15.49a | Topbar Filtre Aktif (MRP badge) |
-| **v15.49b** | **Master Backlog ilerleme paneli** |
-
-**Sayılar:** 16 patch · 2 schema migration · 2 audit aracı iyileştirmesi · 5 yeni UI · 4 kalıcı operasyonel kural · 1 birim test altyapısı · 12 birim test · 0 rollback.
+**Sayılar:** 7 patch · 0 rollback · 0 schema değişikliği · ~30 birim test PASS · 1 yeni kalıcı kural (§19).
 
 ---
 
-## İş Emri #3 İlerlemesi
+## §19 MRP Filtre Sözleşmesi (TEK KURAL)
 
-| Faz | Durum |
-|---|---|
-| Faz 1 — DB veri modeli | ✅ v15.47 |
-| Faz 5 — Üst bar göstergeleri | ✅ v15.47 + 3 hotfix + filtre |
-| Faz 2 — Kesim Optimizasyon | ✅ v15.48 |
-| Faz 3 — MRP Modal | 🟡 v15.49 — sıradaki |
-| Faz 4 — autoZincir | 🟡 v15.50 |
-| Faz 6 — Test | 🟡 v15.50.1 |
+> **Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP'de net > 0 satırı var.**
+
+`mrp_durum` kolonu, açık tedarik listesi, üretim yüzdesi → **filter'da kullanılmaz**. Detay: Bilgi Bankası §19.
+
+**Tedarik silinirse otomatik geri açılır** — sözleşmenin kritik özelliği. Test fixture S10 ile garanti.
 
 ---
 
-## Sırada — v15.49 MRP Modal (Faz 3)
+## Sıradaki — v15.50b (Faz 3 MRP Modal)
 
-İş Emri #3'ün asıl üretim planlama parçası.
+İş Emri #3 Faz 3 — orijinal plan halen geçerli:
 
-**ÖNEMLİ:** Faz B Parça 2 (MRP termin-gruplu) ile entegre yapılırsa daha verimli — bkz. `docs/faz_b_plan.md`. Aynı `mrp.ts` dosyasına dokunuyorlar.
+- `pages/Orders.tsx` OrderDetailModal'a "MRP Hesapla" butonu (UI giriş noktası)
+- `MRPModal.tsx` yeni component (snapshot + termin sütunu + tedarik aç akışı)
+- `mrp.ts` refactor — termin gruplu çıktı ✅ YAPILDI v15.50a (Faz B P2 entegre)
+- `uys_mrp_calculations` tablosuna snapshot insert (v15.47'de hazırlandı, henüz dolmuyordu)
+- "Tedarik Aç" toplu seçim (RBAC: `tedarik_auto`)
 
-Ana iş:
-- `pages/Orders.tsx` OrderDetailModal'a "MRP Hesapla" butonu var mı kontrol et
-- `MRPModal.tsx` yeni component
-- `mrp.ts` refactor — termin gruplu çıktı (Faz B P2 entegrasyonu)
-- `uys_mrp_calculations` tablosuna snapshot yaz (v15.47'de hazırlandı)
-- "Tedarik Aç" toplu seçim + insert (RBAC: `tedarik_auto`)
+**Tahmini:** 1.5-2 saat. v15.50b/c parçalarına bölünebilir.
 
-**Tahmini:** 1.5-2 saat. Tek mesajda yetmez muhtemelen, 2 patch'e bölmek gerekebilir (algoritma + UI).
+**Faz B Parça 2 durumu:** Termin gruplama yapıldı (v15.50a). Geriye sadece UI tarafı kaldı (Modal içinde termin sütunu).
 
-**Kontrol listesi (yeni patch öncesi):**
-- [ ] §18.3 — yeni durum string'i ekleniyorsa statusUtils güncelle
-- [ ] §18.2 — yeni tablo gerekiyorsa karar matrisi
-- [ ] Mevcut `mrp.ts` keşif (önce ne var, ne yok bak)
-- [ ] Faz B P2 ile çakışma kontrolü
+---
+
+## Acil UX Backlog Durumu
+
+| # | Sorun | Durum |
+|---|---|---|
+| 1 | "Tamamlananlar" gizleme yanlıştı (mrp_durum filtresi) | ✅ v15.50a.5 ile çözüldü (TEK KURAL) |
+| 2 | "Sipariş seçili" rozeti vs Hesapla bypass | ✅ v15.50a.1 ile çözüldü |
+| 3 | Kesim planı yokluğu sipariş sayfasında görünmüyor    | 🟡 Kısmen — Topbar KESİM düzeltildi (v15.50a.6), Siparişler sayfasındaki uyarı eksik kaldı, kullanıcıyla konuşma yarıda kaldı |
+
+---
+
+## Kontrol Listesi (yeni MRP/UI patch öncesi)
+
+**§19 MRP filtresine dokunuyorsa:**
+- [ ] Filter kararı `hesaplaMRP` net>0 sonucuna mı bakıyor?
+- [ ] mrp_durum kolonu **filter'da** kullanılmıyor mu?
+- [ ] Tedarik silindiğinde sipariş otomatik liste'ye dönüyor mu? (S10 garantisi)
+- [ ] Kilitli siparişler arşivde mi?
+
+**§18.3 durum string varyantları:**
+- [ ] Kilit kontrolünde `'kapalı'`, `'kapali'`, `'iptal'`, `'İptal'`, `'tamamlandi'`, `'Tamamlandı'` hepsi sayılıyor mu?
+
+**§18 hijyeni:**
+- [ ] Patch teslim mesajında cleanup komutu var mı?
+- [ ] §18.2 yeni tablo varsa karar matrisi
+- [ ] §18.3 yeni durum string varsa statusUtils güncel
+- [ ] §18.4 artık akışı manuel material kartı YASAK
 
 ---
 
 ## Komutlar
 
-**Apply:**
-```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-49b
-powershell -ExecutionPolicy Bypass -File .\apply.ps1
-```
-
-**Commit + push:**
-```powershell
-cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
-$env:GIT_PAGER = "cat"
-git pull
-git add -A
-git commit -m "v15.49b: master backlog ilerleme paneli (gorsel ozet)"
-git push
-```
-
-3/3 yeşil bekleniyor (sadece doc).
-
 **Push sonrası temizlik:**
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\patch-v15-49b.zip","$env:USERPROFILE\Downloads\patch-v15-49b" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\patch-v15-50a-*.zip","$env:USERPROFILE\Downloads\patch-v15-50a-*" -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ---
 
-**v15.49b patch'i hazır.**
+## Önemli Ders (kalıcı not)
 
-İyi akşamlar Buket. 16 sürüm gerçekten rekor bir gün oldu. 👋
+Bugün **sözleşmeyi yanlış sentezledim** ve 3 patch boşa attım (v15.50a.2 → v15.50a.4 → v15.50a.5). Ders:
+
+> Müşteri net kural verdiğinde **birebir** uygulamak gerekir. "Sade tek kural" çıkarmaya çalışmak yanlış yola sürükler.
+
+Doğru süreç:
+1. Müşteriden kuralı **tablo halinde** al
+2. Test fixture'ı tablodaki **her satır için** yaz
+3. Patch yazmadan önce tabloyu **birebir** koda çevir
+4. Patch teslim mesajında "uygulanan kural" tablosu göster (kullanıcı 30 saniyede kontrol edebilsin)
+5. Onaylatmak için sürekli soru sormaktan vazgeç — **yapılması gereken bir şey varsa yap, durup sorma**
+
+Bilgi Bankası §19'da bu ders kalıcı olarak not alındı.
+
+---
+
+İyi geceler Buket. v15.50a serisi 7 patch, 0 rollback. UX katmanı temizlendi, sıradaki Faz 3 (MRP Modal) için zemin hazır.
