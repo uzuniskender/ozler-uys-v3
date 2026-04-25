@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.42** (uys_work_orders.termin kolonu + backfill)
+**Sürüm: v15.43** (audit-columns yorum temizleyici — false positive elimine)
 
-Son Güncelleme: **25 Nisan 2026** (16. oturum — DB schema fix)
+Son Güncelleme: **25 Nisan 2026** (17. oturum — audit aracı iyileştirme)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -48,13 +48,14 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.40**: Pre-push hook fix. `scripts/git-hooks/pre-push` repoda versionable — `git config core.hooksPath scripts/git-hooks` ile aktive ediliyor. Hook içinde Git Bash PATH fix (Node.js standart konumu + npm global), 3 adım: audit-schema + audit-columns + tsc --noEmit. İki makine için de çalışır (Iskender + iskender.uzun paths).
 - **v15.40.1 (hotfix)**: İki düzeltme. (1) Hook içindeki tsc çağrısı `npx --no-install tsc` yerine doğrudan `./node_modules/.bin/tsc` kullanıyor — `npx` "tsc" adını npm registry'deki yanlış pakete (eski `tsc@2.0.4`) çözümlüyordu. (2) `.gitattributes` dosyası eklendi: `scripts/git-hooks/*` ve `*.sh` LF zorunlu, `*.ps1` CRLF. Bu sayede hook dosyası Windows checkout'ta CRLF'ye dönüşüp bash shebang'i kırmıyor.
 - **v15.41**: Stok anomalisi rapor düzeltmesi. Test senaryolarında `_uretimGirisi` ve `_uretimGirisiFire` helper'ları doğrudan DB'ye insert yapıyor, UI'daki `OperatorPanel.save()` → `canProduceWO()` yolunu atlıyor. Bu sebeple rapora `-3 stok` gibi anomalik değerler düşebiliyor (özellikle Senaryo 5'te fire dahil 8 hammadde tüketimi sebebiyle). Rapor okunabilirliğini artırmak için `SenaryoAdim` tipine opsiyonel `bypassNotu?: string` alanı eklendi; `adim()` helper'ına opsiyonel `meta` parametresi eklendi. 6 üretim adımı (S1 #5, S2 #5, S3 #10, S4 #10, S5 #5 fire, S5 #9 telafi) artık `BYPASS_NOTU_URETIM` sabit metnini taşıyor. `TestMode.tsx` canlı log render'ı bypassNotu varsa adım kartının altında ℹ️ ikonu + gri italik açıklama satırı gösteriyor. JSON raporda da alan korunuyor → arşivlenen rapor okuyucusu kasıtlı bypass'ı görebiliyor. **Hiçbir mantık değişmedi** — yalnız tip + UI metadata; PASS/FAIL kararları, validation kuralları, helper davranışları aynı.
-- **v15.42**: `uys_work_orders.termin` kolonu eklendi. audit-columns 4 trace incelemesi sırasında ortaya çıktı — `autoChain.ts:64` her İE oluşturulurken `termin: termin || null` yazıyordu ama DB'de kolon yoktu, Supabase silent reject ediyordu. Bilgi Bankası §5.2 "Her İE kendi terminine sahip" hedefi DB seviyesinde desteklenmiyordu. Migration (`sql/20260425_v15_42_wo_termin.sql`): (1) `ALTER TABLE uys_work_orders ADD COLUMN termin text`, (2) Geriye dönük backfill — mevcut İE'lerin terminini `uys_orders.termin` alanından kopyalar (order_id join). Kod değişikliği YOK — autoChain.ts zaten doğru yazıyordu, artık DB'ye değer iletiliyor. İE bağımsız termini şu andan itibaren persist ediliyor.
+- **v15.42**: `uys_work_orders.termin` kolonu eklendi. audit-columns 4 trace incelemesi sırasında ortaya çıktı — `autoChain.ts:64` her İE oluşturulurken `termin: termin || null` yazıyordu ama DB'de kolon yoktu, Supabase silent reject ediyordu. Bilgi Bankası §5.2 "Her İE kendi terminine sahip" hedefi DB seviyesinde desteklenmiyordu. Migration (`sql/20260425_v15_42_wo_termin.sql`): (1) `ALTER TABLE uys_work_orders ADD COLUMN termin text`, (2) Geriye dönük backfill — mevcut İE'lerin terminini `uys_orders.termin` alanından kopyalar (order_id join). Kod değişikliği YOK — autoChain.ts zaten doğru yazıyordu, artık DB'ye değer iletiliyor. İE bağımsız termini şu andan itibaren persist ediliyor. Doğrulama: 75 İE total, 15 backfill (siparişin termini vardı), 60 terminsiz (test/sipariş termini boştu).
+- **v15.43**: `audit-columns.cjs` yorum temizleyici. Önceki sürümde `supabase.from(...)` regex'i JSDoc/inline yorumları kod sanıp false positive trace warning üretiyordu (örn. `testRun.ts:172` JSDoc içindeki kullanım örneği). Yeni `stripComments()` state machine helper'ı: (1) Block yorum `/* ... */` → boşluğa, (2) Line yorum `// ...` → boşluğa, (3) String literal'ler (`'`, `"`, `` ` ``) korunur — URL'lerdeki `//` ve template literal içindeki yorum benzeri içerik etkilenmez, (4) Newline'lar korunur — satır numaraları ve regex offset'leri bozulmaz. `extractUsages()` artık strip'lenmiş içerik üzerinde çalışır; tüm aşağıdaki regex/parser otomatik yorum-bağımsız hale geldi. Beklenen sonuç: trace warning sayısı 4'ten 3'e düşer (testRun.ts:172 listede olmaz).
 
 ---
 
 # 2. BİR SONRAKİ OTURUMA NOTLAR ⭐
 
-## ✅ TAMAMLANAN — v15.38 → v15.42
+## ✅ TAMAMLANAN — v15.38 → v15.43
 
 **v15.38: Yasak Kontrolleri** — stok/duruş/silme engeli, Senaryo 6 (10/10 OK).
 
@@ -64,13 +65,14 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 
 **v15.41: Stok Anomalisi Rapor Düzeltmesi** — `SenaryoAdim.bypassNotu` alanı + `BYPASS_NOTU_URETIM` sabiti. 6 üretim adımına bypass notu işlendi. UI'da ℹ️ + gri italik alt satır. JSON raporda da yer alır.
 
-**v15.42: uys_work_orders.termin kolonu** — audit-columns 4 trace incelemesinden çıktı. autoChain.ts zaten yazıyordu, DB'de kolon eksikti. Migration ile eklendi + backfill yapıldı.
+**v15.42: uys_work_orders.termin kolonu** — audit-columns 4 trace incelemesinden çıktı. autoChain.ts zaten yazıyordu, DB'de kolon eksikti. Migration ile eklendi + backfill yapıldı (75 İE, 15 backfill).
+
+**v15.43: audit-columns yorum temizleyici** — `stripComments()` state machine helper. JSDoc içindeki örnek `supabase.from(...)` çağrıları artık false positive üretmiyor. Beklenen: 4 trace warning → 3.
 
 ## 🟡 Sıradaki Öncelik
 
 Belirgin bir blocker yok. Olası yönler:
 
-- audit-columns aracını JSDoc yorum satırlarını skip edecek şekilde iyileştir (testRun.ts:172 false positive sebepti)
 - Manuel plan'da havuz önerisi (v15.35 eksik)
 - Hurda geri alma UI
 - Havuz geri alma UI
@@ -603,8 +605,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.42** — uys_work_orders.termin kolonu (audit-columns 4 trace incelemesi sonucu).
+**v15.43** — audit-columns yorum temizleyici (false positive elimine).
 
 ---
 
-*Bu belge v15.42 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.43 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*

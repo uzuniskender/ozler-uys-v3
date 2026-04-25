@@ -43,6 +43,94 @@ function camelToSnake(s) {
 const SYSTEM_COLUMNS = new Set(['id', 'updated_at', 'created_at'])
 
 // ═══════════════════════════════════════════════════════════════
+// 0) YORUM TEMİZLEYİCİ (v15.43 — JSDoc/inline yorum skip)
+// ═══════════════════════════════════════════════════════════════
+//
+// Sebep: regex `supabase.from(...)` çağrılarını yorum içinde de yakalıyordu.
+// Örn. JSDoc'taki `* Kullanım: supabase.from('uys_orders').insert(...)` kullanım
+// örneği "false positive" trace warning üretiyordu (testRun.ts:172).
+//
+// Çözüm: dosya içeriği taranmadan önce yorumlar boşluğa dönüştürülür.
+// String literal'ler içindeki `//` veya `/* */` korunur (URL'ler vb.).
+// Newline'lar ve uzunluk korunur → satır numaraları ve offset'ler bozulmaz.
+function stripComments(src) {
+  let out = ''
+  let i = 0
+  let inString = null  // null | '"' | "'" | '`'
+  let inLineComment = false
+  let inBlockComment = false
+
+  while (i < src.length) {
+    const ch = src[i]
+    const next = src[i + 1]
+
+    if (inLineComment) {
+      if (ch === '\n') {
+        inLineComment = false
+        out += ch
+      } else {
+        out += ' '
+      }
+      i++
+      continue
+    }
+
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false
+        out += '  '
+        i += 2
+        continue
+      }
+      out += ch === '\n' ? '\n' : ' '
+      i++
+      continue
+    }
+
+    if (inString) {
+      // Kaçışlı karakter
+      if (ch === '\\' && next !== undefined) {
+        out += ch + next
+        i += 2
+        continue
+      }
+      if (ch === inString) {
+        inString = null
+      }
+      out += ch
+      i++
+      continue
+    }
+
+    if (ch === '"' || ch === "'" || ch === '`') {
+      inString = ch
+      out += ch
+      i++
+      continue
+    }
+
+    if (ch === '/' && next === '/') {
+      inLineComment = true
+      out += '  '
+      i += 2
+      continue
+    }
+
+    if (ch === '/' && next === '*') {
+      inBlockComment = true
+      out += '  '
+      i += 2
+      continue
+    }
+
+    out += ch
+    i++
+  }
+
+  return out
+}
+
+// ═══════════════════════════════════════════════════════════════
 // 1) DB KOLONLARINI PARSE ET
 // ═══════════════════════════════════════════════════════════════
 function readTableColumns() {
@@ -433,7 +521,11 @@ function extractUsages() {
   const files = scanDir(path.join(ROOT, 'src'), ['.ts', '.tsx'])
 
   for (const file of files) {
-    const content = fs.readFileSync(file, 'utf-8')
+    const rawContent = fs.readFileSync(file, 'utf-8')
+    // v15.43: Yorumları temizle — JSDoc içindeki örnek supabase.from(...)
+    // kullanımları false positive üretmesin. Newline'lar korunur,
+    // satır numaraları ve offset'ler bozulmaz.
+    const content = stripComments(rawContent)
     const fromRegex = /supabase\s*\.\s*from\s*\(\s*['"]([a-z_]+)['"]\s*\)/g
     let m
     while ((m = fromRegex.exec(content)) !== null) {

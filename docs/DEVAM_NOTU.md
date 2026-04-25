@@ -1,7 +1,7 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.42 sonrası)
-**Son canlı sürüm:** v15.42 (uys_work_orders.termin kolonu + backfill)
+**Tarih:** 25 Nisan 2026 (v15.43 sonrası)
+**Son canlı sürüm:** v15.43 (audit-columns yorum temizleyici — false positive elimine)
 
 ---
 
@@ -9,63 +9,66 @@
 
 ```
 UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/UYS_v3_Is_Listesi.md oku.
-Son iş: v15.42 uys_work_orders.termin kolonu TAMAM. Backlog'da blocker yok — kullanıcı yön versin.
+Son iş: v15.43 audit-columns yorum temizleyici TAMAM. Backlog'da blocker yok — kullanıcı yön versin.
 ```
 
 ---
 
-## v15.42 — Neyin Düzeltildi
+## v15.43 — Neyin Düzeltildi
 
 ### Sorun
-`autoChain.ts:64` her İE oluşturulurken (`buildWorkOrders` fonksiyonu) `termin: termin || null` alanını yazıyordu. Ama `uys_work_orders` DB tablosunda `termin` kolonu yoktu — Supabase **silent reject** ediyordu (hata atmadan kolonu görmezden gelme). Bilgi Bankası §5.2 "Her İE kendi terminine sahip" hedefi DB seviyesinde desteklenmiyordu. Sonuç: Sipariş termini sipariş kartında kalıyordu, her İE'nin bağımsız termini persist edilmiyordu.
-
-Tespit yöntemi: audit-columns aracının "trace edilemeyen 4 çağrı" uyarılarının elle incelenmesi.
+`scripts/audit-columns.cjs` regex'i `supabase.from(...)` çağrılarını yakalarken yorum satırlarını da kod sanıyordu. Sonuç: `testRun.ts:172`'deki JSDoc örneği false positive trace warning üretiyordu (4 trace warning'in 1'i sahte alarm).
 
 ### Çözüm
-**Migration: `sql/20260425_v15_42_wo_termin.sql`**
+**`stripComments()` state machine helper'ı** — `extractUsages()`'tan ÖNCE dosya içeriği taranır:
 
-1. `ALTER TABLE uys_work_orders ADD COLUMN IF NOT EXISTS termin text` — kolon ekle (idempotent)
-2. `UPDATE uys_work_orders wo SET termin = o.termin FROM uys_orders o WHERE wo.order_id = o.id AND wo.termin IS NULL AND o.termin IS NOT NULL` — geriye dönük backfill (mevcut İE'ler siparişlerinden termini kopyalar)
-3. RAISE NOTICE ile kaç satır backfill edildi raporu
+- Block yorum `/* ... */` → boşluğa
+- Line yorum `// ...` → boşluğa
+- String literal'ler (`'`, `"`, `` ` ``) korunur — URL'lerdeki `//` ve template literal içindeki yorum benzeri içerik etkilenmez
+- Newline'lar korunur — satır numaraları ve regex offset'leri bozulmaz
+
+`extractUsages()` artık strip'lenmiş içerik üzerinde çalışır. Tüm aşağıdaki regex/parser otomatik yorum-bağımsız hale geldi.
 
 ### Etkilenmeyen Şeyler
-- TypeScript kodu: değişmedi (autoChain.ts zaten doğru yazıyordu)
-- Kolon adı, tipi, nullable: text, NULL allowed (siparişin termini olmayabilir)
-- Veri kaybı: yok, lock yok (ALTER ADD COLUMN nullable atomic)
-- UI: bir sonraki render'da WorkOrders sayfası termini görmeye başlar
+- DB şeması: değişmedi
+- Kullanıcı kodu: tek dosya değişti (`scripts/audit-columns.cjs`)
+- Audit'in başarılı/başarısız mantığı: aynı
+- Mevcut trace başarılı çağrılar: aynı
 
 ---
 
 ## Doğrulama (Apply + push sonrası)
 
-### Apply sonrası — Supabase Studio'da SQL çalıştır
+`git push --dry-run` çıktısında trace warning'ler:
+
+**ÖNCEKİ (4 warning):**
 ```
-1. https://supabase.com/dashboard/project/lmhcobrgrnvtprvmcito/sql
-2. SQL Editor → New query
-3. patch-v15-42/sql/20260425_v15_42_wo_termin.sql içeriğini yapıştır
-4. RUN
-5. Output'ta "[v15.42] uys_work_orders: N satır, M satırda termin var" görmelisin
+⚠ Satır 64: uys_work_orders [upsert] — karmaşık expression
+⚠ Satır 172: uys_orders [insert] — karmaşık expression  ← false positive (JSDoc)
+⚠ Satır 206: uys_izinler [insert] 'data' — değişken tanımı
+⚠ Satır 127: uys_tedarikler [update] 'data' — değişken tanımı
 ```
 
-### Push sonrası
-- `git push` → pre-push hook 3/3 yeşil olmalı (audit-schema artık `termin` kolonunu görüyor)
-- Yeni sipariş oluştur → her İE'nin DB satırında termin kayıtlı olmalı
-- WorkOrders sayfası termini gösterebilmeli
+**SONRA (3 warning bekleniyor):**
+```
+⚠ Satır 64: uys_work_orders [upsert] — karmaşık expression
+⚠ Satır 206: uys_izinler [insert] 'data' — değişken tanımı
+⚠ Satır 127: uys_tedarikler [update] 'data' — değişken tanımı
+```
+
+`testRun.ts:172` listede OLMAMALI. Diğer 3'ü gerçek değişken kullanımı, manuel inceleme yaptık (v15.42 oturumunda) ve hepsi temiz.
 
 ---
 
 ## Sırada (Belirgin Blocker Yok)
 
-### 1. audit-columns iyileştirmesi 🟢
-JSDoc yorum satırlarını skip et (testRun.ts:172 false positive sebepti). `scripts/audit-columns.cjs` güncellemesi.
-
-### 2. Küçük UI işleri 🟢
+### Küçük UI işleri 🟢
 - Manuel plan'da havuz önerisi (v15.35 eksik)
 - Hurda geri alma UI
 - Havuz geri alma UI
 - Toplu senaryo farklı reçetelerle çalıştırılabilir
 
-### 3. Test kapsamı 🟢
+### Test kapsamı 🟢
 - Operator + Admin için test kapsamı (S1-S5 tüm rollerde tekrar)
 
 ---
@@ -74,27 +77,22 @@ JSDoc yorum satırlarını skip et (testRun.ts:172 false positive sebepti). `scr
 
 **Apply:**
 ```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-42
+cd $env:USERPROFILE\Downloads\patch-v15-43
 powershell -ExecutionPolicy Bypass -File .\apply.ps1
 ```
 
-**Supabase'de SQL çalıştır** (kritik adım — kod-only değil schema değişikliği):
-- Supabase Studio → SQL Editor
-- `sql\20260425_v15_42_wo_termin.sql` içeriğini yapıştır
-- RUN
-
-**Commit + push:**
+**Commit + push** (kod-only patch, schema değişikliği YOK):
 ```powershell
 cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
 $env:GIT_PAGER = "cat"
 git pull
 git add -A
-git commit -m "v15.42: uys_work_orders.termin kolonu + backfill"
+git commit -m "v15.43: audit-columns yorum temizleyici - JSDoc false positive elimine"
 git push
 ```
 
-Pre-push hook 3/3 yeşil bekleniyor. FAIL olursa hata mesajını gönder.
+Pre-push hook 3/3 yeşil + audit-columns warning sayısı 3 bekleniyor.
 
 ---
 
-**v15.42 patch'i hazır.**
+**v15.43 patch'i hazır.**
