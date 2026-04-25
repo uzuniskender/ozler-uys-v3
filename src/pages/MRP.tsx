@@ -36,45 +36,52 @@ export function MRP() {
     try { return new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[]) } catch { return new Set<string>() }
   }, [sonuc]) // sonuc değişince yeniden oku
 
-  // v15.50a.4 — BUKET SÖZLEŞMESİ (5 aşama):
-  //   1: '' veya 'bekliyor'  → Görünür (iş bekliyor)
-  //   2: 'eksik'              → Görünür (aksiyon lazım)
-  //   3: 'tamam' + tedarik VAR → Gizli (iş kapandı)
-  //   3 alt: 'tamam' + tedarik YOK (silinmiş) → GÖRÜNÜR (iş yeniden açıldı)
-  //   5: durum=kilit/iptal/tamamlandı → Gizli (kilit her şeyin üstünde)
-  //
-  // 10/10 birim test PASS — doc/DEVAM_NOTU.md altında dokümante.
-  // §18.3 NOTU: statusUtils.isOrderActive helper'ı kullanılabilirdi ama '' davranışı
-  // belirsiz. Burada inline KESİN blacklist kullanılıyor.
+  // v15.50a.5 — TEK KURAL:
+  // Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP sonucunda net > 0 var.
+  // mrp_durum, açık tedarik listesi → filter'da kullanılmaz, sadece bilgi rozeti.
+  // hesaplaMRP zaten stok + açık tedarik düşümü yapıyor → net > 0 yoksa stok yeterli demektir.
   const ORDER_ARCHIVED_STATES = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
 
-  // Helper: bir sipariş MRP listesinde görünür mi?
-  const showInMrpList = (o: typeof orders[0]) => {
-    // Aşama 5: kilit her şeyin üstünde
-    if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return false
-    // Aşama 3: 'tamam' AMA gerçekten tedarik var mı? (silinmiş olabilir → MRP yeniden açılır)
-    if (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') {
-      const acikTedarikVar = tedarikler.some(t => t.orderId === o.id && !t.geldi)
-      if (acikTedarikVar) return false  // tedarik var → iş kapalı
-      return true                        // tedarik yok → MRP yeniden açıldı
+  // Cutting plans için map (hesaplaMRP imzası gerektiriyor)
+  const cpMappedAll = useMemo(() => cuttingPlans.map((p: any) => ({
+    hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+    gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+  })), [cuttingPlans])
+
+  // Her sipariş için net>0 var mı? Tek seferde tüm aktif siparişler için map'le.
+  const orderHasEksik = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const o of orders) {
+      // Kilitli ise atla — zaten gizlenecek
+      if (ORDER_ARCHIVED_STATES.has(o.durum || '')) { map[o.id] = false; continue }
+      try {
+        const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id)
+        map[o.id] = sonuc.some(r => r.net > 0)
+      } catch {
+        map[o.id] = false
+      }
     }
-    // Aşama 1 & 2: '' / 'bekliyor' / 'eksik' → görünür
-    return true
-  }
+    return map
+  }, [orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      const gorunur = showInMrpList(o)
-      return showTamamlanan ? !gorunur : gorunur
+      // Kilitli → arşiv
+      if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return showTamamlanan
+      // Açık → eksik varsa default'ta görünür, yoksa arşivde (toggle ile gösterilir)
+      const eksikVar = orderHasEksik[o.id] ?? false
+      return showTamamlanan ? !eksikVar : eksikVar
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, tedarikler, showTamamlanan])
+  }, [orders, orderHasEksik, showTamamlanan])
 
-  // Toggle label sayısı: default'ta gizli olanlar (mrp-tamam + kilitli birleşik)
   const arsivSayisi = useMemo(() =>
-    orders.filter(o => !showInMrpList(o)).length
+    orders.filter(o => {
+      if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return true
+      return !(orderHasEksik[o.id] ?? false)
+    }).length
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [orders, tedarikler])
+  , [orders, orderHasEksik])
 
   // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
   const ymIEs = useMemo(() =>
