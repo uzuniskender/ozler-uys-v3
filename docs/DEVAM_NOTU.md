@@ -1,87 +1,54 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.44 sonrası)
-**Son canlı sürüm:** v15.44 (Geri alma UI'ları + manuel plan havuz önerisi)
+**Tarih:** 25 Nisan 2026 (v15.45 sonrası)
+**Son canlı sürüm:** v15.45 (İndirilenler Hijyen Kuralı + Faz B planı repoya taşındı)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/UYS_v3_Is_Listesi.md oku.
-Son iş: v15.44 geri alma UI'ları + manuel plan havuz önerisi TAMAM. Backlog'da blocker yok.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/UYS_v3_Is_Listesi.md + docs/faz_b_plan.md oku.
+Son iş: v15.45 hijyen kuralı + faz B planı taşındı. Sıradaki: Faz B Parça 2 veya Parça 3.
 ```
 
 ---
 
-## v15.44 — Üç UI İşi Tek Patch
+## v15.45 — Ne Yapıldı
 
-### İş 1: Hurda geri alma UI (admin only)
-**Yer:** Warehouse.tsx → "Hurdaya Gönderilen" alt tab → her satıra "↩ Geri Al" butonu (kehribar renkli, küçük).
-**RBAC:** `acikbar_hurda_geri_al` (DEFAULTS'ta boş array → admin only).
-**Aksiyon:** `barModel.ts.acikBarHurdadanGeriAl(barId, kullaniciId, kullaniciAd)`:
-1. `uys_acik_barlar.durum` 'hurda' → 'acik', hurda_* alanları NULL
-2. `uys_fire_logs` ilgili 'bar_hurda' kaydı **SİLİNMEZ** — `not_` alanına `[İPTAL: tarih kullanıcı]` prefix eklenir → audit trail korunur
-3. fire_log id'si artık deterministik: `'fire-bar-hurda-' + acikBarId` → idempotent + geri alma sırasında bulunabilir
-4. Confirm dialog ile kullanıcı onayı gerekir
+### 1. İndirilenler Hijyen Kuralı (yeni Bilgi Bankası §18)
+Buket Downloads klasöründe 13+ patch zip + duplicate `GitHub\ozler-uys-v3\` klasörü kalıntısı tespit etti. Bundan sonra:
+- Her patch teslim mesajının SONUNDA Claude bir cleanup komutu verir
+- Apply + push doğrulandıktan sonra kullanıcı çalıştırır → ilgili Downloads dosyaları silinir
+- Repo dosyaları ASLA Downloads'a kopyalanmaz (duplicate riski)
+- Bilgi bankası tek yerde: `docs/UYS_v3_Bilgi_Bankasi.md`
 
-### İş 2: Havuz geri alma UI (admin only)
-**Yer:** Warehouse.tsx → yeni "Tüketilmiş Bar" alt tab'ı (`tab='tuketildi'`). 'tuketildi' durumlu açık barları listeler.
-**RBAC:** `acikbar_havuz_geri_al` (admin only).
-**Aksiyon:** `barModel.ts.acikBarTuketimGeriAl(barId, kullaniciId, kullaniciAd)`:
-1. `uys_acik_barlar.durum` 'tuketildi' → 'acik', tuketim_* alanları NULL
-2. **Stok hareketlerine DOKUNULMAZ** — eğer üretim gerçekten yapıldıysa stok zaten düşmüştür
-3. Confirm dialog'da NET uyarı: *"Stok hareketleri korunur, manuel düzeltme gerekirse Stok sayfasından yapın"*
-4. Yanlış işaretleme senaryosu için tasarlandı (double-counting riski yok)
-
-### İş 3: Manuel plan'da havuz önerisi
-**Yer:** CuttingPlans.tsx → KesimOlusturModal `kaydet()` artık yeni planId'yi `onSaved(planId)` callback'ine iletiyor. Parent CuttingPlans bu ID ile otomatik plan'daki havuz tarama mantığının aynısını çalıştırıyor.
-**Mantık:**
-- yeniPlan.durum === 'bekliyor' kontrol
-- Plandaki HM için durum='acik' bar varsa
-- Plandaki en küçük parça boyu havuz barından küçük/eşit ise → HavuzOneriModal aç
-- Eski otomatik plan'la birebir aynı UX
-
-### Etkilenmeyen
-- DB şeması: değişmedi (sadece deterministik fire_log ID'si yeni hurda kayıtlarında kullanılır, eski kayıtlar olduğu gibi kalır)
-- Mevcut hurda yapma akışı: aynı (sadece fire_log ID'si artık deterministik)
-- Tüketim mantığı: aynı (barModelSync, acikBarTuket dokunulmadı)
-- Validation kuralları: aynı
+### 2. Faz B planı repoya taşındı
+Downloads kalıntılarında bulunan v15.21 dönemi `faz_b_plan.md` (Sipariş Termin Farkındalığı) artık `docs/faz_b_plan.md`. Plan 3 parçalı:
+- **Parça 1: İE terminleri** — ✅ v15.42 ile yapıldı (uys_work_orders.termin kolonu)
+- **Parça 2: MRP termin-gruplu hesap** — 🟡 backlog (1.5–2 saat)
+- **Parça 3: Kesim'de manuel kalem seçimi** — 🟡 backlog (2–3 saat)
 
 ---
 
-## Doğrulama (Apply + push sonrası)
+## Sırada — Faz B Parça 2 veya Parça 3
 
-### Test 1: Hurda geri alma
-1. Açık Bar Havuzu → Detay → bir barı hurdaya gönder
-2. "Hurdaya Gönderilen" alt tab → bar listede görünmeli, sağda "↩ Geri Al" butonu (admin'sen)
-3. Geri Al → confirm dialog → onay → bar listeden gitmeli, "Açık Bar Havuzu"nda görünmeli
-4. Reports → Fire Analizi → ilgili kayıt hala görünür ama `not_` alanı `[İPTAL: ...]` prefix ile başlar
+### Parça 2: MRP termin-gruplu hesap (1.5–2 saat)
+**Mevcut:** `hesaplaMRP()` toplam ihtiyaç çıkarıyor → "sac X: 500kg net 300kg"
+**Yeni:** Termin gruplu çıktı → "sac X: 15 Mayıs 100kg, 1 Haziran 200kg"
+**Dosyalar:** `mrp.ts` (refactor), `Orders.tsx` (OrderDetailModal MRP sekmesi), `MRP.tsx`, `mrpTedarikOlustur` (teslim_tarihi=termin)
+**Risk:** `hesaplaMRP` birden fazla yerden çağrılıyor — imza değişirse tüm çağrıları güncelle. FIFO tahsis test edilmeli.
 
-### Test 2: Havuz geri alma (eğer tüketilmiş bar varsa)
-1. "Tüketilmiş Bar" alt tab'ı → tüketilmiş barlar listede
-2. "↩ Geri Al" → confirm dialog → uyarı mesajını oku → onay → bar açık havuza döner
-3. Stok sayfası → ilgili HM stok değişmemiş olmalı (dokunulmadı)
+### Parça 3: Kesim'de manuel kalem seçimi (2–3 saat)
+**Mevcut:** Kesim planı otomatik (açık İE'lerden), operatör müdahalesi sınırlı
+**Yeni:** "Kesim planına ekle" butonu → modal → checkbox+termin renk kodlu (kırmızı: geçmiş, sarı: ≤7 gün, gri: ileri) → seçilenler plana eklenir
+**Dosyalar:** `CuttingPlans.tsx` (yeni `CuttingPlanIeSelectorModal`), `cutting.ts` (`olusturCuttingPlan`'a seçili ID listesi parametresi)
+**Risk:** UI ağırlıklı, DB'ye dokunmaz. Geriye uyumlu (boş ID listesi = otomatik mod).
 
-### Test 3: Manuel plan havuz önerisi
-1. Manuel Plan → bir HM seç (havuzunda açık bar olan, parça boyu uygun)
-2. İE seç + bar oluştur + kaydet
-3. Kaydet sonrası HavuzOneriModal otomatik açılmalı
-4. Önerilen havuz barını seç + onayla → plan yeniden optimize olmalı
-
-### Push doğrulama
-- Pre-push hook 3/3 yeşil olmalı
-- audit-columns warning sayısı 3 (önceki gibi, bu patch yeni warning eklemedi)
-
----
-
-## Sırada (Belirgin Blocker Yok)
-
-Backlog temizlendi. Olası yönler kullanıcı tercihine bağlı:
-
-- Toplu senaryo farklı reçetelerle çalıştırılabilir hale getir
-- Operator + Admin için test kapsamı (S1-S5 tüm rollerde tekrar)
-- (yeni iş ihtiyacı geldikçe)
+### Diğer küçük işler
+- audit-columns iyileştirmesi (zaten v15.43'te yapıldı, JSDoc skip)
+- Toplu senaryo farklı reçetelerle çalıştırılabilir
+- Operator + Admin için test kapsamı
 
 ---
 
@@ -89,22 +56,27 @@ Backlog temizlendi. Olası yönler kullanıcı tercihine bağlı:
 
 **Apply:**
 ```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-44
+cd $env:USERPROFILE\Downloads\patch-v15-45
 powershell -ExecutionPolicy Bypass -File .\apply.ps1
 ```
 
-**Commit + push** (kod-only patch, schema değişikliği YOK):
+**Commit + push:**
 ```powershell
 cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
 $env:GIT_PAGER = "cat"
 git pull
 git add -A
-git commit -m "v15.44: hurda+havuz geri alma UI + manuel plan havuz onerisi"
+git commit -m "v15.45: indirilenler hijyen kurali + faz B plani repoya tasindi"
 git push
 ```
 
-Pre-push hook 3/3 yeşil bekleniyor.
+Pre-push hook 3/3 yeşil bekleniyor. Kod değişikliği YOK, sadece docs.
+
+**Push sonrası — TEMİZLİK (yeni kuralın ilk testi):**
+```powershell
+Remove-Item "$env:USERPROFILE\Downloads\patch-v15-45.zip","$env:USERPROFILE\Downloads\patch-v15-45","$env:USERPROFILE\Desktop\faz_b_plan.md" -Recurse -Force -ErrorAction SilentlyContinue
+```
 
 ---
 
-**v15.44 patch'i hazır.**
+**v15.45 patch'i hazır.**

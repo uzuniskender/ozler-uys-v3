@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.44)
-**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici TAMAM ✅. v15.44: hurda geri alma + havuz geri alma + manuel plan havuz önerisi TAMAM ✅. Backlog'da blocker yok.
+**Son güncelleme:** 25 Nisan 2026 (v15.45)
+**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları TAMAM ✅. v15.45: İndirilenler Hijyen Kuralı + Faz B planı repoya taşındı (`docs/faz_b_plan.md`). **Sıradaki büyük iş: Faz B Parça 2 (MRP termin-gruplu) ve Parça 3 (Kesim'de manuel kalem seçimi).**
 
 ---
 

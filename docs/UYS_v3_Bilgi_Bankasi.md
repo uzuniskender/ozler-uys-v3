@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.44** (Geri alma UI'ları + manuel plan havuz önerisi)
+**Sürüm: v15.45** (İndirilenler Hijyen Kuralı + Faz B planı repoya taşındı)
 
-Son Güncelleme: **25 Nisan 2026** (18. oturum — UI iyileştirme paketi)
+Son Güncelleme: **25 Nisan 2026** (19. oturum — operasyonel disiplin)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -31,6 +31,7 @@ Son Güncelleme: **25 Nisan 2026** (18. oturum — UI iyileştirme paketi)
 15. Bilinen Buglar ve Backlog
 16. Öğrenilenler — v15.33 → v15.37
 17. Referanslar
+18. İndirilenler Hijyen Kuralı ⭐ YENİ
 
 ---
 
@@ -51,6 +52,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.42**: `uys_work_orders.termin` kolonu eklendi. audit-columns 4 trace incelemesi sırasında ortaya çıktı — `autoChain.ts:64` her İE oluşturulurken `termin: termin || null` yazıyordu ama DB'de kolon yoktu, Supabase silent reject ediyordu. Bilgi Bankası §5.2 "Her İE kendi terminine sahip" hedefi DB seviyesinde desteklenmiyordu. Migration (`sql/20260425_v15_42_wo_termin.sql`): (1) `ALTER TABLE uys_work_orders ADD COLUMN termin text`, (2) Geriye dönük backfill — mevcut İE'lerin terminini `uys_orders.termin` alanından kopyalar (order_id join). Kod değişikliği YOK — autoChain.ts zaten doğru yazıyordu, artık DB'ye değer iletiliyor. İE bağımsız termini şu andan itibaren persist ediliyor. Doğrulama: 75 İE total, 15 backfill (siparişin termini vardı), 60 terminsiz (test/sipariş termini boştu).
 - **v15.43**: `audit-columns.cjs` yorum temizleyici. Önceki sürümde `supabase.from(...)` regex'i JSDoc/inline yorumları kod sanıp false positive trace warning üretiyordu (örn. `testRun.ts:172` JSDoc içindeki kullanım örneği). Yeni `stripComments()` state machine helper'ı: (1) Block yorum `/* ... */` → boşluğa, (2) Line yorum `// ...` → boşluğa, (3) String literal'ler (`'`, `"`, `` ` ``) korunur — URL'lerdeki `//` ve template literal içindeki yorum benzeri içerik etkilenmez, (4) Newline'lar korunur — satır numaraları ve regex offset'leri bozulmaz. `extractUsages()` artık strip'lenmiş içerik üzerinde çalışır; tüm aşağıdaki regex/parser otomatik yorum-bağımsız hale geldi. Beklenen sonuç: trace warning sayısı 4'ten 3'e düşer (testRun.ts:172 listede olmaz).
 - **v15.44**: Üç UI işi tek patch — geri alma ve manuel plan havuz önerisi. (1) **Hurda geri alma UI**: Warehouse.tsx "Hurdaya Gönderilen" alt tab'ında her satıra "↩ Geri Al" butonu (admin only, RBAC: `acikbar_hurda_geri_al`). `barModel.ts.acikBarHurdadanGeriAl()` durumu 'hurda' → 'acik' yapar, hurda_* alanlarını temizler. fire_logs SİLİNMEZ — kayıt `not_` alanına `[İPTAL: tarih kullanıcı]` prefix eklenir → audit trail korunur. fire_log id'si artık deterministik (`'fire-bar-hurda-' + acikBarId`) → idempotent + geri alma sırasında bulunabilir. (2) **Havuz geri alma UI**: yeni "Tüketilmiş Bar" alt tab'ı. Admin'e "↩ Geri Al" butonu (RBAC: `acikbar_havuz_geri_al`). `acikBarTuketimGeriAl()` durumu 'tuketildi' → 'acik' yapar, tuketim_* alanlarını temizler. **Stok hareketlerine DOKUNULMAZ** — eğer üretim gerçekten yapıldıysa stok zaten düşmüştür, otomatik geri alma double-counting yaratır. Yanlış işaretleme senaryosu için tasarlandı. Confirm dialog'da net uyarı. (3) **Manuel plan'da havuz önerisi**: KesimOlusturModal `kaydet()` artık yeni planId'yi `onSaved(planId)` callback'ine iletiyor. Parent CuttingPlans bu ID ile otomatik plan'daki havuz tarama mantığının aynısını çalıştırıyor (en küçük parça boyu vs. havuz bar uzunluğu kontrolü). Uygun havuz barı varsa HavuzOneriModal açılır. Schema değişikliği YOK, kod-only patch.
+- **v15.45**: Operasyonel disiplin paketi. (1) **İndirilenler Hijyen Kuralı** — yeni bölüm §18'e eklendi. Her patch teslim mesajının sonunda Claude bir cleanup komutu verir; apply + push doğrulandıktan sonra kullanıcı bu komutu çalıştırır → Downloads'taki ilgili patch zip + extracted klasör silinir. Repo dosyaları ASLA Downloads'a kopyalanmaz, içerik dosyaları (planlar, notlar) repoya taşınır. (2) **Faz B planı repoya taşındı** — Downloads kalıntılarında bulunan v15.21 dönemi `faz_b_plan.md` (Sipariş Termin Farkındalığı, 3 parçalı plan) artık `docs/faz_b_plan.md`. Parça 1 zaten v15.42 ile yapıldı (uys_work_orders.termin); Parça 2 (MRP termin-gruplu) ve Parça 3 (Kesim'de manuel kalem seçimi) backlog'a alındı.
 
 ---
 
@@ -72,16 +74,19 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 
 **v15.44: Geri alma UI'ları + manuel plan havuz önerisi** — 3 küçük iş tek patch. Hurda geri alma + havuz geri alma (admin only, audit trail korunur). Manuel plan kaydet sonrası havuz önerisi modal'ı (otomatik plan'la eşit deneyim).
 
+**v15.45: Operasyonel disiplin** — İndirilenler Hijyen Kuralı (§18) + Faz B planı repoya taşındı (`docs/faz_b_plan.md`).
+
 ## 🟡 Sıradaki Öncelik
 
-Belirgin bir blocker yok. Olası yönler:
+**Faz B (Sipariş Termin Farkındalığı)** — `docs/faz_b_plan.md`. Parça 1 yapıldı (v15.42 ile termin kolonu eklendi), kalan:
 
-- Toplu senaryo farklı reçetelerle çalıştırılabilir
-- Operator + Admin için test kapsamı (S1-S5 tüm rollerde tekrar)
+- **Parça 2: MRP termin-gruplu hesap** (1.5–2 saat). Aynı malkod farklı terminlerde ayrı satır, FIFO termin sırasına göre stok tahsisi. `mrp.ts` refactor.
+- **Parça 3: Kesim'de manuel kalem seçimi** (2–3 saat). UI ağırlıklı. CuttingPlanIeSelectorModal — operatör İE'leri checkbox ile seçer, termin renk kodlu (kırmızı/sarı/gri).
 
 ## 🟢 Küçük İşler
 
-- (Backlog temizlendi)
+- Toplu senaryo farklı reçetelerle çalıştırılabilir
+- Operator + Admin için test kapsamı (S1-S5 tüm rollerde tekrar)
 
 ---
 
@@ -605,8 +610,44 @@ ozler-uys-v3/
 - Supabase: `https://lmhcobrgrnvtprvmcito.supabase.co`
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
+# 18. İndirilenler Hijyen Kuralı (v15.45) ⭐ YENİ
+
+## Temel Kural
+
+Her patch teslim mesajının **SONUNDA** Claude bir cleanup komutu verir. Apply + push doğrulandıktan sonra kullanıcı bu komutu çalıştırır → Downloads'taki ilgili patch zip + extracted klasör silinir.
+
+## Komut Formatı (her patch için)
+
+```powershell
+Remove-Item "$env:USERPROFILE\Downloads\patch-vXX-YY.zip","$env:USERPROFILE\Downloads\patch-vXX-YY" -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+(`vXX-YY` her patch'te kendine has — ör. `v15-45`, `v15-46`, ...)
+
+## Kurallar
+
+1. **Patch zip'leri** apply + push doğrulandıktan sonra silinir — repo'da var, GitHub'da var, Downloads'ta tutmaya gerek yok
+2. **Upload için hazırlanan zip'ler** (`uys_xxx.zip`, `audit_xxx.zip` — Buket'in Claude'a gönderdiği geçici paketler) Claude'a yüklendiğinde işini yaptı, hemen silinebilir
+3. **Repo dosyaları** (`src/`, `docs/`, `scripts/`, `.git/`, `sql/`) **ASLA Downloads'a kopyalanmaz** — `Documents\GitHub\ozler-uys-v3\` tek doğru yer. Duplicate riskini önler.
+4. **İçerik dosyaları** (planlar, notlar, eski belgeler) repoya taşınır → Downloads'ta bırakılmaz. Örnek: v15.45'te `faz_b_plan.md` → `docs/faz_b_plan.md`
+5. **Bilgi bankası repo'da tutulur** — `docs/UYS_v3_Bilgi_Bankasi.md` tek geçerli versiyon. Downloads'ta veya başka yerde eski kopyalar varsa SİLİNİR.
+
+## Klasör Yapısı
+
+| Yer | İçerik | Yaşam Süresi |
+|---|---|---|
+| `Downloads\` | Geçici zip'ler (patch + upload) | Patch sonrası silinir |
+| `Documents\GitHub\ozler-uys-v3\` | **Tek geçerli repo** | Kalıcı |
+| `Documents\GitHub\ozler-uys-v3\docs\` | Bilgi bankası, iş listesi, planlar | Kalıcı (versionable) |
+
+## İlk Test (v15.45 oturumunda)
+
+Buket Downloads klasöründe biriken eski 13+ patch zip + 3 upload zip + 3 eski repo zip + 1 kopya `GitHub\ozler-uys-v3\` klasörü tespit etti. Tek seferlik temizlik komutuyla hepsi silindi. v15.45 patch'i bu kuralı kalıcı hale getirdi: Claude bundan sonra her patch'in sonunda cleanup komutu verecek.
+
+---
+
 ## Son canlı sürüm
-**v15.44** — Geri alma UI'ları (hurda + havuz, admin only, audit trail korunur) + manuel plan havuz önerisi.
+**v15.45** — İndirilenler Hijyen Kuralı + Faz B planı repoya taşındı (`docs/faz_b_plan.md`).
 
 ---
 
