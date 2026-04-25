@@ -221,9 +221,10 @@ export function hesaplaMRP(
       Object.keys(p).forEach(k => {
         const v = p[k]
         const key = (k || '').trim().toLowerCase()
-        if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: urunTermin }
-        else if (urunTermin && (!brutIhtiyac[key].termin || urunTermin < brutIhtiyac[key].termin)) brutIhtiyac[key].termin = urunTermin
-        brutIhtiyac[key].brut += v.miktar
+        // v15.50a — Faz B P2: termin gruplama. Aynı malkod farklı terminler ayrı satır.
+        const grupKey = key + '__' + (urunTermin || '')
+        if (!brutIhtiyac[grupKey]) brutIhtiyac[grupKey] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: urunTermin }
+        brutIhtiyac[grupKey].brut += v.miktar
       })
     }
   }
@@ -255,9 +256,10 @@ export function hesaplaMRP(
       if (k === w.malkod) return
       const v = p[k]
       const key = (k || '').trim().toLowerCase()
-      if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: wTermin }
-      else if (wTermin && (!brutIhtiyac[key].termin || wTermin < brutIhtiyac[key].termin)) brutIhtiyac[key].termin = wTermin
-      brutIhtiyac[key].brut += v.miktar
+      // v15.50a — Faz B P2: termin gruplama (bağımsız/sipariş dışı İE)
+      const grupKey = key + '__' + (wTermin || '')
+      if (!brutIhtiyac[grupKey]) brutIhtiyac[grupKey] = { malkod: k, malad: v.malad, tip: v.tip, birim: v.birim, brut: 0, termin: wTermin }
+      brutIhtiyac[grupKey].brut += v.miktar
     })
   }
 
@@ -309,36 +311,77 @@ export function hesaplaMRP(
     }
 
     dbg('[MRP DEBUG] Cutting override EKLENDİ:', hmk, 'brut:', planAdet)
-    const key = (hmk || '').trim().toLowerCase()
-    if (!brutIhtiyac[key]) brutIhtiyac[key] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: 0, termin: '' }
-    // Kesim planı gerçek bar sayısını gösterir — BOM'u override et
-    brutIhtiyac[key].brut = planAdet
+    const malkodLower = (hmk || '').trim().toLowerCase()
+
+    // v15.50a — Faz B P2: cutting plan override termin gruplama uyumlu.
+    // Plan'a düşen kesimlerin İE'lerinin EN ERKEN termini plan termini sayılır (FIFO).
+    // BOM'dan bu malkoda eklenen TÜM termin gruplarını sil — plan tek satırda override eder.
+    const planWoIds = new Set<string>()
+    for (const s of (p.satirlar || [])) {
+      for (const k of ((s as any).kesimler || [])) {
+        if (k.woId) planWoIds.add(k.woId)
+      }
+    }
+    const planTermin = workOrders
+      .filter(w => planWoIds.has(w.id) && (w as any).termin)
+      .map(w => (w as any).termin as string)
+      .sort()[0] || ''
+
+    // BOM'dan bu malkoda eklenen tüm termin gruplarını temizle
+    Object.keys(brutIhtiyac).forEach(bk => {
+      if (bk.startsWith(malkodLower + '__')) delete brutIhtiyac[bk]
+    })
+
+    // Plan termini ile tek satır olarak ekle
+    const grupKey = malkodLower + '__' + planTermin
+    brutIhtiyac[grupKey] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: planAdet, termin: planTermin }
   })
 
-  // 5. Stok ve açık tedarik hesabı
-  const sonuc: MRPRow[] = []
-  Object.keys(brutIhtiyac).forEach(k => {
-    const bi = brutIhtiyac[k]
-    // Stok sorguları orijinal malkod ile (stok hareketleri kart kodunu birebir tutar)
-    const fizikselStok = getStok(bi.malkod, stokHareketler)
-    // Başka siparişlerin rezervesini düş (kendi siparişin hariç) — case-insensitive malkod eşleşmesi
+  // 5. Stok ve açık tedarik hesabı — v15.50a: termin gruplama + FIFO tahsis
+  // Malkod bazlı pool kur (case-insensitive). Aynı malkod farklı terminlere ayrılmışsa
+  // EN ERKEN termin önce stok+açık tedarik tüketir, kalan sonraki terminlere kalır.
+  const stokPool: Record<string, number> = {}
+  const acikTedPool: Record<string, number> = {}
+  Object.values(brutIhtiyac).forEach(bi => {
     const kLower = (bi.malkod || '').trim().toLowerCase()
+    if (stokPool[kLower] !== undefined) return
+    const fizikselStok = getStok(bi.malkod, stokHareketler)
     const baskaRezerve = (mrpRezerve || [])
       .filter(r => (r.malkod || '').trim().toLowerCase() === kLower && r.orderId !== currentOrderId)
       .reduce((a, r) => a + r.miktar, 0)
-    const stok = Math.max(0, fizikselStok - baskaRezerve)
-    // TÜM açık tedarikler (v2 mantığı — sadece aynı sipariş değil) — case-insensitive
-    const acikTedarik = tedarikler
+    stokPool[kLower] = Math.max(0, fizikselStok - baskaRezerve)
+    acikTedPool[kLower] = tedarikler
       .filter(t => (t.malkod || '').trim().toLowerCase() === kLower && !t.geldi)
       .reduce((a, t) => a + t.miktar, 0)
-    const net = Math.max(0, Math.ceil(bi.brut - stok - acikTedarik))
-    const durum: MRPRow['durum'] = (stok + acikTedarik) >= bi.brut ? 'yeterli' : net > 0 ? 'eksik' : 'yeterli'
-
-    // YarıMamul filtreleme — üretilir, tedarik edilmez
-    if (bi.tip === 'YarıMamul') return
-
-    sonuc.push({ malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: Math.max(0, stok), acikTedarik, net, durum, termin: bi.termin || '' })
   })
+
+  // Termin sırasına göre işle (FIFO) — en erken termin pool'dan önce alır
+  const sirali = Object.values(brutIhtiyac).sort((a, b) => {
+    const at = a.termin || '9999-99-99'
+    const bt = b.termin || '9999-99-99'
+    return at.localeCompare(bt)
+  })
+
+  const sonuc: MRPRow[] = []
+  for (const bi of sirali) {
+    // YarıMamul filtreleme — üretilir, tedarik edilmez
+    if (bi.tip === 'YarıMamul') continue
+
+    const kLower = (bi.malkod || '').trim().toLowerCase()
+    const stokDus = Math.min(stokPool[kLower] || 0, bi.brut)
+    stokPool[kLower] = (stokPool[kLower] || 0) - stokDus
+    const kalan = Math.max(0, bi.brut - stokDus)
+    const acikDus = Math.min(acikTedPool[kLower] || 0, kalan)
+    acikTedPool[kLower] = (acikTedPool[kLower] || 0) - acikDus
+    const net = Math.max(0, Math.ceil(bi.brut - stokDus - acikDus))
+    const durum: MRPRow['durum'] = (stokDus + acikDus) >= bi.brut ? 'yeterli' : net > 0 ? 'eksik' : 'yeterli'
+
+    sonuc.push({
+      malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim,
+      brut: bi.brut, stok: stokDus, acikTedarik: acikDus, net, durum,
+      termin: bi.termin || '',
+    })
+  }
 
   dbg('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.values(brutIhtiyac).map(b => b.malkod))
 

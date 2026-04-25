@@ -152,13 +152,21 @@ export async function autoZincir(
     const ord = orders.find((o: any) => o.id === orderId)
     const eksikler = mrpSonuc.filter(x => x.durum === 'eksik' && x.net > 0)
     for (const x of eksikler) {
-      // Bu malkod+sipariş için zaten açık tedarik var mı?
-      const mevcutTed = tedarikler.find(t => t.malkod === x.malkod && t.orderId === orderId && !t.geldi)
+      // v15.50a — Faz B P2: termin gruplaması sonrası aynı malkod farklı termine düşebilir.
+      // mevcut tedarik kontrolü termin'i de eşleştirmeli, yoksa ikinci satır atlanır.
+      const xTermin = x.termin || ''
+      const mevcutTed = tedarikler.find(t =>
+        t.malkod === x.malkod
+        && t.orderId === orderId
+        && (t.teslimTarihi || '') === xTermin
+        && !t.geldi
+      )
       if (mevcutTed) continue
       await supabase.from('uys_tedarikler').insert({
         id: uid(), malkod: x.malkod, malad: x.malad, miktar: x.net,
         birim: x.birim || 'Adet', tarih: today(),
         order_id: orderId, siparis_no: ord?.siparisNo || '',
+        teslim_tarihi: xTermin || null,
         durum: 'bekliyor', geldi: false, not_: 'Otomatik (Sipariş Zinciri)',
       })
       tedCount++
