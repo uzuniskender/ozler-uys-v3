@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.40.1** (Pre-push Hook Hotfix — tsc + .gitattributes)
+**Sürüm: v15.41** (Stok Anomalisi Rapor Düzeltmesi — bypassNotu sistemi)
 
-Son Güncelleme: **25 Nisan 2026** (14. oturum — hook hotfix)
+Son Güncelleme: **25 Nisan 2026** (15. oturum — rapor okunabilirliği)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -47,22 +47,29 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.39**: SR #11 Havuz Satırı Adaptasyonu. Sistem Sağlık Raporu'ndaki 11. kontrol artık havuz satırlarını (`satir.havuzBarId` dolu olanlar) ayrı işliyor — bar_acilis aramak yerine `uys_acik_barlar[havuzBarId].durum` kontrolü yapıyor. Üç eksik tipi ayrı raporlanıyor: normal eksik / havuz orphan / havuz açık kalmış. **Canlıda doğrulandı: 11/11 PASS.**
 - **v15.40**: Pre-push hook fix. `scripts/git-hooks/pre-push` repoda versionable — `git config core.hooksPath scripts/git-hooks` ile aktive ediliyor. Hook içinde Git Bash PATH fix (Node.js standart konumu + npm global), 3 adım: audit-schema + audit-columns + tsc --noEmit. İki makine için de çalışır (Iskender + iskender.uzun paths).
 - **v15.40.1 (hotfix)**: İki düzeltme. (1) Hook içindeki tsc çağrısı `npx --no-install tsc` yerine doğrudan `./node_modules/.bin/tsc` kullanıyor — `npx` "tsc" adını npm registry'deki yanlış pakete (eski `tsc@2.0.4`) çözümlüyordu. (2) `.gitattributes` dosyası eklendi: `scripts/git-hooks/*` ve `*.sh` LF zorunlu, `*.ps1` CRLF. Bu sayede hook dosyası Windows checkout'ta CRLF'ye dönüşüp bash shebang'i kırmıyor.
+- **v15.41**: Stok anomalisi rapor düzeltmesi. Test senaryolarında `_uretimGirisi` ve `_uretimGirisiFire` helper'ları doğrudan DB'ye insert yapıyor, UI'daki `OperatorPanel.save()` → `canProduceWO()` yolunu atlıyor. Bu sebeple rapora `-3 stok` gibi anomalik değerler düşebiliyor (özellikle Senaryo 5'te fire dahil 8 hammadde tüketimi sebebiyle). Rapor okunabilirliğini artırmak için `SenaryoAdim` tipine opsiyonel `bypassNotu?: string` alanı eklendi; `adim()` helper'ına opsiyonel `meta` parametresi eklendi. 6 üretim adımı (S1 #5, S2 #5, S3 #10, S4 #10, S5 #5 fire, S5 #9 telafi) artık `BYPASS_NOTU_URETIM` sabit metnini taşıyor. `TestMode.tsx` canlı log render'ı bypassNotu varsa adım kartının altında ℹ️ ikonu + gri italik açıklama satırı gösteriyor. JSON raporda da alan korunuyor → arşivlenen rapor okuyucusu kasıtlı bypass'ı görebiliyor. **Hiçbir mantık değişmedi** — yalnız tip + UI metadata; PASS/FAIL kararları, validation kuralları, helper davranışları aynı.
 
 ---
 
 # 2. BİR SONRAKİ OTURUMA NOTLAR ⭐
 
-## ✅ TAMAMLANAN — v15.38 + v15.39 + v15.40
+## ✅ TAMAMLANAN — v15.38 + v15.39 + v15.40 + v15.41
 
 **v15.38: Yasak Kontrolleri** — stok/duruş/silme engeli, Senaryo 6 (10/10 OK).
 
 **v15.39: SR #11 Havuz Adaptasyonu** — normal + havuz ayrımı, 3 eksik tipi. **11/11 PASS doğrulandı** (timestamp 2026-04-24T21:15).
 
-**v15.40: Pre-push Hook** — `scripts/git-hooks/pre-push` repoda versionable. `core.hooksPath` ile aktive. 3 check: audit-schema, audit-columns, tsc --noEmit. PATH fix: Git Bash `/c/Program Files/nodejs` + npm global (iki makine paths).
+**v15.40 + v15.40.1: Pre-push Hook** — `scripts/git-hooks/pre-push` repoda versionable. `core.hooksPath` ile aktive. 3 check: audit-schema, audit-columns, tsc --noEmit. PATH fix: Git Bash `/c/Program Files/nodejs` + npm global (iki makine paths). Hotfix: doğrudan `./node_modules/.bin/tsc` + `.gitattributes` LF enforce. **3/3 PASS doğrulandı** (timestamp 2026-04-25).
+
+**v15.41: Stok Anomalisi Rapor Düzeltmesi** — `SenaryoAdim.bypassNotu` alanı + `BYPASS_NOTU_URETIM` sabiti. 6 üretim adımına bypass notu işlendi. UI'da ℹ️ + gri italik alt satır. JSON raporda da yer alır.
 
 ## 🟡 Sıradaki Öncelik
 
-- **Stok anomalisi raporu** (Senaryo 5 -3 gösterimi). Gerçek veri sorunu değil, rapor okunabilirliği için. Tavsiye: Senaryo 5 raporuna açıklayıcı not eklemek (`_uretimGirisi` test bypass — UI katmanında koruma mevcut).
+- **audit-columns trace edilemeyen 4 çağrı** elle gözden geçir:
+  - `src\features\production\autoChain.ts:64` — `uys_work_orders [upsert]`
+  - `src\lib\testRun.ts:172` — `uys_orders [insert]`
+  - `src\pages\Operators.tsx:206` — `uys_izinler [insert]`
+  - `src\pages\Procurement.tsx:127` — `uys_tedarikler [update]`
 
 ## 🟢 Küçük İşler
 
@@ -481,7 +488,7 @@ Canlı Supabase'de izole test. Detay §9.
 Temiz.
 
 ## 🟡 Öncelik 1 — ORTA
-- Stok anomalisi (Senaryo 5 -3 gösterimi, rapor okunabilirliği)
+- audit-columns 4 trace edilemeyen çağrı (elle gözden geçir, kolon mismatch var mı)
 
 ## 🟢 Küçük iyileştirmeler
 - Havuz geri alma UI
@@ -593,8 +600,8 @@ ozler-uys-v3/
 - GitHub: `https://github.com/uzuniskender/ozler-uys-v3`
 
 ## Son canlı sürüm
-**v15.40.1** — Pre-push Hook hotfix (tsc doğru çağrı + .gitattributes LF enforce).
+**v15.41** — Stok anomalisi rapor düzeltmesi (bypassNotu sistemi + UI ℹ️ rendering).
 
 ---
 
-*Bu belge v15.40.1 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.41 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*

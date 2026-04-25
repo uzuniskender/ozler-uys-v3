@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.40)
-**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅. SR #11 havuz adaptasyonu TAMAM ✅ (v15.39, 11/11 PASS). Pre-push hook TAMAM ✅ (v15.40).
+**Son güncelleme:** 25 Nisan 2026 (v15.41)
+**Durum:** Tüm senaryolar otomatikleştirildi (v15.37 + v15.38). Yasak kontrolleri TAMAM ✅. SR #11 havuz adaptasyonu TAMAM ✅ (v15.39, 11/11 PASS). Pre-push hook TAMAM ✅ (v15.40 + v15.40.1, 3/3 PASS). Stok anomalisi raporu TAMAM ✅ (v15.41, bypassNotu sistemi).
 
 ---
 
@@ -107,3 +107,4 @@ Test bitince manuel olarak:
 - Küçük adetlerle (örn. 10) stok zaten yeterli olabilir, tedarik/teslim adımı SKIP olur
 - Senaryo 6 reçete gerektirmez (saf validation testi)
 - **Önemli:** `_uretimGirisi` test helper'ı yasak kontrollerini BYPASS eder (Senaryo 5 -3 gösterimi kasıtlı — helper direkt DB insert yapar, UI save() yolundan geçmez). Yasak 1 gerçek koruma sadece UI katmanında (`save()`).
+- **v15.41 ile (rapor okunabilirliği):** Bypass kullanan 6 üretim adımı (S1 #5, S2 #5, S3 #10, S4 #10, S5 #5 fire, S5 #9 telafi) artık `bypassNotu` taşıyor. Test Modu canlı log'unda adım kartının altında ℹ️ + gri italik açıklama görünür. JSON raporda da alan korunur. Mantık değişmedi; yalnız meta + UI rendering.

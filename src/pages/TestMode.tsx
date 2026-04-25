@@ -369,24 +369,34 @@ export function TestMode() {
             {canliLog.map((log, i) => (
               <div
                 key={i}
-                className={`px-4 py-1.5 border-b border-border/30 text-[11px] flex items-start gap-2 ${
+                className={`px-4 py-1.5 border-b border-border/30 text-[11px] ${
                   log.durum === 'FAIL' ? 'bg-red/10' : log.durum === 'SKIP' ? 'bg-zinc-500/5' : ''
                 }`}
               >
-                <span className={`shrink-0 font-bold ${
-                  log.durum === 'OK' ? 'text-green' :
-                  log.durum === 'FAIL' ? 'text-red' : 'text-zinc-500'
-                }`}>
-                  {log.durum === 'OK' ? '✓' : log.durum === 'FAIL' ? '✗' : '○'}
-                </span>
-                <span className="flex-1 text-zinc-300">{log.adim}</span>
-                {log.hata && <span className="text-red text-[10px] truncate max-w-[300px]">{log.hata}</span>}
-                {log.delil && !log.hata && (
-                  <span className="text-zinc-500 font-mono text-[10px] truncate max-w-[300px]">
-                    {JSON.stringify(log.delil).slice(0, 100)}
+                {/* Üst satır — adım sonucu */}
+                <div className="flex items-start gap-2">
+                  <span className={`shrink-0 font-bold ${
+                    log.durum === 'OK' ? 'text-green' :
+                    log.durum === 'FAIL' ? 'text-red' : 'text-zinc-500'
+                  }`}>
+                    {log.durum === 'OK' ? '✓' : log.durum === 'FAIL' ? '✗' : '○'}
                   </span>
+                  <span className="flex-1 text-zinc-300">{log.adim}</span>
+                  {log.hata && <span className="text-red text-[10px] truncate max-w-[300px]">{log.hata}</span>}
+                  {log.delil && !log.hata && (
+                    <span className="text-zinc-500 font-mono text-[10px] truncate max-w-[300px]">
+                      {JSON.stringify(log.delil).slice(0, 100)}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-zinc-600 font-mono text-[10px]">{log.sureMs}ms</span>
+                </div>
+                {/* v15.41: bypassNotu — adım test helper bypass kullanıyorsa */}
+                {log.bypassNotu && (
+                  <div className="ml-5 mt-1 flex items-start gap-1.5 text-zinc-500 italic text-[10px] leading-relaxed">
+                    <span className="shrink-0" aria-hidden="true">ℹ️</span>
+                    <span>{log.bypassNotu}</span>
+                  </div>
                 )}
-                <span className="shrink-0 text-zinc-600 font-mono text-[10px]">{log.sureMs}ms</span>
               </div>
             ))}
           </div>

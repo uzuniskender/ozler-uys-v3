@@ -27,6 +27,14 @@ export interface SenaryoAdim {
   delil?: Record<string, unknown>
   hata?: string
   uyari?: string
+  /**
+   * v15.41: Adımın test helper bypass kullandığını işaretler.
+   * Test helper'lar (`_uretimGirisi`, `_uretimGirisiFire`) UI yolundan
+   * (`OperatorPanel.save()` → `canProduceWO()`) geçmediği için Yasak 1
+   * (stok kontrolü) atlanır. Bu, raporda görülen anomalik stok değerlerinin
+   * (örn. -3) KASITLI olduğunu — gerçek üretimde imkansız olduğunu — belirtir.
+   */
+  bypassNotu?: string
 }
 
 export interface SenaryoRapor {
@@ -77,6 +85,18 @@ interface RunnerState {
   stokSnapshotBaslangic: Record<string, number>
 }
 
+// ═══ SABİTLER ═══
+
+/**
+ * v15.41: Üretim adımlarına eklenir. Test helper'ları (`_uretimGirisi`,
+ * `_uretimGirisiFire`) doğrudan DB insert yapar; UI'daki `OperatorPanel.save()`
+ * yolundan geçmez, dolayısıyla `canProduceWO()` çağrılmaz. Bu durum sadece
+ * test bağlamında geçerlidir; gerçek üretimde Yasak 1 sıkıdır.
+ */
+const BYPASS_NOTU_URETIM =
+  'Test helper kullanır — UI\'daki Yasak 1 (stok kontrolü) bypass edilir. ' +
+  'Negatif stok gösterimi KASITLIDIR; gerçek üretimde save() → canProduceWO() engeller.'
+
 // ═══ YARDIMCILAR ═══
 
 function initState(testRunId: string, parentId: string): RunnerState {
@@ -97,6 +117,7 @@ function initState(testRunId: string, parentId: string): RunnerState {
 
 async function adim<T>(
   state: RunnerState, name: string, fn: () => Promise<T>, ctx: RunnerContext,
+  meta?: { bypassNotu?: string },
 ): Promise<T | null> {
   const t0 = Date.now()
   try {
@@ -106,6 +127,7 @@ async function adim<T>(
       delil: result && typeof result === 'object' && !Array.isArray(result)
         ? result as Record<string, unknown>
         : { result },
+      ...(meta?.bypassNotu ? { bypassNotu: meta.bypassNotu } : {}),
     }
     state.adimlar.push(rec); ctx.onLog?.(rec)
     return result
@@ -113,6 +135,7 @@ async function adim<T>(
     const rec: SenaryoAdim = {
       adim: name, durum: 'FAIL', sureMs: Date.now() - t0,
       hata: e?.message || String(e),
+      ...(meta?.bypassNotu ? { bypassNotu: meta.bypassNotu } : {}),
     }
     state.adimlar.push(rec); ctx.onLog?.(rec)
     throw e
@@ -459,7 +482,7 @@ export async function senaryo1(ctx: RunnerContext): Promise<SenaryoRapor> {
       await adim(state, '5. Parçalı üretim (2 log + HM çıkışı)', async () => ({
         logSayisi: await _uretimGirisi(state, Math.min(4, ctx.adet)),
         stokCikis: state.ozet.stokCikis,
-      }), ctx)
+      }), ctx, { bypassNotu: BYPASS_NOTU_URETIM })
 
       // Üretim doğrulama: log kaydedildi, stok azaldı mı
       await adim(state, '5.1 Üretim doğrulama', async () => {
@@ -518,7 +541,7 @@ export async function senaryo2(ctx: RunnerContext): Promise<SenaryoRapor> {
       await wait(200)
       await adim(state, '5. Parçalı üretim', async () => ({
         logSayisi: await _uretimGirisi(state, Math.min(4, ctx.adet)),
-      }), ctx)
+      }), ctx, { bypassNotu: BYPASS_NOTU_URETIM })
     }
 
     return finalize(state, 'Senaryo 2: Manuel İE → Kesim → MRP → Tedarik → Teslim → Üretim', t0)
@@ -595,7 +618,7 @@ export async function senaryo3(ctx: RunnerContext): Promise<SenaryoRapor> {
       await wait(200)
       await adim(state, '10. Parçalı üretim', async () => ({
         logSayisi: await _uretimGirisi(state, Math.min(4, ctx.adet)),
-      }), ctx)
+      }), ctx, { bypassNotu: BYPASS_NOTU_URETIM })
     }
 
     return finalize(state, 'Senaryo 3: Sipariş → Tedarik sil → 2. Sipariş → Konsolidasyon → Üretim', t0)
@@ -661,7 +684,7 @@ export async function senaryo4(ctx: RunnerContext): Promise<SenaryoRapor> {
       await wait(200)
       await adim(state, '10. Parçalı üretim', async () => ({
         logSayisi: await _uretimGirisi(state, Math.min(4, ctx.adet)),
-      }), ctx)
+      }), ctx, { bypassNotu: BYPASS_NOTU_URETIM })
     }
 
     return finalize(state, 'Senaryo 4: İE → Tedarik sil → 2. İE → Konsolidasyon → Üretim', t0)
@@ -790,7 +813,7 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
       if (!state.ieIds.length) throw new Error('Üretecek İE yok')
       const r = await _uretimGirisiFire(state, 6, 2, [15, 10])
       return { logId: r.logId, fireLogId: r.fireLogId, durus: 2 }
-    }, ctx) as any
+    }, ctx, { bypassNotu: BYPASS_NOTU_URETIM }) as any
 
     // Fire loglandı mı kontrol
     await wait(200)
@@ -850,7 +873,7 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
         const n = await _uretimGirisi(state, 2)
         state.ieIds[0] = origIeId  // eski haline getir
         return { logSayisi: n }
-      }, ctx)
+      }, ctx, { bypassNotu: BYPASS_NOTU_URETIM })
     }
 
     return finalize(state, 'Senaryo 5: Sipariş → Fire + Duruş → Telafi İE → Telafi Üretim', t0)
