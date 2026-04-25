@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.47.3)
-**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları TAMAM ✅. v15.45-46: Hijyen Kuralı + iş emirleri arşivi. v15.47/v15.47.1/v15.47.2/v15.47.3: İş Emri #3 Faz 1+5 + 3 hotfix (audit whitelist + durum string normalize + statusUtils yayılım/'beklemede' bug fix).
+**Son güncelleme:** 25 Nisan 2026 (v15.48a)
+**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları + statusUtils yayılım TAMAM ✅. v15.48a: vitest altyapısı + cutting.test.ts (5 senaryo / 17 test) + artikMalzemelerOlustur(). Sıradaki: v15.48b (Kesim Plan Oluştur UI butonu + modal + artık kart UI).
 
 ---
 

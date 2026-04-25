@@ -13,6 +13,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:e2e:cleanup": "tsx tests/e2e/run-cleanup.ts",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "audit": "node scripts/audit-schema.cjs",
     "prebuild": "node scripts/audit-schema.cjs && node scripts/audit-columns.cjs",
     "audit:columns": "node scripts/audit-columns.cjs"
@@ -60,6 +62,7 @@
     "tsx": "^4.19.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",
-    "vite": "^8.0.4"
+    "vite": "^8.0.4",
+    "vitest": "^3.2.4"
   }
 }

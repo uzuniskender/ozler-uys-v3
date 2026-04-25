@@ -489,3 +489,17 @@ export function optimizeKesim(ihtiyaclar: KesimIhtiyacCompat[], hamMalzemeler: M
   }
   return sonuclar
 }
+
+// ═══════════════════════════════════════════════════════════════
+// v15.48a — KESİM ARTIĞI MALZEME ÖNERİSİ
+// ═══════════════════════════════════════════════════════════════
+//
+// v15.48a hotfix: artikMalzemelerOlustur'un implementasyonu './cuttingArtik'
+// dosyasına taşındı (vitest Supabase env hatası sebebiyle). Geriye uyumluluk
+// için aynı isimle re-export ediliyor — kullanıcı kodu etkilenmez.
+//
+// Detay: cuttingArtik.ts saf fonksiyon, Supabase import etmiyor → vitest'te
+// import edilebilir. cutting.ts ise Supabase'e bağımlı (kesimPlanlariKaydet
+// vb.), ondan test edilemez.
+
+export { artikMalzemelerOlustur, type ArtikSuggest } from './cuttingArtik'
