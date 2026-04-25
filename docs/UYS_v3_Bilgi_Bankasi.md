@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.49a** (Topbar Filtre Aktif — MRP badge tıklayınca otomatik filtre)
+**Sürüm: v15.49b** (Master Backlog ilerleme paneli — görsel özet)
 
-Son Güncelleme: **25 Nisan 2026** (23. oturum — küçük UX iyileştirmesi)
+Son Güncelleme: **25 Nisan 2026** (23. oturum kapanış — backlog görünürlüğü)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -65,6 +65,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.48b1**: İş Emri #3 Faz 2 UI parçası 1/2 — Otomatik Plan önizleme modal'ı. **Sürpriz keşif:** `pages/CuttingPlans.tsx`'te zaten "Otomatik Plan" butonu vardı, ama **doğrudan DB'ye kaydediyordu** (önizleme yok). Kullanıcı sonucu görmeden plan oluşturuyordu. Bu sürüm aynı butonu **3 adımlı akışa** çevirdi: (1) Algoritma çalışır, (2) **Sonuç modal'ı** açılır — plan sayısı, toplam fire %, her plan için satır detayları (bar adedi, kesimler, fire mm), renkli fire göstergeleri (yeşil <%5, sarı %5-15, kırmızı >15), (3) Kullanıcı "Kaydet" derse `kesimPlanlariKaydet` ile DB'ye yazar (mevcut akış aynı), "İptal" derse hiçbir şey değişmez. Yeni `OtoPlanSonucModal` component'i eklendi. **Algoritmaya dokunulmadı** — sadece UI önizleme katmanı. Schema değişikliği YOK. **Akıllı filtre:** "Tüm açık İE'ler zaten planda" senaryosunda modal açılmaz, doğrudan toast bilgilendirir.
 - **v15.48 (Faz 2 KAPANIŞ)**: v15.48b2 (Artık Malzeme UI) iptal edildi + §18.4 Artık Yönetimi Konvansiyonu eklendi. **Sürpriz keşif:** UYS v3'te v15.32'den itibaren kesim artıkları **otomatik olarak** `uys_acik_barlar` havuzuna ekleniyor (`barModelSync` mekanizması). Manuel "Material kartı oluştur + stok girişi" akışı **çift kayıt** yaratırdı (bir kez havuzda, bir kez malzemeler tablosunda). Bu sebeple v15.48b2 tasarımı durduruldu — **v15.48a'da yazılan `artikMalzemelerOlustur()` saf-fonksiyon olarak kalacak** (raporlama, istatistik, gelecek için altyapı). `cuttingArtik.ts` başına ⚠️ "UI'a bağlama, çakışma yaratır" uyarısı eklendi. Bilgi Bankası'na **§18.4 Artık Yönetimi Konvansiyonu** bölümü eklendi: artık akışının hangi katmanda olduğu (`uys_acik_barlar` havuzu), neden manuel material kartı yasak, gelecekte ne zaman bu kararı revize etmek gerekebilir. **Master backlog'ta İş Emri #3 Faz 2 → ✅ TAMAM olarak işaretlendi** (kapsam: algoritma + UI önizleme + güvenlik testi).
 - **v15.49a**: Topbar Filtre Aktif — küçük UX iyileştirmesi. v15.47'de eklenen 3 zincir badge'i (KESİM/MRP/TEDARİK) tıklanınca ilgili sayfaya gidiyordu ama kullanıcı orada manuel filtre çekmek zorundaydı. Şimdi: (1) **MRP badge** → `#/orders?mrp=eksik` URL'iyle açılır, Orders sayfası `mrpFilter='eksik'` ile yüklenir → "MRP: Eksik" filtresi otomatik aktif (kırmızı dropdown ile görünür). (2) **TEDARİK badge** → `#/procurement` (zaten default `'bekliyor'` filtresi aktif, ek değişiklik gerekmedi). (3) **KESİM badge** → `#/cutting` (sayfa zaten "Kesim Önerileri — N İE planlanmamış" bölümünü gösteriyor, ek değişiklik gerekmedi). **Yeni:** `Orders.tsx`'e `mrpFilter` state + URL okuma + dropdown ('Tümü/Eksik/Tamam', renkli görsel feedback). `useEffect` ile URL parametresi değişince filtre senkron olur. Filter mantığı `'eksik'` durumunda kapalı siparişleri gizler (gündemde değil), `'tamam'` durumunda sadece MRP'si yapılmış olanları gösterir. Schema değişikliği YOK, kod-only.
+- **v15.49b**: Master Backlog ilerleme paneli — sadece doc patch. `docs/is_emri/00_BACKLOG_Master.md` dosyasının başına 4 yeni özet bölüm eklendi: (1) **📊 Genel İlerleme** — ASCII progress bar ile 10 büyük önerinin durumu (3 tamam / 1 kısmi / 6 backlog) tek bakışta görülür. (2) **📅 Son Sürümler** — 25 Nisan'da gelen 15 sürümün master backlog'a etkisi tablo halinde (v15.46'dan v15.49a'ya kadar). (3) **📚 §18 Ailesi 4 Kalıcı Kural** — bütün operasyonel disipline tek tabloda erişim (Hijyen + Yeni Tablo + Durum String + Artık Yönetimi). (4) Mevcut "Kullanım" ve "10 Öneri" tablosu aynen kalır. **Amaç:** Yeni bir oturuma başlayan Claude (veya Buket) durumu 30 saniyede kavrayabilir, "ne yapıldı, ne kaldı, hangi kurallar var" net görsün. Schema değişikliği YOK, kod değişikliği YOK.
 
 ---
 
@@ -924,7 +925,7 @@ Yeni bir kesim/fire akışı yazıyorsan:
 ---
 
 ## Son canlı sürüm
-**v15.49a** — Topbar Filtre Aktif (MRP badge → otomatik filtre).
+**v15.49b** — Master Backlog ilerleme paneli (görsel özet).
 
 ---
 

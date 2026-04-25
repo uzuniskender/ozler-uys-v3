@@ -1,7 +1,48 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 25 Nisan 2026 (v15.46)
+**Son güncelleme:** 25 Nisan 2026 (v15.49a sonrası)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
+
+---
+
+## 📊 Genel İlerleme — 3/10 büyük öneri tamam · 1/10 kısmi · 6/10 backlog
+
+```
+✅ TAMAM    ███░░░░░░░  3/10  (#4 Kesim · #10 Üst Bar · #11 Problem Takip kısmi)
+🟢 KISMİ    █░░░░░░░░░  1/10  (#6 autoZincir — autoChain.ts mevcut, UI yok)
+🟡 BACKLOG  ░░░░░░████  6/10  (#1 Operatör · #2 Yedek · #3 MRP · #5 Sevk · #7 Excel · #8 PDF · #9 Stok)
+```
+
+> **Not:** v15.46'da master backlog repoya taşındı. v15.47-v15.49a arası **3 büyük faz tamamlandı** (İş Emri #3 Faz 1+5 + Faz 2). Faz B planı (`docs/faz_b_plan.md`) ile İş Emri #3 örtüştüğünden **#3 (MRP Modal) entegre yapılabilir**.
+
+---
+
+## 📅 Son Sürümler (25 Nisan 2026 — Tek Günde 15 Sürüm)
+
+Bu master backlog'a doğrudan etki eden sürümler:
+
+| Sürüm | Etki |
+|---|---|
+| **v15.46** | Master backlog repoya taşındı (bu dosya yaratıldı) |
+| **v15.47** | İş Emri #3 Faz 1+5 → DB veri modeli + Topbar göstergeleri |
+| **v15.47.1-3** | 3 hotfix: §18.2 + §18.3 + statusUtils yayılım |
+| **v15.48a** | Vitest + cuttingArtik — birim test altyapısı |
+| **v15.48b1** | Otomatik Plan önizleme modal'ı |
+| **v15.48** | Faz 2 KAPANIŞ + §18.4 (artık yönetimi konvansiyonu) |
+| **v15.49a** | Topbar Filtre Aktif (MRP badge → otomatik filtre) |
+
+---
+
+## 📚 4 Kalıcı Operasyonel Kural — Bilgi Bankası §18 Ailesi
+
+Bu kurallar tüm gelecek patch'lerde işleyecek. Yeni bir iş başlamadan önce kontrol edilir:
+
+| Bölüm | Kural | Sürüm |
+|---|---|---|
+| **§18** | İndirilenler Hijyen Kuralı (Downloads temiz) | v15.45 |
+| **§18.2** | Yeni Tablo Konvansiyonu (audit FAIL önler) | v15.47.1 |
+| **§18.3** | Durum String Konvansiyonu (statusUtils ile normalize) | v15.47.2 |
+| **§18.4** | Artık Yönetimi Konvansiyonu (havuz sistemi tek standart) | v15.48 |
 
 ---
 

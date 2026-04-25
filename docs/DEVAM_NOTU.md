@@ -1,48 +1,68 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.49a sonrası)
-**Son canlı sürüm:** v15.49a (Topbar Filtre Aktif — MRP badge otomatik filtre)
+**Tarih:** 25 Nisan 2026 (v15.49b sonrası — günün son patchi)
+**Son canlı sürüm:** v15.49b (Master Backlog ilerleme paneli)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/is_emri/00_BACKLOG_Master.md oku.
-Son iş: v15.49a Topbar filtre. Sıradaki: v15.49 MRP modal (Faz 3) - Faz B Parça 2 ile entegre.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi) + docs/is_emri/00_BACKLOG_Master.md (üstteki ilerleme paneli) oku.
+Son iş: v15.49b ilerleme paneli. Sıradaki: v15.49 MRP modal (Faz 3) — Faz B Parça 2 ile entegre.
 ```
 
 ---
 
-## v15.49a — Ne Yapıldı
+## v15.49b — Ne Yapıldı
 
-### Sorun
-v15.47'de eklenen 3 zincir badge'i (KESİM/MRP/TEDARİK) tıklanınca ilgili sayfaya gidiyordu ama kullanıcı orada **manuel filtre** çekmek zorundaydı. "12 sipariş MRP bekliyor" diyor, sayfaya gidiyor, "Tüm siparişler" görüyor → kullanıcı kafası karışıyor.
+`docs/is_emri/00_BACKLOG_Master.md` dosyasının başına 3 görsel özet bölüm eklendi:
 
-### Çözüm
-Tek küçük değişiklik MRP için — diğer ikisi zaten doğruydu:
+1. **📊 Genel İlerleme** — ASCII progress bar ile 10 büyük önerinin durumu (3 ✅ / 1 🟢 / 6 🟡)
+2. **📅 Son Sürümler** — 25 Nisan'da gelen 15 sürümün master backlog'a etkisi
+3. **📚 §18 Ailesi** — 4 kalıcı operasyonel kural tek tabloda
 
-| Badge | Çözüm |
+Mevcut "Kullanım" + "10 Öneri" tablosu + "21 maddelik orijinal backlog" + diğer bölümler aynen kalır.
+
+**Amaç:** Yeni oturum başında durumu 30 saniyede kavrayabilmek. "Ne yapıldı, ne kaldı, hangi kurallar var" hızlıca görünür.
+
+---
+
+## Bugünün Final Raporu — 16 Sürüm
+
+| Sürüm | Konu |
 |---|---|
-| KESİM | Zaten doğru — sayfa default "Kesim Önerileri" bölümünü gösteriyor |
-| MRP | URL'ye `?mrp=eksik` eklendi → Orders sayfası "MRP: Eksik" filtresiyle açılır |
-| TEDARİK | Zaten doğru — sayfa default `'bekliyor'` filtresiyle açılır |
+| v15.40.1 | Pre-push hook hotfix |
+| v15.41 | Stok anomalisi rapor (bypassNotu) |
+| v15.42 | uys_work_orders.termin kolonu |
+| v15.43 | audit-columns yorum temizleyici |
+| v15.44 | Hurda + havuz geri alma + manuel havuz önerisi |
+| v15.45 | §18 İndirilenler Hijyen Kuralı |
+| v15.46 | İş emirleri arşivi |
+| v15.47 | Üretim Zinciri Faz 1+5 (DB + Topbar) |
+| v15.47.1 | §18.2 Yeni Tablo Konvansiyonu |
+| v15.47.2 | §18.3 Durum String Konvansiyonu |
+| v15.47.3 | statusUtils yayılım + 'beklemede' bug fix |
+| v15.48a | Vitest + cuttingArtik + 12 birim test |
+| v15.48b1 | Otomatik Plan önizleme modal |
+| v15.48 | Faz 2 KAPANIŞ + §18.4 Artık Yönetimi |
+| v15.49a | Topbar Filtre Aktif (MRP badge) |
+| **v15.49b** | **Master Backlog ilerleme paneli** |
 
-### Değişiklikler
-**`src/components/layout/Topbar.tsx`:**
-- MRP badge `navTo('/orders')` → `navTo('/orders?mrp=eksik')`
+**Sayılar:** 16 patch · 2 schema migration · 2 audit aracı iyileştirmesi · 5 yeni UI · 4 kalıcı operasyonel kural · 1 birim test altyapısı · 12 birim test · 0 rollback.
 
-**`src/pages/Orders.tsx`:**
-- `urlMrpFilter = searchParams.get('mrp')` URL parametresi okunur
-- Yeni `mrpFilter` state ('all' / 'eksik' / 'tamam')
-- `useEffect` ile URL değişince filtre senkron
-- Filter mantığı: `'eksik'` durumu MRP'si yapılmamış aktif siparişleri gösterir (kapalı olanları gizler), `'tamam'` durumunda sadece MRP'si yapılmış olanları
-- UI'da yeni dropdown: "MRP: Tümü/Eksik/Tamam" — renkli görsel feedback (eksik kırmızı, tamam yeşil)
+---
 
-### Etkilenmeyen
-- DB şeması — dokunulmadı
-- Diğer Topbar elementleri
-- statusFilter (sipariş durumu) bağımsız çalışmaya devam eder
+## İş Emri #3 İlerlemesi
+
+| Faz | Durum |
+|---|---|
+| Faz 1 — DB veri modeli | ✅ v15.47 |
+| Faz 5 — Üst bar göstergeleri | ✅ v15.47 + 3 hotfix + filtre |
+| Faz 2 — Kesim Optimizasyon | ✅ v15.48 |
+| Faz 3 — MRP Modal | 🟡 v15.49 — sıradaki |
+| Faz 4 — autoZincir | 🟡 v15.50 |
+| Faz 6 — Test | 🟡 v15.50.1 |
 
 ---
 
@@ -50,16 +70,22 @@ Tek küçük değişiklik MRP için — diğer ikisi zaten doğruydu:
 
 İş Emri #3'ün asıl üretim planlama parçası.
 
-**Önemli:** Faz B Parça 2 (MRP termin-gruplu) ile entegre yapılırsa daha verimli — bkz. `docs/faz_b_plan.md`.
+**ÖNEMLİ:** Faz B Parça 2 (MRP termin-gruplu) ile entegre yapılırsa daha verimli — bkz. `docs/faz_b_plan.md`. Aynı `mrp.ts` dosyasına dokunuyorlar.
 
 Ana iş:
-- `pages/Orders.tsx` OrderDetailModal'a "MRP Hesapla" butonu (zaten var mı kontrol et)
+- `pages/Orders.tsx` OrderDetailModal'a "MRP Hesapla" butonu var mı kontrol et
 - `MRPModal.tsx` yeni component
 - `mrp.ts` refactor — termin gruplu çıktı (Faz B P2 entegrasyonu)
 - `uys_mrp_calculations` tablosuna snapshot yaz (v15.47'de hazırlandı)
-- "Tedarik Aç" toplu seçim + insert
+- "Tedarik Aç" toplu seçim + insert (RBAC: `tedarik_auto`)
 
-**Tahmini:** 1.5-2 saat. Tek mesajda yetmez, 2 patch'e bölmek gerekebilir.
+**Tahmini:** 1.5-2 saat. Tek mesajda yetmez muhtemelen, 2 patch'e bölmek gerekebilir (algoritma + UI).
+
+**Kontrol listesi (yeni patch öncesi):**
+- [ ] §18.3 — yeni durum string'i ekleniyorsa statusUtils güncelle
+- [ ] §18.2 — yeni tablo gerekiyorsa karar matrisi
+- [ ] Mevcut `mrp.ts` keşif (önce ne var, ne yok bak)
+- [ ] Faz B P2 ile çakışma kontrolü
 
 ---
 
@@ -67,7 +93,7 @@ Ana iş:
 
 **Apply:**
 ```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-49a
+cd $env:USERPROFILE\Downloads\patch-v15-49b
 powershell -ExecutionPolicy Bypass -File .\apply.ps1
 ```
 
@@ -77,17 +103,19 @@ cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
 $env:GIT_PAGER = "cat"
 git pull
 git add -A
-git commit -m "v15.49a: topbar mrp badge tikladiginda orders sayfasinda otomatik filtre"
+git commit -m "v15.49b: master backlog ilerleme paneli (gorsel ozet)"
 git push
 ```
 
-3/3 yeşil bekleniyor (kod-only).
+3/3 yeşil bekleniyor (sadece doc).
 
 **Push sonrası temizlik:**
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\patch-v15-49a.zip","$env:USERPROFILE\Downloads\patch-v15-49a" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\patch-v15-49b.zip","$env:USERPROFILE\Downloads\patch-v15-49b" -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ---
 
-**v15.49a patch'i hazır.**
+**v15.49b patch'i hazır.**
+
+İyi akşamlar Buket. 16 sürüm gerçekten rekor bir gün oldu. 👋

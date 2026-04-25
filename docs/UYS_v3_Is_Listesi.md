@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.49a)
-**Durum:** İş Emri #3 Faz 1+5 ✅ + Faz 2 ✅. v15.49a: Topbar MRP badge → Orders sayfasında otomatik "MRP: Eksik" filtresi. Sıradaki büyük iş: Faz 3 (MRP modal) — Faz B Parça 2 ile entegre. Sonra Faz 4 (autoZincir).
+**Son güncelleme:** 25 Nisan 2026 (v15.49b)
+**Durum:** Bugün 16. sürüm. v15.49b: Master backlog ilerleme paneli (sadece doc, görsel özet). Sıradaki büyük iş: v15.49 MRP modal (Faz 3) — Faz B Parça 2 ile entegre.
 
 ---
 
