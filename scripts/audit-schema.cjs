@@ -34,12 +34,15 @@ const STORE_WHITELIST = new Set([
   'uys_chat_reactions',   // ÖzlerMsg v1
   'uys_chat_attachments', // ÖzlerMsg v1
   'uys_v15_31_silinen_hareketler', // v15.31 bar model göç audit — runtime'da kullanılmaz, kanıt amaçlı
+  'uys_mrp_calculations', // v15.47 — MRP run snapshot, Faz 3'te (v15.49) MRP modal yazınca dolacak. Şu an global state'e gerek yok; modal kendi fetch edecek.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
 // Örn: yalnızca göç/audit amaçlı, ömürlük tek-seferlik kayıtlar.
+// Veya: hesaplanabilen snapshot/cache tabloları (yedeği tutmaya gerek yok).
 const DATA_MGMT_WHITELIST = new Set([
   'uys_v15_31_silinen_hareketler', // v15.31 göç audit — tek seferlik, backup zorunlu değil
+  'uys_mrp_calculations',          // v15.47 — MRP run snapshot, yeniden hesaplanabilir, backup gereksiz
 ])
 
 // ═══════════════════════════════════════════════════════════════

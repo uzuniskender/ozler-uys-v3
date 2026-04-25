@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.47** (Üretim Zinciri Faz 1+5 — veri modeli + üst bar göstergeleri)
+**Sürüm: v15.47.1** (Hotfix — audit whitelist + Yeni Tablo Konvansiyonu §18.2)
 
-Son Güncelleme: **25 Nisan 2026** (21. oturum — İş Emri #3 başlangıcı)
+Son Güncelleme: **25 Nisan 2026** (21. oturum hotfix — kalıcı çözüm)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -31,7 +31,8 @@ Son Güncelleme: **25 Nisan 2026** (21. oturum — İş Emri #3 başlangıcı)
 15. Bilinen Buglar ve Backlog
 16. Öğrenilenler — v15.33 → v15.37
 17. Referanslar
-18. İndirilenler Hijyen Kuralı ⭐ YENİ
+18. İndirilenler Hijyen Kuralı
+18.2. Yeni Tablo Konvansiyonu ⭐ YENİ
 
 ---
 
@@ -55,6 +56,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.45**: Operasyonel disiplin paketi. (1) **İndirilenler Hijyen Kuralı** — yeni bölüm §18'e eklendi. Her patch teslim mesajının sonunda Claude bir cleanup komutu verir; apply + push doğrulandıktan sonra kullanıcı bu komutu çalıştırır → Downloads'taki ilgili patch zip + extracted klasör silinir. Repo dosyaları ASLA Downloads'a kopyalanmaz, içerik dosyaları (planlar, notlar) repoya taşınır. (2) **Faz B planı repoya taşındı** — Downloads kalıntılarında bulunan v15.21 dönemi `faz_b_plan.md` (Sipariş Termin Farkındalığı, 3 parçalı plan) artık `docs/faz_b_plan.md`. Parça 1 zaten v15.42 ile yapıldı (uys_work_orders.termin); Parça 2 (MRP termin-gruplu) ve Parça 3 (Kesim'de manuel kalem seçimi) backlog'a alındı.
 - **v15.46**: İş Emirleri arşivi repoya taşındı. Eski "Günaydın" oturumunda hazırlanan **6 detaylı iş emri** + **21 maddelik master backlog** + **10 öneri özeti** artık `docs/is_emri/` altında. Dosyalar: `00_BACKLOG_Master.md` (özet + durum + kategoriler), `01_OperatorPaneli.md` (production-blocker, /operator route, RBAC operator rolü, mobil-first), `02_YedeklemeYonetimi.md` (/backup route, JSON snapshot, geri yükleme), `03_UretimZinciri.md` (autoZincir + MRP modal + Kesim optimizasyon + Üst bar göstergeleri — 4 büyük özellik tek iş emri), `04_Sevkiyat.md` (oluşturma formu + sipariş bazlı kalan hesabı + yasal irsaliye), `05_VeriOperasyonlari.md` (Toplu Sipariş Excel + PDF çıktı + Stok Onarım — 3 bölüm), `06_ProblemTakip.md` (KPI 4. kart, sekmeli modal, tarihce/yorum tabloları, Excel I/O). 10 öneri 6 iş emrinde paketlendi çünkü bazıları birbirine bağımlı (örn. üretim zinciri 4 özelliği bir arada). 11 madde çıkarıldı (gerekçeleriyle master backlog'da). Doc-only patch — kod değişikliği YOK.
 - **v15.47**: Üretim Zinciri Faz 1 + Faz 5 başlangıcı (`docs/is_emri/03_UretimZinciri.md`). 3 küçük parça tek patch'te: (1) **DB veri modeli** — `uys_kesim_planlari`'ya 4 yeni kolon (`ham_en`, `ham_kalinlik`, `fire_kg`, `artik_malzeme_kod`), `uys_tedarikler`'e 2 yeni kolon (`auto_olusturuldu`, `mrp_calculation_id`), yeni tablo `uys_mrp_calculations` (her MRP run snapshot'ı için JSONB alanlar: `brut_ihtiyac`, `stok_durumu`, `acik_tedarik`, `net_ihtiyac`). Bu altyapı Faz 2-4 (kesim optimizasyon + MRP modal + autoZincir) için hazır. Migration idempotent + RAISE NOTICE ile doğrulama. (2) **2 yeni RBAC aksiyonu** — MRP grubuna `tedarik_auto` ve `auto_chain_run` eklendi (planlama default). `mrp_calculate` ve `cutting_optimize` zaten mevcut (`mrp_calc`, `cutting_add`), duplicate yaratılmadı. (3) **Üst bar zincir göstergeleri** — Topbar.tsx'e 3 tıklanabilir badge: `[KESİM 🔴 N]` (kesim operasyonu olan, plana atanmamış İE sayısı), `[MRP 🟡 N]` (mrpDurum != 'tamamlandi' aktif sipariş sayısı), `[TEDARİK 🟢 N]` (geldi=false bekleyen tedarik sayısı). Renk: 0=yeşil, 1-5=sarı, 6+=kırmızı. `useMemo` ile cache'li, ilgili 4 store array değişince yeniden hesaplanır. Tıklayınca filtreli sayfaya yönlendirir (`#/cutting`, `#/orders`, `#/procurement`). Mobile'de gizli (`hidden md:flex` — küçük ekranda yer kalmıyor).
+- **v15.47.1 (hotfix + konvansiyon)**: Push sırasında audit-schema FAIL verdi — yeni `uys_mrp_calculations` tablosu store ve DataManagement listesinde olmadığı için. Whitelist'lere yorumlu giriş eklendi (Faz 3'te modal kendi fetch edecek, backup gereksiz çünkü snapshot yeniden hesaplanabilir). **Asıl önemli:** Bu durum gelecekte 5+ kez tekrar gelecekti (İş Emri #2, #4, #5, #6 hepsinde yeni tablolar geliyor). Bilgi Bankası §18.2 "Yeni Tablo Konvansiyonu" bölümü eklendi: her yeni migration'a 2 satırlık intent yorumu (BACKUP: evet/hayır + STORE: hangi sürümde eklenecek), karar matrisi (4 farklı tablo tipine göre nereye girer), kontrol listesi. Bir sonraki tablo geldiğinde bu konvansiyon takip edilirse aynı sıkıntı yaşanmaz.
 
 ---
 
@@ -666,8 +668,117 @@ Buket Downloads klasöründe biriken eski 13+ patch zip + 3 upload zip + 3 eski 
 
 ---
 
+# 18.2 Yeni Tablo Konvansiyonu (v15.47.1) ⭐ YENİ
+
+## Sorun
+
+v15.47'de `uys_mrp_calculations` tablosu eklendiğinde `audit-schema.cjs` push'ı engelledi: "Bu tablo store ve DataManagement listesinde yok". Çünkü tablo Faz 3'te kullanılacak ama Faz 1'de oluşturuldu — şu an boş duruyor, kimse fetch etmiyor.
+
+Aynı durum gelecekte 5+ kez daha gelecek (İş Emri #2 → `pt_yedekler`, #4 → `sevk_satirlari`, #5 → `stok_onar_logs`, #6 → `pt_tarihce` + `pt_yorumlar`). Bu konvansiyon o tekrarı önlemek için.
+
+## Yeni Tablo İçin Karar Matrisi
+
+Bir migration'da yeni tablo eklerken **4 soru** sorulmalı:
+
+| Soru | Evet → | Hayır → |
+|------|--------|---------|
+| **Q1.** UI bu tabloyu fetch edip listeleyecek mi (LoadAll)? | `store/index.ts` TABLE_MAP'e mapper ekle | `STORE_WHITELIST`'e ekle (yorumla) |
+| **Q2.** Realtime subscription gerekli mi (anlık güncelleme)? | TABLE_MAP'te otomatik dahil | `STORE_WHITELIST` yeterli |
+| **Q3.** JSON yedek/restore'a dahil mi? | `DataManagement.tsx` `tables` listesine ekle | `DATA_MGMT_WHITELIST`'e ekle (yorumla) |
+| **Q4.** Tablo runtime'da kullanılabilir hale gelecek mi? | Hangi sürümde? (yorum) | Tek seferlik göç/audit (yorum) |
+
+## 4 Tablo Tipi ve Nereye Gider
+
+### Tip A: First-class tablo (kullanıcı verisi)
+**Örnek:** `uys_orders`, `uys_work_orders`, `pt_problemler`, `sevk_satirlari` (gelecek)
+
+**Eylem:**
+1. `store/index.ts`: yeni mapper + TABLE_MAP girişi
+2. `types/index.ts`: TypeScript interface
+3. `DataManagement.tsx`: `tables` listesine ekle
+4. **Whitelist'e EKLENMEZ**
+
+### Tip B: Audit / log tablosu (tarihsel kayıt, runtime UI yok)
+**Örnek:** `uys_v15_31_silinen_hareketler`, `stok_onar_logs` (gelecek)
+
+**Eylem:**
+1. `STORE_WHITELIST`'e ekle (UI fetch etmiyor)
+2. `DataManagement.tsx` listesine **EKLE** (audit kaydı yedeklenmeli — silinirse kaybolur)
+3. **DATA_MGMT_WHITELIST'e EKLENMEZ**
+
+### Tip C: Snapshot / cache (yeniden hesaplanabilir)
+**Örnek:** `uys_mrp_calculations` (v15.47), gelecekte cache tabloları
+
+**Eylem:**
+1. `STORE_WHITELIST`'e ekle (modal/sayfa kendi fetch edecek)
+2. `DATA_MGMT_WHITELIST`'e ekle (backup gereksiz, yeniden hesaplanabilir)
+3. Migration yorumunda hangi sürümde dolacağı belirtilmeli
+
+### Tip D: Backup tablosu (yedek için yedek)
+**Örnek:** `pt_yedekler` (gelecek — İş Emri #2)
+
+**Eylem:**
+1. **STORE_WHITELIST'e EKLE** (büyük JSON blob, global state'e yüklenmemeli)
+2. **DATA_MGMT_WHITELIST'e EKLE** (yedeğin yedeğini almak abes)
+3. Backup sayfasında özel UI ile yönetilir
+
+## Migration Yorumu Şablonu
+
+Her yeni tablo migration'ının başında 2 satırlık intent yorumu:
+
+```sql
+-- v15.XX — yeni_tablo_adi
+-- TIP: A | B | C | D (bkz. §18.2)
+-- BACKUP: evet | hayir (sebep)
+-- STORE: yapıldı | sürüm (yapılacak) | hayir (kalıcı)
+CREATE TABLE IF NOT EXISTS public.yeni_tablo_adi (
+  ...
+);
+```
+
+**Örnek (uys_mrp_calculations için doğru hali):**
+```sql
+-- v15.47 — uys_mrp_calculations
+-- TIP: C (snapshot, yeniden hesaplanabilir)
+-- BACKUP: hayir (her MRP run yeniden çalıştırılabilir)
+-- STORE: v15.49 (Faz 3 MRP modal yazınca modal kendi fetch edecek)
+```
+
+## Kontrol Listesi (her yeni tablo için)
+
+Migration yazmadan önce:
+- [ ] Q1-Q4 sorularını cevapla
+- [ ] Tabloyu Tip A/B/C/D'den birine sok
+- [ ] Migration başına intent yorumu ekle
+- [ ] Gerekiyorsa whitelist'e (yorumlu) ekle
+- [ ] Gerekiyorsa store/types/DataManagement'a ekle
+
+Push öncesi:
+- [ ] `npm run build` — TypeScript hatası yok mu
+- [ ] `node scripts/audit-schema.cjs` — yeşil mi
+- [ ] `node scripts/audit-columns.cjs` — yeşil mi
+- [ ] Hook 3/3 OK
+
+Bu 4 madde sırası takip edilirse "schema FAIL" hatası tekrarlanmaz.
+
+## Gelecek Tablolar İçin Önceden Karar
+
+İş Emirlerinde gelecek tabloların önceden tip ataması:
+
+| Tablo | Kaynak İş Emri | Tip | Aksiyon |
+|---|---|---|---|
+| `pt_yedekler` | #2 | D | İki whitelist'te + Backup sayfası özel fetch |
+| `sevk_satirlari` | #4 | A | Tam entegrasyon (store + types + DataManagement) |
+| `stok_onar_logs` | #5 | B | Store whitelist + DataManagement'a EKLE |
+| `pt_tarihce` | #6 | A (audit ile karışık) | Tam entegrasyon, modal kendi fetch eder |
+| `pt_yorumlar` | #6 | A | Tam entegrasyon, realtime gerek |
+
+İlgili iş emrinde bu tipler kontrol edilmeli, yanlışsa düzeltilmeli.
+
+---
+
 ## Son canlı sürüm
-**v15.47** — Üretim Zinciri Faz 1+5 (DB veri modeli + Topbar zincir göstergeleri).
+**v15.47.1** — Hotfix: audit whitelist + Yeni Tablo Konvansiyonu §18.2.
 
 ---
 
