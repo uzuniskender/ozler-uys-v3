@@ -36,31 +36,45 @@ export function MRP() {
     try { return new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[]) } catch { return new Set<string>() }
   }, [sonuc]) // sonuc değişince yeniden oku
 
-  // v15.50a.2 — BUKET MODELI:
-  // MRP = stok-eksik dedektörü. mrp_durum kolonuna bakmayız (eski kayıtlarda tutarsız).
-  // Sadece sipariş kilidi (durum: kapalı/iptal/tamamlandı) ile karar veririz.
-  // Açık sipariş → görünür (eksik var mı diye hesaplaMRP çağrılır).
-  // Kilitli sipariş → arşivde, toggle ile gösterilir.
+  // v15.50a.4 — BUKET SÖZLEŞMESİ (5 aşama):
+  //   1: '' veya 'bekliyor'  → Görünür (iş bekliyor)
+  //   2: 'eksik'              → Görünür (aksiyon lazım)
+  //   3: 'tamam' + tedarik VAR → Gizli (iş kapandı)
+  //   3 alt: 'tamam' + tedarik YOK (silinmiş) → GÖRÜNÜR (iş yeniden açıldı)
+  //   5: durum=kilit/iptal/tamamlandı → Gizli (kilit her şeyin üstünde)
   //
-  // §18.3 NOTU: statusUtils.isOrderActive helper'ı kullanılabilirdi ama boş durum
-  // ('' string) için davranışı belirsiz. Burada inline KESİN blacklist kullanıyoruz.
-  // İleride statusUtils'e isOrderArchived helper'ı eklendiğinde buradan kaldırılabilir.
+  // 10/10 birim test PASS — doc/DEVAM_NOTU.md altında dokümante.
+  // §18.3 NOTU: statusUtils.isOrderActive helper'ı kullanılabilirdi ama '' davranışı
+  // belirsiz. Burada inline KESİN blacklist kullanılıyor.
   const ORDER_ARCHIVED_STATES = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
-  const isArsiv = (durum: string) => ORDER_ARCHIVED_STATES.has(durum || '')
+
+  // Helper: bir sipariş MRP listesinde görünür mi?
+  const showInMrpList = (o: typeof orders[0]) => {
+    // Aşama 5: kilit her şeyin üstünde
+    if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return false
+    // Aşama 3: 'tamam' AMA gerçekten tedarik var mı? (silinmiş olabilir → MRP yeniden açılır)
+    if (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') {
+      const acikTedarikVar = tedarikler.some(t => t.orderId === o.id && !t.geldi)
+      if (acikTedarikVar) return false  // tedarik var → iş kapalı
+      return true                        // tedarik yok → MRP yeniden açıldı
+    }
+    // Aşama 1 & 2: '' / 'bekliyor' / 'eksik' → görünür
+    return true
+  }
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      const arsiv = isArsiv(o.durum)
-      return showTamamlanan ? arsiv : !arsiv
+      const gorunur = showInMrpList(o)
+      return showTamamlanan ? !gorunur : gorunur
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, showTamamlanan])
+  }, [orders, tedarikler, showTamamlanan])
 
-  // Toggle label için: arşivlik (kapalı/iptal/tamamlandı) sipariş sayısı
+  // Toggle label sayısı: default'ta gizli olanlar (mrp-tamam + kilitli birleşik)
   const arsivSayisi = useMemo(() =>
-    orders.filter(o => isArsiv(o.durum)).length
+    orders.filter(o => !showInMrpList(o)).length
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [orders])
+  , [orders, tedarikler])
 
   // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
   const ymIEs = useMemo(() =>
