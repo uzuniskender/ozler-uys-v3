@@ -110,7 +110,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
           <span className="font-bold tabular-nums">{zincirCounts.kesim}</span>
         </button>
         <button
-          onClick={() => navTo('/orders')}
+          onClick={() => navTo('/orders?mrp=eksik')}
           className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 ${badgeColor(zincirCounts.mrp)}`}
           title={`${zincirCounts.mrp} sipariş MRP bekliyor`}
         >

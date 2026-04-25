@@ -42,8 +42,16 @@ export function Orders() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const urlFlowId = searchParams.get('flow') || ''
+  const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [mrpFilter, setMrpFilter] = useState(urlMrpFilter === 'eksik' ? 'eksik' : 'all')
+  // v15.49a — URL'den geldiyse filtreyi uygula (dropdown da senkron olur)
+  useEffect(() => {
+    if (urlMrpFilter === 'eksik' && mrpFilter !== 'eksik') {
+      setMrpFilter('eksik')
+    }
+  }, [urlMrpFilter])
   const [showForm, setShowForm] = useState(false)
   const [editOrder, setEditOrder] = useState<Order | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -134,6 +142,16 @@ export function Orders() {
   const filtered = useMemo(() => {
     return orders.filter(o => {
       if (search) { const q = search.toLowerCase(); if (!(o.siparisNo + o.musteri + o.mamulAd).toLowerCase().includes(q)) return false }
+      // v15.49a — MRP filtresi (Topbar badge'inden geliyor olabilir)
+      if (mrpFilter === 'eksik') {
+        // 'tamam' veya 'tamamlandi' = MRP yapılmış. Diğer her şey eksik sayılır.
+        // Kapalı siparişler MRP eksik bile olsa gündemde değil; bu filtrede gizle.
+        const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
+        if (mrpDone) return false
+        if (o.durum === 'kapalı') return false
+      } else if (mrpFilter === 'tamam') {
+        if (!(o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi')) return false
+      }
       const nearT = orderNearestTermin(o)
       if (statusFilter === 'active') return o.durum !== 'kapalı' && orderPct(o.id) < 100
       if (statusFilter === 'done') return orderPct(o.id) >= 100
@@ -141,7 +159,7 @@ export function Orders() {
       if (statusFilter === 'closed') return o.durum === 'kapalı'
       return o.durum !== 'kapalı'
     })
-  }, [orders, search, statusFilter, workOrders, logs])
+  }, [orders, search, statusFilter, mrpFilter, workOrders, logs])
 
   async function copyOrder(o: Order) {
     const newId = uid()
@@ -255,6 +273,12 @@ export function Orders() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Sipariş no veya müşteri ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="all">Tümü</option><option value="active">Üretimde</option><option value="done">Tamamlandı</option><option value="late">Gecikmeli</option><option value="closed">Kapalı</option>
+        </select>
+        {/* v15.49a — MRP filtresi (Topbar MRP badge'inden de tetiklenir: ?mrp=eksik) */}
+        <select value={mrpFilter} onChange={e => setMrpFilter(e.target.value)} className={`px-3 py-2 border rounded-lg text-xs ${mrpFilter === 'eksik' ? 'bg-red/10 border-red/30 text-red' : mrpFilter === 'tamam' ? 'bg-green/10 border-green/30 text-green' : 'bg-bg-2 border-border text-zinc-300'}`} title="MRP durumuna göre filtrele">
+          <option value="all">MRP: Tümü</option>
+          <option value="eksik">MRP: Eksik</option>
+          <option value="tamam">MRP: Tamam</option>
         </select>
       </div>
 
