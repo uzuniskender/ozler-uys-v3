@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.45** (İndirilenler Hijyen Kuralı + Faz B planı repoya taşındı)
+**Sürüm: v15.46** (İş Emirleri arşivi repoya taşındı — 6 dosya + master backlog)
 
-Son Güncelleme: **25 Nisan 2026** (19. oturum — operasyonel disiplin)
+Son Güncelleme: **25 Nisan 2026** (20. oturum — backlog sistemleştirme)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -53,6 +53,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.43**: `audit-columns.cjs` yorum temizleyici. Önceki sürümde `supabase.from(...)` regex'i JSDoc/inline yorumları kod sanıp false positive trace warning üretiyordu (örn. `testRun.ts:172` JSDoc içindeki kullanım örneği). Yeni `stripComments()` state machine helper'ı: (1) Block yorum `/* ... */` → boşluğa, (2) Line yorum `// ...` → boşluğa, (3) String literal'ler (`'`, `"`, `` ` ``) korunur — URL'lerdeki `//` ve template literal içindeki yorum benzeri içerik etkilenmez, (4) Newline'lar korunur — satır numaraları ve regex offset'leri bozulmaz. `extractUsages()` artık strip'lenmiş içerik üzerinde çalışır; tüm aşağıdaki regex/parser otomatik yorum-bağımsız hale geldi. Beklenen sonuç: trace warning sayısı 4'ten 3'e düşer (testRun.ts:172 listede olmaz).
 - **v15.44**: Üç UI işi tek patch — geri alma ve manuel plan havuz önerisi. (1) **Hurda geri alma UI**: Warehouse.tsx "Hurdaya Gönderilen" alt tab'ında her satıra "↩ Geri Al" butonu (admin only, RBAC: `acikbar_hurda_geri_al`). `barModel.ts.acikBarHurdadanGeriAl()` durumu 'hurda' → 'acik' yapar, hurda_* alanlarını temizler. fire_logs SİLİNMEZ — kayıt `not_` alanına `[İPTAL: tarih kullanıcı]` prefix eklenir → audit trail korunur. fire_log id'si artık deterministik (`'fire-bar-hurda-' + acikBarId`) → idempotent + geri alma sırasında bulunabilir. (2) **Havuz geri alma UI**: yeni "Tüketilmiş Bar" alt tab'ı. Admin'e "↩ Geri Al" butonu (RBAC: `acikbar_havuz_geri_al`). `acikBarTuketimGeriAl()` durumu 'tuketildi' → 'acik' yapar, tuketim_* alanlarını temizler. **Stok hareketlerine DOKUNULMAZ** — eğer üretim gerçekten yapıldıysa stok zaten düşmüştür, otomatik geri alma double-counting yaratır. Yanlış işaretleme senaryosu için tasarlandı. Confirm dialog'da net uyarı. (3) **Manuel plan'da havuz önerisi**: KesimOlusturModal `kaydet()` artık yeni planId'yi `onSaved(planId)` callback'ine iletiyor. Parent CuttingPlans bu ID ile otomatik plan'daki havuz tarama mantığının aynısını çalıştırıyor (en küçük parça boyu vs. havuz bar uzunluğu kontrolü). Uygun havuz barı varsa HavuzOneriModal açılır. Schema değişikliği YOK, kod-only patch.
 - **v15.45**: Operasyonel disiplin paketi. (1) **İndirilenler Hijyen Kuralı** — yeni bölüm §18'e eklendi. Her patch teslim mesajının sonunda Claude bir cleanup komutu verir; apply + push doğrulandıktan sonra kullanıcı bu komutu çalıştırır → Downloads'taki ilgili patch zip + extracted klasör silinir. Repo dosyaları ASLA Downloads'a kopyalanmaz, içerik dosyaları (planlar, notlar) repoya taşınır. (2) **Faz B planı repoya taşındı** — Downloads kalıntılarında bulunan v15.21 dönemi `faz_b_plan.md` (Sipariş Termin Farkındalığı, 3 parçalı plan) artık `docs/faz_b_plan.md`. Parça 1 zaten v15.42 ile yapıldı (uys_work_orders.termin); Parça 2 (MRP termin-gruplu) ve Parça 3 (Kesim'de manuel kalem seçimi) backlog'a alındı.
+- **v15.46**: İş Emirleri arşivi repoya taşındı. Eski "Günaydın" oturumunda hazırlanan **6 detaylı iş emri** + **21 maddelik master backlog** + **10 öneri özeti** artık `docs/is_emri/` altında. Dosyalar: `00_BACKLOG_Master.md` (özet + durum + kategoriler), `01_OperatorPaneli.md` (production-blocker, /operator route, RBAC operator rolü, mobil-first), `02_YedeklemeYonetimi.md` (/backup route, JSON snapshot, geri yükleme), `03_UretimZinciri.md` (autoZincir + MRP modal + Kesim optimizasyon + Üst bar göstergeleri — 4 büyük özellik tek iş emri), `04_Sevkiyat.md` (oluşturma formu + sipariş bazlı kalan hesabı + yasal irsaliye), `05_VeriOperasyonlari.md` (Toplu Sipariş Excel + PDF çıktı + Stok Onarım — 3 bölüm), `06_ProblemTakip.md` (KPI 4. kart, sekmeli modal, tarihce/yorum tabloları, Excel I/O). 10 öneri 6 iş emrinde paketlendi çünkü bazıları birbirine bağımlı (örn. üretim zinciri 4 özelliği bir arada). 11 madde çıkarıldı (gerekçeleriyle master backlog'da). Doc-only patch — kod değişikliği YOK.
 
 ---
 
@@ -76,12 +77,25 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 
 **v15.45: Operasyonel disiplin** — İndirilenler Hijyen Kuralı (§18) + Faz B planı repoya taşındı (`docs/faz_b_plan.md`).
 
+**v15.46: İş Emirleri arşivi** — `docs/is_emri/` altında 6 detaylı iş emri + master backlog (21 madde + 10 öneri).
+
 ## 🟡 Sıradaki Öncelik
 
-**Faz B (Sipariş Termin Farkındalığı)** — `docs/faz_b_plan.md`. Parça 1 yapıldı (v15.42 ile termin kolonu eklendi), kalan:
+İki ana yol var:
 
-- **Parça 2: MRP termin-gruplu hesap** (1.5–2 saat). Aynı malkod farklı terminlerde ayrı satır, FIFO termin sırasına göre stok tahsisi. `mrp.ts` refactor.
-- **Parça 3: Kesim'de manuel kalem seçimi** (2–3 saat). UI ağırlıklı. CuttingPlanIeSelectorModal — operatör İE'leri checkbox ile seçer, termin renk kodlu (kırmızı/sarı/gri).
+**A. Faz B kalan parçalar (Sipariş Termin Farkındalığı):**
+- Parça 2: MRP termin-gruplu hesap (1.5–2 saat) — `docs/faz_b_plan.md`
+- Parça 3: Kesim'de manuel kalem seçimi (2–3 saat)
+
+**B. Master backlog'tan iş emirleri:**
+- `docs/is_emri/01_OperatorPaneli.md` — Production-blocker (/operator route, RBAC, mobil)
+- `docs/is_emri/02_YedeklemeYonetimi.md` — Production-blocker (/backup route, geri yükleme)
+- `docs/is_emri/03_UretimZinciri.md` — autoZincir + MRP modal + Kesim optimizasyon + Üst bar
+- `docs/is_emri/04_Sevkiyat.md` — Sevkiyat oluşturma formu
+- `docs/is_emri/05_VeriOperasyonlari.md` — Toplu Sipariş + PDF + Stok Onarım
+- `docs/is_emri/06_ProblemTakip.md` — KPI + tarihçe + yorum
+
+İş Emri #3 ile Faz B Parça 2/3 örtüşür — birlikte yapılırsa daha verimli. Ayrıntı: `docs/is_emri/00_BACKLOG_Master.md`.
 
 ## 🟢 Küçük İşler
 
@@ -561,7 +575,16 @@ ozler-uys-v3/
 ├── docs/                             ⭐ YENİ v15.37
 │   ├── UYS_v3_Bilgi_Bankasi.md      # Bu dosya
 │   ├── UYS_v3_Is_Listesi.md         # Test senaryoları
-│   └── DEVAM_NOTU.md                # Sonraki oturum için
+│   ├── DEVAM_NOTU.md                # Sonraki oturum için
+│   ├── faz_b_plan.md                ⭐ v15.45 YENİ (Sipariş Termin Farkındalığı)
+│   └── is_emri/                     ⭐ v15.46 YENİ (Master backlog + 6 detaylı iş emri)
+│       ├── 00_BACKLOG_Master.md     # 21 madde + 10 öneri özeti + durum
+│       ├── 01_OperatorPaneli.md     # /operator route (production-blocker)
+│       ├── 02_YedeklemeYonetimi.md  # /backup route (production-blocker)
+│       ├── 03_UretimZinciri.md      # autoZincir + MRP + Kesim + Üst bar
+│       ├── 04_Sevkiyat.md           # Sevkiyat oluşturma formu
+│       ├── 05_VeriOperasyonlari.md  # Toplu Sipariş + PDF + Stok Onarım
+│       └── 06_ProblemTakip.md       # KPI + tarihçe + yorum
 ├── sql/
 │   ├── master_schema.sql
 │   ├── 20260424_v15_34_hurda.sql
@@ -647,7 +670,11 @@ Buket Downloads klasöründe biriken eski 13+ patch zip + 3 upload zip + 3 eski 
 ---
 
 ## Son canlı sürüm
-**v15.45** — İndirilenler Hijyen Kuralı + Faz B planı repoya taşındı (`docs/faz_b_plan.md`).
+**v15.46** — İş Emirleri arşivi repoya taşındı (`docs/is_emri/` — 6 dosya + master backlog).
+
+---
+
+*Bu belge v15.46 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
 
 ---
 
