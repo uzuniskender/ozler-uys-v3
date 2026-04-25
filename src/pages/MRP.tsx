@@ -10,7 +10,6 @@ import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, type MRPRow } from '@/features/production/mrp'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
-import { isOrderActive } from '@/lib/statusUtils'
 
 export function MRP() {
   const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, mrpRezerve, loadAll } = useStore()
@@ -39,16 +38,25 @@ export function MRP() {
   // Sadece sipariş kilidi (durum: kapalı/iptal/tamamlandı) ile karar veririz.
   // Açık sipariş → görünür (eksik var mı diye hesaplaMRP çağrılır).
   // Kilitli sipariş → arşivde, toggle ile gösterilir.
+  //
+  // §18.3 NOTU: statusUtils.isOrderActive helper'ı kullanılabilirdi ama boş durum
+  // ('' string) için davranışı belirsiz. Burada inline KESİN blacklist kullanıyoruz.
+  // İleride statusUtils'e isOrderArchived helper'ı eklendiğinde buradan kaldırılabilir.
+  const ORDER_ARCHIVED_STATES = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
+  const isArsiv = (durum: string) => ORDER_ARCHIVED_STATES.has(durum || '')
+
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      const aktif = isOrderActive(o)
-      return showTamamlanan ? !aktif : aktif
+      const arsiv = isArsiv(o.durum)
+      return showTamamlanan ? arsiv : !arsiv
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, showTamamlanan])
 
   // Toggle label için: arşivlik (kapalı/iptal/tamamlandı) sipariş sayısı
   const arsivSayisi = useMemo(() =>
-    orders.filter(o => !isOrderActive(o)).length
+    orders.filter(o => isArsiv(o.durum)).length
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   , [orders])
 
   // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
