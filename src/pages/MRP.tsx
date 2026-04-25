@@ -380,7 +380,7 @@ export function MRP() {
         </>)}
 
         <div className="flex items-center gap-3 mt-3">
-          <button onClick={hesapla} disabled={!can('mrp_calc') || (!selectedOrders.size && !selectedYMs.size)}
+          <button onClick={() => hesapla()} disabled={!can('mrp_calc') || (!selectedOrders.size && !selectedYMs.size)}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             Hesapla →
           </button>
@@ -409,7 +409,7 @@ export function MRP() {
             <button onClick={() => setViewFilter(viewFilter === 'yeterli' ? 'tum' : 'yeterli')} className={`px-2 py-1 rounded text-[10px] font-semibold ${viewFilter === 'yeterli' ? 'bg-green text-white' : 'bg-green/10 text-green hover:bg-green/20'}`}>✓ {yeterliler.length} yeterli</button>
             <span className="flex-1" />
             {selectedRows.size > 0 && (
-              <button onClick={topluTedarikOlustur} className="px-3 py-1.5 bg-accent text-white rounded-lg text-[10px] font-semibold">
+              <button onClick={() => topluTedarikOlustur()} className="px-3 py-1.5 bg-accent text-white rounded-lg text-[10px] font-semibold">
                 + Toplu Tedarik ({selectedRows.size})
               </button>
             )}
