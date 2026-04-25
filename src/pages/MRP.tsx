@@ -10,6 +10,7 @@ import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, type MRPRow } from '@/features/production/mrp'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
+import { isOrderActive } from '@/lib/statusUtils'
 
 export function MRP() {
   const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, mrpRezerve, loadAll } = useStore()
@@ -33,31 +34,21 @@ export function MRP() {
     try { return new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[]) } catch { return new Set<string>() }
   }, [sonuc]) // sonuc değişince yeniden oku
 
+  // v15.50a.2 — BUKET MODELI:
+  // MRP = stok-eksik dedektörü. mrp_durum kolonuna bakmayız (eski kayıtlarda tutarsız).
+  // Sadece sipariş kilidi (durum: kapalı/iptal/tamamlandı) ile karar veririz.
+  // Açık sipariş → görünür (eksik var mı diye hesaplaMRP çağrılır).
+  // Kilitli sipariş → arşivde, toggle ile gösterilir.
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      if (o.durum === 'Tamamlandı' || o.durum === 'tamamlandi' || o.durum === 'İptal' || o.durum === 'iptal') return false
-      if (!showTamamlanan) {
-        // 'tamam' ve eski 'tamamlandi' her zaman gizli
-        if (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') return false
-        // 'eksik' ama tedarik oluşturulmuşsa gizle (iş kapandı)
-        if (o.mrpDurum === 'eksik') {
-          const acikTedarikVar = tedarikler.some(t => t.orderId === o.id && !t.geldi)
-          if (acikTedarikVar) return false
-        }
-      }
-      // MRP tamamlanmış siparişleri varsayılan olarak gizle
-      // Gerçek ilerlemeye bak — %100 ise gösterme
-      const wos = workOrders.filter(w => w.orderId === o.id)
-      if (!wos.length) return true // İE yoksa göster (henüz oluşturulmamış)
-      const total = wos.reduce((a, w) => a + w.hedef, 0)
-      const done = wos.reduce((a, w) => a + logs.filter(l => l.woId === w.id).reduce((s, l) => s + l.qty, 0), 0)
-      return total <= 0 || done < total
+      const aktif = isOrderActive(o)
+      return showTamamlanan ? !aktif : aktif
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
-  }, [orders, workOrders, logs, showTamamlanan])
+  }, [orders, showTamamlanan])
 
-  // MRP tamamlanmış ama hâlâ aktif sipariş sayısı (toggle label için)
-  const mrpTamamSayisi = useMemo(() =>
-    orders.filter(o => (o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') && o.durum !== 'Tamamlandı' && o.durum !== 'tamamlandi' && o.durum !== 'İptal' && o.durum !== 'iptal').length
+  // Toggle label için: arşivlik (kapalı/iptal/tamamlandı) sipariş sayısı
+  const arsivSayisi = useMemo(() =>
+    orders.filter(o => !isOrderActive(o)).length
   , [orders])
 
   // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
@@ -310,10 +301,10 @@ export function MRP() {
             </div>
             <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
             <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
-            {mrpTamamSayisi > 0 && (
+            {arsivSayisi > 0 && (
               <button onClick={() => setShowTamamlanan(!showTamamlanan)}
-                className={`px-2 py-1 rounded text-[10px] ${showTamamlanan ? 'bg-green/10 text-green border border-green/20' : 'bg-bg-3 text-zinc-500 hover:text-white'}`}>
-                {showTamamlanan ? `✓ Tamamlananlar (${mrpTamamSayisi})` : `+ Tamamlananlar (${mrpTamamSayisi})`}
+                className={`px-2 py-1 rounded text-[10px] ${showTamamlanan ? 'bg-amber/10 text-amber border border-amber/20' : 'bg-bg-3 text-zinc-500 hover:text-white'}`}>
+                {showTamamlanan ? `🔒 Arşiv (${arsivSayisi})` : `+ Arşiv (${arsivSayisi})`}
               </button>
             )}
           </div>
@@ -336,8 +327,10 @@ export function MRP() {
             )
           })}
         </div>
-        {aktifOrders.length === 0 && mrpTamamSayisi > 0 && !showTamamlanan && (
-          <div className="p-3 text-center text-xs text-green">✓ Tüm siparişlerin MRP hesabı yapıldı. Tekrar hesaplamak için "Tamamlananlar" butonuna tıklayın.</div>
+        {aktifOrders.length === 0 && !showTamamlanan && (
+          <div className="p-3 text-center text-xs text-green">
+            ✓ Aktif sipariş yok.{arsivSayisi > 0 ? ` Arşivdeki ${arsivSayisi} kapalı siparişi görmek için "+ Arşiv" butonuna tıklayın.` : ''}
+          </div>
         )}
 
         {/* Bağımsız YM İş Emirleri */}
