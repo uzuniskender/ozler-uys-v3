@@ -1,15 +1,36 @@
 /**
  * v15.48a — Kesim Artığı Helper'ları (saf fonksiyon, Supabase'siz)
  *
+ * ⚠️ ⚠️ ⚠️ DİKKAT — UI'A BAĞLAMA (v15.48 keşfi) ⚠️ ⚠️ ⚠️
+ *
+ * Bu fonksiyon `ArtikSuggest` listesi döner ama **DOĞRUDAN UI'A BAĞLAMAYIN**.
+ * UYS v3'te v15.32'den itibaren kesim artıkları **otomatik olarak**
+ * `uys_acik_barlar` havuzuna ekleniyor (`barModelSync` mekanizması).
+ * Manuel "Material kartı oluştur" akışı **çift kayıt** yaratır:
+ *   - Bir kez `uys_acik_barlar` (otomatik, v15.32 sistemi)
+ *   - Bir kez `uys_malzemeler` + `uys_stok_hareketler` (manuel, eski mantık)
+ *
+ * Mevcut sistem yeterli:
+ *   - Açık bar havuzu Depolar → "Açık Bar Havuzu" tab'ında görünür
+ *   - Yeni kesim planı oluşturulduğunda "Havuz Önerisi" modal'ı uygun
+ *     barları otomatik öneriyor
+ *   - Hurda/geri alma akışları v15.44'te eklendi
+ *
+ * Bu fonksiyon ne için var:
+ *   - Raporlama / istatistik (kaç bar artık çıktı, hangi boylar?)
+ *   - Gelecekte havuz sistemi değişirse hazır altyapı
+ *   - Birim test örneği (saf-fonksiyon ayrımı, bkz. §18.5)
+ *
+ * Ayrıntı: docs/UYS_v3_Bilgi_Bankasi.md §18.4 "Artık Yönetimi Konvansiyonu"
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ *
  * Bu dosya `cutting.ts`'ten ayrıldı çünkü cutting.ts Supabase client import
  * eder; bu da vitest birim testlerinde sorun yaratıyor (env değişkeni yok →
  * Supabase init patlar). artikMalzemelerOlustur zaten DB'ye dokunmuyor, saf
  * hesaplama. Onu burada test edilebilir bir modülde tutuyoruz.
  *
  * cutting.ts geriye uyumluluk için bu dosyadan re-export eder.
- *
- * Bilgi: docs/UYS_v3_Bilgi_Bankasi.md §18.4 (eklenecek) "Test edilebilir
- * saf fonksiyon ayrımı".
  */
 
 // ─── Inline tipler — cutting.ts'teki interface'lerin minimal versiyonları ───

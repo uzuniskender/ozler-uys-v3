@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.48b1** (İş Emri #3 Faz 2 UI — Otomatik Plan önizleme modal)
+**Sürüm: v15.48** (İş Emri #3 Faz 2 KAPANIŞ — §18.4 Artık Yönetimi Konvansiyonu)
 
-Son Güncelleme: **25 Nisan 2026** (22. oturum — Otomatik Plan kullanıcı dostu)
+Son Güncelleme: **25 Nisan 2026** (22. oturum kapanış — kapsam keşfi)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -33,7 +33,8 @@ Son Güncelleme: **25 Nisan 2026** (22. oturum — Otomatik Plan kullanıcı dos
 17. Referanslar
 18. İndirilenler Hijyen Kuralı
 18.2. Yeni Tablo Konvansiyonu
-18.3. Durum String Konvansiyonu ⭐ YENİ
+18.3. Durum String Konvansiyonu
+18.4. Artık Yönetimi Konvansiyonu ⭐ YENİ
 
 ---
 
@@ -61,7 +62,8 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.47.2 (hotfix #2 + konvansiyon)**: v15.47'deki Topbar MRP badge'i 12 gösterdi ama gerçek 0 olmalıydı. SQL doğrulamasıyla ortaya çıktı: `uys_orders.durum` eski siparişlerde `'kapalı'`, `mrp_durum` ise `'tamam'` (kısa form). Topbar mantığı sadece `'iptal'/'tamamlandi'` filtresi kullanıyordu, bu eski string'leri kaçırıyordu. **Çözüm:** `src/lib/statusUtils.ts` yeni dosya — 4 helper (`isOrderActive`, `isOrderMrpPending`, `isWorkOrderOpen`, `isCuttingPlanActive`, `isProcurementPending`) tüm bilinen string varyantlarını normalize ediyor. Topbar artık bu helper'ları kullanıyor; mantık 2 satıra düştü. Aynı helper'lar gelecekte başka sayfalarda da kullanılabilir, tutarlılık sağlanır. **Asıl önemli:** DB seviyesinde 4 farklı "tamamlandı" kavramı varyantı tespit edildi (`'tamamlandi'`, `'tamam'`, `'kapalı'`, `'kapali'`). Bilgi Bankası §18.3 "Durum String Konvansiyonu" eklendi — her tablo için kullanılan durum string'leri belge edildi, DB-wide migrate riskli olduğu için kod seviyesinde normalize stratejisi açıklandı, gelecek için yeni durum eklerken kontrol listesi eklendi.
 - **v15.47.3 (hotfix #3 + yayılım)**: statusUtils.ts yayılımı 4 sayfaya — kapsam audit'i sırasında **gerçek bir bug** ortaya çıktı: WorkOrders.tsx'te `'beklemede'` (paused) durumu var ama Topbar `isWorkOrderOpen` helper'ı sadece `'tamamlandi'/'iptal'` filtreliyordu. **Sonuç:** Paused İE'ler "açık" sayılıyor, KESİM badge'inde false positive sayım yapıyordu. Düzeltme: `WO_CLOSED_OR_PAUSED_STATES` 3'lü set (`'tamamlandi'`, `'iptal'`, `'beklemede'`) → paused İE'ler artık plana alınmıyor. **2 yeni helper:** `isCuttingPlanPending(cp)` (CuttingPlans liste için), `isAcikBarAvailable(b)` (havuz önerisi için — gelecekte de kullanılır). **2 sayfa refactor:** `Procurement.tsx` 5 yer (filtered, markGeldiBulk, toggleSelectAll, toplamBekleyen, bulk select checkbox — `!t.geldi` → `isProcurementPending(t)`), `CuttingPlans.tsx` 7 yer (3 wo durum filtresi → `!isWorkOrderOpen(w)`, 3 acikBar durum kontrolü → `isAcikBarAvailable(a)`, 1 plan durum filtresi → `isCuttingPlanPending`). `Orders.tsx` ve `WorkOrders.tsx` çoğunlukla insert/update payload veya UI eşleştirme, helper'a sokmak gereksizdi (bilerek dokunulmadı). §18.3 DB snapshot tablosu güncellendi — 3 yeni keşif: `uys_work_orders.durum`'da `'beklemede'`, `uys_orders.mrp_durum`'da `'eksik'`/`'calistirildi'`, `uys_acik_barlar.durum` (yeni satır: `'acik'`/`'tuketildi'`/`'hurda'`).
 - **v15.48a**: İş Emri #3 Faz 2 algoritma katmanı (UI yok). 4 ana parça: (1) **`vitest` altyapısı** — daha önce sadece Playwright (E2E) vardı, birim test yoktu. `package.json`'a `vitest@^3.2.4` devDep eklendi, 2 script (`test:unit`, `test:unit:watch`), `vitest.config.ts` yeni dosya (alias `@/` resolver + node env, sadece `src/**/*.test.ts` dosyalarını çalıştırır, E2E dışlanır). (2) **`artikMalzemelerOlustur()` yeni export** — `cutting.ts`'e eklendi. Plan'ın `tamamlandi` durumlu satırlarındaki fire'ları tarar, eşik (default 50mm) üzeri olanları `ArtikSuggest` listesi olarak döner. Aynı `malkod+uzunluk` için adet birleştirir. Kod formatı: `ARTIK-{originalMalkod}-{uzunlukMm}`. **DB'ye yazmaz** — sadece öneri listesi; v15.48b UI tarafı kullanıcıya sunup onaylanırsa Material kartı oluşturacak. (3) **`cutting.test.ts` yeni dosya** — 5 senaryo / 17 test (sonra hotfix ile 12'ye düştü). Hotfix: `cutting.ts` Supabase'e bağımlı olduğu için vitest'te import edilemedi → `cuttingArtik.ts` saf-fonksiyon ayrı modüle çıkarıldı, `cutting.ts` re-export ediyor (geriye uyumlu). (4) **Mevcut algoritma keşfi** — `cutting.ts.boykesimOptimum()` zaten gelişmiş: best-fit yerleştirme, 50 iterasyonlu fire optimize döngüsü, plan birleştirme, havuz desteği. İş Emri #3 Faz 2 spec'inin %80'i zaten yapılmış — bu sürüm sadece güvenlik ağı (test) + artık öneri (yardımcı fonk) ekledi.
-- **v15.48b1**: İş Emri #3 Faz 2 UI parçası 1/2 — Otomatik Plan önizleme modal'ı. **Sürpriz keşif:** `pages/CuttingPlans.tsx`'te zaten "Otomatik Plan" butonu vardı, ama **doğrudan DB'ye kaydediyordu** (önizleme yok). Kullanıcı sonucu görmeden plan oluşturuyordu. Bu sürüm aynı butonu **3 adımlı akışa** çevirdi: (1) Algoritma çalışır, (2) **Sonuç modal'ı** açılır — plan sayısı, toplam fire %, her plan için satır detayları (bar adedi, kesimler, fire mm), renkli fire göstergeleri (yeşil <%5, sarı %5-15, kırmızı >15), (3) Kullanıcı "Kaydet" derse `kesimPlanlariKaydet` ile DB'ye yazar (mevcut akış aynı), "İptal" derse hiçbir şey değişmez. Yeni `OtoPlanSonucModal` component'i eklendi. **Algoritmaya dokunulmadı** — sadece UI önizleme katmanı. Schema değişikliği YOK. **Akıllı filtre:** "Tüm açık İE'ler zaten planda" senaryosunda modal açılmaz, doğrudan toast bilgilendirir. Sıradaki: v15.48b2 — Artık malzeme UI (Material kartı oluşturma akışı, `artikMalzemelerOlustur` UI bağı).
+- **v15.48b1**: İş Emri #3 Faz 2 UI parçası 1/2 — Otomatik Plan önizleme modal'ı. **Sürpriz keşif:** `pages/CuttingPlans.tsx`'te zaten "Otomatik Plan" butonu vardı, ama **doğrudan DB'ye kaydediyordu** (önizleme yok). Kullanıcı sonucu görmeden plan oluşturuyordu. Bu sürüm aynı butonu **3 adımlı akışa** çevirdi: (1) Algoritma çalışır, (2) **Sonuç modal'ı** açılır — plan sayısı, toplam fire %, her plan için satır detayları (bar adedi, kesimler, fire mm), renkli fire göstergeleri (yeşil <%5, sarı %5-15, kırmızı >15), (3) Kullanıcı "Kaydet" derse `kesimPlanlariKaydet` ile DB'ye yazar (mevcut akış aynı), "İptal" derse hiçbir şey değişmez. Yeni `OtoPlanSonucModal` component'i eklendi. **Algoritmaya dokunulmadı** — sadece UI önizleme katmanı. Schema değişikliği YOK. **Akıllı filtre:** "Tüm açık İE'ler zaten planda" senaryosunda modal açılmaz, doğrudan toast bilgilendirir.
+- **v15.48 (Faz 2 KAPANIŞ)**: v15.48b2 (Artık Malzeme UI) iptal edildi + §18.4 Artık Yönetimi Konvansiyonu eklendi. **Sürpriz keşif:** UYS v3'te v15.32'den itibaren kesim artıkları **otomatik olarak** `uys_acik_barlar` havuzuna ekleniyor (`barModelSync` mekanizması). Manuel "Material kartı oluştur + stok girişi" akışı **çift kayıt** yaratırdı (bir kez havuzda, bir kez malzemeler tablosunda). Bu sebeple v15.48b2 tasarımı durduruldu — **v15.48a'da yazılan `artikMalzemelerOlustur()` saf-fonksiyon olarak kalacak** (raporlama, istatistik, gelecek için altyapı). `cuttingArtik.ts` başına ⚠️ "UI'a bağlama, çakışma yaratır" uyarısı eklendi. Bilgi Bankası'na **§18.4 Artık Yönetimi Konvansiyonu** bölümü eklendi: artık akışının hangi katmanda olduğu (`uys_acik_barlar` havuzu), neden manuel material kartı yasak, gelecekte ne zaman bu kararı revize etmek gerekebilir. **Master backlog'ta İş Emri #3 Faz 2 → ✅ TAMAM olarak işaretlendi** (kapsam: algoritma + UI önizleme + güvenlik testi). Sıradaki: v15.49 MRP modal (Faz 3) — Faz B Parça 2 ile entegre yapılırsa daha verimli.
 
 ---
 
@@ -869,8 +871,59 @@ Bu konuyu kapsamlı çözmek için iki yol var:
 
 ---
 
+# 18.4 Artık Yönetimi Konvansiyonu (v15.48) ⭐ YENİ
+
+## Tek Kural
+
+**Kesim artıkları (fire) sadece `uys_acik_barlar` havuzunda izlenir. Manuel `uys_malzeme` kartı + stok girişi YASAK.**
+
+## Sebep
+
+UYS v3'te v15.32'den itibaren `barModelSync` mekanizması var. Bir kesim planı tamamlandığında otomatik olarak:
+1. Kesilen her bar için `bar_acilis` stok hareketi
+2. Her bar fire'ı için `uys_acik_barlar` kaydı (durum: 'acik', uzunlukMm: fire değeri)
+
+Bu açık barlar:
+- Depolar → "Açık Bar Havuzu" tab'ında listelenir
+- Yeni kesim planı oluştururken "Havuz Önerisi" modal'ı uygun barları otomatik öneriyor
+- Hurda akışı (v15.34) ve geri alma (v15.44) entegre
+
+## Yasak
+
+Manuel olarak şunlar **yapılmamalı**:
+- `uys_malzeme.insert({ kod: 'ARTIK-X-1240', ... })`
+- `uys_stok_hareketler.insert({ tip: 'giris', aciklama: 'Kesim artığı' })`
+
+Sebep: Aynı fire iki kez kaydedilir (havuz + manuel kart) → stok şişer, raporlar yanıltıcı, MRP yanlış net ihtiyaç hesaplar.
+
+## Ne Yapılabilir
+
+`artikMalzemelerOlustur()` (cuttingArtik.ts) fonksiyonu var — **saf hesaplama**. UI'a bağlanmıyor. Kullanım alanları:
+
+- Raporlama / istatistik: "Bu plan kaç bar artık çıkardı, hangi boylarda?"
+- Birim test örneği (saf-fonksiyon, Supabase'siz)
+- Gelecek için altyapı (havuz sistemi değişirse hazır)
+
+## Bu Kararı Ne Zaman Revize Edebiliriz?
+
+İki senaryo:
+1. **Açık bar havuz sistemi performans sorunu yaratırsa** — örn. 10000+ bar varsa havuz UI yavaşlar, alternatif gerekebilir
+2. **Müşteriden talep gelirse** — "Artıkları malzeme listesinde de görmek istiyorum, sayım için"
+
+Bu senaryolar olmadan dokunma — mevcut sistem temiz çalışıyor.
+
+## Kontrol Listesi
+
+Yeni bir kesim/fire akışı yazıyorsan:
+- [ ] `uys_malzeme.insert` ile `'ARTIK-...'` kodlu kart yaratıyor musun? → **YASAK**
+- [ ] Fire için `tip: 'giris'` stok hareketi yazıyor musun? → **YASAK**
+- [ ] `barModelSync` zaten bu işi yapıyor mu? → Evet, kontrol et
+- [ ] Sadece raporlama ihtiyacın varsa `artikMalzemelerOlustur()` kullan
+
+---
+
 ## Son canlı sürüm
-**v15.48b1** — İş Emri #3 Faz 2 UI: Otomatik Plan önizleme modal'ı.
+**v15.48** — İş Emri #3 Faz 2 KAPANIŞ + §18.4 Artık Yönetimi Konvansiyonu.
 
 ---
 

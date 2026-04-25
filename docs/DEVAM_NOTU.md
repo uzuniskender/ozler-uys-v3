@@ -1,57 +1,63 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.48b1 sonrası)
-**Son canlı sürüm:** v15.48b1 (Otomatik Plan önizleme modal'ı)
+**Tarih:** 25 Nisan 2026 (v15.48 sonrası)
+**Son canlı sürüm:** v15.48 (İş Emri #3 Faz 2 KAPANIŞ + §18.4 Artık Yönetimi)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md + docs/is_emri/03_UretimZinciri.md (Faz 2 sonu) oku.
-Son iş: v15.48b1 Otomatik Plan onay modal. Sıradaki: v15.48b2 artık malzeme UI VEYA v15.49 MRP modal.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18.4) + docs/is_emri/00_BACKLOG_Master.md oku.
+Son iş: v15.48 İş Emri #3 Faz 2 KAPANIŞ. Sıradaki: v15.49 MRP modal (Faz 3) - Faz B Parça 2 ile entegre.
 ```
 
 ---
 
-## v15.48b1 — Ne Yapıldı
+## v15.48 — Ne Yapıldı
 
 ### Sürpriz Keşif
-`pages/CuttingPlans.tsx`'teki "Otomatik Plan" butonu zaten vardı, ama doğrudan DB'ye kaydediyordu. Kullanıcı önizleme yapamıyordu.
+v15.48b2 (Artık Malzeme UI) tasarlanıyordu. Mevcut `ArtikOneriModal` incelenirken keşfedildi:
+- v15.32'den itibaren kesim artıkları **otomatik** `uys_acik_barlar` havuzuna ekleniyor (`barModelSync`)
+- Eski "Manuel stok girişi" akışı v15.32'de kasıtlı **deprecate** edilmiş
+- Manuel material kartı + stok girişi yapsak → **çift kayıt**
 
-### Çözüm: 3 Adımlı Akış
-1. **Algoritma çalışır** (`kesimPlanOlustur()`) — DB'ye yazmadan
-2. **Sonuç modal'ı açılır** — yeni `OtoPlanSonucModal`:
-   - Üst banner: plan sayısı + toplam fire % (renk: <%5 yeşil, 5-15 sarı, >15 kırmızı)
-   - Her plan kartı: HM kod/ad, gerekli bar adet, plan-bazlı fire %
-   - Plan içi tablo: Bar (×N), Kesimler (İE no + parça boyu × adet), Fire mm
-3. **Kullanıcı:**
-   - "Kaydet" → `kesimPlanlariKaydet()` + havuz önerisi tarama (mevcut akış)
-   - "İptal" → hiçbir şey değişmez
+### Karar
+v15.48b2 iptal. v15.48a'da yazılan `artikMalzemelerOlustur()` saf-fonksiyon olarak kalıyor (raporlama, gelecek altyapı, birim test örneği).
 
-### Akıllı Filtre
-"Tüm açık İE'ler zaten planda" senaryosunda modal açılmaz, doğrudan toast bilgilendirir.
+### Değişiklikler
+1. **`cuttingArtik.ts` başına ⚠️ uyarı bloğu** — "UI'a bağlama, çakışma yaratır"
+2. **Bilgi Bankası §18.4 Artık Yönetimi Konvansiyonu** — yeni bölüm:
+   - Tek kural: artıklar sadece `uys_acik_barlar` havuzunda
+   - Yasak: manuel material kartı + stok girişi
+   - Saf-fonksiyon ne için: raporlama, istatistik, gelecek altyapı
+   - Kontrol listesi
+3. **Master Backlog güncel** — İş Emri #3 Faz 2 (#4) ve Faz 5 (#10) → **🟢 TAMAM**
 
-### Etkilenmeyen
-- Algoritma (`boykesimOptimum`, `kesimPlanOlustur`) dokunulmadı
-- Manuel Plan akışı (`KesimOlusturModal`) aynı
-- `kesimPlanlariKaydet()` aynı
-- Schema değişikliği YOK
+### İş Emri #3 Durumu
+| Faz | Durum |
+|---|---|
+| Faz 1 (DB veri modeli) | ✅ v15.47 |
+| Faz 5 (Üst bar göstergeleri) | ✅ v15.47 + 3 hotfix |
+| Faz 2 (Kesim Optimizasyon) | ✅ v15.48 (algoritma + UI önizleme + test + §18.4) |
+| Faz 3 (MRP Modal) | 🟡 v15.49 — sıradaki |
+| Faz 4 (autoZincir) | 🟡 v15.50 |
+| Faz 6 (Test) | 🟡 v15.50.1 |
 
 ---
 
-## Sırada — İki Yol
+## Sırada — v15.49 MRP Modal (Faz 3)
 
-### Yol A: v15.48b2 — Artık Malzeme UI (~30 dk)
-Plan tamamlandığında `artikMalzemelerOlustur()` (v15.48a'da yazıldı) kullanılarak fire ≥50mm parçalar için Material kartı oluşturma akışı:
-- "Plan Tamamlandı" sonrası modal: artık adayları listesi (kod, ad, uzunluk, adet)
-- Kullanıcı checkbox ile seçer + "Oluştur"
-- DB'ye Material insert + stok hareketi (giriş, açıklama 'Kesim artığı')
+İş Emri #3'ün asıl üretim planlama parçası. **Faz B Parça 2 (MRP termin-gruplu) ile entegre yapılırsa daha verimli** (`docs/faz_b_plan.md`).
 
-### Yol B: v15.49 — MRP Modal (Faz 3, ~1.5 saat)
-İş Emri #3'ün asıl üretim planlama parçası. **Faz B Parça 2 (MRP termin-gruplu) ile entegre edilirse daha verimli** (`docs/faz_b_plan.md`).
+Ana iş:
+- `pages/Orders.tsx` OrderDetailModal'a "MRP Hesapla" butonu (var mı kontrol et)
+- `MRPModal.tsx` yeni component
+- `mrp.ts` refactor — termin gruplu çıktı (Faz B P2 entegrasyonu)
+- `uys_mrp_calculations` tablosuna snapshot yaz (v15.47'de hazırlandı)
+- "Tedarik Aç" toplu seçim + insert
 
-### Yol C: Bugünlük yeter (12 sürüm rekor)
+**Tahmini:** 1.5-2 saat. Tek mesajda yetmez muhtemelen, 2 patch'e bölmek gerekebilir (algoritma + UI).
 
 ---
 
@@ -59,7 +65,7 @@ Plan tamamlandığında `artikMalzemelerOlustur()` (v15.48a'da yazıldı) kullan
 
 **Apply:**
 ```powershell
-cd $env:USERPROFILE\Downloads\patch-v15-48b1
+cd $env:USERPROFILE\Downloads\patch-v15-48
 powershell -ExecutionPolicy Bypass -File .\apply.ps1
 ```
 
@@ -69,7 +75,7 @@ cd $env:USERPROFILE\Documents\GitHub\ozler-uys-v3
 $env:GIT_PAGER = "cat"
 git pull
 git add -A
-git commit -m "v15.48b1: otomatik plan onizleme modal"
+git commit -m "v15.48: Faz 2 KAPANIS + 18.4 artik yonetimi konvansiyonu"
 git push
 ```
 
@@ -77,9 +83,9 @@ git push
 
 **Push sonrası temizlik:**
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\patch-v15-48b1.zip","$env:USERPROFILE\Downloads\patch-v15-48b1" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\patch-v15-48.zip","$env:USERPROFILE\Downloads\patch-v15-48" -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ---
 
-**v15.48b1 patch'i hazır.**
+**v15.48 patch'i hazır.**

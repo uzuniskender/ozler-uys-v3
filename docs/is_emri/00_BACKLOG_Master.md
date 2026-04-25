@@ -25,7 +25,7 @@ Detaylı iş emirleri `docs/is_emri/01_*.md` ... `06_*.md` dosyalarındadır. He
 | 1 | **Operatör Paneli** (`/operator` route) | `01_OperatorPaneli.md` | v15.17.0 | 🟡 Backlog |
 | 2 | **Yedekleme Yönetimi** (`/backup` route) | `02_YedeklemeYonetimi.md` | v15.18.0 | 🟡 Backlog |
 | 3 | **MRP Hesaplama Modal** | `03_UretimZinciri.md` Faz 3 | v15.21.0 | 🟡 Backlog (Faz B P2 ile örtüşür) |
-| 4 | **Kesim Planı Optimizasyon** | `03_UretimZinciri.md` Faz 2 | v15.20.0 | 🟡 Backlog |
+| 4 | **Kesim Planı Optimizasyon** | `03_UretimZinciri.md` Faz 2 | v15.20.0 | 🟢 **TAMAM** (v15.48: algoritma + UI önizleme + birim test) |
 | 5 | **Sevkiyat Oluşturma Formu** | `04_Sevkiyat.md` | v15.23.0 | 🟡 Backlog |
 | 6 | **autoZincir** (Sipariş→İE→Kesim→MRP→Tedarik) | `03_UretimZinciri.md` Faz 4 | v15.22.0 | 🟢 **Kısmi yapıldı** (autoChain.ts mevcut) |
 | 7 | **Toplu Sipariş Excel İmport** | `05_VeriOperasyonlari.md` Bölüm 1 | v15.24.0 | 🟡 Backlog |
@@ -36,7 +36,7 @@ Detaylı iş emirleri `docs/is_emri/01_*.md` ... `06_*.md` dosyalarındadır. He
 |---|---------|---------|-----|-------|
 | 8 | **PDF Çıktı (İş Emri + Sevk İrsaliyesi)** | `05_VeriOperasyonlari.md` Bölüm 2 | v15.25.0 | 🟡 Backlog |
 | 9 | **Stok Onarım** | `05_VeriOperasyonlari.md` Bölüm 3 | v15.24.1 | 🟡 Backlog |
-| 10 | **Üst Bar Durum Göstergeleri** (KESİM/MRP/TEDARİK 🔴/🟢) | `03_UretimZinciri.md` Faz 5 | v15.19.0 | 🟡 Backlog |
+| 10 | **Üst Bar Durum Göstergeleri** (KESİM/MRP/TEDARİK 🔴/🟢) | `03_UretimZinciri.md` Faz 5 | v15.19.0 | 🟢 **TAMAM** (v15.47 + 3 hotfix: statusUtils ile sağlam) |
 
 ### Bonus İş Emri (10 öneri dışı)
 
