@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
 import { cancelFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
+import { isOrderMrpPending, isWorkOrderOpen, isCuttingPlanActive, isProcurementPending } from '@/lib/statusUtils'
 
 interface TopbarProps {
   onMenuClick: () => void
@@ -32,9 +33,10 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const flowCount = activeFlows.length
 
   // ─── v15.47 — Üretim Zinciri durum göstergeleri ─────────────────
-  // KESİM: Kesim operasyonu içeren, durum != 'iptal'/'tamamlandi', kesim planı atanmamış İE sayısı
-  // MRP: mrp_durum != 'tamamlandi' olan aktif sipariş sayısı
-  // TEDARİK: durum == 'bekliyor' (geldi=false) tedarik sayısı
+  // v15.47.2 — Durum string mismatch fix:
+  //   uys_orders.durum 'kapalı' (eski) ve mrp_durum 'tamam' (kısa) string'leri
+  //   normalize edilmiş statusUtils helper'larıyla yakalanıyor.
+  //   Bkz: docs/UYS_v3_Bilgi_Bankasi.md §18.3 Durum String Konvansiyonu
   const zincirCounts = useMemo(() => {
     // Kesim operasyon ID seti (operasyon kodu/adı 'KESIM' içerenler)
     const kesimOpIds = new Set(
@@ -44,10 +46,10 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
         (o.ad || '').toUpperCase().includes('KESIM')
       ).map(o => o.id)
     )
-    // Plana atanmış WO ID seti
+    // Plana atanmış WO ID seti (sadece iptal olmamış planlar)
     const planliWoIds = new Set<string>()
     for (const cp of cuttingPlans) {
-      if (cp.durum === 'iptal') continue
+      if (!isCuttingPlanActive(cp)) continue
       for (const s of (cp.satirlar || [])) {
         for (const k of (s.kesimler || [])) {
           if (k.woId) planliWoIds.add(k.woId)
@@ -55,19 +57,13 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
       }
     }
     const kesim = workOrders.filter(w => {
-      if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+      if (!isWorkOrderOpen(w)) return false
       if (!kesimOpIds.has(w.opId)) return false
       return !planliWoIds.has(w.id)
     }).length
 
-    const mrp = orders.filter(o =>
-      o.durum !== 'iptal' && o.durum !== 'tamamlandi' &&
-      o.mrpDurum !== 'tamamlandi'
-    ).length
-
-    const tedarik = tedarikler.filter(t =>
-      !t.geldi && t.durum !== 'iptal' && t.durum !== 'tamamlandi'
-    ).length
+    const mrp = orders.filter(isOrderMrpPending).length
+    const tedarik = tedarikler.filter(isProcurementPending).length
 
     return { kesim, mrp, tedarik }
   }, [workOrders, orders, cuttingPlans, tedarikler, operations])

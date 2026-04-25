@@ -1,8 +1,8 @@
 # UYS v3 — Test İş Listesi ve Yasak Kontrolleri
 
 **Hazırlayan:** Buket
-**Son güncelleme:** 25 Nisan 2026 (v15.47.1)
-**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları TAMAM ✅. v15.45-46: Hijyen Kuralı + iş emirleri arşivi. v15.47: İş Emri #3 Faz 1+5 (DB + Topbar). v15.47.1: Hotfix audit whitelist + Yeni Tablo Konvansiyonu §18.2 (kalıcı kural).
+**Son güncelleme:** 25 Nisan 2026 (v15.47.2)
+**Durum:** Tüm test senaryoları + yasak kontrolleri + pre-push hook + stok anomalisi raporu + termin kolonu + audit yorum temizleyici + geri alma UI'ları TAMAM ✅. v15.45-46: Hijyen Kuralı + iş emirleri arşivi. v15.47: İş Emri #3 Faz 1+5. v15.47.1: audit whitelist + §18.2. v15.47.2: durum string normalize + §18.3.
 
 ---
 

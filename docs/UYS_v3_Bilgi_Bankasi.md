@@ -4,9 +4,9 @@
 
 Özler Kalıp ve İskele Sistemleri A.Ş.
 
-**Sürüm: v15.47.1** (Hotfix — audit whitelist + Yeni Tablo Konvansiyonu §18.2)
+**Sürüm: v15.47.2** (Hotfix — durum string mismatch + §18.3 Durum String Konvansiyonu)
 
-Son Güncelleme: **25 Nisan 2026** (21. oturum hotfix — kalıcı çözüm)
+Son Güncelleme: **25 Nisan 2026** (21. oturum hotfix #2 — Topbar mantık düzeltmesi)
 
 *Hazırlayan: Buket Bıçakçı — Claude ile birlikte*
 
@@ -32,7 +32,8 @@ Son Güncelleme: **25 Nisan 2026** (21. oturum hotfix — kalıcı çözüm)
 16. Öğrenilenler — v15.33 → v15.37
 17. Referanslar
 18. İndirilenler Hijyen Kuralı
-18.2. Yeni Tablo Konvansiyonu ⭐ YENİ
+18.2. Yeni Tablo Konvansiyonu
+18.3. Durum String Konvansiyonu ⭐ YENİ
 
 ---
 
@@ -57,6 +58,7 @@ UYS v3, Özler Kalıp ve İskele Sistemleri A.Ş.'nin Dilovası fabrikasında ku
 - **v15.46**: İş Emirleri arşivi repoya taşındı. Eski "Günaydın" oturumunda hazırlanan **6 detaylı iş emri** + **21 maddelik master backlog** + **10 öneri özeti** artık `docs/is_emri/` altında. Dosyalar: `00_BACKLOG_Master.md` (özet + durum + kategoriler), `01_OperatorPaneli.md` (production-blocker, /operator route, RBAC operator rolü, mobil-first), `02_YedeklemeYonetimi.md` (/backup route, JSON snapshot, geri yükleme), `03_UretimZinciri.md` (autoZincir + MRP modal + Kesim optimizasyon + Üst bar göstergeleri — 4 büyük özellik tek iş emri), `04_Sevkiyat.md` (oluşturma formu + sipariş bazlı kalan hesabı + yasal irsaliye), `05_VeriOperasyonlari.md` (Toplu Sipariş Excel + PDF çıktı + Stok Onarım — 3 bölüm), `06_ProblemTakip.md` (KPI 4. kart, sekmeli modal, tarihce/yorum tabloları, Excel I/O). 10 öneri 6 iş emrinde paketlendi çünkü bazıları birbirine bağımlı (örn. üretim zinciri 4 özelliği bir arada). 11 madde çıkarıldı (gerekçeleriyle master backlog'da). Doc-only patch — kod değişikliği YOK.
 - **v15.47**: Üretim Zinciri Faz 1 + Faz 5 başlangıcı (`docs/is_emri/03_UretimZinciri.md`). 3 küçük parça tek patch'te: (1) **DB veri modeli** — `uys_kesim_planlari`'ya 4 yeni kolon (`ham_en`, `ham_kalinlik`, `fire_kg`, `artik_malzeme_kod`), `uys_tedarikler`'e 2 yeni kolon (`auto_olusturuldu`, `mrp_calculation_id`), yeni tablo `uys_mrp_calculations` (her MRP run snapshot'ı için JSONB alanlar: `brut_ihtiyac`, `stok_durumu`, `acik_tedarik`, `net_ihtiyac`). Bu altyapı Faz 2-4 (kesim optimizasyon + MRP modal + autoZincir) için hazır. Migration idempotent + RAISE NOTICE ile doğrulama. (2) **2 yeni RBAC aksiyonu** — MRP grubuna `tedarik_auto` ve `auto_chain_run` eklendi (planlama default). `mrp_calculate` ve `cutting_optimize` zaten mevcut (`mrp_calc`, `cutting_add`), duplicate yaratılmadı. (3) **Üst bar zincir göstergeleri** — Topbar.tsx'e 3 tıklanabilir badge: `[KESİM 🔴 N]` (kesim operasyonu olan, plana atanmamış İE sayısı), `[MRP 🟡 N]` (mrpDurum != 'tamamlandi' aktif sipariş sayısı), `[TEDARİK 🟢 N]` (geldi=false bekleyen tedarik sayısı). Renk: 0=yeşil, 1-5=sarı, 6+=kırmızı. `useMemo` ile cache'li, ilgili 4 store array değişince yeniden hesaplanır. Tıklayınca filtreli sayfaya yönlendirir (`#/cutting`, `#/orders`, `#/procurement`). Mobile'de gizli (`hidden md:flex` — küçük ekranda yer kalmıyor).
 - **v15.47.1 (hotfix + konvansiyon)**: Push sırasında audit-schema FAIL verdi — yeni `uys_mrp_calculations` tablosu store ve DataManagement listesinde olmadığı için. Whitelist'lere yorumlu giriş eklendi (Faz 3'te modal kendi fetch edecek, backup gereksiz çünkü snapshot yeniden hesaplanabilir). **Asıl önemli:** Bu durum gelecekte 5+ kez tekrar gelecekti (İş Emri #2, #4, #5, #6 hepsinde yeni tablolar geliyor). Bilgi Bankası §18.2 "Yeni Tablo Konvansiyonu" bölümü eklendi: her yeni migration'a 2 satırlık intent yorumu (BACKUP: evet/hayır + STORE: hangi sürümde eklenecek), karar matrisi (4 farklı tablo tipine göre nereye girer), kontrol listesi. Bir sonraki tablo geldiğinde bu konvansiyon takip edilirse aynı sıkıntı yaşanmaz.
+- **v15.47.2 (hotfix #2 + konvansiyon)**: v15.47'deki Topbar MRP badge'i 12 gösterdi ama gerçek 0 olmalıydı. SQL doğrulamasıyla ortaya çıktı: `uys_orders.durum` eski siparişlerde `'kapalı'`, `mrp_durum` ise `'tamam'` (kısa form). Topbar mantığı sadece `'iptal'/'tamamlandi'` filtresi kullanıyordu, bu eski string'leri kaçırıyordu. **Çözüm:** `src/lib/statusUtils.ts` yeni dosya — 4 helper (`isOrderActive`, `isOrderMrpPending`, `isWorkOrderOpen`, `isCuttingPlanActive`, `isProcurementPending`) tüm bilinen string varyantlarını normalize ediyor. Topbar artık bu helper'ları kullanıyor; mantık 2 satıra düştü. Aynı helper'lar gelecekte başka sayfalarda da kullanılabilir, tutarlılık sağlanır. **Asıl önemli:** DB seviyesinde 4 farklı "tamamlandı" kavramı varyantı tespit edildi (`'tamamlandi'`, `'tamam'`, `'kapalı'`, `'kapali'`). Bilgi Bankası §18.3 "Durum String Konvansiyonu" eklendi — her tablo için kullanılan durum string'leri belge edildi, DB-wide migrate riskli olduğu için kod seviyesinde normalize stratejisi açıklandı, gelecek için yeni durum eklerken kontrol listesi eklendi.
 
 ---
 
@@ -777,8 +779,92 @@ Bu 4 madde sırası takip edilirse "schema FAIL" hatası tekrarlanmaz.
 
 ---
 
+# 18.3 Durum String Konvansiyonu (v15.47.2) ⭐ YENİ
+
+## Sorun
+
+DB seviyesinde tablolar arasında durum string'leri tutarsız. Aynı kavramı (örn. "tamamlandı") farklı tablolar farklı yazıyor. v15.47'de bu Topbar MRP badge'inde false positive yaratttı (12 göstermek yerine 0 olması gerekirdi).
+
+## Mevcut Durum (DB Snapshot — v15.47.2 itibariyle)
+
+Aşağıdaki sorgu ile gerçek string'ler tespit edildi:
+
+```sql
+SELECT 'orders' AS tablo, COALESCE(durum, '(bos)') AS durum, count(*)
+FROM public.uys_orders GROUP BY durum
+UNION ALL ... (5 tablo için)
+```
+
+| Tablo | Durum string'leri |
+|---|---|
+| `uys_orders.durum` | `'kapalı'` (10), `(boş)` (2) |
+| `uys_orders.mrp_durum` | `'tamam'` (6), `'bekliyor'` (6) |
+| `uys_work_orders.durum` | `'tamamlandi'` (60), `'bekliyor'` (15) |
+| `uys_kesim_planlari.durum` | `'tamamlandi'` (25), `'bekliyor'` (11) |
+| `uys_tedarikler.durum` | `'geldi'` (68) — sadece geldi olanlar; bekleyenlerde durum boş |
+
+## Tutarsızlıklar
+
+| Kavram | Kullanılan string'ler |
+|---|---|
+| "Tamamlandı" | `'tamamlandi'` (modern), `'tamam'` (kısa, sadece `mrp_durum`'da), `'kapalı'` (sadece `orders.durum`'da) |
+| "Bekliyor" | `'bekliyor'` (tutarlı) |
+| "İptal" | `'iptal'` (tutarlı) |
+| "Geldi" | `'geldi'` (sadece tedarikler) |
+
+## Strateji — Kod Seviyesinde Normalize
+
+DB-wide migrate (örn. `'tamam'` → `'tamamlandi'`, `'kapalı'` → `'tamamlandi'`) **YAPILMIYOR**, çünkü:
+- `'kapalı'` aslında "tamamlandı"dan farklı bir kavram olabilir (sevki bitmiş, kapatılmış ama farklı semantik)
+- Başka mantıklar bu string'lere bağımlı olabilir, kırarız
+- Risk yüksek, fayda az
+
+**Yerine: `src/lib/statusUtils.ts`** — tüm durum kontrolü helper'lardan geçer.
+
+## Helper Fonksiyonları
+
+```typescript
+// statusUtils.ts
+isOrderActive(o)           // sipariş aktif mi (kapalı/iptal/tamamlandi değil)
+isOrderMrpPending(o)       // MRP bekleniyor mu (mrp_durum 'tamam'|'tamamlandi' değil)
+isWorkOrderOpen(w)         // İE açık mı
+isCuttingPlanActive(cp)    // kesim planı iptal değil mi
+isProcurementPending(t)    // tedarik bekleniyor mu (geldi=false ve iptal değil)
+```
+
+Her helper içeride **bilinen tüm varyantları kontrol ediyor** (`'tamam' OR 'tamamlandi'`, `'kapalı' OR 'kapali' OR 'tamamlandi' OR 'iptal'` gibi).
+
+## Yeni Yer / Yeni Durum Eklerken Kontrol Listesi
+
+**Yeni bir sayfada durum filtresi yazıyorsan:**
+- [ ] `statusUtils.ts`'ten ilgili helper'ı kullan, asla doğrudan `o.durum === 'tamamlandi'` yazma
+- [ ] Helper yoksa **yeni helper EKLE** (içinde tüm varyantları say)
+- [ ] Test: ekrandaki sayı/filtre ile DB sorgusu eşleşiyor mu?
+
+**Yeni bir durum string'i ekliyorsan (örn. `orders.durum = 'beklemede'`):**
+- [ ] İlgili `statusUtils.ts` helper'ına eklediğin string'i ekle
+- [ ] Eski string'lerin (`'kapalı'`, `'tamam'`) hala desteklendiğinden emin ol
+- [ ] §18.3 tablosunu güncelle (yeni satır ekle)
+
+**Yeni bir tablo ekliyorsan ve durum alanı varsa:**
+- [ ] §18.2'ye göre tipi belirle (A/B/C/D)
+- [ ] Migration'da durum alanı için `CHECK (durum IN (...))` constraint **DÜŞÜN** (yeni tablolar tutarlı kalsın)
+- [ ] §18.3 tablosuna yeni satır ekle
+
+## DB-Wide Standartlaştırma Kararı (Gelecek)
+
+Bu konuyu kapsamlı çözmek için iki yol var:
+
+**A. Migrate (riskli, kapsamlı):** Tüm `'tamam'` → `'tamamlandi'`, `'kapalı'` → yeni statü. Migration + tüm kod taraması + test. **Tahmini 1-2 gün iş.** Şu an YAPMIYORUZ — fayda/risk dengesi düşük.
+
+**B. Yeni statü konvansiyonu (orta vadeli):** İleride yeni tablo eklediğimizde sadece şu standart durumları kullan: `'aktif' | 'bekliyor' | 'tamamlandi' | 'iptal'`. Eski tablolar dokunulmaz, helper'lar normalize eder. Yeni tablolar baştan tutarlı.
+
+**Tavsiye: B.** v15.48+ tüm migrationlar B'ye uyumlu yazılır. Eski tablolar zaman içinde refactor için fırsat çıktıkça düzeltilebilir, ama acil değil.
+
+---
+
 ## Son canlı sürüm
-**v15.47.1** — Hotfix: audit whitelist + Yeni Tablo Konvansiyonu §18.2.
+**v15.47.2** — Hotfix: durum string mismatch + §18.3 Durum String Konvansiyonu.
 
 ---
 
