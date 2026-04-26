@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, type MRPRow } from '@/features/production/mrp'
+import { isOrderArchived } from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
 
@@ -40,7 +41,8 @@ export function MRP() {
   // Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP sonucunda net > 0 var.
   // mrp_durum, açık tedarik listesi → filter'da kullanılmaz, sadece bilgi rozeti.
   // hesaplaMRP zaten stok + açık tedarik düşümü yapıyor → net > 0 yoksa stok yeterli demektir.
-  const ORDER_ARCHIVED_STATES = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
+  // v15.50b — Inline ARCHIVED_STATES set'i statusUtils.isOrderArchived helper'ına geçirildi.
+  // Helper '.toLowerCase().trim()' yapıyor → büyük/küçük harf varyantlarına dirençli.
 
   // Cutting plans için map (hesaplaMRP imzası gerektiriyor)
   const cpMappedAll = useMemo(() => cuttingPlans.map((p: any) => ({
@@ -53,7 +55,7 @@ export function MRP() {
     const map: Record<string, boolean> = {}
     for (const o of orders) {
       // Kilitli ise atla — zaten gizlenecek
-      if (ORDER_ARCHIVED_STATES.has(o.durum || '')) { map[o.id] = false; continue }
+      if (isOrderArchived(o)) { map[o.id] = false; continue }
       try {
         const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id)
         map[o.id] = sonuc.some(r => r.net > 0)
@@ -67,7 +69,7 @@ export function MRP() {
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
       // Kilitli → arşiv
-      if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return showTamamlanan
+      if (isOrderArchived(o)) return showTamamlanan
       // Açık → eksik varsa default'ta görünür, yoksa arşivde (toggle ile gösterilir)
       const eksikVar = orderHasEksik[o.id] ?? false
       return showTamamlanan ? !eksikVar : eksikVar
@@ -77,7 +79,7 @@ export function MRP() {
 
   const arsivSayisi = useMemo(() =>
     orders.filter(o => {
-      if (ORDER_ARCHIVED_STATES.has(o.durum || '')) return true
+      if (isOrderArchived(o)) return true
       return !(orderHasEksik[o.id] ?? false)
     }).length
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -992,16 +992,17 @@ S10: Tedarik silindiğinde MRP otomatik açılır.
 
 ## §18.3 İlişkisi
 
-`statusUtils.ts`'de `isOrderArchived(o)` helper'ı **yok** (sadece `isOrderActive` var, `''` davranışı belirsiz). MRP.tsx şu anda inline blacklist set kullanıyor. İleride helper eklenebilir:
+`statusUtils.ts`'de `isOrderArchived(o)` helper'ı **v15.50b'de eklendi**:
 
 ```typescript
 export function isOrderArchived(o: Order): boolean {
-  const ARCHIVED = new Set(['kapalı', 'kapali', 'iptal', 'İptal', 'tamamlandi', 'Tamamlandı'])
-  return ARCHIVED.has((o.durum || '').trim())
+  return !isOrderActive(o)
 }
 ```
 
-Sonra MRP.tsx ve diğer kullanım yerleri helper'a refactor.
+`isOrderActive` mevcut `ORDER_INACTIVE_STATES` set'ini kullanıyor (`'tamamlandi', 'kapalı', 'kapali', 'iptal'`) ve `.toLowerCase().trim()` yapıyor → büyük/küçük harf varyantlarına dirençli.
+
+`MRP.tsx` v15.50b'de inline blacklist set'i kaldırıp helper'a geçti (4 yer). §18.3 statusUtils tutarlılığı genişledi.
 
 ## Acil UX Serisi Özeti (25 Nis 2026)
 
@@ -1013,6 +1014,7 @@ Sonra MRP.tsx ve diğer kullanım yerleri helper'a refactor.
 - **v15.50a.4** — 5 aşama tablo (yanlış sözleşme yorumu) — revize edildi
 - **v15.50a.5** — TEK KURAL (net>0) — doğru sözleşme, kanıtlandı
 - **v15.50a.6** — Topbar KESİM badge keyword fix (KESME LAZER yakalanmıyordu)
+- **v15.50b** — Faz 3 MRP Modal entegrasyonu (snapshot insert + RBAC + isOrderArchived)
 
 ## Önemli Ders
 
@@ -1027,7 +1029,23 @@ Sonra MRP.tsx ve diğer kullanım yerleri helper'a refactor.
 ---
 
 ## Son canlı sürüm
-**v15.50a.6** — Topbar KESİM badge fix (UX serisi tamamlandı).
+**v15.50b** — Faz 3 MRP Modal entegrasyonu: snapshot insert + RBAC + isOrderArchived helper.
+
+### v15.50b Notları (26 Nis 2026 — Faz 3 Kapanışı)
+
+**Sürpriz keşif:** Faz 3 scope'unun tahmin edilenden çok azı eksikti. `pages/Orders.tsx` içindeki `OrderDetailModal` zaten MRP tab + buton + termin sütunu + per-row tedarik + toplu tedarik + Excel export + TamZincirButton içeriyordu. DEVAM_NOTU'nun "MRPModal.tsx yeni component" planı yanıltıcıydı; mevcut Modal'ın **4 eksik noktası** kapatıldı:
+
+1. **`uys_mrp_calculations` snapshot insert** — `runMRP` sonu, JSONB `{malkod: miktar}` formatında 4 alan (`brut_ihtiyac`, `stok_durumu`, `acik_tedarik`, `net_ihtiyac`). Aynı malkod birden fazla termin satırına yayılmış olabilir (v15.50a termin gruplama) → toplam alınır. `hesaplayan` NOT NULL kolonu için `useAuth().user.username || email || dbId || 'system'` fallback. Snapshot insert sessiz fail olursa MRP akışı bozulmaz (try/catch + console.warn).
+
+2. **`mrp_calculation_id` + `auto_olusturuldu` bağlantısı** — `mrp.ts:mrpTedarikOlustur` imzasına opts parametresi (`{ mrpCalculationId?, auto? }`). Per-row + Tedarik butonu manuel akış (`auto_olusturuldu: false`), Toplu Tedarik otomatik (`auto_olusturuldu: true`). Her iki yol da aynı `lastCalcId` snapshot'ına bağlanır → audit/raporlamada tedarik-MRP run ilişkisi kurulabilir.
+
+3. **RBAC kontrolleri** — Toplu Tedarik butonuna `can('tedarik_auto')`, Per-row + Tedarik butonuna `can('mrp_supply')`. MRP Hesapla butonu zaten `can('orders_mrp')` ile sarılıydı (dokunulmadı).
+
+4. **`isOrderArchived` helper** — §19 opsiyonel iyileştirmesi yapıldı. `MRP.tsx` inline `ORDER_ARCHIVED_STATES` set'i kaldırıldı, 4 yerde `isOrderArchived(o)` çağrısına geçildi. Helper `isOrderActive`'in tersi (case-insensitive trim ile).
+
+**Sonuç:** 5 dosya · 0 schema değişikliği · 0 rollback · §19 sözleşmesi korundu (filter hala net>0'a bakıyor, snapshot bilgi amaçlı). Faz 3 KAPANDI; İş Emri #3 master backlog'da bu satır ✅ olarak güncellenebilir.
+
+**Sürpriz keşif dersi:** Yeni iş'e başlamadan önce mevcut kodu **dikkatli oku**. DEVAM_NOTU'ndaki plan yazıldığı andan sonra kod değişmiş olabilir. Bu patch'te 1.5-2 saatlik iş tahmini 30 dakikaya düştü — çünkü iş zaten yapılmıştı, sadece eksikler kapatıldı.
 
 ---
 

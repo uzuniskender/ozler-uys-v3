@@ -1,7 +1,7 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 25 Nisan 2026 (v15.50a.6 sonrası — UX serisi kapanışı)
-**Son canlı sürüm:** v15.50a.6
+**Tarih:** 26 Nisan 2026 (v15.50b sonrası — Faz 3 MRP Modal entegrasyonu)
+**Son canlı sürüm:** v15.50b
 
 ---
 
@@ -9,107 +9,105 @@
 
 ```
 UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §19 MRP Filtre Sözleşmesi + §18 ailesi 4 kalıcı kural) + docs/is_emri/00_BACKLOG_Master.md (üstteki ilerleme paneli) oku.
-Son iş: v15.50a serisi (7 patch) ile MRP UX 3 kritik bug çözüldü, hesap layer'ı kanıtlandı.
-Sıradaki: v15.50b (Faz 3 MRP Modal) — İş Emri #3'ün orijinal planı.
+Son iş: v15.50b (Faz 3 MRP Modal entegrasyonu) — uys_mrp_calculations snapshot insert + RBAC kontrolleri + isOrderArchived helper.
+Sıradaki: İş Emri #3 Faz 4 (autoZincir UI) veya İş Emri #1 (Operatör Paneli) veya İş Emri #2 (Yedekleme).
 ```
 
 ---
 
-## Bugünün Final Raporu — 7 Sürüm (v15.50a serisi)
+## v15.50b Özeti — Faz 3 MRP Modal Entegrasyonu
 
-| Sürüm | Konu | Doğrulama |
+**Sürpriz keşif:** Faz 3'ün tahmin edilen scope'unun büyük kısmı zaten yapılmıştı. `pages/Orders.tsx` içindeki `OrderDetailModal` zaten:
+- MRP tab + "MRP Hesapla" butonu (`can('orders_mrp')` ile)
+- `runMRP()` — hesaplaMRP + mrp_durum update + rezerveYaz
+- Termin sütunu sonuç tablosunda
+- Per-row + Tedarik + Toplu Tedarik butonları
+- Excel export
+- TamZincirButton (autoZincir entrypoint)
+
+DEVAM_NOTU'nun "MRPModal.tsx yeni component" planı yanıltıcıydı — yeni component yaratmak overkill, mevcut Modal'ın **eksik 4 noktasını** kapatmak doğru iş çıktı.
+
+### v15.50b'de Kapatılan 4 Eksik
+
+| # | İş | Dosya |
 |---|---|---|
-| v15.50a   | hesaplaMRP termin gruplama + stok pool FIFO            | 4/4 birim test PASS |
-| v15.50a.1 | MRP.tsx onClick event leak (Hesapla bypass) hotfix     | Manuel canlı |
-| v15.50a.2 | MRP filtre v1 (mrp_durum yoksay) — REVİZE              | 11/11 → revize |
-| v15.50a.3 | MRP tablo viewFilter default 'tum' (boş tablo fix)     | Manuel canlı |
-| v15.50a.4 | MRP filtre 5 aşama (yanlış sözleşme) — REVİZE          | 10/10 → revize |
-| v15.50a.5 | MRP filtre TEK KURAL (net>0) — DOĞRU SÖZLEŞME          | Canlı + 11/11 |
-| v15.50a.6 | Topbar KESİM badge keyword fix (KESME LAZER yakalama)  | Canlı |
+| 1 | `uys_mrp_calculations` snapshot insert (Tip C, §18.2 uyumlu) — runMRP sonu, JSONB `{malkod: miktar}` formatında 4 alan (brut/stok/acik/net) | Orders.tsx OrderDetailModal.runMRP |
+| 2 | Tedarik insert'lerine `mrp_calculation_id` + `auto_olusturuldu` bağlantısı | Orders.tsx (per-row) + mrp.ts (mrpTedarikOlustur opts) |
+| 3 | RBAC: Toplu Tedarik → `tedarik_auto`, Per-row + Tedarik → `mrp_supply` | Orders.tsx (2 yer) |
+| 4 | `isOrderArchived` helper (§19 opsiyonel iyileştirmesi) — MRP.tsx inline set'i kaldırıldı | statusUtils.ts + MRP.tsx |
 
-**Sayılar:** 7 patch · 0 rollback · 0 schema değişikliği · ~30 birim test PASS · 1 yeni kalıcı kural (§19).
+### Sayılar
 
----
-
-## §19 MRP Filtre Sözleşmesi (TEK KURAL)
-
-> **Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP'de net > 0 satırı var.**
-
-`mrp_durum` kolonu, açık tedarik listesi, üretim yüzdesi → **filter'da kullanılmaz**. Detay: Bilgi Bankası §19.
-
-**Tedarik silinirse otomatik geri açılır** — sözleşmenin kritik özelliği. Test fixture S10 ile garanti.
+5 dosya · 0 schema değişikliği · 0 rollback · §19 sözleşmesi korundu · §18.3 statusUtils tutarlılığı arttı.
 
 ---
 
-## Sıradaki — v15.50b (Faz 3 MRP Modal)
+## §18 Hijyen — v15.50b Cleanup
 
-İş Emri #3 Faz 3 — orijinal plan halen geçerli:
+**Patch sonrası temizlik:**
+```powershell
+Remove-Item "$env:USERPROFILE\Downloads\patch-v15-50b*.zip","$env:USERPROFILE\Downloads\patch-v15-50b*" -Recurse -Force -ErrorAction SilentlyContinue
+```
 
-- `pages/Orders.tsx` OrderDetailModal'a "MRP Hesapla" butonu (UI giriş noktası)
-- `MRPModal.tsx` yeni component (snapshot + termin sütunu + tedarik aç akışı)
-- `mrp.ts` refactor — termin gruplu çıktı ✅ YAPILDI v15.50a (Faz B P2 entegre)
-- `uys_mrp_calculations` tablosuna snapshot insert (v15.47'de hazırlandı, henüz dolmuyordu)
-- "Tedarik Aç" toplu seçim (RBAC: `tedarik_auto`)
+**§18.2 yeni tablo kontrolü:** Bu patch'te yeni tablo yok (mevcut `uys_mrp_calculations` doldurulmaya başlandı). Tablo zaten Tip C — STORE_WHITELIST ve DATA_MGMT_WHITELIST'te (audit-schema.cjs).
 
-**Tahmini:** 1.5-2 saat. v15.50b/c parçalarına bölünebilir.
+**§18.3 durum string kontrolü:** Bu patch'te yeni durum string'i yok. `isOrderArchived` mevcut `ORDER_INACTIVE_STATES` listesini reverse logic ile kullanıyor.
 
-**Faz B Parça 2 durumu:** Termin gruplama yapıldı (v15.50a). Geriye sadece UI tarafı kaldı (Modal içinde termin sütunu).
+**§18.4 artık kontrolü:** Bu patch'te kesim akışı dokunulmadı.
 
----
-
-## Acil UX Backlog Durumu
-
-| # | Sorun | Durum |
-|---|---|---|
-| 1 | "Tamamlananlar" gizleme yanlıştı (mrp_durum filtresi) | ✅ v15.50a.5 ile çözüldü (TEK KURAL) |
-| 2 | "Sipariş seçili" rozeti vs Hesapla bypass | ✅ v15.50a.1 ile çözüldü |
-| 3 | Kesim planı yokluğu sipariş sayfasında görünmüyor    | 🟡 Kısmen — Topbar KESİM düzeltildi (v15.50a.6), Siparişler sayfasındaki uyarı eksik kaldı, kullanıcıyla konuşma yarıda kaldı |
+**§19 MRP sözleşmesi kontrolü:**
+- Filter hala `hesaplaMRP` net>0 sonucuna bakıyor ✓
+- `mrp_durum` filter'da kullanılmıyor (sadece bilgi rozeti) ✓
+- Tedarik silindiğinde otomatik geri açılma davranışı bozulmadı ✓
+- `uys_mrp_calculations` snapshot **bilgi amaçlı** — filter'a girmiyor ✓
 
 ---
 
-## Kontrol Listesi (yeni MRP/UI patch öncesi)
+## Sıradaki Adaylar
+
+**Adim A — İş Emri #3 Faz 4 (autoZincir UI):**
+- `autoChain.ts` mevcut (autoChain.ts mevcut, UI yok — Backlog #6 "kısmi yapıldı")
+- TamZincirButton zaten Orders.tsx'te entrypoint var
+- Eksik: dashboard / log paneli (autoZincir tetiklenince ne yaptığını gösteren step-by-step UI)
+
+**Adim B — İş Emri #1 (Operatör Paneli):**
+- `/operator` route — production-blocker
+- Backlog v15.17.0 tag'i ile bekliyor
+
+**Adim C — İş Emri #2 (Yedekleme Yönetimi):**
+- `/backup` route — production-blocker
+- `pt_yedekler` tablosu Tip D, önceden tip ataması yapıldı (§18.2 tablosu)
+
+**Adim D — Topbar KESİM badge'i Siparişler sayfasında uyarı (yarım kalmıştı):**
+- v15.50a.6'da Topbar düzeltildi ama Orders.tsx'teki uyarı eklenmemişti
+- Küçük UX patch — 30 dakikalık iş
+
+Buket önceliği belirler.
+
+---
+
+## Kontrol Listesi (Bir sonraki MRP/UI patch öncesi)
 
 **§19 MRP filtresine dokunuyorsa:**
 - [ ] Filter kararı `hesaplaMRP` net>0 sonucuna mı bakıyor?
 - [ ] mrp_durum kolonu **filter'da** kullanılmıyor mu?
 - [ ] Tedarik silindiğinde sipariş otomatik liste'ye dönüyor mu? (S10 garantisi)
-- [ ] Kilitli siparişler arşivde mi?
+- [ ] Kilitli siparişler arşivde mi? (`isOrderArchived` ile)
 
 **§18.3 durum string varyantları:**
-- [ ] Kilit kontrolünde `'kapalı'`, `'kapali'`, `'iptal'`, `'İptal'`, `'tamamlandi'`, `'Tamamlandı'` hepsi sayılıyor mu?
+- [ ] `isOrderArchived` / `isOrderActive` / `isWorkOrderOpen` helper'ları kullanılıyor mu?
+- [ ] `o.durum === 'tamamlandi'` gibi inline kontroller eklenmemiş mi?
 
 **§18 hijyeni:**
 - [ ] Patch teslim mesajında cleanup komutu var mı?
-- [ ] §18.2 yeni tablo varsa karar matrisi
+- [ ] §18.2 yeni tablo varsa karar matrisi (A/B/C/D)
 - [ ] §18.3 yeni durum string varsa statusUtils güncel
 - [ ] §18.4 artık akışı manuel material kartı YASAK
 
----
-
-## Komutlar
-
-**Push sonrası temizlik:**
-```powershell
-Remove-Item "$env:USERPROFILE\Downloads\patch-v15-50a-*.zip","$env:USERPROFILE\Downloads\patch-v15-50a-*" -Recurse -Force -ErrorAction SilentlyContinue
-```
+**RBAC:**
+- [ ] Yeni butonlar `can(...)` ile sarılı mı?
+- [ ] Permissions.ts'te yeni action varsa DEFAULTS doldurulmuş mu?
 
 ---
 
-## Önemli Ders (kalıcı not)
-
-Bugün **sözleşmeyi yanlış sentezledim** ve 3 patch boşa attım (v15.50a.2 → v15.50a.4 → v15.50a.5). Ders:
-
-> Müşteri net kural verdiğinde **birebir** uygulamak gerekir. "Sade tek kural" çıkarmaya çalışmak yanlış yola sürükler.
-
-Doğru süreç:
-1. Müşteriden kuralı **tablo halinde** al
-2. Test fixture'ı tablodaki **her satır için** yaz
-3. Patch yazmadan önce tabloyu **birebir** koda çevir
-4. Patch teslim mesajında "uygulanan kural" tablosu göster (kullanıcı 30 saniyede kontrol edebilsin)
-5. Onaylatmak için sürekli soru sormaktan vazgeç — **yapılması gereken bir şey varsa yap, durup sorma**
-
-Bilgi Bankası §19'da bu ders kalıcı olarak not alındı.
-
----
-
-İyi geceler Buket. v15.50a serisi 7 patch, 0 rollback. UX katmanı temizlendi, sıradaki Faz 3 (MRP Modal) için zemin hazır.
+İyi geceler Buket. v15.50b ile İş Emri #3 Faz 3 kapsamı kapandı.

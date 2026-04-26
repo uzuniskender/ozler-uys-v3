@@ -394,16 +394,26 @@ export function hesaplaMRP(
 }
 
 // ═══ BACKWARD COMPAT ═══
+// v15.50b — opts parametresi eklendi:
+//   - mrpCalculationId: uys_mrp_calculations snapshot id (varsa tedarikler.mrp_calculation_id'ye yazılır)
+//   - auto: tedarik kaydının auto_olusturuldu bayrağı (default true — toplu/otomatik akış)
+// Geri uyumluluk: opts yoksa eski davranış (auto=true, calc_id=null).
 export async function mrpTedarikOlustur(
-  orderId: string, siparisNo: string, mrpRows: MRPRow[]
+  orderId: string, siparisNo: string, mrpRows: MRPRow[],
+  opts?: { mrpCalculationId?: string; auto?: boolean }
 ): Promise<number> {
   const ihtiyaclar = mrpRows.filter(r => r.net > 0)
   if (!ihtiyaclar.length) return 0
+  const auto = opts?.auto ?? true
+  const calcId = opts?.mrpCalculationId || null
   for (const r of ihtiyaclar) {
     await supabase.from('uys_tedarikler').insert({
       id: uid(), malkod: r.malkod, malad: r.malad, miktar: r.net, birim: r.birim,
       order_id: orderId, siparis_no: siparisNo,
-      durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: r.termin || null, not_: 'MRP otomatik',
+      durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: r.termin || null,
+      not_: auto ? 'MRP otomatik' : 'MRP',
+      auto_olusturuldu: auto,
+      mrp_calculation_id: calcId,
     })
   }
   // Siparisin mrp_durum'u 'tamam' olsun (MRP akisi kapandi)

@@ -40,6 +40,19 @@ export function isOrderActive(o: Order): boolean {
 }
 
 /**
+ * Sipariş "arşivde" mi? — yani MRP listesinde ve aktif iş akışında gizlenir.
+ * v15.50b — §19 MRP Filtre Sözleşmesi opsiyonel iyileştirmesi.
+ *
+ * Mantık olarak `!isOrderActive(o)` ile aynı, fakat niyet okunabilirliği için
+ * ayrı helper. Filter kararında `isOrderArchived(o) ? gizle : göster` yazımı
+ * `!isOrderActive(o) ? gizle : göster`'den daha açık ve §19 sözleşmesi ile birebir
+ * eşleşiyor (sözleşme "arşiv" terimini kullanıyor).
+ */
+export function isOrderArchived(o: Order): boolean {
+  return !isOrderActive(o)
+}
+
+/**
  * Bir siparişin MRP'sinin "tamamlanmış" sayıldığı tüm string'ler.
  * - 'tamamlandi' — modern kod
  * - 'tamam'      — eski kod (kısa form)

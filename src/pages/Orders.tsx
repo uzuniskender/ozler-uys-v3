@@ -639,10 +639,13 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 
 function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; malkod: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
   const { recipes, stokHareketler, tedarikler, cuttingPlans: cp, materials: mats, orders: allOrders, workOrders: allWOs, mrpRezerve, loadAll } = useStore()
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const [tab, setTab] = useState<'ie' | 'mrp'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
   const [mrpDone, setMrpDone] = useState(false)
+  // v15.50b — Son MRP run snapshot id (uys_mrp_calculations.id).
+  // Tedarik insert'lerinde mrp_calculation_id alanına yazılır → audit/raporlama için bağ.
+  const [lastCalcId, setLastCalcId] = useState<string | null>(null)
 
   const kalemler = order.urunler || []
   const cokKalem = kalemler.length > 1
@@ -651,6 +654,40 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
     const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, order.id)
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
+
+    // v15.50b — uys_mrp_calculations snapshot insert (Tip C, §18.2 uyumlu).
+    // JSONB formatı: {malkod: miktar}. Aynı malkod birden fazla termin satırı olabilir
+    // (v15.50a termin gruplama) → toplam alınır.
+    const calcId = uid()
+    const brut: Record<string, number> = {}
+    const stok: Record<string, number> = {}
+    const acik: Record<string, number> = {}
+    const net:  Record<string, number> = {}
+    for (const r of rows) {
+      brut[r.malkod] = (brut[r.malkod] || 0) + r.brut
+      // stok ve acik aynı malkod için tüm termin satırlarında aynı (pool tek tahsisten)
+      stok[r.malkod] = r.stok
+      acik[r.malkod] = r.acikTedarik
+      net[r.malkod]  = (net[r.malkod]  || 0) + r.net
+    }
+    const hesaplayan = user?.username || user?.email || user?.dbId || 'system'
+    try {
+      await supabase.from('uys_mrp_calculations').insert({
+        id: calcId,
+        order_id: order.id,
+        hesaplayan,
+        brut_ihtiyac: brut,
+        stok_durumu: stok,
+        acik_tedarik: acik,
+        net_ihtiyac: net,
+        durum: 'tamamlandi',
+      })
+      setLastCalcId(calcId)
+    } catch (e) {
+      // Snapshot insert sessiz başarısız olursa MRP akışı bozulmamalı; sadece konsola yaz
+      console.warn('[v15.50b] uys_mrp_calculations insert failed:', e)
+    }
+
     const yeniDurum = rows.some(r => r.net > 0) ? 'eksik' : 'tamam'
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', order.id)
     // Rezerve kayıtları yaz
@@ -661,7 +698,13 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   }
 
   async function createTedarik() {
-    const count = await mrpTedarikOlustur(order.id, order.siparisNo, mrpRows)
+    // v15.50b — RBAC: tedarik_auto izni gerekli (toplu/otomatik akış).
+    if (!can('tedarik_auto')) { toast.error('Yetkiniz yok: tedarik_auto'); return }
+    // v15.50b — calcId ve auto bayrağı pass edildi.
+    const count = await mrpTedarikOlustur(order.id, order.siparisNo, mrpRows, {
+      mrpCalculationId: lastCalcId || undefined,
+      auto: true,
+    })
     if (count > 0) { loadAll(); toast.success(count + ' tedarik kaydı oluşturuldu'); await triggerRezerveSync() }
     else toast.info('Tüm ihtiyaçlar karşılanmış')
   }
@@ -819,8 +862,8 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                         <td className="px-3 py-1.5 text-right font-mono text-zinc-500">{r.acikTedarik}</td>
                         <td className={`px-3 py-1.5 text-right font-mono font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net}</td>
                         <td className="px-3 py-1.5"><span className={`text-[10px] font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net > 0 ? '⚠ Eksik' : '✓ Yeterli'}</span></td>
-                        <td className="px-3 py-1.5">{r.net > 0 && <button onClick={async () => {
-                          await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id })
+                        <td className="px-3 py-1.5">{r.net > 0 && can('mrp_supply') && <button onClick={async () => {
+                          await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id, not_: 'MRP', auto_olusturuldu: false, mrp_calculation_id: lastCalcId })
                           await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', order.id)
                           loadAll(); toast.success(r.malkod + ' tedarik oluşturuldu')
                           await triggerRezerveSync()
@@ -828,7 +871,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                       </tr>
                     ))}
                   </tbody></table>
-                {mrpRows.some(r => r.net > 0) && (
+                {mrpRows.some(r => r.net > 0) && can('tedarik_auto') && (
                   <button onClick={createTedarik} className="px-4 py-2 bg-amber hover:bg-amber/80 text-black rounded-lg text-xs font-semibold">
                     📦 Toplu Tedarik Oluştur ({mrpRows.filter(r => r.net > 0).length} kalem)
                   </button>
