@@ -8,6 +8,7 @@ import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
+import { getPlanliWoIds, isKesimWO } from '@/lib/statusUtils'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
@@ -34,6 +35,23 @@ export function WorkOrders() {
     f.durum === 'aktif' &&
     (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
+
+  // v15.61 (İş Emri #13 madde 17) — "Plan Bekliyor" rozet hesabı:
+  // Kesim opsiyonlu + aktif kesim planına atanmamış WO'lar UI'da uyarı rozetiyle gösterilir.
+  // Plan Bekliyor durumu DB'de değil — UI türetilmiş; v15.55 hard block'la birlikte
+  // kullanıcı bu satırların üretime başlatılamayacağını fark eder.
+  const planBekliyorIds = useMemo(() => {
+    const planli = getPlanliWoIds(cuttingPlans)
+    const set = new Set<string>()
+    for (const w of workOrders) {
+      if (!isKesimWO(w)) continue
+      if (planli.has(w.id)) continue
+      // Sadece aktif WO'lar için göster (iptal/tamamlandi'da anlamı yok)
+      if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
+      set.add(w.id)
+    }
+    return set
+  }, [workOrders, cuttingPlans])
 
   // v15.57 (İş Emri #13 madde 1+2) — "Yeni İE" butonu kaldırıldı.
   // Tüm yeni iş emirleri Siparişler sayfasındaki "Yeni İş Emri" butonu üzerinden açılır.
@@ -381,9 +399,20 @@ export function WorkOrders() {
                         <td className="px-3 py-1.5 text-right font-mono"><b>{prod}</b><span className="text-zinc-600">/{w.hedef}</span></td><td className={`px-3 py-1.5 font-mono text-[11px] ${w.termin && w.termin < today() && pct < 100 ? "text-red font-semibold" : "text-zinc-500"}`}>{w.termin || "-"}</td>
                         <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : pct > 0 ? 'bg-accent' : 'bg-zinc-700'}`} style={{ width: `${Math.max(2, pct)}%` }} /></div><span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span></div></td>
                         <td className="px-3 py-1.5">
+                          <div className="flex items-center gap-1.5">
                           <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (w.durum === 'tamamlandi') return 'tamamlandi'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
                             <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                           </select>
+                          {/* v15.61 — Plan Bekliyor rozeti (madde 17): kesim opsiyonlu + plana atanmamış İE */}
+                          {planBekliyorIds.has(w.id) && (
+                            <span
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-amber/15 text-amber border border-amber/30 font-semibold whitespace-nowrap"
+                              title="Bu İE kesim opsiyonu içeriyor ama hiçbir kesim planına atanmamış. Üretim girişi engellenir — önce Kesim Planları sayfasında plan oluşturun."
+                            >
+                              ⚠ Plan Bekliyor
+                            </span>
+                          )}
+                          </div>
                         </td>
                         <td className="px-3 py-1.5 text-right"><button onClick={() => setDetailWO(w.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={13} /></button></td>
                       </tr>
