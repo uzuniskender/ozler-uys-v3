@@ -19,23 +19,19 @@ export function MRP() {
   const [searchParams] = useSearchParams()
   const activeFlowId = searchParams.get('flow') || ''  // v15.36 — flow akışı
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
-  const [selectedYMs, setSelectedYMs] = useState<Set<string>>(new Set())
   const [sonuc, setSonuc] = useState<MRPRow[]>([])
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [flowAutoDone, setFlowAutoDone] = useState(false)  // v15.36
 
   const [showTamamlanan, setShowTamamlanan] = useState(false)
-  const [showYMTamamlanan, setShowYMTamamlanan] = useState(false)
+  // v15.71 — selectedYMs, showYMTamamlanan, mrpDoneYMs, ymIEs, ymTamamSayisi, toggleYM kaldırıldı (madde 18)
   // v15.50a.3 — Default 'tum': hesap sonrasi tum satirlar gorunur (eksik+yeterli).
   // Kullanici "X eksik" rozetine tiklayarak filtreleyebilir. Eski default 'eksik'
   // 0 eksik durumda bos tablo gosteriyordu, kullanici "MRP yapildi mi?" karisikliga dusuyordu.
   const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('tum')
 
-  // MRP tamamlanmış YM İE'leri (localStorage'da tutuluyor)
-  const mrpDoneYMs = useMemo(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[]) } catch { return new Set<string>() }
-  }, [sonuc]) // sonuc değişince yeniden oku
+  // v15.71 — mrpDoneYMs useMemo kaldırıldı (madde 18)
 
   // v15.50a.5 — TEK KURAL:
   // Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP sonucunda net > 0 var.
@@ -85,26 +81,11 @@ export function MRP() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   , [orders, orderHasEksik])
 
-  // Bağımsız YM İE'leri — MRP yapılmışları varsayılan gizle
-  const ymIEs = useMemo(() =>
-    workOrders.filter(w => {
-      if (!w.bagimsiz || w.durum === 'iptal') return false
-      if (logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) >= w.hedef) return false
-      if (!showYMTamamlanan && mrpDoneYMs.has(w.id)) return false
-      return true
-    }),
-    [workOrders, logs, showYMTamamlanan, mrpDoneYMs])
-
-  const ymTamamSayisi = useMemo(() =>
-    workOrders.filter(w => w.bagimsiz && w.durum !== 'iptal' && mrpDoneYMs.has(w.id) &&
-      logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef
-    ).length
-  , [workOrders, logs, mrpDoneYMs])
+  // v15.71 — ymIEs + ymTamamSayisi useMemo kaldırıldı (madde 18)
 
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  function toggleYM(id: string) { setSelectedYMs(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))); setSelectedYMs(new Set(ymIEs.map(w => w.id))) }
-  function selectNone() { setSelectedOrders(new Set()); setSelectedYMs(new Set()) }
+  function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))) }
+  function selectNone() { setSelectedOrders(new Set()) }
 
   // Tarih filtre: termini bu tarihe kadar olan siparişleri seç
   function filterByDate(tarih: string) {
@@ -159,9 +140,9 @@ export function MRP() {
     const ordIds = useOverride ? overrideOrderIds : [...selectedOrders]
     const ymSet = useOverride
       ? (overrideYMs && overrideYMs.size > 0 ? overrideYMs : null)
-      : (selectedYMs.size > 0 ? selectedYMs : null)
+      : null  // v15.71 — selectedYMs kaldırıldı (madde 18)
 
-    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş veya YM İE seçin'); return }
+    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş seçin'); return }
 
     const cpMapped = cuttingPlans.map((p: any) => ({
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
@@ -210,15 +191,13 @@ export function MRP() {
   useEffect(() => {
     if (flowAutoDone || hesaplandi) return
     if (!orders.length || !workOrders.length) return  // Store hazır olana kadar bekle
-    // Aktif sipariş + bağımsız YM seç
+    // v15.71 — Sadece aktif siparişleri seç (YM İE bölümü kaldırıldı, madde 18)
     const ordIds = aktifOrders.map(o => o.id)
-    const ymIds = ymIEs.map(w => w.id)
-    if (!ordIds.length && !ymIds.length) return  // Seçilecek bir şey yoksa dokunma
+    if (!ordIds.length) return  // Seçilecek bir şey yoksa dokunma
     setSelectedOrders(new Set(ordIds))
-    setSelectedYMs(new Set(ymIds))
     setFlowAutoDone(true)
     // Doğrudan override ile hesapla — state async, closure bug önlenir
-    hesapla(ordIds, new Set(ymIds))
+    hesapla(ordIds, undefined)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders.length, workOrders.length])
 
