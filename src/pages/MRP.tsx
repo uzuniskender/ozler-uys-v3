@@ -303,7 +303,7 @@ export function MRP() {
 
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">📊 MRP — Malzeme İhtiyaç Planlaması</h1>
-          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş · {ymIEs.length} YM İE</p></div>
+          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş</p></div>
         {hesaplandi && <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> MRP Excel</button>
           {eksikler.length > 0 && <button onClick={() => {
@@ -367,51 +367,18 @@ export function MRP() {
           </div>
         )}
 
-        {/* Bağımsız YM İş Emirleri */}
-        {(ymIEs.length > 0 || ymTamamSayisi > 0) && (<>
-          <div className="text-xs font-semibold text-zinc-500 uppercase mt-3 mb-2 flex items-center gap-2">
-            Bağımsız YM İş Emirleri
-            <button onClick={() => setSelectedYMs(prev => prev.size === ymIEs.length ? new Set() : new Set(ymIEs.map(w => w.id)))} className="text-[10px] text-amber font-normal hover:text-white">
-              {selectedYMs.size === ymIEs.length && ymIEs.length > 0 ? 'Hiçbirini' : 'Tümünü Seç'}
-            </button>
-            {ymTamamSayisi > 0 && (
-              <button onClick={() => setShowYMTamamlanan(!showYMTamamlanan)}
-                className={`text-[10px] font-normal ${showYMTamamlanan ? 'text-green' : 'text-zinc-500 hover:text-white'}`}>
-                {showYMTamamlanan ? `✓ Tamamlananlar (${ymTamamSayisi})` : `+ Tamamlananlar (${ymTamamSayisi})`}
-              </button>
-            )}
-          </div>
-          {ymIEs.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto">
-            {ymIEs.map(w => {
-              const sel = selectedYMs.has(w.id)
-              const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-              const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
-              return (
-                <button key={w.id} onClick={() => toggleYM(w.id)}
-                  className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-amber/10 border border-amber/30' : mrpDoneYMs.has(w.id) ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={sel} readOnly className="accent-amber" />
-                    <span className="font-mono font-medium text-amber">{w.ieNo}</span>
-                    {mrpDoneYMs.has(w.id) && <span className="px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">MRP ✓</span>}
-                    <span className="text-zinc-500 ml-auto">{pct}%</span>
-                  </div>
-                  <div className="text-zinc-500 truncate mt-0.5">{w.malad} · {w.hedef - prod} kalan</div>
-                </button>
-              )
-            })}
-          </div>
-          ) : (
-            <div className="p-2 text-center text-xs text-green">✓ Tüm YM İE'lerin MRP hesabı yapıldı.</div>
-          )}
-        </>)}
+        {/* v15.59 (İş Emri #13 madde 18) — "Bağımsız YM İş Emirleri" bölümü kaldırıldı.
+            Yapı birleşti: yeni iş emirleri sipariş listesinde görünür (IE-AUTO-... siparis_no ile).
+            Eski IE-MANUAL bağımsız WO'ları artık MRP'de gösterilmiyor — geçmiş veri olarak kabul edildi.
+            ymIEs/selectedYMs/mrpDoneYMs state ve useMemo'ları dursun (ölü kod, ileride temizlenir).
+        */}
 
         <div className="flex items-center gap-3 mt-3">
-          <button onClick={() => hesapla()} disabled={!can('mrp_calc') || (!selectedOrders.size && !selectedYMs.size)}
+          <button onClick={() => hesapla()} disabled={!can('mrp_calc') || !selectedOrders.size}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             Hesapla →
           </button>
-          <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş{selectedYMs.size > 0 ? ` · ${selectedYMs.size} YM İE` : ''} seçili</span>
+          <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş seçili</span>
           <span className="flex-1" />
           <button onClick={senkronla} disabled={!can('mrp_calc')}
             title="Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar"
