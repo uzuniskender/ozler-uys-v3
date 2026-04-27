@@ -3,7 +3,7 @@ import { logAction } from '@/lib/activityLog'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -833,21 +833,35 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
       }
     }
 
+    // v15.67 (madde 10 iskelet) — Sipariş eksildiyse fazla bekleyen tedarikleri düzelt
+    // Yeni MRP sonucunda net=0 olan malzemelerin bekleyen tedarikleri iptal/azaltılır.
+    let dzAzaltilan = 0
+    let dzIptal = 0
+    try {
+      const dz = await mrpTedarikDuzelt(order.id, rows)
+      dzAzaltilan = dz.azaltilan
+      dzIptal = dz.iptalEdilen
+    } catch (e) {
+      console.warn('[v15.67 runMRP] Tedarik düzeltme hatası:', e)
+    }
+
     loadAll()
     await triggerRezerveSync()
 
     // Toast mesajı duruma göre (eski: hep "X malzeme hesaplandı"; yeni: kullanıcı net bilgilendirilir)
     // v15.66 (İş Emri #13 madde 7) — Tedarik açıldıysa Toast'ta "Tedarikleri Gör" action butonu
+    // v15.67 (madde 10) — Tedarik düzeltildiyse de bilgi
     const tedarikAction = { label: 'Tedariklere Git', onClick: () => navigate('/procurement') }
+    const dzInfo = (dzIptal + dzAzaltilan > 0) ? ` · ${dzIptal} tedarik iptal, ${dzAzaltilan} azaltıldı (sipariş eksildi)` : ''
     if (yeniDurum === 'tamam') {
-      toast.success(`${rows.length} malzeme hesaplandı — tüm stoklar yeterli ✓`)
+      toast.success(`${rows.length} malzeme hesaplandı — tüm stoklar yeterli ✓${dzInfo}`, dzInfo ? { duration: 8000, action: tedarikAction } : undefined)
     } else if (acilanTedarikSay > 0) {
-      toast.success(`${rows.length} malzeme hesaplandı — ${acilanTedarikSay} tedarik otomatik açıldı`, { duration: 8000, action: tedarikAction })
+      toast.success(`${rows.length} malzeme hesaplandı — ${acilanTedarikSay} tedarik otomatik açıldı${dzInfo}`, { duration: 8000, action: tedarikAction })
     } else if (!can('tedarik_auto')) {
-      toast.warning(`${rows.length} malzeme hesaplandı — eksikler var, otomatik tedarik yetkiniz yok`, { duration: 8000 })
+      toast.warning(`${rows.length} malzeme hesaplandı — eksikler var, otomatik tedarik yetkiniz yok${dzInfo}`, { duration: 8000 })
     } else {
       // Eksik var ama açılan 0 → tüm ihtiyaçlar zaten bekleyen tedarikle karşılanıyor (F-21 idempotent skip)
-      toast.info(`${rows.length} malzeme hesaplandı — eksikler mevcut bekleyen tedariklerle karşılanıyor`, { duration: 8000, action: tedarikAction })
+      toast.info(`${rows.length} malzeme hesaplandı — eksikler mevcut bekleyen tedariklerle karşılanıyor${dzInfo}`, { duration: 8000, action: tedarikAction })
     }
   }
 

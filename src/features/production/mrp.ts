@@ -490,6 +490,79 @@ export async function mrpTedarikOlustur(
   return kayitliSay
 }
 
+// ═══ v15.67 — TEDARİK DÜZELTME (İş Emri #13 madde 10 iskelet) ═══
+// Sipariş silindiğinde/eksildiğinde fazla bekleyen tedarikleri otomatik düşür/iptal eder.
+//
+// Spec madde 10: "Sipariş silinirse/eksilirse... MRP fazla olmuş olacak. Tedarik sayfasında
+// sipariş gelmediyse miktar düzeltilir, geldiyse malzeme stoğa girer."
+//
+// Mantık:
+//   - Yeni MRP sonucunda bir malzemenin net'i 0 ise ve o sipariş için bekleyen tedarik varsa
+//     → tedarik tamamen iptal edilir (DELETE)
+//   - Bekleyen tedarik miktarı yeni ihtiyaçtan fazla ise → miktar yeni ihtiyaca düşürülür
+//   - GELDİ=true tedarikler dokunulmaz (zaten stoğa girmiş, spec'e uygun)
+//
+// Çağrılma yeri: runMRP (Orders.tsx) sonunda, mrpTedarikOlustur'dan SONRA çalıştırılır
+// (idempotent: yeni eklenen tedarikler düzeltilmez, sadece ESKİ fazlalar).
+//
+// İskelet: Bu adım tek başına eksik. İleride (madde 11 ile) miktar artışı durumu eklenecek.
+export async function mrpTedarikDuzelt(
+  orderId: string,
+  yeniMrpRows: MRPRow[]
+): Promise<{ azaltilan: number; iptalEdilen: number }> {
+  let azaltilan = 0
+  let iptalEdilen = 0
+  if (!orderId) return { azaltilan, iptalEdilen }
+
+  // Mevcut bekleyen tedarikleri çek (sadece bu siparişe ait + gelmemiş)
+  const { data: mevcut, error: tErr } = await supabase
+    .from('uys_tedarikler')
+    .select('id, malkod, miktar, teslim_tarihi')
+    .eq('order_id', orderId)
+    .eq('geldi', false)
+
+  if (tErr) {
+    console.warn('[v15.67 mrpTedarikDuzelt] Bekleyen tedarik fetch fail:', tErr.message)
+    return { azaltilan, iptalEdilen }
+  }
+
+  // Yeni MRP'de her malkod için toplam ihtiyaç (termin gruplama dahil)
+  const yeniIhtiyacMap: Record<string, number> = {}
+  for (const r of yeniMrpRows) {
+    const k = (r.malkod || '').trim().toLowerCase()
+    yeniIhtiyacMap[k] = (yeniIhtiyacMap[k] || 0) + Math.max(0, r.net)
+  }
+
+  for (const t of (mevcut || [])) {
+    const k = (t.malkod || '').trim().toLowerCase()
+    const yeniIhtiyac = yeniIhtiyacMap[k] || 0
+    const mevcutMiktar = t.miktar || 0
+
+    if (yeniIhtiyac <= 0) {
+      // Bu malzemeye yeni MRP'de hiç ihtiyaç yok → tedariği tamamen iptal et
+      await supabase.from('uys_tedarikler').delete().eq('id', t.id)
+      // Bağlı stok hareketi (ted-{id} formatında) varsa o da silinir — ileride geldi=true olursa
+      // duplicate önleme. Şu an geldi=false olduğu için stok hareketi henüz yok ama emniyet için.
+      await supabase.from('uys_stok_hareketler').delete().eq('id', `ted-${t.id}`)
+      iptalEdilen++
+    } else if (mevcutMiktar > yeniIhtiyac) {
+      // Bekleyen tedarik fazla → miktar yeni ihtiyaca düşürülür
+      await supabase.from('uys_tedarikler').update({ miktar: yeniIhtiyac }).eq('id', t.id)
+      // İhtiyaç haritasını güncelle — aynı malkod için başka tedarik varsa yeniden saymasın
+      yeniIhtiyacMap[k] = 0
+      azaltilan++
+    } else {
+      // mevcutMiktar <= yeniIhtiyac → dokunma, yeniIhtiyac'tan ne kadar düşülecek hesapla
+      yeniIhtiyacMap[k] = yeniIhtiyac - mevcutMiktar
+    }
+  }
+
+  if (iptalEdilen + azaltilan > 0) {
+    console.log(`[v15.67 mrpTedarikDuzelt] orderId=${orderId} iptal=${iptalEdilen} azaltilan=${azaltilan}`)
+  }
+  return { azaltilan, iptalEdilen }
+}
+
 // ═══ MRP REZERVE YAZMA — Faz B Parça 2C ═══
 // MRP hesabından sonra ilgili siparişe ait rezervasyon kayıtları oluşturur.
 // Önce o siparişin eski rezervasyonlarını siler, sonra yeni kayıtları yazar.
