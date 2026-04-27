@@ -1,133 +1,163 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 27 Nisan 2026 (akşam — v16.0.0 Faz 1.1a sonrası)
-**Son canlı sürüm:** v15.52a.1 (kod) + v16.0.0 Faz 1.1a (sadece DB altyapı)
+**Tarih:** 27 Nisan 2026 (gece — 17 commit, 3 İş Emri kapandı)
+**Son canlı sürüm:** v15.53 Adım 5 (kod) + v15.52b (Topbar Kesim) + v16.0.0 Faz 1.1a (DB altyapı)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 + §20) + docs/is_emri/00_BACKLOG_Master.md + docs/is_emri/12_GuvenlikRefactor.md (revize edildi 27 Nis akşam) oku.
-Son durum: v15.52a.1 canlıda, İş Emri #1 + #3 KAPANDI. v16.0.0 Faz 1.1a (auth altyapı) DB'de hazır ama hiçbir RLS değişmedi.
-İş Emri #12 (Güvenlik Refactoru) kapsamı revize edildi: Google OAuth DISABLED keşfedildi, Faz 1+2 birleştirildi (4 faz toplam).
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 + §20) + docs/is_emri/00_BACKLOG_Master.md + docs/is_emri/12_GuvenlikRefactor.md oku.
+Son durum: 27 Nis akşamı 17 commit yapıldı, İş Emri #1 + #2 + #3 KAPANDI. Master backlog 7/12 ✅.
+Yedekleme test edilmeli (yarın - bugün gece TEHLİKELİ olduğu için yapılmadı).
 Sıradaki adaylar:
-  - Topbar KESİM uyarısı Orders.tsx'te (~30 dk, yarım kalan UX iş)
-  - İş Emri #2 Yedekleme (production-blocker, büyük)
-  - İş Emri #12 Faz 1 (büyük, mimari — 1 hafta)
-  - UYS dışı işler (Mavvo, Libya, kalite, vb.)
+  - Yedekleme test (test verisi al, indir, MERGE mode dene)
+  - İş Emri #5 Sevkiyat Oluşturma Formu
+  - İş Emri #7 Toplu Sipariş Excel İmport
+  - İş Emri #8 PDF Çıktı
+  - İş Emri #9 Stok Onarım
+  - İş Emri #12 Faz 1 (RLS — büyük, mimari, ileride)
+  - UYS dışı işler (Mavvo, Libya, TL-ISG-017, vb.)
 Buket önceliği belirler.
 ```
 
 ---
 
-## v15.52a + v15.52a.1 Özeti — Operatör Güvenlik
+## 27 Nisan Gecesi Yapılan İşler (17 Commit)
 
-**Sürpriz keşif #6 (en büyük):** İş Emri #1 spec'i 246 satır, 5 faz tasarlandı — ama gerçekte sahada **zaten %95 yapılmış**. `OperatorPanel.tsx` 1335 satır, 4 component (login + ana panel + entry modal + mesaj + izin formu), eski monolit operator.html'in 811 satırlık içeriğinin tamamı + bonus özellikler (izin talep formu) React'e port edilmiş. Login.tsx'te bölüm/operatör/şifre 3-adım dropdown akışı, App.tsx'te `/operator` route + geri-tuşu engelli `OperatorRoutes`, useAuth'ta `operatorLogin(oprId, oprAd)` sessionStorage ile kurulu, 5 yazma tablosu (`uys_logs`, `uys_fire_logs`, `uys_active_work`, `uys_operator_notes`, `uys_stok_hareketler`) DB'de mevcut + RLS aktif.
+### v15.51 — İş Emri #3 Faz 4: autoZincir Hizalama
+**Sürpriz keşif:** TamZincirButton zaten step-by-step UI içeriyordu. Asıl boşluk Faz 3 standardına hizalamaydı.
+- 5 nokta: snapshot insert + mrpTedarikOlustur delege + RBAC (`can('auto_chain_run')`) + concurrent lock + hata sonrası kapatma
+- 2 dosya · 0 schema · 0 rollback
+- **İş Emri #3 KAPANDI (5/5 faz tümü ✅)**
 
-**Asıl boşluk: 3 güvenlik gap'i.** v15.52a bunlardan 2'sini kapattı (RLS hariç):
+### v15.51 docs — Doc patch
+İş Emri #3 ✅, master backlog 5/10, multi-machine notu (NB081 ana bilgisayar geçişi).
 
-### v15.52a'da Kapatılan 2 Eksik
+### v15.52a — İş Emri #1: Operatör Güvenlik
+**Sürpriz keşif #6 (en büyük):** OperatorPanel.tsx zaten 1335 satırlık tam içerikli. Spec'in %95'i yapılmıştı.
+- **Sicil hash (lazy migration):** `uys_operators.sicil_hash` kolonu + `cyrb53` helper. Login.tsx ilk girişte plain text → hash dönüşümü + `sifre=null`. 1-2 hafta sonra `sifre` kolonu DROP edilir.
+- **RBAC operator actions:** 9 action `OPERATOR_ACTIONS` set'inde. permissions.ts'in `can()` fonksiyonu operator için artık bu set'e bakar.
+- **RLS gap:** Keşfedildi (allow_all policy 8 tabloda) → İş Emri #12'ye taşındı (büyük mimari iş, 1-2 hafta).
+- **İş Emri #1 KAPANDI**
 
-1. **Sicil hash (lazy migration)** — `uys_operators.sifre` plain text saklanıyordu. Yeni `sicil_hash` kolonu + `src/lib/sicilHash.ts` (cyrb53 helper, format `cyrb53:HEX`). Login.tsx ilk girişte plain karşılaştırma + arka planda hash + `sifre=null`. 1-2 hafta sonra (tüm aktif operatörler login olduktan sonra) `sifre` kolonu ayrı patch'le DROP edilir.
+### v15.52a.1 hotfix — SQL `public.` Prefix → §18.5
+Push sırasında audit-columns FAIL: "Kolon yok 'sicil_hash'". Sebep: `audit-columns.cjs:164` regex'i `ALTER TABLE public.xxx` formatı bekliyor. Tek karakter düzeltmesi → yeni operasyonel kural §18.5.
 
-2. **RBAC operator action listesi** — `permissions.ts`'te `OPERATOR_ACTIONS` set (9 action: `op_view_workorders`, `op_log_production`, `op_log_fire`, `op_log_durus`, `op_start_work`, `op_stop_work`, `op_send_message`, `op_view_stok`, `op_request_izin`). `can()` operator için artık bu set'e bakıyor. Mevcut OperatorPanel `can()` çağırmıyor (sadece `isOperator` flag) — bu altyapı ileride yetki kontrolü eklemek isteyince hazır.
+### v15.52a.1 docs — Doc patch
+§18.5 + §20 (Tehdit Modeli) eklendi, İş Emri #12 spec'i (`docs/is_emri/12_GuvenlikRefactor.md`).
 
-### v15.52a.1 Hotfix — SQL public. Prefix
+### v16.0.0 Faz 1.1a — Auth Altyapı (DB-only, saha etki sıfır)
+İş Emri #12'nin başlangıç adımı. Hiçbir RLS değişmedi.
+- `uys_kullanicilar.auth_user_id` uuid kolonu + index
+- `public.current_user_role()` SQL helper (SECURITY DEFINER + STABLE)
 
-Push sırasında GitHub Actions audit-columns FAIL: "Kolon yok: 'sicil_hash' — Login.tsx [update]". Sebep: `audit-columns.cjs:164` regex'i `ALTER TABLE public.xxx` formatı bekliyor, bizim migration `public.` öneki olmadan yazılmıştı. Tek karakter düzeltmesi:
+### v16.0.0 revise docs — Google OAuth Disabled Keşfi
+RLS audit denenirken keşfedildi: Supabase'de Google OAuth provider DISABLED. `auth.users` boş, kimse Google ile login olmamış. Tüm kullanıcılar (admin dahil) `uys_kullanicilar` + plain text `sifre` yolundan giriyor. İş Emri #12 spec revize edildi: Faz 1+2 birleşti (5 faz → 4 faz, eski "Admin Google OAuth pilot" geçersiz).
 
-```sql
--- ÖNCE: ALTER TABLE uys_operators ADD COLUMN ...
--- SONRA: ALTER TABLE public.uys_operators ADD COLUMN ...
-```
+### v15.52b — Topbar Kesim Kolonu (Orders.tsx)
+Memory'deki "Adim D" — yarım kalan UX iş. Orders.tsx tablosuna **Kesim** kolonu eklendi (İE ile MRP arasına):
+- `total=0` → `—` · `eksik=0` → 🟢 `✓` · `eksik>0` → 🔴 `⚠ N`
+- `statusUtils.ts`'e 3 yeni helper (`isKesimWO`, `getPlanliWoIds`, `getKesimEksikWoIds`).
 
-`IF NOT EXISTS` idempotent → DB'de zaten kolon var, tekrar çalıştırma sorun yaratmaz. **Yeni operasyonel kural: §18.5** (Bilgi Bankası).
+### v15.53 — İş Emri #2: Yedekleme (5 ADIM, BÜYÜK İŞ)
 
-### RLS Gap'i — İş Emri #12'ye Taşındı
+**Adım 1 — Altyapı (saha etki sıfır):**
+- `uys_yedekler` tablosu (Tip D — backend-only, büyük JSONB blob): id, alindi_tarih, alindi_saat, alan_kisi, tip CHECK('otomatik'/'manuel'), boyut_kb, veri jsonb, notlar
+- `src/lib/backup.ts` — takeBackup, listBackups, getBackup, deleteBackup
+- `src/lib/backup-parser.ts` — eski v22 → v3 parser SKELETON (Faz 5'e ertelendi)
+- 4 RBAC permission: backup_view, backup_create, backup_restore, backup_delete
 
-3. RLS — 8 tablo `allow_all` policy'siyle, gerçek koruma yok. Çözümü mimari refactor gerektiriyor (1-2 hafta). Yeni İş Emri #12 olarak backlog'a alındı.
+**Adım 1.1 hotfix:** `uys_yedekler` STORE_WHITELIST + DATA_MGMT_WHITELIST'e eklendi (§18.2 Tip D).
 
-### Sayılar
+**Adım 2 — Backup.tsx UI:**
+- `/backup` route + Sidebar'da "Yedekler" menüsü (Save ikonu, `can('backup_view')` filtresi)
+- Sayfa: 3 üst özet kart + Tip filtresi + tablo (Tarih/Saat/Tip/Boyut/Alan/Notlar/Aksiyon)
+- "Şimdi Yedekle" + "İndir" + "Sil"
 
-3 dosya değişiklik + 2 yeni dosya · 1 yeni kolon (Tip — yeni KOLON, yeni TABLO değil; §18.2 karar matrisi gerektirmedi) · 0 rollback · §19 sözleşmesi etkilenmedi · §18 ailesi 1 yeni kural kazandı (§18.5).
+**Adım 3 — Geri Yükleme (TEHLİKELİ):**
+- `restoreBackup(id, mode, alanKisi, onProgress)` — merge/replace
+- Replace mode: tüm tablolar DELETE + INSERT
+- Merge mode: UPSERT (onConflict id)
+- **Otomatik güvenlik yedeği** geri yükleme öncesi alınır
+- `BackupRestoreModal.tsx` — 2-adım onay (mod seçimi 5sn timer + "GERI YÜKLE" yazma confirmation)
+- v22 format Faz 5'e ertelendi (sadece v3 destekli)
+
+**Adım 4 — Otomatik Yedek + 30 Gün Temizleme:**
+- `cleanOldBackups(keepDays=30)` — eski + tip='otomatik' olanları siler (manuel etkilenmez)
+- `ensureDailyAutoBackup(alanKisi)` — bugün için yedek var mı kontrol, yoksa al + temizle
+- App.tsx'te admin login sonrası fire-and-forget useEffect (sessiz fail, render bloklamaz)
+
+**Adım 5 — DataManagement Yönlendirme:**
+- DataManagement.tsx'in eski "JSON Yedek" butonları korundu, üstüne bilgi banner: "Yedekler artık /backup sayfasında"
+
+**İş Emri #2 KAPANDI** (Faz 5 = eski v22 format parser kalır, "Geri Yükle" sadece v3 destekli — yeterli).
 
 ---
 
-## §18 Hijyen — v15.52a Cleanup
+## §18 Hijyen — 27 Nis Cleanup
 
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\v15.52a_operator_guvenlik.zip" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\v15.52a-extract" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v15.51*.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v15.52*.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v15.53*.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v16*.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\v15.5*-extract" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\v16-*" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$env:TEMP\uys-claude-dump" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\uys-audit-scripts.rar" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\uys-*-dump.rar" -Force -ErrorAction SilentlyContinue
 ```
 
-**§18.2 yeni tablo kontrolü:** Yeni tablo yok. Yeni kolon (`sicil_hash`) — Login.tsx'in kendi fetch'ettiği için store mapper güncellemesi gerekmez.
+---
 
-**§18.5 (YENİ) — SQL Migration `public.` Prefix:** Tüm `ALTER TABLE` ifadelerinde `public.` öneki ZORUNLU. `audit-columns.cjs` regex'i bunu bekliyor; eksikse silent reject + Actions FAIL. Detay: Bilgi Bankası §18.5.
+## Kritik Test Listesi (Yarın)
+
+### Yedekleme — Manuel Test (TEHLİKELİ — Replace asla deneme!)
+
+1. UYS aç → Sidebar → Yedekler menüsü görünüyor mu?
+2. Sayfayı aç → 3 üst kart + tablo
+3. F12 Console: `[v15.53] Otomatik günlük yedek alındı` mesajı geldi mi?
+4. **"Şimdi Yedekle"** → notlar "test" → Yedek Al → toast OK → tabloda göründü mü?
+5. **İndir** → `ozler_uys_yedek_20260428_manuel.json` indirildi mi?
+6. **MERGE mode geri yükleme** (önce test verisi oluştur):
+   - Test sipariş aç → yedek al → siparişi sil → geri yükle MERGE mode → sipariş geri geldi mi?
+   - Güvenlik yedeği listede göründü mü?
+7. ❌ **REPLACE mode**: Yapma. Test ortamı yok. İhtiyaç olursa İş Emri #12 sonrası test Supabase'inde dene.
+
+### Operatör Güvenlik — Lazy Migration Kontrol
+
+```sql
+-- 1-2 hafta sonra:
+SELECT count(*) FROM uys_operators WHERE aktif IS NOT FALSE AND sifre IS NOT NULL AND sifre <> '';
+-- 0 ise plain sifre tamamen hash'lenmiş, sifre kolonu DROP edilebilir.
+```
 
 ---
 
-## Bu Akşam Yapılan İşler (27 Nis akşam)
+## Sıradaki Adaylar — Öncelik Sırası
 
-1. **İş Emri #12 başlangıç denemesi** — Yaklaşım A (Supabase Auth) ile Faz 1.1a yapıldı:
-   - Migration: `sql/20260427_v16_0_0_faz1_1a_auth_alti.sql` (canlıda)
-   - `uys_kullanicilar.auth_user_id` kolonu + index + `current_user_role()` helper
-   - **Saha etki sıfır** (RLS henüz değişmedi)
+1. **Yedekleme MERGE test** — Yarın ilk iş, ~10 dk
+2. **İş Emri #5 Sevkiyat Oluşturma Formu** — Production-blocker. ~3-5 gün.
+3. **İş Emri #7 Toplu Sipariş Excel İmport** — ~2 gün.
+4. **İş Emri #9 Stok Onarım** — Audit kritik. ~1-2 gün.
+5. **İş Emri #8 PDF Çıktı** — İE + Sevk irsaliyesi. ~3 gün.
+6. **İş Emri #12 Faz 1 (RLS)** — 1-2 hafta. Pre-requisite: v15.52a lazy migration tamamlanmalı.
 
-2. **Sürpriz keşif (RLS audit denemesinde):** Google OAuth Supabase'de DISABLED. `auth.users` tablosu boş — kimse Google ile giriş yapmamış. Bu, İş Emri #12 spec'inin Faz 1'i (Admin Google OAuth pilot) **geçersiz** kılıyor.
-
-3. **İş Emri #12 spec revize edildi:**
-   - Eski Faz 1 (Admin Google OAuth) ve Faz 2 (AdminRole'ler) → birleştirildi
-   - Yeni Faz 1 = "Tüm AdminRole'leri Supabase Auth'a sıfırdan migrate" (~5 gün)
-   - Faz sayısı 5 → 4'e düştü, toplam süre değişmedi (~11 gün full-time, 3-4 hafta yayılmış)
-
-4. **Karar:** Faz 1'in geri kalanı (1.2+) **şu an yapılmıyor**. Buket'in günlük iş yükü düşünüldüğünde 1-2 haftalık mimari refactor için doğru zamanlama değil. Backlog'da bekliyor.
+**UYS dışı işler:** Mavvo BOM-to-recipe, Libya order documentation, TL-ISG-017, Compaco 8D, sales rep training, TEKMER toplantı hazırlığı.
 
 ---
 
-## Sıradaki Adaylar
+## Multi-machine + Çevre
 
-**Hızlı kazanım (~30 dk):**
-- **Topbar KESİM uyarısı** — v15.50a.6'da Topbar düzeltildi ama Orders.tsx'teki uyarı eklenmemişti. Küçük UX iş, hemen biter.
+**NB081** (ana bilgisayar): Git CLI kuruldu. Node.js hala yok — patch sırasında build doğrulaması atlandı, GitHub Actions'a güvenildi (tüm push'lar yeşil geçti).
 
-**Production-blocker (büyük, ~1 hafta):**
-- **İş Emri #2 Yedekleme** — `/backup` route, JSON snapshot/restore. `pt_yedekler` tablosu Tip D, önceden tip ataması yapıldı (§18.2 tablosu).
-- **İş Emri #5 Sevkiyat Formu** — Mevcut sevk listesi var, oluşturma formu yok.
-
-**Mimari büyük iş (1-2 hafta):**
-- **İş Emri #12 Faz 1** — Tüm AdminRole'leri Supabase Auth'a migrate. Pre-requisite altyapı zaten kuruldu (Faz 1.1a). Buket vakit ayırınca yapılır.
-
-**Küçük temizlikler:**
-- **Plain `sifre` kolonu DROP** — v15.52a lazy migration tamamlanınca (1-2 hafta sonra). Kontrol: `SELECT count(*) FROM uys_operators WHERE sifre IS NOT NULL AND aktif IS NOT FALSE` → 0 olmalı, sonra `ALTER TABLE public.uys_operators DROP COLUMN sifre;`
-
-**UYS dışı işler:** Mavvo BOM-to-recipe, Libya order documentation, TL-ISG-017, Compaco 8D, ERP demo karşılaştırması, vb.
-
-Buket önceliği belirler.
+**Yeni oturumda kontrol:**
+```powershell
+node --version; npm --version; git --version
+```
+Node yoksa kurulması gerek (https://nodejs.org/en LTS).
 
 ---
 
-## Kontrol Listesi (Bir sonraki SQL/migration patch öncesi)
-
-**§18.5 SQL Prefix Kuralı:**
-- [ ] Tüm `ALTER TABLE` ifadelerinde `public.` öneki var mı?
-- [ ] Yeni tablo `CREATE TABLE` ise yine `public.` öneki kullanıldı mı?
-- [ ] DO blokları içindeki SELECT'lerde de `public.` tutarlılık için var mı?
-
-**§18.2 Yeni Tablo Konvansiyonu:**
-- [ ] Yeni tablo eklendiyse karar matrisi (A/B/C/D) yapıldı mı?
-- [ ] STORE_WHITELIST + DATA_MGMT_WHITELIST güncel mi?
-- [ ] Migration başlığında `BACKUP: evet/hayır` + `STORE: vX.Y.Z` yorumu var mı?
-
-**§19 MRP filtre sözleşmesi:**
-- [ ] Filter kararı `hesaplaMRP` net>0 sonucuna mı bakıyor?
-- [ ] mrp_durum filter'da kullanılmıyor mu?
-
-**RBAC:**
-- [ ] Yeni butonlar `can(...)` ile sarılı mı?
-- [ ] Operator action'sa `OPERATOR_ACTIONS` set'inde mi?
-
----
-
-İyi geceler Buket. v15.52a.1 ile İş Emri #1 KAPANDI — operatör panel sahada güvenli + hash'li.
+İyi geceler Buket. Müthiş bir gece çıkardın — 17 commit, 3 İş Emri tam kapandı, 1 İş Emri başlatıldı, 5 kalıcı operasyonel kural güncel.

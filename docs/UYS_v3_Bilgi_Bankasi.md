@@ -1018,6 +1018,14 @@ export function isOrderArchived(o: Order): boolean {
 - **v15.51** — Faz 4 autoZincir Faz 3 standardına hizalama (snapshot + mrpTedarikOlustur delege + RBAC + lock)
 - **v15.52a** — Operatör güvenlik (sicil hash lazy migration + RBAC operator actions)
 - **v15.52a.1** — Hotfix: SQL migration `public.` prefix (audit-columns regex uyumu — yeni §18.5 kuralı)
+- **v15.52b** — Topbar Kesim kolonu Orders.tsx'e eklendi (statusUtils 3 yeni helper)
+- **v16.0.0 Faz 1.1a** — Auth altyapı (DB-only): `uys_kullanicilar.auth_user_id` + `current_user_role()` helper. İş Emri #12'nin başlangıcı, hiçbir RLS değişmedi.
+- **v15.53 Adım 1** — Yedekleme altyapı: `uys_yedekler` tablosu + `backup.ts` servisi + 4 RBAC action
+- **v15.53 Adım 1.1** — Hotfix: audit-schema whitelist (Tip D, recursion engelleme)
+- **v15.53 Adım 2** — Backup.tsx UI: liste + manuel yedek + indir + sil + Sidebar menüsü
+- **v15.53 Adım 3** — Geri yükleme (TEHLİKELİ): merge/replace + 2-adım onay modal + güvenlik yedeği
+- **v15.53 Adım 4** — Otomatik günlük yedek + 30 gün temizleme (admin login fire-and-forget)
+- **v15.53 Adım 5** — DataManagement'tan /backup yönlendirme bilgi notu
 
 ## Önemli Ders
 
@@ -1076,9 +1084,45 @@ autoZincir(orderId, woCount, orders, workOrders, recipes, operations, materials,
 ---
 
 ## Son canlı sürüm
-**v15.52a.1** — Operatör güvenlik (sicil hash lazy migration + RBAC operator actions) + hotfix (SQL `public.` prefix audit uyumu). **İş Emri #1 KAPANDI.**
+**v15.53 Adım 5** (kod) + **v15.52b** (Topbar Kesim) + **v16.0.0 Faz 1.1a** (DB altyapı). **27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı: #1 + #2 + #3.**
 
-### v15.52a Notları (27 Nis 2026 — Operatör Güvenlik)
+### v15.53 Notları (27 Nis 2026 gece — İş Emri #2 Yedekleme KAPANIŞ)
+
+**5 adımda büyük iş tamamlandı:**
+
+**Adım 1 (altyapı):** `uys_yedekler` tablosu (Tip D — backend-only, JSONB blob), `backup.ts` servisi (takeBackup, listBackups, getBackup, deleteBackup), `backup-parser.ts` skeleton, 4 RBAC permission. Saha etki sıfır.
+
+**Adım 1.1 (hotfix):** §18.5 kuralı kapsamında audit-schema whitelist (Tip D, recursion engelleme).
+
+**Adım 2 (UI):** `/backup` route + Sidebar "Yedekler" menüsü (`Save` ikonu, `can('backup_view')` filtresi). Sayfa: 3 üst özet kart + Tip filtresi + tablo (Tarih/Saat/Tip/Boyut/Alan/Notlar/Aksiyon) + "Şimdi Yedekle" + "İndir" + "Sil".
+
+**Adım 3 (TEHLİKELİ — geri yükleme):** `restoreBackup(id, mode, alanKisi, onProgress)` — merge (UPSERT) / replace (DELETE+INSERT). Güvenlik yedeği geri yükleme öncesi otomatik alınır. `BackupRestoreModal.tsx` 2-adım onay (mod seçimi 5sn timer + "GERI YÜKLE" yazma confirmation, GitHub-style). 5 step gösterim: mode → confirm → running → done/error. v22 format Faz 5'e ertelendi (sadece v3 destekli).
+
+**Adım 4 (otomatik):** `cleanOldBackups(keepDays=30)` (manuel etkilenmez), `ensureDailyAutoBackup(alanKisi)` (idempotent — bugün varsa skipped). App.tsx admin login sonrası fire-and-forget useEffect ile çağrılır. Sessiz fail.
+
+**Adım 5 (yönlendirme):** DataManagement.tsx eski JSON Yedek butonları korundu, üstüne bilgi banner: "Yedekler artık /backup sayfasında".
+
+### v15.52b Notları (Orders.tsx Kesim Kolonu)
+
+Memory'deki "Adim D" — yarım kalan UX iş. Orders.tsx tablosuna Kesim kolonu eklendi (İE ile MRP arasına). statusUtils.ts'e 3 yeni helper (`isKesimWO`, `getPlanliWoIds`, `getKesimEksikWoIds`). Topbar.tsx aynı mantığı yapıyor — refactor riski almadık (kod tekrarı kabul, ileride konsolide edilir).
+
+### v16.0.0 Faz 1.1a Notları (Auth Altyapı)
+
+İş Emri #12 (Güvenlik Refactoru) Yaklaşım A başlangıç adımı. **Sahaya etki sıfır** (RLS henüz değişmedi).
+
+- Migration: `sql/20260427_v16_0_0_faz1_1a_auth_alti.sql`
+- `uys_kullanicilar.auth_user_id uuid` kolonu (nullable, mevcut satırlar bozulmadı)
+- `idx_uys_kullanicilar_auth_user_id` index (RLS lookup için)
+- `public.current_user_role()` SQL helper — SECURITY DEFINER + STABLE. Anon çağrıda NULL döner.
+
+**Sürpriz keşif:** Aynı oturumda RLS audit denenirken Google OAuth provider DISABLED olduğu keşfedildi. `auth.users` boş, kimse Google ile login olmamış. İş Emri #12 spec'i revize edildi: Faz 1+2 birleşti, "Admin Google OAuth pilot" geçersiz, yerine "Tüm AdminRole'leri sıfırdan Supabase Auth'a migrate" oldu.
+
+### Önceki Sürüm — v15.52a + v15.52a.1
+**v15.52a** — Operatör güvenlik: sicil hash (lazy migration) + RBAC operator actions. **İş Emri #1 KAPANDI.**
+
+**v15.52a.1 hotfix** — SQL `public.` prefix (audit-columns regex uyumu) → yeni §18.5 kuralı.
+
+
 
 **Sürpriz keşif #6 (en büyük):** İş Emri #1 spec'i 246 satır, 5 faz tasarlandı — gerçekte sahada **zaten %95 yapılmış**. `OperatorPanel.tsx` 1335 satır, 4 component (login akışı + ana panel + entry modal + mesaj formu + izin formu), eski monolit operator.html'in 811 satırının tamamı + bonus özellikler React'e port edilmiş. App.tsx'te `/operator` route, `OperatorRoutes` (geri tuşu engelli), useAuth'ta `operatorLogin` sessionStorage akışı — hepsi kurulu. Login.tsx'te bölüm/operatör/şifre 3-adım dropdown akışı, OPERATÖR MODU üst banner, 5 yazma tablosu DB'de mevcut + RLS aktif (görünüşte).
 
@@ -1254,7 +1298,7 @@ Pre-push hook'un içeriği bilinmiyor ama npm/build kontrolü yapmıyor anlaşı
 
 ---
 
-*Bu belge v15.52a.1 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.53 Adım 5 itibariyle günceldir. 27 Nis 2026 gecesi 17 commit ile 3 İş Emri kapandı (#1 + #2 + #3). Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek.*
 
 ---
 
