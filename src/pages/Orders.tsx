@@ -545,14 +545,33 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     setSaving(false)
 
     // v15.36 — Yeni sipariş akışı: flow başlat + kesim planına yönlendir
-    // Revize/güncelleme için akış başlatma (sadece yeni sipariş)
+    // v15.60 (İş Emri #13 madde 6) — Koşullu: kesim opsiyonlu WO varsa /cutting'e,
+    // yoksa modal kapanır (MRP otomatik tedarik F-19/20 zaten devrede).
     if (!initial && user) {
       const userId = user.dbId || user.email || user.username || ''
       const userAd = user.username || ''
 
+      // v15.60 — Bu siparişin oluşturduğu WO'larda kesim opsiyonu var mı?
+      // Yeni WO'lar yukarıda buildWorkOrders ile insert edildi; createdOrderId üzerinden çek.
+      let kesimVarMi = false
+      if (createdOrderId) {
+        const { data: yeniWOs } = await supabase
+          .from('uys_work_orders')
+          .select('id, op_ad')
+          .eq('order_id', createdOrderId)
+        kesimVarMi = (yeniWOs || []).some(w => isKesimWO({ opAd: w.op_ad }))
+      }
+
+      if (!kesimVarMi) {
+        // Kesim WO yok → /cutting'e gitmek anlamsız. Modal kapanır, MRP otomatik akacak.
+        toast.success('Sipariş oluşturuldu — kesim adımı yok, MRP otomatik hesaplanacak')
+        onSaved()
+        return
+      }
+
       if (activeFlowId) {
         // Zaten bir flow vardı (CuttingPlans'tan "yeni sipariş ekle" ile geldik) → aynı flow kalır
-        await advanceFlow(activeFlowId, 'kesim', { siparisNo: siparisNo.trim() })
+        await advanceFlow(activeFlowId, 'kesim', { siparisNo: etkinSiparisNo })
         toast.success('Sipariş eklendi — kesim planına dönülüyor')
         onSaved()
         navigate('/cutting?flow=' + activeFlowId)
@@ -563,7 +582,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
           flowType: 'siparis',
           initialStep: 'kesim',
           userId, userAd,
-          stateData: { siparisNo: siparisNo.trim(), orderId: createdOrderId, baslik: `Sipariş ${siparisNo.trim()}` },
+          stateData: { siparisNo: etkinSiparisNo, orderId: createdOrderId, baslik: `Sipariş ${etkinSiparisNo}` },
         })
         if (flow) {
           toast.success('Sipariş oluşturuldu — kesim planına yönlendiriliyor')
