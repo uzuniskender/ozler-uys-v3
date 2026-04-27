@@ -404,13 +404,15 @@ export function WorkOrders() {
                             <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                           </select>
                           {/* v15.61 — Plan Bekliyor rozeti (madde 17): kesim opsiyonlu + plana atanmamış İE */}
+                          {/* v15.68 — Tıklanabilir: kullanıcıyı Kesim Planları sayfasına yönlendirir (one-click fix) */}
                           {planBekliyorIds.has(w.id) && (
-                            <span
-                              className="text-[9px] px-1.5 py-0.5 rounded bg-amber/15 text-amber border border-amber/30 font-semibold whitespace-nowrap"
-                              title="Bu İE kesim opsiyonu içeriyor ama hiçbir kesim planına atanmamış. Üretim girişi engellenir — önce Kesim Planları sayfasında plan oluşturun."
+                            <button
+                              onClick={() => navigate('/cutting?wo=' + w.id)}
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-amber/15 hover:bg-amber/25 text-amber border border-amber/30 font-semibold whitespace-nowrap cursor-pointer transition-colors"
+                              title="Bu İE kesim opsiyonu içeriyor ama hiçbir kesim planına atanmamış. Tıkla → Kesim Planları sayfasına git, plan oluştur."
                             >
-                              ⚠ Plan Bekliyor
-                            </span>
+                              ⚠ Plan Bekliyor →
+                            </button>
                           )}
                           </div>
                         </td>
