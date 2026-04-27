@@ -33,6 +33,7 @@ import { Messages } from '@/pages/Messages'
 import { ProblemTakip } from '@/pages/ProblemTakip'
 import Chat from '@/pages/Chat'
 import { HmTipleri } from '@/pages/HmTipleri'
+import { Backup } from '@/pages/Backup'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
 
@@ -73,6 +74,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/problem-takip" element={<ProblemTakip />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/hm-tipleri" element={<HmTipleri />} />
+          <Route path="/backup" element={<Backup />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

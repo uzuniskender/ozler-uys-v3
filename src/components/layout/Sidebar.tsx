@@ -6,7 +6,7 @@ import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -44,6 +44,7 @@ const NAV = [
     { path: '/problem-takip', label: 'Problem Takip', icon: AlertOctagon, badge: 'problemlerOpen', guest: false },
     { path: '/test-mode', label: 'Test Modu', icon: FlaskConical, badge: 'activeTest', guest: false },
     { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
+    { path: '/backup', label: 'Yedekler', icon: Save, guest: false },
     { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
   ]},
 ]
@@ -54,7 +55,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const location = useLocation()
   const navigate = useNavigate()
   const store = useStore()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const isGuest = user?.role === 'guest'
   const chatUnread = useChatNotifStore(s => s.unreadCount)
   const chatMentions = useChatNotifStore(s => s.unreadMentionCount)
@@ -127,6 +128,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 {group.label}
               </div>
               {group.items.map(item => {
+                // v15.53 — Yedekler menüsü sadece backup_view yetkisi olanlara
+                if (item.path === '/backup' && !can('backup_view')) return null
                 const active = location.pathname === item.path
                 // Chat için özel: mention + unread count store'dan; diğerleri için getBadge (v15.17)
                 const badge = item.path === '/chat'
