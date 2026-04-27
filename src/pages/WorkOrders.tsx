@@ -35,7 +35,13 @@ export function WorkOrders() {
     (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
 
-  function handleNewIEClick() {
+  // v15.57 (İş Emri #13 madde 1+2) — "Yeni İE" butonu kaldırıldı.
+  // Tüm yeni iş emirleri Siparişler sayfasındaki "Yeni İş Emri" butonu üzerinden açılır.
+  // Eski handleNewIEClick + showNewIE state + NewIEModal render kaldırıldı (NewIEModal
+  // component tanımı dosyada kaldı, ileride Sipariş modal'ında "tekil İE" tiki için
+  // referans olabilir — madde 3'ün Faz A3'ünde değerlendirilir).
+  const navigate = useNavigate()
+  const handleYeniSiparis = () => {
     if (myActiveFlow) {
       toast.warning(
         `Tamamlanmamış akış var: ${myActiveFlow.stateData.baslik || 'Akış'} (${myActiveFlow.currentStep}). ` +
@@ -44,7 +50,7 @@ export function WorkOrders() {
       )
       return
     }
-    setShowNewIE(true)
+    navigate('/orders?yeni=1')
   }
 
   // URL'den ?ie=X&log=Y → detail modal aç + log highlight
@@ -64,7 +70,6 @@ export function WorkOrders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workOrders.length])
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [showNewIE, setShowNewIE] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   function toggleCollapse(key: string) { setCollapsed(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
@@ -273,7 +278,7 @@ export function WorkOrders() {
             }
             if (count > 0) { loadAll(); toast.success(count + ' İE durumu güncellendi') } else toast.info('Tüm durumlar güncel')
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">🔄 Durumları Güncelle</button>
-          {can('wo_add') && <button onClick={handleNewIEClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İE</button>}
+          {can('wo_add') && <button onClick={handleYeniSiparis} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold" title="Yeni iş emri Siparişler sayfasından eklenir"><Plus size={13} /> Yeni İş Emri</button>}
         </div>
       </div>
 
@@ -393,7 +398,7 @@ export function WorkOrders() {
       {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
 
       {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAll} />}
-      {showNewIE && <NewIEModal operations={operations} orders={orders} onClose={() => setShowNewIE(false)} onSaved={() => { setShowNewIE(false); loadAll(); toast.success('İş emri oluşturuldu') }} recipes={recipes} />}
+      {/* v15.57 — NewIEModal render kaldırıldı (madde 1: Yeni İE butonu Sipariş üzerinden) */}
     </div>
   )
 }

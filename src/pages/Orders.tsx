@@ -44,6 +44,7 @@ export function Orders() {
   const [searchParams] = useSearchParams()
   const urlFlowId = searchParams.get('flow') || ''
   const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
+  const urlYeni = searchParams.get('yeni') || ''       // v15.57 — WorkOrders'tan ?yeni=1 ile direk modal aç
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [mrpFilter, setMrpFilter] = useState(urlMrpFilter === 'eksik' ? 'eksik' : 'all')
@@ -55,6 +56,14 @@ export function Orders() {
   }, [urlMrpFilter])
   const [showForm, setShowForm] = useState(false)
   const [editOrder, setEditOrder] = useState<Order | null>(null)
+
+  // v15.57 — WorkOrders sayfasından ?yeni=1 ile gelinince Yeni İş Emri modalını otomatik aç
+  useEffect(() => {
+    if (urlYeni === '1' && !showForm && !editOrder) {
+      setEditOrder(null)
+      setShowForm(true)
+    }
+  }, [urlYeni])
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
   const [showBulkImport, setShowBulkImport] = useState(false)
@@ -283,7 +292,7 @@ export function Orders() {
           {can('orders_add') && <button onClick={() => setShowBulkImport(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>}
           {can('orders_mrp') && <button onClick={topluMRP} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20"><Calculator size={13} /> Toplu MRP</button>}
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
-          {can('orders_add') && <button onClick={handleNewOrderClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni Sipariş</button>}
+          {can('orders_add') && <button onClick={handleNewOrderClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni İş Emri</button>}
         </div>
       </div>
       <div className="flex gap-2 mb-4">
@@ -549,7 +558,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="bg-bg-1 border border-border rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-          <h2 className="text-lg font-semibold">{initial ? 'Sipariş Düzenle' : 'Yeni Sipariş'}</h2>
+          <h2 className="text-lg font-semibold">{initial ? 'Sipariş Düzenle' : 'Yeni İş Emri'}</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={18} /></button>
         </div>
 
