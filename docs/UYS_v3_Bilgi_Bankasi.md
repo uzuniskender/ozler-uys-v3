@@ -1016,6 +1016,8 @@ export function isOrderArchived(o: Order): boolean {
 - **v15.50a.6** — Topbar KESİM badge keyword fix (KESME LAZER yakalanmıyordu)
 - **v15.50b** — Faz 3 MRP Modal entegrasyonu (snapshot insert + RBAC + isOrderArchived)
 - **v15.51** — Faz 4 autoZincir Faz 3 standardına hizalama (snapshot + mrpTedarikOlustur delege + RBAC + lock)
+- **v15.52a** — Operatör güvenlik (sicil hash lazy migration + RBAC operator actions)
+- **v15.52a.1** — Hotfix: SQL migration `public.` prefix (audit-columns regex uyumu — yeni §18.5 kuralı)
 
 ## Önemli Ders
 
@@ -1029,7 +1031,7 @@ export function isOrderArchived(o: Order): boolean {
 
 ---
 
-## Son canlı sürüm
+## Önceki Sürüm — v15.51
 **v15.51** — Faz 4 autoZincir Faz 3 standardına hizalama: snapshot insert + mrpTedarikOlustur delege + RBAC + lock + hata sonrası kapatma. **İş Emri #3 KAPANDI (Faz 1+2+3+4+5 tümü ✅).**
 
 ### v15.51 Notları (27 Nis 2026 — Faz 4 Kapanışı)
@@ -1073,7 +1075,146 @@ autoZincir(orderId, woCount, orders, workOrders, recipes, operations, materials,
 
 ---
 
-## Multi-machine Notu (27 Nis 2026 Eklendi — NB081)
+## Son canlı sürüm
+**v15.52a.1** — Operatör güvenlik (sicil hash lazy migration + RBAC operator actions) + hotfix (SQL `public.` prefix audit uyumu). **İş Emri #1 KAPANDI.**
+
+### v15.52a Notları (27 Nis 2026 — Operatör Güvenlik)
+
+**Sürpriz keşif #6 (en büyük):** İş Emri #1 spec'i 246 satır, 5 faz tasarlandı — gerçekte sahada **zaten %95 yapılmış**. `OperatorPanel.tsx` 1335 satır, 4 component (login akışı + ana panel + entry modal + mesaj formu + izin formu), eski monolit operator.html'in 811 satırının tamamı + bonus özellikler React'e port edilmiş. App.tsx'te `/operator` route, `OperatorRoutes` (geri tuşu engelli), useAuth'ta `operatorLogin` sessionStorage akışı — hepsi kurulu. Login.tsx'te bölüm/operatör/şifre 3-adım dropdown akışı, OPERATÖR MODU üst banner, 5 yazma tablosu DB'de mevcut + RLS aktif (görünüşte).
+
+**Asıl boşluk: 3 güvenlik gap'i. v15.52a 2'sini kapattı:**
+
+#### 1. Sicil Hash (Lazy Migration)
+
+**Önce:** `uys_operators.sifre` plain text saklanıyordu (Login.tsx karşılaştırması). DB dump senaryosunda tüm operatör şifreleri okunabiliyordu.
+
+**Sonra:** `src/lib/sicilHash.ts` yeni dosya — cyrb53 helper (`hashSicil`, `verifySicil`, `isHashed`). Format `cyrb53:HEX` — version prefix sayesinde gelecekte bcrypt/SHA-256'ya geçiş kolay. Migration: `uys_operators.sicil_hash text` kolonu eklendi (Tip — yeni KOLON, yeni TABLO değil, §18.2 karar matrisi gerekmedi).
+
+**Lazy migration mantığı (Login.tsx `doOprLogin`):**
+- Hash varsa → hash karşılaştırması
+- Hash yoksa → plain text karşılaştırma → arka planda hashle + `sifre=null` UPDATE
+- Her başarılı giriş bir adım dönüştürür; 1-2 hafta sonra (tüm aktif operatörler login olduktan sonra) `sifre` kolonu ayrı patch ile DROP edilir
+
+#### 2. RBAC Operator Actions
+
+**Önce:** `permissions.ts:can()` operator için her zaman `false` dönüyordu (`if (role === 'guest' || role === 'operator') return false`). OperatorPanel `can()` çağırmıyordu (sadece `isOperator` flag) — yani kontrol mekanizması yoktu.
+
+**Sonra:** `OPERATOR_ACTIONS = new Set([...9 action])` — `op_view_workorders`, `op_log_production`, `op_log_fire`, `op_log_durus`, `op_start_work`, `op_stop_work`, `op_send_message`, `op_view_stok`, `op_request_izin`. `can()` operator role için bu set'e bakar. AdminRole DEFAULTS yapısı bozulmadı (operator ayrı izin domeni).
+
+OperatorPanel hâlâ `can()` çağırmıyor — bu altyapı ileride yetki kontrolü eklemek isteyince hazır (örn. "üretim sorumlusu fire kayıt yetkisini operatör için kapatabilsin" senaryosu).
+
+#### 3. RLS Gap → İş Emri #12
+
+**Keşif:** RLS audit (paralelde çalıştırılan SQL) gösterdi ki 8 ana tablo `allow_all` policy'siyle korunuyor (`cmd: ALL, qual: true, with_check: true`) — yani gerçekte koruma yok. Anon key sahibi DB'deki tüm verileri okuyup yazabilir.
+
+**Karar:** Mimari refactor gerektirdiği için (1-2 hafta) yeni iş emri olarak ayrıldı: `docs/is_emri/12_GuvenlikRefactor.md`. Detay: §20.
+
+### v15.52a.1 Hotfix Notları — SQL `public.` Prefix Kuralı (§18.5)
+
+Push sonrası GitHub Actions FAIL: `audit-columns.cjs` "Kolon yok: 'sicil_hash'" diyordu, halbuki Supabase'de kolon mevcuttu. Sebep: `audit-columns.cjs:164` regex'i `ALTER TABLE public.xxx` formatı bekliyor:
+
+```javascript
+const alterBlockRegex = /ALTER TABLE[^;]*public\.(\w+)([^;]+?);/gi
+```
+
+v15.52a SQL migration `public.` öneki olmadan yazıldığı için audit script kolon eklemesini yakalayamamıştı.
+
+**Düzeltme:** Tek karakter migration (idempotent — `IF NOT EXISTS` zaten DB'deki kolonu koruyor). Yeni operasyonel kural §18.5 olarak Bilgi Bankası'na eklendi.
+
+### Sayılar (v15.52a + v15.52a.1)
+
+3 dosya değişiklik + 2 yeni dosya · 1 yeni kolon · 0 rollback · §19 sözleşmesi etkilenmedi · §18 ailesi 1 yeni kural kazandı (§18.5).
+
+---
+
+## §18.5 — SQL Migration `public.` Prefix Kuralı (v15.52a.1 Eklendi)
+
+**Kural:** Tüm SQL migration'larda (`ALTER TABLE`, `CREATE TABLE`, DO blokları içindeki SELECT/UPDATE) **`public.` şema öneki ZORUNLU**.
+
+**Sebep:** `scripts/audit-columns.cjs:164` regex'i `public.` öneki bekliyor:
+```javascript
+const alterBlockRegex = /ALTER TABLE[^;]*public\.(\w+)([^;]+?);/gi
+```
+
+Eksikse:
+- ✗ Audit kolon eklemesini yakalayamaz
+- ✗ Insert/update'ler için "kolon yok" warning'i çıkar
+- ✗ GitHub Actions FAIL → push reddedilir
+
+**Doğru örnek:**
+```sql
+ALTER TABLE public.uys_operators ADD COLUMN IF NOT EXISTS sicil_hash text;
+
+DO $$
+BEGIN
+  SELECT count(*) FROM public.uys_operators WHERE aktif IS NOT FALSE;
+END$$;
+```
+
+**Yanlış örnek:**
+```sql
+-- public. öneki YOK → audit fail
+ALTER TABLE uys_operators ADD COLUMN sicil_hash text;
+```
+
+**Kontrol listesi:**
+- [ ] Tüm `ALTER TABLE` ifadelerinde `public.` öneki var
+- [ ] Yeni `CREATE TABLE` ise yine `public.` öneki kullanıldı
+- [ ] DO blokları içindeki SELECT'lerde de tutarlılık için `public.` var
+- [ ] Patch teslim mesajında "§18.5 kontrol edildi" notu
+
+**Tarih:** v15.52a.1, 27 Nis 2026
+
+---
+
+## §20 — Tehdit Modeli & RLS Durumu (v15.52a.1 Eklendi)
+
+### Mevcut Durum (27 Nis 2026)
+
+8 ana tablo (`uys_operators`, `uys_logs`, `uys_fire_logs`, `uys_active_work`, `uys_operator_notes`, `uys_stok_hareketler`, `uys_work_orders`, `uys_orders`) RLS açık görünüyor ama tek `allow_all` policy (`cmd: ALL, qual: true, with_check: true`) ile korumasız. Pratik etki: anon key sahibi (yani frontend'i açan herkes) DB'deki tüm verileri okuyup yazabilir.
+
+### Niye Şu An Risk Düşük
+
+1. **İç ağ kullanımı** — sahaya internet açık değil, dışarıdan erişim yok
+2. **Operatörler teknik değil** — F12 → Console hack senaryosu uzak
+3. **Niyet meselesi** — kötü amaç yok, herkes işini yapıyor
+4. **Veri zaten paylaşılır** — Özler iç ağında herkes herkesi tanıyor
+
+### Niye İleride Çözmek Gerek
+
+**İç tehdit (düşük olasılık ama ciddi sonuç):**
+- İşten ayrılan çalışan kayıt manipülasyonu yapabilir
+- Operatör fire kaydını silerek hatasını gizleyebilir
+- Yetkisiz veri okuma (maaş bilgisi, müşteri detayı) — ama UYS'te bu veri zaten yok
+
+**Audit/Belgelendirme:**
+- ISO 27001 (Bilgi Güvenliği) — büyüme/EU müşteri taleplerinde gündeme gelebilir
+- Akkuyu NGS, IC İçtaş, Compaco Romania, MHM Yunanistan gibi büyük müşteriler tedarikçi audit'inde sorabilir
+- ISO 9001 "süreç kontrolü" maddesi audit'inde değinilebilir
+
+### Çözüm: İş Emri #12
+
+Detay: `docs/is_emri/12_GuvenlikRefactor.md`. Yaklaşım A (Supabase Auth) seçildi. 5 fazlı plan:
+
+1. **Faz 1 (~2 gün):** Admin pilot — `auth.users` ↔ `uys_kullanicilar` senkron, hassas tablolarda RLS sıkılaştır
+2. **Faz 2 (~3 gün):** uretim_sor / planlama / depocu rolleri Auth'a taşı
+3. **Faz 3 (~3 gün):** Operator rolü Auth'a taşı (sessionStorage `OPR_KEY` deseni kalkar)
+4. **Faz 4 (~2 gün):** Tüm tablolarda RLS yayılımı + `allow_all` DROP + audit log
+5. **Faz 5 (~1 gün):** Temizlik (eski custom auth path'leri kaldır, plain `sifre` kolonu DROP)
+
+**Toplam:** ~11 gün full-time → Buket'in iş yüküyle 3-4 hafta'ya yayılır.
+
+**Pre-requisite:** v15.52a lazy migration tamamlanmalı (tüm operatörler hash'lenmiş olmalı) — Faz 3 öncesi.
+
+### Karar Gerekçesi (27 Nis 2026)
+
+Buket "Güvenliğim için şimdi yapalım" tercihi. Ama günlük iş yükü (kalite müdürü + çevre görevlisi + operasyonel projeler) düşünüldüğünde tek seferde değil **kademeli** yapılacak. İş Emri #12 spec'i hazır, faz başına ayrı oturumda işlenecek.
+
+**Karar revizyon notu:** Eğer iç tehdit endişesi yoksa ve audit yakın değilse, bu işi 6-12 ay erteleyip diğer iş emirlerini (#2 Yedekleme, #5 Sevk vb.) önceliklendirmek mantıklı olabilir. Buket revize edebilir.
+
+---
+
+## Multi-machine Notu (NB081 — 27 Nis 2026 Eklendi)
 
 Buket bugün ana bilgisayara (NB081) geçti. Bu makinenin başlangıç durumu:
 - ❌ Git CLI kurulu değildi (sadece GitHub Desktop) → Git for Windows kuruldu (PATH dahil)
@@ -1090,7 +1231,7 @@ Pre-push hook'un içeriği bilinmiyor ama npm/build kontrolü yapmıyor anlaşı
 
 ---
 
-*Bu belge v15.51 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
+*Bu belge v15.52a.1 itibariyle günceldir. Sonraki oturumlarda patch'in içinde `docs/UYS_v3_Bilgi_Bankasi.md` olarak güncellenecek, manuel upload beklenmeyecektir.*
 
 ---
 

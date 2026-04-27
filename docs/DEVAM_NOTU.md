@@ -1,151 +1,114 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 27 Nisan 2026 (v15.51 sonrası — Faz 4 autoZincir Faz 3 standardına hizalama)
-**Son canlı sürüm:** v15.51
+**Tarih:** 27 Nisan 2026 (v15.52a.1 sonrası — Operatör güvenlik patch'i + audit hotfix)
+**Son canlı sürüm:** v15.52a.1
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §19 MRP Filtre Sözleşmesi + §18 ailesi 4 kalıcı kural) + docs/is_emri/00_BACKLOG_Master.md (üstteki ilerleme paneli) oku.
-Son iş: v15.51 (Faz 4 autoZincir Faz 3 standardına hizalama) — snapshot insert + mrpTedarikOlustur delege + RBAC + lock + hata sonrası kapatma.
-İş Emri #3 KAPANDI (Faz 1+2+3+4+5 tümü ✅).
-Sıradaki: İş Emri #1 (Operatör Paneli) veya İş Emri #2 (Yedekleme) veya küçük UX patch'leri.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 MRP sözleşmesi + §20 tehdit modeli) + docs/is_emri/00_BACKLOG_Master.md oku.
+Son iş: v15.52a + v15.52a.1 (Operatör güvenlik: sicil hash lazy migration + RBAC operator actions + SQL public. prefix hotfix).
+İş Emri #1 (Operatör Paneli) KAPANDI — sahada zaten %95 yapılmıştı, eksik güvenlik gap'leri kapatıldı.
+Sıradaki: İş Emri #2 (Yedekleme) veya İş Emri #12 (Güvenlik Refactoru — RLS) veya küçük UX patch'leri.
 ```
 
 ---
 
-## v15.51 Özeti — Faz 4 autoZincir Hizalama
+## v15.52a + v15.52a.1 Özeti — Operatör Güvenlik
 
-**Sürpriz keşif #2:** DEVAM_NOTU "step-by-step UI eksik, dashboard/log paneli gerekli" diyordu. Aslında `pages/Orders.tsx` içindeki `TamZincirButton` zaten:
-- Confirm dialog
-- Live adım listesi (✅/⚠️/❌/ℹ️ ikonlu, `onProgress` callback'iyle)
-- 4 KPI kart (İE/Kesim/MRP/Tedarik sayıları)
-- Eksik malzemeler tablosu
-- Action butonlar (MRP'ye git, Kesim'e git, Kapat)
+**Sürpriz keşif #6 (en büyük):** İş Emri #1 spec'i 246 satır, 5 faz tasarlandı — ama gerçekte sahada **zaten %95 yapılmış**. `OperatorPanel.tsx` 1335 satır, 4 component (login + ana panel + entry modal + mesaj + izin formu), eski monolit operator.html'in 811 satırlık içeriğinin tamamı + bonus özellikler (izin talep formu) React'e port edilmiş. Login.tsx'te bölüm/operatör/şifre 3-adım dropdown akışı, App.tsx'te `/operator` route + geri-tuşu engelli `OperatorRoutes`, useAuth'ta `operatorLogin(oprId, oprAd)` sessionStorage ile kurulu, 5 yazma tablosu (`uys_logs`, `uys_fire_logs`, `uys_active_work`, `uys_operator_notes`, `uys_stok_hareketler`) DB'de mevcut + RLS aktif.
 
-içeriyordu. Yeni UI gereksizdi. Asıl boşluk **Faz 3 standardına hizalama**ydı — autoZincir, manuel MRP modal'ın v15.50b'de getirdiği snapshot + flag desenini takip etmiyordu.
+**Asıl boşluk: 3 güvenlik gap'i.** v15.52a bunlardan 2'sini kapattı (RLS hariç):
 
-### v15.51'de Kapatılan 5 Eksik
+### v15.52a'da Kapatılan 2 Eksik
 
-| # | İş | Dosya |
-|---|---|---|
-| 1 | `uys_mrp_calculations` snapshot insert (Tip C, §18.2 uyumlu) — autoZincir MRP run sonu, Faz 3 modal pattern'iyle birebir aynı | autoChain.ts |
-| 2 | Tedarik insert artık `mrpTedarikOlustur(opts)` ile delege (`auto_olusturuldu: true` + `mrp_calculation_id` FK). Termin-bazlı duplicate filter korundu | autoChain.ts |
-| 3 | `mrp_durum` güncellemesi + `rezerveYaz` çağrısı (manuel akışla hizalı) | autoChain.ts |
-| 4 | RBAC: `TamZincirButton` `can('auto_chain_run')` ile sarıldı; yetki yoksa null render | Orders.tsx |
-| 5 | Concurrent lock (`useRef`) + hata catch'inde boş sonuç struct → "Kapat" butonu görünür | Orders.tsx |
+1. **Sicil hash (lazy migration)** — `uys_operators.sifre` plain text saklanıyordu. Yeni `sicil_hash` kolonu + `src/lib/sicilHash.ts` (cyrb53 helper, format `cyrb53:HEX`). Login.tsx ilk girişte plain karşılaştırma + arka planda hash + `sifre=null`. 1-2 hafta sonra (tüm aktif operatörler login olduktan sonra) `sifre` kolonu ayrı patch'le DROP edilir.
+
+2. **RBAC operator action listesi** — `permissions.ts`'te `OPERATOR_ACTIONS` set (9 action: `op_view_workorders`, `op_log_production`, `op_log_fire`, `op_log_durus`, `op_start_work`, `op_stop_work`, `op_send_message`, `op_view_stok`, `op_request_izin`). `can()` operator için artık bu set'e bakıyor. Mevcut OperatorPanel `can()` çağırmıyor (sadece `isOperator` flag) — bu altyapı ileride yetki kontrolü eklemek isteyince hazır.
+
+### v15.52a.1 Hotfix — SQL public. Prefix
+
+Push sırasında GitHub Actions audit-columns FAIL: "Kolon yok: 'sicil_hash' — Login.tsx [update]". Sebep: `audit-columns.cjs:164` regex'i `ALTER TABLE public.xxx` formatı bekliyor, bizim migration `public.` öneki olmadan yazılmıştı. Tek karakter düzeltmesi:
+
+```sql
+-- ÖNCE: ALTER TABLE uys_operators ADD COLUMN ...
+-- SONRA: ALTER TABLE public.uys_operators ADD COLUMN ...
+```
+
+`IF NOT EXISTS` idempotent → DB'de zaten kolon var, tekrar çalıştırma sorun yaratmaz. **Yeni operasyonel kural: §18.5** (Bilgi Bankası).
+
+### RLS Gap'i — İş Emri #12'ye Taşındı
+
+3. RLS — 8 tablo `allow_all` policy'siyle, gerçek koruma yok. Çözümü mimari refactor gerektiriyor (1-2 hafta). Yeni İş Emri #12 olarak backlog'a alındı.
 
 ### Sayılar
 
-2 dosya · 0 schema değişikliği · 0 rollback · §19 sözleşmesi korundu · §18.2 + §18.3 tutarlılığı arttı.
-
-### autoZincir İmza Değişikliği
-
-**Eski (v15.50b):**
-```typescript
-autoZincir(orderId, woCount, orders, workOrders, recipes, operations, materials,
-  stokHareketler, tedarikler, logs, cuttingPlans, onProgress?)
-```
-
-**Yeni (v15.51):**
-```typescript
-autoZincir(orderId, woCount, orders, workOrders, recipes, operations, materials,
-  stokHareketler, tedarikler, logs, cuttingPlans, hesaplayan, onProgress?)
-```
-
-12 → 13 parametre. `hesaplayan` snapshot insert'in NOT NULL kolonu için. Çağıran taraf (Orders.tsx TamZincirButton) `useAuth().user?.username || email || dbId || 'system'` fallback ile dolduruyor (Faz 3 modal ile birebir aynı pattern).
+3 dosya değişiklik + 2 yeni dosya · 1 yeni kolon (Tip — yeni KOLON, yeni TABLO değil; §18.2 karar matrisi gerektirmedi) · 0 rollback · §19 sözleşmesi etkilenmedi · §18 ailesi 1 yeni kural kazandı (§18.5).
 
 ---
 
-## §18 Hijyen — v15.51 Cleanup
+## §18 Hijyen — v15.52a Cleanup
 
-**Patch sonrası temizlik:**
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\v15.51_faz4_autozincir_hizalama.zip" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\v15.51-extract" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v15.52a_operator_guvenlik.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\v15.52a-extract" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\uys-claude-dump" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\uys-audit-scripts.rar" -Force -ErrorAction SilentlyContinue
 ```
 
-**§18.2 yeni tablo kontrolü:** Bu patch'te yeni tablo yok. Mevcut `uys_mrp_calculations` artık autoZincir tarafından da dolduruluyor (Faz 3 modal'a ek olarak).
+**§18.2 yeni tablo kontrolü:** Yeni tablo yok. Yeni kolon (`sicil_hash`) — Login.tsx'in kendi fetch'ettiği için store mapper güncellemesi gerekmez.
 
-**§18.3 durum string kontrolü:** Yeni durum string'i yok.
-
-**§18.4 artık kontrolü:** Bu patch'te kesim/artık akışı dokunulmadı.
-
-**§19 MRP sözleşmesi kontrolü:**
-- Filter hala `hesaplaMRP` net>0 sonucuna bakıyor ✓
-- `mrp_durum` filter'da kullanılmıyor (autoZincir artık bu kolonu güncellese de filter karar mekanizmasına girmiyor) ✓
-- Tedarik silindiğinde otomatik geri açılma davranışı bozulmadı ✓
-- `uys_mrp_calculations` snapshot **bilgi amaçlı** — filter'a girmiyor ✓
+**§18.5 (YENİ) — SQL Migration `public.` Prefix:** Tüm `ALTER TABLE` ifadelerinde `public.` öneki ZORUNLU. `audit-columns.cjs` regex'i bunu bekliyor; eksikse silent reject + Actions FAIL. Detay: Bilgi Bankası §18.5.
 
 ---
 
 ## Sıradaki Adaylar
 
-**Adim B — İş Emri #1 (Operatör Paneli):**
-- `/operator` route — production-blocker
-- Backlog v15.17.0 tag'i ile bekliyor
-- En yüksek öncelik (sahaya yayılım için kritik)
-
-**Adim C — İş Emri #2 (Yedekleme Yönetimi):**
+**Adim B — İş Emri #2 (Yedekleme Yönetimi):**
 - `/backup` route — production-blocker
 - `pt_yedekler` tablosu Tip D, önceden tip ataması yapıldı (§18.2 tablosu)
+- Mevcut `apply.ps1`'de "Bilgi bankası backup" mantığı var, repo bilinci var
 
-**Adim D — Topbar KESİM badge'i Siparişler sayfasında uyarı (yarım kalmıştı):**
+**Adim D — Topbar KESİM badge'i Siparişler sayfasında uyarı:**
 - v15.50a.6'da Topbar düzeltildi ama Orders.tsx'teki uyarı eklenmemişti
 - Küçük UX patch — 30 dakikalık iş
 
-**Adim E — Mavvo BOM-to-recipe entegrasyonu (UYS dışı, paralel iş):**
-- Backlog'da değil ama Buket'in işletim önceliği
+**Adim E — Plain `sifre` kolonu DROP (1-2 hafta sonra):**
+- v15.52a lazy migration tamamlanınca (tüm aktif operatörler login olduktan sonra)
+- Kontrol: `SELECT count(*) FROM uys_operators WHERE sifre IS NOT NULL AND aktif IS NOT FALSE` → 0 olmalı
+- Sonra: `ALTER TABLE public.uys_operators DROP COLUMN sifre;`
+
+**Adim F — İş Emri #12 (Güvenlik Refactoru — RLS):**
+- 1-2 haftalık büyük iş
+- `docs/is_emri/12_GuvenlikRefactor.md` (bu patch'le birlikte oluşturuldu)
+- Faz 1'le başlanır (Admin'leri Supabase Auth'a tam taşıma — düşük risk pilot)
 
 Buket önceliği belirler.
 
 ---
 
-## Kontrol Listesi (Bir sonraki MRP/UI patch öncesi)
+## Kontrol Listesi (Bir sonraki SQL/migration patch öncesi)
 
-**§19 MRP filtresine dokunuyorsa:**
+**§18.5 SQL Prefix Kuralı:**
+- [ ] Tüm `ALTER TABLE` ifadelerinde `public.` öneki var mı?
+- [ ] Yeni tablo `CREATE TABLE` ise yine `public.` öneki kullanıldı mı?
+- [ ] DO blokları içindeki SELECT'lerde de `public.` tutarlılık için var mı?
+
+**§18.2 Yeni Tablo Konvansiyonu:**
+- [ ] Yeni tablo eklendiyse karar matrisi (A/B/C/D) yapıldı mı?
+- [ ] STORE_WHITELIST + DATA_MGMT_WHITELIST güncel mi?
+- [ ] Migration başlığında `BACKUP: evet/hayır` + `STORE: vX.Y.Z` yorumu var mı?
+
+**§19 MRP filtre sözleşmesi:**
 - [ ] Filter kararı `hesaplaMRP` net>0 sonucuna mı bakıyor?
-- [ ] mrp_durum kolonu **filter'da** kullanılmıyor mu?
-- [ ] Tedarik silindiğinde sipariş otomatik liste'ye dönüyor mu? (S10 garantisi)
-- [ ] Kilitli siparişler arşivde mi? (`isOrderArchived` ile)
-
-**§18.3 durum string varyantları:**
-- [ ] `isOrderArchived` / `isOrderActive` / `isWorkOrderOpen` helper'ları kullanılıyor mu?
-- [ ] `o.durum === 'tamamlandi'` gibi inline kontroller eklenmemiş mi?
-
-**§18 hijyeni:**
-- [ ] Patch teslim mesajında cleanup komutu var mı?
-- [ ] §18.2 yeni tablo varsa karar matrisi (A/B/C/D)
-- [ ] §18.3 yeni durum string varsa statusUtils güncel
-- [ ] §18.4 artık akışı manuel material kartı YASAK
+- [ ] mrp_durum filter'da kullanılmıyor mu?
 
 **RBAC:**
 - [ ] Yeni butonlar `can(...)` ile sarılı mı?
-- [ ] Permissions.ts'te yeni action varsa DEFAULTS doldurulmuş mu?
-
-**Multi-machine (yeni 27 Nisan 2026 itibariyle):**
-- [ ] NB081 makinesinde Node.js henüz kurulu değil — patch teslim öncesi bu makinede build doğrulaması yapılamıyor
-- [ ] Push öncesi `git status --short` boş, `git pull` Already up to date olmalı
-- [ ] Pre-push hook çalışıyor (audit-schema + audit-columns); schema değişmediği sürece sorunsuz geçer
+- [ ] Operator action'sa `OPERATOR_ACTIONS` set'inde mi?
 
 ---
 
-## Multi-machine Notu (27 Nis 2026 Eklendi)
-
-Buket bugün ana bilgisayara (NB081) geçti. Bu makinede başlangıçta:
-- Git CLI yoktu → Git for Windows kuruldu (PATH dahil)
-- Node.js hala yok → patch sırasında build doğrulaması atlandı, GitHub Actions'a güvenildi
-
-**Yeni oturumda:** Eğer kod patch'i yapılacaksa Node.js kurulu mu kontrol et:
-```powershell
-node --version; npm --version
-```
-Yoksa LTS sürümünü https://nodejs.org/en adresinden indir, kur, PowerShell'i kapat-aç.
-
-Pre-push hook'un içeriği bilinmiyor — şu ana kadar npm/build kontrolü yapmıyor anlaşılan (push başarılı geçti). Eğer ileride pre-push fail olursa `git push --no-verify` ile bypass edip ayrı kontrol et.
-
----
-
-İyi geceler Buket. v15.51 ile İş Emri #3 tamamen kapandı (5/5 faz).
+İyi geceler Buket. v15.52a.1 ile İş Emri #1 KAPANDI — operatör panel sahada güvenli + hash'li.
