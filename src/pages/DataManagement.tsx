@@ -4,7 +4,7 @@ import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
 import { useState, useEffect, Fragment } from 'react'
 import { useStore } from '@/store'
 import { supabase, fetchAll } from '@/lib/supabase'
-import { Download, Upload, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Download, Upload, RefreshCw, AlertTriangle, Info } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
@@ -807,6 +807,22 @@ export function DataManagement() {
             })
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel Aktar</button>}
           {can('data_backup') && <button onClick={exportJSON} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Download size={13} /> JSON Yedek</button>}
+        </div>
+      </div>
+
+      {/* v15.53 Adım 5 — Yedekler sayfasına yönlendirme bilgi notu */}
+      <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/25 rounded-lg flex items-start gap-2 text-xs">
+        <Info size={14} className="text-cyan-400 flex-shrink-0 mt-0.5" />
+        <div className="text-zinc-300 leading-relaxed">
+          <strong className="text-cyan-400">Otomatik yedekleme artık ayrı bir sayfada.</strong>
+          {' '}Günlük yedekler, manuel yedek alma, geri yükleme ve indirme için{' '}
+          <button
+            onClick={() => { window.location.hash = '#/backup' }}
+            className="underline text-cyan-400 hover:text-cyan-300 font-semibold"
+          >
+            Yedekler sayfası
+          </button>
+          'nı kullanın. Bu sayfadaki <strong>JSON Yedek</strong> ve <strong>JSON Geri Yükle</strong> butonları eski sistemden kalmıştır — sıradan kullanım için Yedekler sayfası tercih edilir.
         </div>
       </div>
 
