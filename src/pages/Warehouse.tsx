@@ -498,6 +498,15 @@ export function Warehouse() {
           onSaved={() => { loadAll() }}
         />
       )}
+
+      {/* v15.69 — Manuel Giriş/Çıkış modal render (eksikti — buton tıklandığında modal açılmıyordu) */}
+      {showGiris && (
+        <StokGirisModal
+          materials={materials}
+          onClose={() => setShowGiris(false)}
+          onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }}
+        />
+      )}
     </div>
   )
 }
