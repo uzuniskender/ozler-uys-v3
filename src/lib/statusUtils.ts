@@ -161,3 +161,66 @@ export function isProcurementPending(t: Tedarik): boolean {
   const d = (t.durum || '').toLowerCase().trim()
   return !TEDARIK_CANCELLED_STATES.has(d)
 }
+
+// ─── KESIM (kesim operasyonu / kesim planları) ───────────────────
+// v15.52b — Topbar.tsx'teki KESIM badge mantığının ortak helper'a çıkarılmış hali.
+// Orders.tsx (sipariş listesi kesim eksik kolonu) da bunları kullanır.
+// NOT: Topbar.tsx şu an kendi inline mantığını koruyor — refactor ayrı patch'te.
+
+/**
+ * Kesim operasyonu sayılan opAd anahtar kelimeleri (büyük harf normalize'li).
+ * Tüm kesim varyantları: 'KESİM', 'KESME', 'KES' (kök), '+ kesim makineleri'.
+ * Eski Topbar.tsx sadece 'KESIM' arıyordu, "KESME LAZER" gibi yakalanmıyordu (v15.50a.6 fix).
+ */
+const KESIM_OP_KEYWORDS = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
+
+/**
+ * WO'nun operasyon adı kesim operasyonu mu?
+ * opAd üzerinden direkt arama — operations tablosuna bağımlılık yok, opId boş bile olsa çalışır.
+ */
+export function isKesimWO(w: { opAd?: string | null }): boolean {
+  const opAd = (w.opAd || '').toLocaleUpperCase('tr-TR')
+  return KESIM_OP_KEYWORDS.some(k => opAd.includes(k))
+}
+
+/**
+ * Aktif (iptal olmamış) kesim planlarındaki tüm WO ID'lerini döner.
+ * Kullanım: Hangi WO'lar plana atanmış? Set'te olan = atanmış.
+ */
+export function getPlanliWoIds(cuttingPlans: CuttingPlan[]): Set<string> {
+  const set = new Set<string>()
+  for (const cp of cuttingPlans) {
+    if (!isCuttingPlanActive(cp)) continue
+    for (const s of (cp.satirlar || [])) {
+      for (const k of (s.kesimler || [])) {
+        if (k.woId) set.add(k.woId)
+      }
+    }
+  }
+  return set
+}
+
+/**
+ * Kesim eksik olan WO ID'lerini döner.
+ * Şartlar:
+ *   - WO açık (tamamlanmadı, iptal değil, paused değil)
+ *   - WO kesim operasyonu (isKesimWO = true)
+ *   - Henüz aktif bir kesim planına atanmamış
+ *
+ * Kullanım: Topbar KESİM badge sayısı, Orders.tsx kesim eksik kolonu, vb.
+ */
+export function getKesimEksikWoIds(
+  workOrders: WorkOrder[],
+  cuttingPlans: CuttingPlan[]
+): Set<string> {
+  const planli = getPlanliWoIds(cuttingPlans)
+  const eksik = new Set<string>()
+  for (const w of workOrders) {
+    if (!isWorkOrderOpen(w)) continue
+    if (!isKesimWO(w)) continue
+    if (planli.has(w.id)) continue
+    eksik.add(w.id)
+  }
+  return eksik
+}
+
