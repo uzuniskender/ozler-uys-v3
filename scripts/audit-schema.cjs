@@ -37,6 +37,7 @@ const STORE_WHITELIST = new Set([
   'uys_mrp_calculations', // v15.47 — MRP run snapshot, Faz 3'te (v15.49) MRP modal yazınca dolacak. Şu an global state'e gerek yok; modal kendi fetch edecek.
   'uys_yedekler',         // v15.53 — Tip D, büyük JSONB blob (1MB+), frontend store'a girmez; backup.ts kendi fetch ediyor.
   'uys_sevk_satirlari',   // v15.54 GEÇİCİ — Faz 1'de tablo eklendi, Faz 2'de store mapper'a taşınınca BU SATIRI SİL
+  'uys_activity_log',     // v15.75 — Tip C, log tablosu (binlerce kayıt). Frontend store'a yüklenmez; Logs.tsx getDbActivityLog ile filtreli sorgular.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -47,6 +48,7 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_mrp_calculations',          // v15.47 — MRP run snapshot, yeniden hesaplanabilir, backup gereksiz
   'uys_yedekler',                  // v15.53 — backup tablosunun kendisi yedeklenmez (recursion engellenir)
   'uys_sevk_satirlari',            // v15.54 GEÇİCİ — Faz 2'de DataManagement'a + backup.ts BACKUP_TABLES'a eklenecek; o zaman BU SATIRI SİL
+  'uys_activity_log',              // v15.75 — Tip C, log tablosu. Backup'a girmez (kalıcı/bağımsız). Restore log temizlemesi yanlış olur.
 ])
 
 // ═══════════════════════════════════════════════════════════════
