@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 27 Nisan 2026 gece (3 İş Emri kapandı tek günde — v15.51, v15.52a.1, v15.53)
+**Son güncelleme:** 27 Nisan 2026 (İş Emri #13 başlatıldı — 14/22 madde tamamlandı, ana akış refactor omurgası ayakta)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 ---
@@ -101,6 +101,7 @@ Detaylı iş emirleri `docs/is_emri/01_*.md` ... `06_*.md` dosyalarındadır. He
 | # | Özellik | İş Emri | Tag | Durum |
 |---|---------|---------|-----|-------|
 | 12 | **Güvenlik Refactoru — RLS Tam Uygulama** (Supabase Auth + RLS policy yayılımı) | `12_GuvenlikRefactor.md` | v16.0.0 | 🟡 Backlog (27 Nis 2026 keşfedildi — `allow_all` policy ile gerçek koruma yok) |
+| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.68 | 🟢 14/22 TAMAM (1, 2, 3, 4, 5, 6, 7, 10\*, 17, 18, 19, 20, 21, 22). Kalan: 8, 9, 11, 13, 14, 15, 16. \*Madde 10 iskelet. |
 
 ---
 

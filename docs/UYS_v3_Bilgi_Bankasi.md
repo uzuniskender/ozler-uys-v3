@@ -1084,7 +1084,31 @@ autoZincir(orderId, woCount, orders, workOrders, recipes, operations, materials,
 ---
 
 ## Son canlı sürüm
-**v15.53 Adım 5** (kod) + **v15.52b** (Topbar Kesim) + **v16.0.0 Faz 1.1a** (DB altyapı). **27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı: #1 + #2 + #3.**
+**v15.68** (kod) — İş Emri #13 (Ana Akış Refactoru) **14/22 madde tamamlandı**. Kritik MRP+tedarik bug'ları kalıcı çözüldü, ana akış omurgası ayakta.
+
+### v15.55-v15.68 Notları (27 Nis 2026 — İş Emri #13)
+
+**Kapsanan maddeler:** 1, 2, 3, 4, 5, 6, 7, 10 (iskelet), 17, 18, 19, 20, 21, 22
+
+**Kritik bug zinciri kapandı:**
+- **F-21 idempotent tedarik** — 4 farklı tedarik açma noktasında çift kayıt önlendi (mrpTedarikOlustur, runMRP, autoChain, topluTedarikOlustur)
+- **Rezerve düşürmesi kaldırıldı** — `mrp.ts` artık Buket'in formülünü uyguluyor: NET = BRÜT − STOK − YOLDA. Eski kod stoktan diğer siparişlerin rezervesini düşüyordu.
+- **Kesim planı zorunluluğu** — ProductionEntry HARD BLOCK + WorkOrders Plan Bekliyor rozeti + tıklanabilir
+- **Çift tedarik sahada düzeltildi** — S26A_02981_2 için 207 fazla tedarik SQL ile silindi
+
+**Yeni bileşenler:**
+- `ActiveFlowDecisionModal.tsx` — Devam/Beklet/İptal 3-buton modal (madde 17)
+- `bekletFlow`, `devamEttirFlow` (pendingFlow.ts)
+- `mrpTedarikDuzelt` (mrp.ts) — sipariş eksildiğinde fazla bekleyen tedarikleri otomatik iptal/azalt (madde 10 iskelet)
+
+**UI iyileştirmeleri:**
+- Topbar: bekletilen flow'lar mor "BEKLETİLDİ" badge ile görünür
+- Toast: tedarik açıldıysa "Tedariklere Git" action butonu
+- WorkOrders: Plan Bekliyor rozeti tıklanabilir → /cutting
+
+**Kalan 8 madde:** 8, 9 (kısmen var), 11, 12 (kısmen yapıldı), 13, 14, 15, 16 (havuzla yapıldı sayılabilir).
+
+
 
 ### v15.53 Notları (27 Nis 2026 gece — İş Emri #2 Yedekleme KAPANIŞ)
 

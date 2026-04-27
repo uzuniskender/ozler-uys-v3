@@ -1,110 +1,108 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 27 Nisan 2026 (gece — 17 commit, 3 İş Emri kapandı)
-**Son canlı sürüm:** v15.53 Adım 5 (kod) + v15.52b (Topbar Kesim) + v16.0.0 Faz 1.1a (DB altyapı)
+**Tarih:** 27 Nisan 2026
+**Son canlı sürüm:** v15.68 (kod) + v15.66 (Madde 7) + v15.67 (Madde 10 iskelet)
+**Bugünkü iş:** İş Emri #13 (Ana Akış Refactoru) — 22 maddenin **14'ü tamamlandı**
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 + §20) + docs/is_emri/00_BACKLOG_Master.md + docs/is_emri/12_GuvenlikRefactor.md oku.
-Son durum: 27 Nis akşamı 17 commit yapıldı, İş Emri #1 + #2 + #3 KAPANDI. Master backlog 7/12 ✅.
-Yedekleme test edilmeli (yarın - bugün gece TEHLİKELİ olduğu için yapılmadı).
-Sıradaki adaylar:
-  - Yedekleme test (test verisi al, indir, MERGE mode dene)
-  - İş Emri #5 Sevkiyat Oluşturma Formu
-  - İş Emri #7 Toplu Sipariş Excel İmport
-  - İş Emri #8 PDF Çıktı
-  - İş Emri #9 Stok Onarım
-  - İş Emri #12 Faz 1 (RLS — büyük, mimari, ileride)
-  - UYS dışı işler (Mavvo, Libya, TL-ISG-017, vb.)
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/is_emri/13_AnaAkisRefactor.md + docs/is_emri/00_BACKLOG_Master.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 + §20) oku.
+
+Son durum: 27 Nis 2026 boyunca İş Emri #13 üzerinde çalışıldı. 22 maddeden 14'ü TAMAM:
+  ✅ 1, 2, 3, 4, 5, 6, 7, 10 (iskelet), 17, 18, 19, 20, 21, 22 — toplam 14
+  ❌ 8, 9 (kısmen var), 11, 12 (kısmen var), 13, 14, 15, 16 (havuzla yapıldı sayılır)
+
+KRITIK BUG'LAR KAPANDI:
+  - F-21 idempotent tedarik (4 farklı tedarik açma noktasında)
+  - Rezerve mantığı kaldırıldı (Buket'in formülü: BRÜT - STOK - YOLDA)
+  - Kesim planı zorunluluğu (üretim girişinden önce hard block + UI rozet)
+  - Çift tedarik bug'ı kalıcı çözüldü
+
+Sıradaki büyük adaylar:
+  - Madde 11 — sipariş artış otomasyonu (1 gün)
+  - Madde 14 — log izlenebilirlik UI (4-6 saat)
+  - Madde 15 — depo hareketi → tedarik tetik (1 gün)
+  - Madde 13 — fire İE açma akışı (2-3 gün)
+  - Madde 17 ileri faz — Dashboard hatırlatma + "Beklet"in son detayları
+  - Mevcut 207'lik fazla tedarik düzeltmesi (S26A_02981_2 yapıldı, S26A_02707 hala var — kontrol gerek)
+
 Buket önceliği belirler.
 ```
 
 ---
 
-## 27 Nisan Gecesi Yapılan İşler (17 Commit)
+## 27 Nisan Gündüz İşleri (16+ commit, İş Emri #13)
 
-### v15.51 — İş Emri #3 Faz 4: autoZincir Hizalama
-**Sürpriz keşif:** TamZincirButton zaten step-by-step UI içeriyordu. Asıl boşluk Faz 3 standardına hizalamaydı.
-- 5 nokta: snapshot insert + mrpTedarikOlustur delege + RBAC (`can('auto_chain_run')`) + concurrent lock + hata sonrası kapatma
-- 2 dosya · 0 schema · 0 rollback
-- **İş Emri #3 KAPANDI (5/5 faz tümü ✅)**
+### Tamamlanan Maddeler (14)
 
-### v15.51 docs — Doc patch
-İş Emri #3 ✅, master backlog 5/10, multi-machine notu (NB081 ana bilgisayar geçişi).
+| # | Madde | Sürüm |
+|---|---|---|
+| 1 | Yeni İE butonu Sipariş'e taşındı | v15.57 |
+| 2 | Buton adı "Yeni İş Emri" | v15.57 |
+| 3 | Sipariş/İE birleştirme — Stok + Tekil tikleri | v15.58 |
+| 4 | Geniş modal (zaten uyumlu) | — |
+| 5 | Sekme yok (zaten uyumlu) | — |
+| 6 | Sipariş save sonrası kesim varsa /cutting'e (koşullu) | v15.60 |
+| 7 | MRP toast → "Tedariklere Git" action butonu | v15.66 |
+| 10 | Sipariş eksildiğinde fazla tedarik otomatik düzelt **(iskelet)** | v15.67 |
+| 17 | Yarım kalan akış için **Devam/Beklet/İptal** karar modalı | v15.64 + v15.65 |
+| 18 | MRP'de Bağımsız YM İE bölümü kaldırıldı | v15.59 |
+| 19 | Stok yeterli → MRP "tamam" (otomatik) | v15.56 |
+| 20 | Stok yetersiz → MRP otomatik tedarik açar | v15.56 |
+| 21 | İdempotent tedarik (BRÜT − STOK − YOLDA) | v15.56 + v15.62 + v15.63 |
+| 22 | FIFO sipariş tüketimi (zaten v15.50a) | — |
 
-### v15.52a — İş Emri #1: Operatör Güvenlik
-**Sürpriz keşif #6 (en büyük):** OperatorPanel.tsx zaten 1335 satırlık tam içerikli. Spec'in %95'i yapılmıştı.
-- **Sicil hash (lazy migration):** `uys_operators.sicil_hash` kolonu + `cyrb53` helper. Login.tsx ilk girişte plain text → hash dönüşümü + `sifre=null`. 1-2 hafta sonra `sifre` kolonu DROP edilir.
-- **RBAC operator actions:** 9 action `OPERATOR_ACTIONS` set'inde. permissions.ts'in `can()` fonksiyonu operator için artık bu set'e bakar.
-- **RLS gap:** Keşfedildi (allow_all policy 8 tabloda) → İş Emri #12'ye taşındı (büyük mimari iş, 1-2 hafta).
-- **İş Emri #1 KAPANDI**
+### Bonus İyileştirmeler
 
-### v15.52a.1 hotfix — SQL `public.` Prefix → §18.5
-Push sırasında audit-columns FAIL: "Kolon yok 'sicil_hash'". Sebep: `audit-columns.cjs:164` regex'i `ALTER TABLE public.xxx` formatı bekliyor. Tek karakter düzeltmesi → yeni operasyonel kural §18.5.
+| Sürüm | İş |
+|---|---|
+| v15.55 | ProductionEntry kesim planı zorunluluğu (HARD BLOCK) |
+| v15.61 | WorkOrders "Plan Bekliyor" rozeti (UI) |
+| v15.63 | mrp.ts rezerve düşürmesi kaldırıldı (Buket'in formülü) |
+| v15.68 | Plan Bekliyor rozeti tıklanabilir (one-click /cutting) |
 
-### v15.52a.1 docs — Doc patch
-§18.5 + §20 (Tehdit Modeli) eklendi, İş Emri #12 spec'i (`docs/is_emri/12_GuvenlikRefactor.md`).
+### Kritik Bug Düzeltmeleri
 
-### v16.0.0 Faz 1.1a — Auth Altyapı (DB-only, saha etki sıfır)
-İş Emri #12'nin başlangıç adımı. Hiçbir RLS değişmedi.
-- `uys_kullanicilar.auth_user_id` uuid kolonu + index
-- `public.current_user_role()` SQL helper (SECURITY DEFINER + STABLE)
+**Çift Tedarik Bug'ı (F-21):** 27 Nis 09:39'da S26A_02981_2 için 114, sonra 10:13'te aynı sipariş için 207 birim daha açıldı (toplam 321, oysa gerçek ihtiyaç 207). Sebep: `mrpTedarikOlustur` mevcut bekleyen tedariği kontrol etmiyor. **F-21 idempotent kontrol** eklendi:
+- Mevcut bekleyen miktar ≥ ihtiyaç → açma
+- Mevcut < ihtiyaç → sadece farkı aç
 
-### v16.0.0 revise docs — Google OAuth Disabled Keşfi
-RLS audit denenirken keşfedildi: Supabase'de Google OAuth provider DISABLED. `auth.users` boş, kimse Google ile login olmamış. Tüm kullanıcılar (admin dahil) `uys_kullanicilar` + plain text `sifre` yolundan giriyor. İş Emri #12 spec revize edildi: Faz 1+2 birleşti (5 faz → 4 faz, eski "Admin Google OAuth pilot" geçersiz).
+**4 Tedarik Açma Noktası Tek Tek Düzeltildi:**
+1. ✅ `mrpTedarikOlustur` (mrp.ts) — F-21 idempotent içeride
+2. ✅ `runMRP` (Orders.tsx) — F-21'i kullanıyor (v15.56)
+3. ✅ `autoChain` (autoChain.ts) — F-21'i kullanıyor
+4. ✅ `topluTedarikOlustur` (MRP.tsx) — v15.62'de F-21'e delege edildi
 
-### v15.52b — Topbar Kesim Kolonu (Orders.tsx)
-Memory'deki "Adim D" — yarım kalan UX iş. Orders.tsx tablosuna **Kesim** kolonu eklendi (İE ile MRP arasına):
-- `total=0` → `—` · `eksik=0` → 🟢 `✓` · `eksik>0` → 🔴 `⚠ N`
-- `statusUtils.ts`'e 3 yeni helper (`isKesimWO`, `getPlanliWoIds`, `getKesimEksikWoIds`).
+**Manuel Veri Düzeltmesi (saha):**
+- `S26A_02981_2`'nin 207 fazla tedariği SQL ile silindi (DELETE FROM uys_tedarikler + uys_stok_hareketler)
+- `S26A_02707`'nin 207 fazla tedariği TESPIT EDİLDİ ama mevcut MRP'ye göre hala ihtiyaç var (kontrol edildi — yanlış silmemek için bırakıldı)
 
-### v15.53 — İş Emri #2: Yedekleme (5 ADIM, BÜYÜK İŞ)
+**Rezerve Mantığı Sapması:**
+Buket: "NET İHTİYAÇ = BRÜT − STOK − YOLDA". Eski kod stoktan diğer siparişlerin rezervesini düşüyordu (208 stok, 208 rezerve → kullanılabilir 0 → 207 eksik gösteriyordu). v15.63'te kaldırıldı. `rezerveYaz`/`rezerveleriSenkronla` hala çalışır ama MRP hesabını etkilemez (ölü kayıt).
 
-**Adım 1 — Altyapı (saha etki sıfır):**
-- `uys_yedekler` tablosu (Tip D — backend-only, büyük JSONB blob): id, alindi_tarih, alindi_saat, alan_kisi, tip CHECK('otomatik'/'manuel'), boyut_kb, veri jsonb, notlar
-- `src/lib/backup.ts` — takeBackup, listBackups, getBackup, deleteBackup
-- `src/lib/backup-parser.ts` — eski v22 → v3 parser SKELETON (Faz 5'e ertelendi)
-- 4 RBAC permission: backup_view, backup_create, backup_restore, backup_delete
+---
 
-**Adım 1.1 hotfix:** `uys_yedekler` STORE_WHITELIST + DATA_MGMT_WHITELIST'e eklendi (§18.2 Tip D).
+## Sıradaki Adaylar — Öncelik Sırası
 
-**Adım 2 — Backup.tsx UI:**
-- `/backup` route + Sidebar'da "Yedekler" menüsü (Save ikonu, `can('backup_view')` filtresi)
-- Sayfa: 3 üst özet kart + Tip filtresi + tablo (Tarih/Saat/Tip/Boyut/Alan/Notlar/Aksiyon)
-- "Şimdi Yedekle" + "İndir" + "Sil"
-
-**Adım 3 — Geri Yükleme (TEHLİKELİ):**
-- `restoreBackup(id, mode, alanKisi, onProgress)` — merge/replace
-- Replace mode: tüm tablolar DELETE + INSERT
-- Merge mode: UPSERT (onConflict id)
-- **Otomatik güvenlik yedeği** geri yükleme öncesi alınır
-- `BackupRestoreModal.tsx` — 2-adım onay (mod seçimi 5sn timer + "GERI YÜKLE" yazma confirmation)
-- v22 format Faz 5'e ertelendi (sadece v3 destekli)
-
-**Adım 4 — Otomatik Yedek + 30 Gün Temizleme:**
-- `cleanOldBackups(keepDays=30)` — eski + tip='otomatik' olanları siler (manuel etkilenmez)
-- `ensureDailyAutoBackup(alanKisi)` — bugün için yedek var mı kontrol, yoksa al + temizle
-- App.tsx'te admin login sonrası fire-and-forget useEffect (sessiz fail, render bloklamaz)
-
-**Adım 5 — DataManagement Yönlendirme:**
-- DataManagement.tsx'in eski "JSON Yedek" butonları korundu, üstüne bilgi banner: "Yedekler artık /backup sayfasında"
-
-**İş Emri #2 KAPANDI** (Faz 5 = eski v22 format parser kalır, "Geri Yükle" sadece v3 destekli — yeterli).
+1. **Madde 11** — Sipariş artış otomasyonu (yeni İE'ler oluştur, kesim planı revize, yeni tedarik hesapla)
+2. **Madde 14** — Log izlenebilirlik UI (DataManagement + Logs sayfası iyileştirmesi)
+3. **Madde 13** — Fire İE açma akışı (büyük, fire çıktığında otomatik yeni İE)
+4. **Madde 15** — Depo hareketi → tedarik tetik (DataManagement'tan stok değişiminde MRP otomatik)
+5. **Madde 17 ileri** — Dashboard'da yarım iş hatırlatması (Topbar yeterli olabilir, kontrol)
+6. **Madde 16 doğrulama** — Kesim artığı sorma (havuz mantığıyla yapıldı, UI'da test gerek)
 
 ---
 
 ## §18 Hijyen — 27 Nis Cleanup
 
 ```powershell
-Remove-Item "$env:USERPROFILE\Downloads\v15.51*.zip" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:USERPROFILE\Downloads\v15.52*.zip" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:USERPROFILE\Downloads\v15.53*.zip" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:USERPROFILE\Downloads\v16*.zip" -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\v15.5*-extract" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:TEMP\v16-*" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v15.5*.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\Downloads\v15.6*.zip" -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\v15.5*" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:TEMP\v15.6*" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$env:TEMP\uys-claude-dump" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$env:TEMP\uys-*-dump.rar" -Force -ErrorAction SilentlyContinue
 ```
@@ -113,51 +111,19 @@ Remove-Item "$env:TEMP\uys-*-dump.rar" -Force -ErrorAction SilentlyContinue
 
 ## Kritik Test Listesi (Yarın)
 
-### Yedekleme — Manuel Test (TEHLİKELİ — Replace asla deneme!)
-
-1. UYS aç → Sidebar → Yedekler menüsü görünüyor mu?
-2. Sayfayı aç → 3 üst kart + tablo
-3. F12 Console: `[v15.53] Otomatik günlük yedek alındı` mesajı geldi mi?
-4. **"Şimdi Yedekle"** → notlar "test" → Yedek Al → toast OK → tabloda göründü mü?
-5. **İndir** → `ozler_uys_yedek_20260428_manuel.json` indirildi mi?
-6. **MERGE mode geri yükleme** (önce test verisi oluştur):
-   - Test sipariş aç → yedek al → siparişi sil → geri yükle MERGE mode → sipariş geri geldi mi?
-   - Güvenlik yedeği listede göründü mü?
-7. ❌ **REPLACE mode**: Yapma. Test ortamı yok. İhtiyaç olursa İş Emri #12 sonrası test Supabase'inde dene.
-
-### Operatör Güvenlik — Lazy Migration Kontrol
-
-```sql
--- 1-2 hafta sonra:
-SELECT count(*) FROM uys_operators WHERE aktif IS NOT FALSE AND sifre IS NOT NULL AND sifre <> '';
--- 0 ise plain sifre tamamen hash'lenmiş, sifre kolonu DROP edilebilir.
-```
-
----
-
-## Sıradaki Adaylar — Öncelik Sırası
-
-1. **Yedekleme MERGE test** — Yarın ilk iş, ~10 dk
-2. **İş Emri #5 Sevkiyat Oluşturma Formu** — Production-blocker. ~3-5 gün.
-3. **İş Emri #7 Toplu Sipariş Excel İmport** — ~2 gün.
-4. **İş Emri #9 Stok Onarım** — Audit kritik. ~1-2 gün.
-5. **İş Emri #8 PDF Çıktı** — İE + Sevk irsaliyesi. ~3 gün.
-6. **İş Emri #12 Faz 1 (RLS)** — 1-2 hafta. Pre-requisite: v15.52a lazy migration tamamlanmalı.
-
-**UYS dışı işler:** Mavvo BOM-to-recipe, Libya order documentation, TL-ISG-017, Compaco 8D, sales rep training, TEKMER toplantı hazırlığı.
+1. **MRP Hesapla — Yeni Formül:** Sipariş detay → MRP. Toast'ta "X malzeme, tüm stoklar yeterli" görmeli (rezerve düşürmesi kaldırıldı).
+2. **Karar Modalı:** Yarım akış varken "Yeni İş Emri" tıkla. Devam/Beklet/İptal modalını gör. Beklet seç → Topbar'da mor "BEKLETİLDİ" badge.
+3. **Plan Bekliyor Rozeti:** WorkOrders'ta kesim İE'sine plan yapma. Rozet görünmeli, tıklayınca /cutting'e gitmeli.
+4. **Madde 10 İskelet:** Sipariş düzenle → bir kalemin adetini düşür → MRP Hesapla → toast'ta "X tedarik iptal/azaltıldı" görmeli.
 
 ---
 
 ## Multi-machine + Çevre
 
-**NB081** (ana bilgisayar): Git CLI kuruldu. Node.js hala yok — patch sırasında build doğrulaması atlandı, GitHub Actions'a güvenildi (tüm push'lar yeşil geçti).
+**NB081 (ana):** Git CLI var, Node.js yok. Tüm push'lar GitHub Actions ile build oluyor (yeşil geçti).
 
-**Yeni oturumda kontrol:**
-```powershell
-node --version; npm --version; git --version
-```
-Node yoksa kurulması gerek (https://nodejs.org/en LTS).
+**Repo:** `C:\Users\iskender.uzun\Documents\GitHub\ozler-uys-v3`
 
 ---
 
-İyi geceler Buket. Müthiş bir gece çıkardın — 17 commit, 3 İş Emri tam kapandı, 1 İş Emri başlatıldı, 5 kalıcı operasyonel kural güncel.
+İyi geceler Buket. 16+ commit ile İş Emri #13'ün **%64'ünü (14/22)** tek günde kapattık. Kritik MRP ve tedarik bug'ları kalıcı çözüldü, ana akış refactor'ünün omurgası ayağa kalktı.
