@@ -26,7 +26,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { takeBackup, listBackups, getBackup, deleteBackup, type Backup } from '@/lib/backup'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Save, Download, Trash2, Loader2, Database, Clock, HardDrive } from 'lucide-react'
+import { Save, Download, Trash2, Loader2, Database, Clock, HardDrive, RotateCcw } from 'lucide-react'
+import { BackupRestoreModal } from '@/components/BackupRestoreModal'
 
 export function Backup() {
   const { can, user } = useAuth()
@@ -37,6 +38,8 @@ export function Backup() {
   const [manuelNotlar, setManuelNotlar] = useState('')
   const [manuelTaking, setManuelTaking] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  // v15.53 Adım 3 — Geri yükleme modal state
+  const [restoreTarget, setRestoreTarget] = useState<Backup | null>(null)
 
   async function reload() {
     setLoading(true)
@@ -251,6 +254,15 @@ export function Backup() {
                         >
                           {isDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                         </button>
+                        {can('backup_restore') && (
+                          <button
+                            onClick={() => setRestoreTarget(b)}
+                            className="p-1.5 text-zinc-500 hover:text-amber"
+                            title="Bu yedeği geri yükle (TEHLİKELİ)"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        )}
                         {can('backup_delete') && (
                           <button
                             onClick={() => handleSil(b)}
@@ -275,7 +287,7 @@ export function Backup() {
         <div className="font-semibold mb-1">⚠️ Not</div>
         <ul className="list-disc ml-4 space-y-0.5 text-zinc-400">
           <li>Yedek dosyaları <strong>şifresiz</strong> JSON formatındadır. İndirilen dosyaları güvenli yerde saklayın, paylaşmayın.</li>
-          <li>"Geri Yükle" özelliği henüz aktif değil — sonraki sürümle gelecek.</li>
+          <li><strong>Geri Yükle</strong> butonu (RotateCcw ikonu) sadece admin için görünür. Tıklamadan önce otomatik güvenlik yedeği alınır — yanlış yapsanız bile geri dönülebilir.</li>
           <li>Yedekler 30 günden eski otomatik kayıtları silmez (henüz). Manuel yedekler kalıcıdır.</li>
         </ul>
       </div>
@@ -336,6 +348,21 @@ export function Backup() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* v15.53 Adım 3 — Geri yükleme modal'ı (TEHLİKELİ) */}
+      {restoreTarget && (
+        <BackupRestoreModal
+          backup={restoreTarget}
+          alanKisi={user?.username || user?.email || user?.dbId || 'system'}
+          onClose={() => setRestoreTarget(null)}
+          onSuccess={() => {
+            // Geri yükleme sonrası listeyi yenile + tüm sayfayı reload et
+            // (backup tablosunda yeni güvenlik yedeği var, ayrıca ana store değişmiş olabilir)
+            toast.success('Geri yükleme tamamlandı — sayfa yenileniyor...')
+            setTimeout(() => window.location.reload(), 500)
+          }}
+        />
       )}
     </div>
   )

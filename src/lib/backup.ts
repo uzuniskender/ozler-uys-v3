@@ -211,16 +211,161 @@ export async function deleteBackup(id: string): Promise<{ ok: boolean; error?: s
   return { ok: true }
 }
 
-// ─── Faz 3+ için stub'lar (henüz implementasyon yok) ────────────────────
+// ─── Faz 3 — Geri Yükleme ───────────────────────────────────────────────
+
+export interface RestoreResult {
+  ok: boolean
+  mode: 'merge' | 'replace'
+  guvenlikYedegiId?: string  // restore öncesi otomatik alınan güvenlik yedeği
+  insertedRows?: number
+  affectedTables?: number
+  error?: string
+  step?: string  // hata oluşursa hangi adımda
+}
+
+export type RestoreProgress = (step: string, detail?: string) => void
 
 /**
- * STUB — Faz 3'te (sonraki oturum) implementasyon eklenecek.
- * TEHLİKELİ — Tüm verileri yedekteki haline geri çevirir.
+ * Yedeği geri yükler. İki mod var:
+ *
+ * - **merge** (güvenli): Yedekteki kayıtları mevcutlara UPSERT eder. Mevcut yeni
+ *   veriler korunur. Yedekte olan + DB'de olan: yedektekiyle güncellenir.
+ *   Yedekte olmayan + DB'de olan: değişmez. Yedekte olan + DB'de olmayan: eklenir.
+ *
+ * - **replace** (TEHLİKELİ): Yedekteki tabloları önce DELETE, sonra INSERT eder.
+ *   Yedekten sonra eklenen TÜM veri kaybolur. Sadece yedeği bire bir restore eder.
+ *
+ * Her iki modda da:
+ *   1) Önce otomatik güvenlik yedeği alınır (geri yükleme öncesi snapshot)
+ *   2) Yedek versiyonu kontrol edilir (v3 destekli, v22 kapsam dışı)
+ *   3) Tablolar üzerinde DELETE/UPSERT yapılır (BACKUP_TABLES sırasıyla)
+ *
+ * @param backupId Geri yüklenecek yedek ID'si (uys_yedekler.id)
+ * @param mode 'merge' veya 'replace'
+ * @param alanKisi İşlemi yapan kullanıcı (audit + güvenlik yedeği için)
+ * @param onProgress Adım adım UI feedback için callback
  */
-// export async function restoreBackup(...): Promise<RestoreResult> { ... }
+export async function restoreBackup(
+  backupId: string,
+  mode: 'merge' | 'replace',
+  alanKisi: string,
+  onProgress?: RestoreProgress
+): Promise<RestoreResult> {
+  if (!backupId) return { ok: false, mode, error: 'backupId boş' }
+  if (!alanKisi) return { ok: false, mode, error: 'alanKisi boş' }
+
+  let currentStep = 'baslatiliyor'
+
+  try {
+    // ─── 1) Güvenlik yedeği al ───
+    currentStep = 'guvenlik_yedegi'
+    onProgress?.('Güvenlik yedeği alınıyor...', 'Geri yükleme öncesi mevcut durumun snapshot\'ı')
+    const guvSonuc = await takeBackup(
+      alanKisi,
+      'manuel',
+      `[GÜVENLİK] Geri yükleme öncesi (${mode}) — yedek ID: ${backupId.slice(0, 8)}...`
+    )
+    if (!guvSonuc.ok) {
+      return { ok: false, mode, step: currentStep, error: 'Güvenlik yedeği alınamadı: ' + guvSonuc.error }
+    }
+    const guvenlikYedegiId = guvSonuc.id
+
+    // ─── 2) Yedeği oku ───
+    currentStep = 'yedek_okuma'
+    onProgress?.('Yedek okunuyor...', 'Snapshot DB\'den çekiliyor')
+    const backup = await getBackup(backupId)
+    if (!backup || !backup.veri) {
+      return { ok: false, mode, step: currentStep, error: 'Yedek bulunamadı veya boş' }
+    }
+
+    // ─── 3) Versiyon kontrolü ───
+    const snapshot = backup.veri
+    if (!snapshot._version || snapshot._version !== 'v3') {
+      return {
+        ok: false, mode, step: currentStep,
+        error: `Bu yedek formatı henüz desteklenmiyor (versiyon: ${snapshot._version || 'bilinmiyor'}). Sadece v3 yedekler restore edilebilir.`,
+      }
+    }
+    if (!snapshot.tables || typeof snapshot.tables !== 'object') {
+      return { ok: false, mode, step: currentStep, error: 'Yedek tabloları okunamıyor (snapshot.tables eksik)' }
+    }
+
+    // ─── 4) Replace mode: önce DELETE ───
+    if (mode === 'replace') {
+      currentStep = 'temizleme'
+      onProgress?.('Veriler temizleniyor...', 'Mevcut tablolar siliniyor (replace mode)')
+      // Ters sırada sil — FK olabilir, child önce silinmeli
+      // BACKUP_TABLES sırası zaten parent-child düzeninde (orders → work_orders)
+      // Ters sırada sileceğiz: en sondan başla
+      const reverseOrder = [...BACKUP_TABLES].reverse()
+      for (const t of reverseOrder) {
+        // .neq('id', '__non_existent__') hilesi: WHERE clause olmadan DELETE
+        // Supabase RLS bunu istemez; gerçek bir filter koymalı.
+        // Tüm satırları silmek için: filter('id', 'neq', '__no_id__') yerine
+        // .gte('alindi_saat', '1900-01-01') gibi her zaman doğru bir filter kullan.
+        // Pragmatik: id alanı tüm tabloda var, dolu — id IS NOT NULL filter
+        const { error } = await supabase.from(t).delete().not('id', 'is', null)
+        if (error) {
+          return {
+            ok: false, mode, step: currentStep, guvenlikYedegiId,
+            error: `Tablo temizlenemedi (${t}): ${error.message}. Güvenlik yedeği: ${guvenlikYedegiId}`,
+          }
+        }
+      }
+    }
+
+    // ─── 5) INSERT / UPSERT ───
+    currentStep = mode === 'replace' ? 'yedekten_yukleme' : 'birlestirme'
+    onProgress?.(
+      mode === 'replace' ? 'Yedek geri yükleniyor...' : 'Yedek mevcut verilerle birleştiriliyor...',
+      `${BACKUP_TABLES.length} tablo işleniyor`
+    )
+
+    let totalRows = 0
+    let affectedTables = 0
+    for (const t of BACKUP_TABLES) {
+      const rows = snapshot.tables[t] || []
+      if (rows.length === 0) continue
+      affectedTables++
+      // 500'lük chunk'lar halinde upsert (Supabase limit'i)
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500)
+        const { error } = await supabase.from(t).upsert(chunk, { onConflict: 'id' })
+        if (error) {
+          return {
+            ok: false, mode, step: currentStep, guvenlikYedegiId,
+            error: `Insert/upsert hatası (${t}): ${error.message}. Güvenlik yedeği: ${guvenlikYedegiId}`,
+          }
+        }
+        totalRows += chunk.length
+      }
+    }
+
+    // ─── 6) Tamamlandı ───
+    currentStep = 'tamamlandi'
+    onProgress?.('Tamamlandı ✓', `${totalRows} kayıt, ${affectedTables} tablo`)
+
+    return {
+      ok: true,
+      mode,
+      guvenlikYedegiId,
+      insertedRows: totalRows,
+      affectedTables,
+    }
+  } catch (e: any) {
+    return {
+      ok: false,
+      mode,
+      step: currentStep,
+      error: e?.message || 'Beklenmeyen hata',
+    }
+  }
+}
+
+// ─── Faz 4+ için stub'lar ──────────────────────────────────────────────
 
 /**
- * STUB — Faz 4'te (sonraki oturum) implementasyon eklenecek.
+ * STUB — Faz 4'te implementasyon eklenecek.
  * 30 günden eski otomatik yedekleri siler. Manuel yedekler etkilenmez.
  */
 // export async function cleanOldBackups(keepDays = 30): Promise<number> { ... }
