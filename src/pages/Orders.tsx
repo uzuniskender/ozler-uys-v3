@@ -3,7 +3,7 @@ import { logAction } from '@/lib/activityLog'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -513,23 +513,72 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     let createdOrderId = ''  // v15.36: yeni sipariş için DB id — flow state'ine yazılacak
 
     if (initial?.id) {
-      // Güncelleme — eski İE'leri sil, her kalem için yeniden üret
-      // ÜYSREV2 (v15.29): Önce eski İE'lerin woId'lerini yakala — kesim planı temizliği için.
-      // Delete sonrası cuttingPlanTemizle ile orphan kesimleri temizle (§14 Öncelik 1 kapanışı).
-      const eskiWoIds = allWos.filter(w => w.orderId === initial.id).map(w => w.id)
-      await supabase.from('uys_work_orders').delete().eq('order_id', initial.id)
-      const cpResult = await cuttingPlanTemizle(eskiWoIds, allPlans as any)
-      await supabase.from('uys_orders').update({ ...row, mrp_durum: 'bekliyor' }).eq('id', initial.id)
-      // Sipariş revize oldu — eski rezervasyonları temizle (yeni hesapla tekrar oluşacak)
-      await rezerveSil(initial.id)
-      let woTotal = 0
-      for (const k of kalemler) {
-        if (k.rcId) { const c = await buildWorkOrders(initial.id, siparisNo.trim(), k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
+      // v15.74 (İş Emri #13 madde 11) — DELTA-BASED REVİZYON
+      // Eski "delete + recreate" akışı kaldırıldı (loglar korunuyordu ama WO ID'leri değişiyor,
+      // üretim takibi sıfırlanıyordu). Yeni akış: ne değiştiyse ona göre uygula.
+      //
+      // 8 senaryo (siparisDelta ile tespit edilir):
+      //   ARTIS    → WO hedefleri × mpm artar (yeni İE açılmaz)
+      //   AZALIS   → WO hedefleri azalır (üretildi > yeniAdet ise BLOCK)
+      //   IPTAL    → tüm açık WO durum='iptal' (silme yok, log korunur)
+      //   TERMIN   → WO termin update
+      //   KALEM_EKLE → buildWorkOrders ile yeni WO'lar
+      //   KALEM_SIL  → o kalemin WO'ları 'iptal'
+      //   RECETE   → kalem_sil + kalem_ekle kombinasyonu
+      //   METADATA → sadece orders update
+      //
+      // TEMEL KURAL: Loglar/üretim DOKUNULMAZ. WO durum'lar 'iptal' olur ama silinmez.
+      const eskiOrder = {
+        id: initial.id,
+        siparisNo: initial.siparisNo || '',
+        musteri: initial.musteri || '',
+        not: initial.not || '',
+        durum: initial.durum || '',
+        urunler: (initial.urunler || []) as any,
       }
-      const temizlikNotu = cpResult.temizlenenKesim
-        ? ` · ${cpResult.temizlenenKesim} kesim temizlendi${cpResult.silinenPlan ? ` · ${cpResult.silinenPlan} plan silindi` : ''}`
-        : ''
-      toast.info(woTotal + ' iş emri güncellendi' + temizlikNotu)
+      const yeniOrder = {
+        id: initial.id,
+        siparisNo: etkinSiparisNo,
+        musteri: etkinMusteri,
+        not: genelNot,
+        durum: initial.durum || '',  // edit modunda durum değişmez (iptal Orders detay'dan yapılır)
+        termin: enYakinTermin,
+        urunler: kalemler as any,
+        mamulKod: ilk.mamulKod,
+        mamulAd: ilk.mamulAd,
+        receteId: ilk.rcId,
+        adet: toplamAdet,
+      }
+
+      const delta = siparisDelta(eskiOrder, yeniOrder, allWos as any, useStore.getState().logs as any)
+
+      // Hata kontrolü — azalış senaryosunda üretildi > yeniAdet
+      if (delta.hatalar.length > 0) {
+        setError(delta.hatalar.join(' · '))
+        setSaving(false)
+        return
+      }
+
+      if (delta.toplamSenaryoSayisi === 0) {
+        toast.info('Sipariş değişikliği tespit edilmedi')
+        setSaving(false)
+        onSaved()
+        return
+      }
+
+      // Delta uygula
+      try {
+        const { ozetler } = await siparisRevizeUygula(delta, yeniOrder, fullRecipes, allPlans as any)
+        if (ozetler.length === 0) {
+          toast.info('Sadece bilgi alanları güncellendi')
+        } else {
+          toast.success('Sipariş revize edildi · ' + ozetler.join(' · '), { duration: 8000 })
+        }
+      } catch (err: any) {
+        setError('Revizyon hatası: ' + (err?.message || String(err)))
+        setSaving(false)
+        return
+      }
     } else {
       const newId = uid()
       createdOrderId = newId

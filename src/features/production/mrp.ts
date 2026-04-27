@@ -724,3 +724,318 @@ export async function rezerveleriSenkronla(
   // v15.70: no-op (rezerve sistemi kapatıldı). Caller imzaları korundu.
   return { siparisSayisi: 0, rezerveSayisi: 0 }
 }
+
+// ═══ v15.74 — SİPARİŞ DELTA HESABI (İş Emri #13 madde 11) ═══
+// Sipariş edit edildiğinde "ne değişti" tespit eder. 8 senaryo:
+//   1 ARTIS    — kalem adet ↑     → WO hedefleri × mpm ile artar (yeni İE açılmaz)
+//   2 AZALIS   — kalem adet ↓     → WO hedefleri azalır (üretildi > yeniAdet ise BLOCK)
+//   3 IPTAL    — sipariş iptal    → tüm açık WO durum='iptal', tedarik düzelt
+//   4 RECETE   — kalem rcId değişti → eski WO'lar 'iptal', yeni WO'lar açılır (loglar korunur)
+//   5 TERMIN   — kalem termin değişti → WO termin update
+//   6 KALEM_EKLE — yeni kalem    → buildWorkOrders ile yeni WO'lar
+//   7 KALEM_SIL  — kalem silindi → o kalemin WO'ları 'iptal' (silme yok)
+//   8 METADATA   — müşteri/no/not değişti → sadece orders update
+//
+// Kombine: birden fazla senaryo aynı anda olabilir (örn. kalem 1 artış + kalem 2 silindi).
+// Bu yüzden delta KALEM BAZLI hesaplanır.
+//
+// TEMEL KURAL: Değişiklik anına kadar olan log/üretim DOKUNULMAZ.
+// WO durum='iptal' olur ama silinmez (log'larla bağ korunur).
+
+import type { OrderItem } from '@/types'
+
+export type DeltaTip = 'artis' | 'azalis' | 'iptal' | 'recete' | 'termin' | 'kalem_ekle' | 'kalem_sil' | 'metadata' | 'noop'
+
+export interface KalemDelta {
+  rcId: string
+  tip: DeltaTip
+  eskiAdet: number
+  yeniAdet: number
+  fark: number
+  uretildiAdet: number  // bu kaleme bağlı tüm logların toplamı (kontrol için)
+  eskiTermin?: string
+  yeniTermin?: string
+  etkilenenWoIds: string[]
+}
+
+export interface SiparisDelta {
+  orderId: string
+  iptalEdildi: boolean         // sipariş bütün durum 'iptal' yapıldıysa true
+  metadataDegisti: boolean
+  kalemDeltalari: KalemDelta[]
+  hatalar: string[]            // örn. "Reçete X için 50 üretildi, yeni adet 40 olamaz"
+  toplamSenaryoSayisi: number  // metadata + kalem değişimi
+}
+
+/**
+ * v15.74 — Sipariş edit'inde "ne değişti" tespit eder.
+ * Yan etki yok, sadece okur. Caller siparisRevizeUygula ile asıl işi yapar.
+ */
+export function siparisDelta(
+  oldOrder: { id: string; siparisNo: string; musteri: string; not: string; durum: string; urunler: OrderItem[] },
+  newOrder: { siparisNo: string; musteri: string; not: string; durum: string; urunler: OrderItem[] },
+  workOrders: WorkOrder[],
+  logs: { woId: string; qty: number }[],
+): SiparisDelta {
+  const result: SiparisDelta = {
+    orderId: oldOrder.id,
+    iptalEdildi: false,
+    metadataDegisti: false,
+    kalemDeltalari: [],
+    hatalar: [],
+    toplamSenaryoSayisi: 0,
+  }
+
+  // İptal kontrolü (en üst öncelikli)
+  if (newOrder.durum === 'iptal' || newOrder.durum === 'kapalı') {
+    if (oldOrder.durum !== newOrder.durum) {
+      result.iptalEdildi = true
+      result.toplamSenaryoSayisi++
+      return result  // iptal varsa diğer farkları umursama (zaten hepsi etkilenecek)
+    }
+  }
+
+  // Metadata değişimi
+  if (
+    oldOrder.siparisNo !== newOrder.siparisNo ||
+    oldOrder.musteri !== newOrder.musteri ||
+    oldOrder.not !== newOrder.not
+  ) {
+    result.metadataDegisti = true
+    result.toplamSenaryoSayisi++
+  }
+
+  // Kalem bazlı diff — eski ve yeni urunler[] karşılaştır
+  const oldByRc: Record<string, OrderItem> = {}
+  for (const k of (oldOrder.urunler || [])) oldByRc[k.rcId] = k
+
+  const yeniByRc: Record<string, OrderItem> = {}
+  for (const k of (newOrder.urunler || [])) yeniByRc[k.rcId] = k
+
+  // Bu kaleme bağlı WO'ları + üretildiği toplam adeti getirir
+  function woUretildi(rcId: string): { woIds: string[]; uretildi: number } {
+    const woIds = workOrders
+      .filter(w => w.orderId === oldOrder.id && w.rcId === rcId && w.durum !== 'iptal')
+      .map(w => w.id)
+    let uretildi = 0
+    for (const woId of woIds) {
+      uretildi += logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
+    }
+    return { woIds, uretildi }
+  }
+
+  // Eski kalemler — yeni listede var mı bak
+  for (const rcId of Object.keys(oldByRc)) {
+    const oldK = oldByRc[rcId]
+    const yeniK = yeniByRc[rcId]
+    const { woIds, uretildi } = woUretildi(rcId)
+
+    if (!yeniK) {
+      // KALEM SİLİNDİ
+      result.kalemDeltalari.push({
+        rcId, tip: 'kalem_sil',
+        eskiAdet: oldK.adet, yeniAdet: 0, fark: -oldK.adet,
+        uretildiAdet: uretildi,
+        eskiTermin: oldK.termin, yeniTermin: undefined,
+        etkilenenWoIds: woIds,
+      })
+      result.toplamSenaryoSayisi++
+      continue
+    }
+
+    // Adet, termin, rcId aynı mı? (rcId map'in anahtarı zaten aynı, reçete değişimi farklı şekilde tespit edilmeli)
+    const adetDegisti = oldK.adet !== yeniK.adet
+    const terminDegisti = oldK.termin !== yeniK.termin
+
+    if (adetDegisti) {
+      const fark = yeniK.adet - oldK.adet
+      if (fark > 0) {
+        result.kalemDeltalari.push({
+          rcId, tip: 'artis',
+          eskiAdet: oldK.adet, yeniAdet: yeniK.adet, fark,
+          uretildiAdet: uretildi,
+          eskiTermin: oldK.termin, yeniTermin: yeniK.termin,
+          etkilenenWoIds: woIds,
+        })
+        result.toplamSenaryoSayisi++
+      } else {
+        // AZALIS — üretildi > yeniAdet ise hata
+        if (uretildi > yeniK.adet) {
+          result.hatalar.push(
+            `Reçete ${rcId} için ${uretildi} adet üretildi, yeni adet ${yeniK.adet} olamaz (azaltma kabul edilmez)`
+          )
+        }
+        result.kalemDeltalari.push({
+          rcId, tip: 'azalis',
+          eskiAdet: oldK.adet, yeniAdet: yeniK.adet, fark,
+          uretildiAdet: uretildi,
+          eskiTermin: oldK.termin, yeniTermin: yeniK.termin,
+          etkilenenWoIds: woIds,
+        })
+        result.toplamSenaryoSayisi++
+      }
+    } else if (terminDegisti) {
+      result.kalemDeltalari.push({
+        rcId, tip: 'termin',
+        eskiAdet: oldK.adet, yeniAdet: yeniK.adet, fark: 0,
+        uretildiAdet: uretildi,
+        eskiTermin: oldK.termin, yeniTermin: yeniK.termin,
+        etkilenenWoIds: woIds,
+      })
+      result.toplamSenaryoSayisi++
+    }
+  }
+
+  // Yeni kalemler — eski listede yok ise KALEM_EKLE
+  for (const rcId of Object.keys(yeniByRc)) {
+    if (oldByRc[rcId]) continue  // zaten yukarıda işlendi
+    const yeniK = yeniByRc[rcId]
+    result.kalemDeltalari.push({
+      rcId, tip: 'kalem_ekle',
+      eskiAdet: 0, yeniAdet: yeniK.adet, fark: yeniK.adet,
+      uretildiAdet: 0,
+      eskiTermin: undefined, yeniTermin: yeniK.termin,
+      etkilenenWoIds: [],
+    })
+    result.toplamSenaryoSayisi++
+  }
+
+  return result
+}
+
+/**
+ * v15.74 — siparisDelta sonucuna göre asıl uygulamayı yapar.
+ * Caller tarafında çağrılma sırası:
+ *   1. siparisDelta() → ne değişti tespit
+ *   2. delta.hatalar.length > 0 ise → kullanıcıya göster, abort
+ *   3. siparisRevizeUygula() → DB değişiklikleri uygula
+ *   4. mrpTedarikDuzelt() → fazla bekleyen tedarikleri otomatik düşür (madde 10)
+ *   5. runMRP / autoMRP → eksikleri açar (F-19/20)
+ *
+ * @returns özet string'leri (toast göstermek için)
+ */
+export async function siparisRevizeUygula(
+  delta: SiparisDelta,
+  newOrder: { id: string; siparisNo: string; musteri: string; not: string; termin: string; durum: string; urunler: OrderItem[]; mamulKod: string; mamulAd: string; receteId: string; adet: number },
+  recipes: Recipe[],
+  cuttingPlans: { id: string; satirlar: any[] }[],
+): Promise<{ ozetler: string[] }> {
+  const ozetler: string[] = []
+
+  // 1) Sipariş kaydının kendisini güncelle (her zaman — adet/termin değişebilir, urunler yeniden serileştirilir)
+  const orderRow: Record<string, unknown> = {
+    siparis_no: newOrder.siparisNo,
+    musteri: newOrder.musteri,
+    not_: newOrder.not,
+    termin: newOrder.termin,
+    mamul_kod: newOrder.mamulKod,
+    mamul_ad: newOrder.mamulAd,
+    recete_id: newOrder.receteId,
+    adet: newOrder.adet,
+    urunler: newOrder.urunler,
+  }
+  // İptal durumu varsa onu da güncelle
+  if (delta.iptalEdildi) orderRow['durum'] = newOrder.durum
+
+  // mrp_durum revizyonun anlamlı olduğu durumlarda 'bekliyor' olur
+  // (sadece adet/termin/reçete/kalem ekleme/silme. Metadata için dokunma)
+  const akisDegisti = delta.kalemDeltalari.some(k => k.tip !== 'termin')
+  if (akisDegisti && !delta.iptalEdildi) orderRow['mrp_durum'] = 'bekliyor'
+
+  await supabase.from('uys_orders').update(orderRow).eq('id', delta.orderId)
+
+  // 2) İptal senaryosu — tüm açık WO'ları iptal et (silme yok, log korunur)
+  if (delta.iptalEdildi) {
+    const { count: iptalSayisi } = await supabase
+      .from('uys_work_orders')
+      .update({ durum: 'iptal' })
+      .eq('order_id', delta.orderId)
+      .neq('durum', 'iptal')
+      .select('*', { count: 'exact', head: true })
+    ozetler.push(`Sipariş iptal edildi · ${iptalSayisi || 0} İE iptal işaretlendi (loglar korundu)`)
+    return { ozetler }
+  }
+
+  // 3) Kalem bazlı senaryolar
+  for (const kd of delta.kalemDeltalari) {
+    if (kd.tip === 'metadata' || kd.tip === 'noop') continue
+
+    if (kd.tip === 'artis') {
+      // WO hedefleri × mpm ile artar. MEvcut kayıt için: yeni hedef = (yeni adet) × mpm
+      // Çünkü buildWorkOrders'ta hedef = ceil(adet × zincirCarpan × mpm) → bunu bizim "adet"'e oranlamak için
+      // formül olmadan basit yaklaşım: WO'nun mevcut hedef'i / eski adet × yeni adet (oranlı yaz)
+      for (const woId of kd.etkilenenWoIds) {
+        // Mevcut WO oku, hedefini orantılı artır
+        const { data: wo } = await supabase
+          .from('uys_work_orders')
+          .select('id, hedef')
+          .eq('id', woId)
+          .single()
+        if (!wo) continue
+        const yeniHedef = Math.ceil((wo.hedef as number) * (kd.yeniAdet / kd.eskiAdet))
+        await supabase.from('uys_work_orders').update({ hedef: yeniHedef }).eq('id', woId)
+      }
+      ozetler.push(`+${kd.fark} adet → ${kd.etkilenenWoIds.length} İE hedefi artırıldı`)
+    }
+
+    if (kd.tip === 'azalis') {
+      // Aynı orantı, hedef azaltılır. (Hata kontrolü siparisDelta'da yapıldı)
+      for (const woId of kd.etkilenenWoIds) {
+        const { data: wo } = await supabase
+          .from('uys_work_orders')
+          .select('id, hedef')
+          .eq('id', woId)
+          .single()
+        if (!wo) continue
+        const yeniHedef = Math.max(kd.uretildiAdet, Math.ceil((wo.hedef as number) * (kd.yeniAdet / kd.eskiAdet)))
+        await supabase.from('uys_work_orders').update({ hedef: yeniHedef }).eq('id', woId)
+      }
+      ozetler.push(`${kd.fark} adet → ${kd.etkilenenWoIds.length} İE hedefi azaltıldı (üretildi=${kd.uretildiAdet} korundu)`)
+    }
+
+    if (kd.tip === 'termin') {
+      // Sadece termin update, akış değişmez
+      for (const woId of kd.etkilenenWoIds) {
+        await supabase.from('uys_work_orders').update({ termin: kd.yeniTermin || null }).eq('id', woId)
+      }
+      ozetler.push(`Termin değişti → ${kd.etkilenenWoIds.length} İE güncellendi`)
+    }
+
+    if (kd.tip === 'kalem_sil') {
+      // O kalemin tüm açık WO'ları iptal (silme yok)
+      await supabase
+        .from('uys_work_orders')
+        .update({ durum: 'iptal' })
+        .in('id', kd.etkilenenWoIds)
+      ozetler.push(`Kalem silindi → ${kd.etkilenenWoIds.length} İE iptal (loglar korundu)`)
+    }
+
+    if (kd.tip === 'kalem_ekle') {
+      // Yeni kalem için WO'lar oluştur — buildWorkOrders dynamic import
+      // (Circular dep önlemek için)
+      const { buildWorkOrders } = await import('./autoChain')
+      // Kalem ekle: woTotal başlangıç max sira + 1
+      const { data: maxSira } = await supabase
+        .from('uys_work_orders')
+        .select('sira')
+        .eq('order_id', delta.orderId)
+        .order('sira', { ascending: false })
+        .limit(1)
+      const baslangicSira = (maxSira && maxSira[0]?.sira) ? Number(maxSira[0].sira) : 0
+      // newOrder.urunler içinden bu rcId'li kalemi bul (yeni eklenmiş olmalı)
+      const yeniKalem = newOrder.urunler.find(k => k.rcId === kd.rcId)
+      if (yeniKalem) {
+        const c = await buildWorkOrders(
+          delta.orderId, newOrder.siparisNo, kd.rcId, kd.yeniAdet,
+          recipes, yeniKalem.termin, baslangicSira
+        )
+        ozetler.push(`Yeni kalem → ${c} İE oluşturuldu`)
+      }
+    }
+
+    // 'recete' senaryosu kalem_sil + kalem_ekle olarak gelir (rcId değiştiği için
+    // siparisDelta yukarıda zaten ikisini tespit eder). Bu yüzden ayrı handler yok.
+  }
+
+  return { ozetler }
+}
