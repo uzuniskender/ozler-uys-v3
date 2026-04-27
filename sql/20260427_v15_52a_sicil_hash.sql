@@ -23,15 +23,15 @@
 --   audit-schema.cjs whitelist güncellenmesi gerekmez.
 -- ════════════════════════════════════════════════════════════════════════════
 
-ALTER TABLE uys_operators ADD COLUMN IF NOT EXISTS sicil_hash text;
+ALTER TABLE public.uys_operators ADD COLUMN IF NOT EXISTS sicil_hash text;
 
 DO $$
 DECLARE
   total int;
   with_pass int;
 BEGIN
-  SELECT count(*) INTO total FROM uys_operators WHERE aktif IS NOT FALSE;
-  SELECT count(*) INTO with_pass FROM uys_operators WHERE aktif IS NOT FALSE AND sifre IS NOT NULL AND sifre <> '';
+  SELECT count(*) INTO total FROM public.uys_operators WHERE aktif IS NOT FALSE;
+  SELECT count(*) INTO with_pass FROM public.uys_operators WHERE aktif IS NOT FALSE AND sifre IS NOT NULL AND sifre <> '';
   RAISE NOTICE 'v15.52a: uys_operators.sicil_hash kolonu eklendi.';
   RAISE NOTICE '  Aktif operatör: %', total;
   RAISE NOTICE '  Plain sifre olan: % (lazy migration ile dönüşecek)', with_pass;
