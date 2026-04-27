@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
 import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
-import { isOrderMrpPending, isWorkOrderOpen, isCuttingPlanActive, isProcurementPending } from '@/lib/statusUtils'
+import { isOrderMrpPending, isWorkOrderOpen, isProcurementPending, isKesimWO, getPlanliWoIds } from '@/lib/statusUtils'
 
 interface TopbarProps {
   onMenuClick: () => void
@@ -40,31 +40,13 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   //   normalize edilmiş statusUtils helper'larıyla yakalanıyor.
   //   Bkz: docs/UYS_v3_Bilgi_Bankasi.md §18.3 Durum String Konvansiyonu
   const zincirCounts = useMemo(() => {
-    // v15.50a.6 — Kesim operasyon tespiti: CuttingPlans.tsx'teki kesimOps listesi ile birebir.
-    // Eski kod sadece 'KESIM' arıyordu, "KESME LAZER" gibi operasyonları kaçırıyordu.
-    // Tüm kesim varyantları: 'KESİM', 'KESME', 'KES' (kök), '+ kesim makineleri'.
-    // opAd üzerinden direkt arama — operations tablosuna bağımlılık yok, opId boş bile olsa çalışır.
-    const KESIM_OPS = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
-    const isKesimWO = (w: typeof workOrders[0]) => {
-      const opAd = (w.opAd || '').toLocaleUpperCase('tr-TR')
-      return KESIM_OPS.some(k => opAd.includes(k))
-    }
-
-    // Plana atanmış WO ID seti (sadece iptal olmamış planlar)
-    const planliWoIds = new Set<string>()
-    for (const cp of cuttingPlans) {
-      if (!isCuttingPlanActive(cp)) continue
-      for (const s of (cp.satirlar || [])) {
-        for (const k of (s.kesimler || [])) {
-          if (k.woId) planliWoIds.add(k.woId)
-        }
-      }
-    }
-    const kesim = workOrders.filter(w => {
-      if (!isWorkOrderOpen(w)) return false
-      if (!isKesimWO(w)) return false
-      return !planliWoIds.has(w.id)
-    }).length
+    // v15.73 — Duplicate kod kaldırıldı, statusUtils helper'ları kullanılıyor (atıl kod sıra 7)
+    // Eski: KESIM_OPS list, isKesimWO inline fn, planliWoIds inline build (50+ satır)
+    // Yeni: isKesimWO + getPlanliWoIds tek satır helper (statusUtils.ts'te tanımlı)
+    const planliWoIds = getPlanliWoIds(cuttingPlans as any)
+    const kesim = workOrders.filter(w =>
+      isWorkOrderOpen(w) && isKesimWO(w) && !planliWoIds.has(w.id)
+    ).length
 
     const mrp = orders.filter(isOrderMrpPending).length
     const tedarik = tedarikler.filter(isProcurementPending).length
