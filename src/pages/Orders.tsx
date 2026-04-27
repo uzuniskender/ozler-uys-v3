@@ -406,6 +406,17 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   const [musteri, setMusteri] = useState(initial?.musteri || '')
   const [genelNot, setGenelNot] = useState(initial?.not || '')
 
+  // v15.58 (İş Emri #13 madde 3) — Sipariş türü tikleri:
+  //   isTekilIE: "Sipariş bağlı değil" — sipariş_no otomatik IE-AUTO-{ts} üretilir, kullanıcı yazmaz
+  //   isStokIE:  "Müşteri yok / Stok için" — musteri "STOK" olarak kaydedilir; termin opsiyonel
+  // initial varsa (düzenleme modu) tikler mevcut değerlere göre türetilir.
+  const [isTekilIE, setIsTekilIE] = useState(() => {
+    return !!initial?.siparisNo?.startsWith('IE-AUTO-') || !!initial?.siparisNo?.startsWith('IE-MANUAL-')
+  })
+  const [isStokIE, setIsStokIE] = useState(() => {
+    return (initial?.musteri || '').toUpperCase() === 'STOK' || !initial?.musteri
+  })
+
   // Kalem listesi — initial'dan veya boş bir kalemle başla
   const [kalemler, setKalemler] = useState<OrderItem[]>(() => {
     if (initial?.urunler && initial.urunler.length > 0) {
@@ -452,13 +463,25 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   }
 
   async function save() {
-    if (!siparisNo.trim()) { setError('Sipariş No zorunlu'); return }
+    // v15.58 (madde 3) — Tekil İE / Stok modlarına göre değer üret
+    let etkinSiparisNo = siparisNo.trim()
+    let etkinMusteri = musteri.trim()
+    if (isTekilIE && !etkinSiparisNo) {
+      // Otomatik İE numarası: IE-AUTO-{Date.now base36}
+      etkinSiparisNo = `IE-AUTO-${Date.now().toString(36).toUpperCase()}`
+    }
+    if (isStokIE) {
+      etkinMusteri = 'STOK'
+    }
+
+    if (!etkinSiparisNo) { setError('Sipariş No zorunlu (veya "Sipariş bağlı değil" tikini açın)'); return }
     if (!kalemler.length) { setError('En az bir ürün kalemi olmalı'); return }
 
     for (let i = 0; i < kalemler.length; i++) {
       const k = kalemler[i]
       if (!k.rcId) { setError(`${i + 1}. kalem için ürün / reçete seçilmedi`); return }
-      if (!k.termin) { setError(`${i + 1}. kalem termini boş`); return }
+      // v15.58 — Stok modunda termin opsiyonel (madde 5)
+      if (!isStokIE && !k.termin) { setError(`${i + 1}. kalem termini boş (Stok modunda boş bırakılabilir — "Müşteri yok" tikini açın)`); return }
       if (!k.adet || k.adet < 1) { setError(`${i + 1}. kalem adedi 1'den küçük`); return }
       // v15.36 — Sıkı reçete kontrolü: reçete gerçekten var ve satırlı mı?
       const rc = recipes.find(r => r.id === k.rcId)
@@ -474,8 +497,8 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     const enYakinTermin = terminler[0] || ''
 
     const row = {
-      siparis_no: siparisNo.trim(),
-      musteri: musteri.trim(),
+      siparis_no: etkinSiparisNo,
+      musteri: etkinMusteri,
       termin: enYakinTermin,
       mamul_kod: ilk.mamulKod,
       mamul_ad: ilk.mamulAd,
@@ -565,14 +588,59 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {error && <div className="p-2 bg-red/10 border border-red/25 rounded text-xs text-red">{error}</div>}
 
+          {/* v15.58 — Sipariş türü tikleri (madde 3) */}
+          <div className="flex items-center gap-4 p-3 bg-bg-2/50 border border-border rounded-lg">
+            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isTekilIE}
+                onChange={e => {
+                  setIsTekilIE(e.target.checked)
+                  if (e.target.checked) setSiparisNo('')  // otomatik üretilecek
+                }}
+                className="accent-accent"
+              />
+              <span><strong>Sipariş bağlı değil</strong> — Tekil İş Emri (otomatik no)</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isStokIE}
+                onChange={e => {
+                  setIsStokIE(e.target.checked)
+                  if (e.target.checked) setMusteri('')  // STOK olarak kaydedilecek
+                }}
+                className="accent-accent"
+              />
+              <span><strong>Müşteri yok</strong> — Stok için iş emri</span>
+            </label>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-zinc-500 mb-1 block">Sipariş No *</label>
-              <input value={siparisNo} onChange={e => setSiparisNo(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus />
+              <label className="text-[11px] text-zinc-500 mb-1 block">
+                Sipariş No {isTekilIE ? <span className="text-amber">(otomatik)</span> : '*'}
+              </label>
+              <input
+                value={siparisNo}
+                onChange={e => setSiparisNo(e.target.value)}
+                disabled={isTekilIE}
+                placeholder={isTekilIE ? 'Otomatik üretilecek (IE-AUTO-...)' : ''}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                autoFocus={!isTekilIE}
+              />
             </div>
             <div>
-              <label className="text-[11px] text-zinc-500 mb-1 block">Müşteri</label>
-              {(() => {
+              <label className="text-[11px] text-zinc-500 mb-1 block">
+                Müşteri {isStokIE ? <span className="text-amber">(STOK)</span> : ''}
+              </label>
+              {isStokIE ? (
+                <input
+                  value="STOK (stok için iş emri)"
+                  disabled
+                  className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-500 italic disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+              ) : (() => {
                 const { customers, orders: allOrders } = useStore.getState()
                 const musteriSet = new Set([...customers.map(c => c.ad || c.kod), ...allOrders.map(o => o.musteri)].filter(Boolean))
                 const opts = [...musteriSet].sort((a, b) => a.localeCompare(b, 'tr')).map(m => ({ value: m, label: m }))
