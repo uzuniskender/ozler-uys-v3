@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast, Toaster } from 'sonner'
+import { hashSicil, verifySicil, isHashed } from '@/lib/sicilHash'
 
 interface LoginProps {
   onLogin: (username: string, password: string) => Promise<{ error: unknown }>
@@ -15,7 +16,8 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showOpr, setShowOpr] = useState(false)
-  const [oprData, setOprData] = useState<{ id: string; ad: string; kod: string; bolum: string; sifre?: string }[]>([])
+  // v15.52a — sicilHash field'ı eklendi (lazy migration: önce hash, yoksa plain)
+  const [oprData, setOprData] = useState<{ id: string; ad: string; kod: string; bolum: string; sifre?: string; sicilHash?: string }[]>([])
   const [selBolum, setSelBolum] = useState('')
   const [selOprId, setSelOprId] = useState('')
   const [oprSifre, setOprSifre] = useState('')
@@ -23,7 +25,12 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
   useEffect(() => {
     if (showOpr && oprData.length === 0) {
       supabase.from('uys_operators').select('*').then(({ data }) => {
-        if (data) setOprData(data.filter((o: any) => o.aktif !== false).map((o: any) => ({ id: o.id, ad: o.ad, kod: o.kod, bolum: o.bolum || '', sifre: o.sifre || '' })))
+        if (data) setOprData(data.filter((o: any) => o.aktif !== false).map((o: any) => ({
+          id: o.id, ad: o.ad, kod: o.kod, bolum: o.bolum || '',
+          sifre: o.sifre || '',
+          // v15.52a — sicil_hash kolonu (migration sonrası dolar; lazy migration ile zamanla yayılır)
+          sicilHash: o.sicil_hash || '',
+        })))
       })
     }
   }, [showOpr])
@@ -40,10 +47,33 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
     setLoading(false)
   }
 
-  function doOprLogin() {
+  // v15.52a — Lazy hash migration:
+  // 1) Hash varsa hash karşılaştır
+  // 2) Yoksa plain text karşılaştır + arka planda hashle + DB'deki sifre kolonunu null'la
+  // Eski plain text saklı kalmaya devam eder ama her başarılı giriş bir adım dönüştürür.
+  // 1-2 hafta sonra (tüm aktif operatörler login olduktan sonra) sifre kolonu drop edilebilir.
+  async function doOprLogin() {
     const opr = oprData.find(o => o.id === selOprId)
-    if (opr && opr.sifre && opr.sifre !== oprSifre) { toast.error('Şifre hatalı'); return }
-    if (onOperatorLogin) onOperatorLogin(selOprId, opr?.ad || '')
+    if (!opr) return
+    // Saklı değer: önce hash, yoksa plain (verifySicil ikisini de tanır)
+    const stored = opr.sicilHash || opr.sifre || ''
+    if (!verifySicil(oprSifre, stored)) { toast.error('Şifre hatalı'); return }
+
+    // Hash henüz yoksa, doğru girilen plain text'i hash'le ve DB'ye yaz
+    if (!isHashed(stored)) {
+      try {
+        const newHash = hashSicil(oprSifre)
+        await supabase.from('uys_operators').update({
+          sicil_hash: newHash,
+          sifre: null,  // plain'i temizle (lazy migration tamamlanır)
+        }).eq('id', opr.id)
+      } catch (e) {
+        // Hash yazımı başarısız olsa bile login devam eder; bir sonraki girişte tekrar denenir
+        console.warn('[v15.52a] sicil_hash lazy migration failed:', e)
+      }
+    }
+
+    if (onOperatorLogin) onOperatorLogin(selOprId, opr.ad || '')
   }
 
   // ═══ OPERATÖR GİRİŞ EKRANI — tam sayfa ═══

@@ -140,9 +140,31 @@ export const ROLE_LIST: { key: AdminRole; label: string }[] = [
   { key: 'depocu', label: 'Depocu' },
 ]
 
+// v15.52a — Operatör panel action listesi.
+// Operatör admin değil; ayrı bir izin domeni. DEFAULTS yapısı (AdminRole[] tutuyor)
+// operator için uygun değil — bu sebeple ayrı bir Set olarak tanımlandı.
+// can() fonksiyonu role === 'operator' için bu set'e bakar.
+//
+// Mevcut OperatorPanel.tsx şu an `can()` çağırmıyor — sadece `isOperator` flag'iyle
+// çalışıyor. Bu set ileride OperatorPanel içine yetki kontrolü eklemek için hazır
+// (örn. üretim sorumlusu operator'a fire kaydı yetkisini kapatmak isterse).
+export const OPERATOR_ACTIONS = new Set<string>([
+  'op_view_workorders',     // bölümüne ait WO'ları görür
+  'op_log_production',      // üretim kaydı (logs INSERT)
+  'op_log_fire',            // fire kaydı (fireLogs INSERT)
+  'op_log_durus',           // duruş kaydı
+  'op_start_work',          // İşe Başla (activeWork INSERT)
+  'op_stop_work',           // İşi Bitir (activeWork DELETE)
+  'op_send_message',        // yöneticiye mesaj (operatorNotes INSERT)
+  'op_view_stok',           // sadece kendi malzemeleri için stok görür
+  'op_request_izin',        // izin talep (IzinTalepForm — bonus, OperatorPanel.tsx'te mevcut)
+])
+
 export function can(role: UserRole, action: string): boolean {
   if (role === 'admin') return true
-  if (role === 'guest' || role === 'operator') return false
+  // v15.52a — Operatör için ayrı izin domeni
+  if (role === 'operator') return OPERATOR_ACTIONS.has(action)
+  if (role === 'guest') return false
   const map = _overrides && Object.keys(_overrides).length > 0 ? _overrides : DEFAULTS
   const allowed = map[action]
   if (!allowed) return false
