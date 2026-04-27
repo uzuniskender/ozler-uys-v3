@@ -337,19 +337,22 @@ export function hesaplaMRP(
     brutIhtiyac[grupKey] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: planAdet, termin: planTermin }
   })
 
-  // 5. Stok ve açık tedarik hesabı — v15.50a: termin gruplama + FIFO tahsis
-  // Malkod bazlı pool kur (case-insensitive). Aynı malkod farklı terminlere ayrılmışsa
-  // EN ERKEN termin önce stok+açık tedarik tüketir, kalan sonraki terminlere kalır.
+  // 5. Stok ve açık tedarik hesabı — v15.63: Buket'in net formülü
+  //    NET İHTİYAÇ = BRÜT − STOK − YOLDA GELEN
+  // Rezerve mantığı KALDIRILDI: stokPool artık fiziksel stok'tan rezerve düşmüyor.
+  // (mrpRezerve parametresi geriye uyumluluk için kalır ama kullanılmaz; rezerveYaz
+  // çağrıları çalışmaya devam eder — ölü kayıt, ileride temizlenir.)
+  //
+  // Sebep: Önceki implementasyon "diğer siparişlerin rezervesini" stoktan düşüyordu.
+  // Bu kullanıcının net formülünden sapma — örnek: 208 stok + 207 ihtiyaç durumunda
+  // diğer siparişler 174+34=208 rezerve yapmış olunca yeni siparişe stok 0 görünüp
+  // 207 eksik gibi gözüküyordu. Doğrusu: sadece fiziksel stok değerlendirilir.
   const stokPool: Record<string, number> = {}
   const acikTedPool: Record<string, number> = {}
   Object.values(brutIhtiyac).forEach(bi => {
     const kLower = (bi.malkod || '').trim().toLowerCase()
     if (stokPool[kLower] !== undefined) return
-    const fizikselStok = getStok(bi.malkod, stokHareketler)
-    const baskaRezerve = (mrpRezerve || [])
-      .filter(r => (r.malkod || '').trim().toLowerCase() === kLower && r.orderId !== currentOrderId)
-      .reduce((a, r) => a + r.miktar, 0)
-    stokPool[kLower] = Math.max(0, fizikselStok - baskaRezerve)
+    stokPool[kLower] = getStok(bi.malkod, stokHareketler)
     acikTedPool[kLower] = tedarikler
       .filter(t => (t.malkod || '').trim().toLowerCase() === kLower && !t.geldi)
       .reduce((a, t) => a + t.miktar, 0)
