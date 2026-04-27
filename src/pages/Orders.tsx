@@ -13,6 +13,7 @@ import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, 
 import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
+import { ActiveFlowDecisionModal } from '@/components/ActiveFlowDecisionModal'
 import { startFlow, advanceFlow } from '@/lib/pendingFlow'
 import { getKesimEksikWoIds, isKesimWO } from '@/lib/statusUtils'
 
@@ -74,15 +75,14 @@ export function Orders() {
     f.durum === 'aktif' &&
     (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
+  // v15.64 (madde 17) — Yarım kalan akış için karar modalı
+  const [flowDecisionOpen, setFlowDecisionOpen] = useState(false)
 
   function handleNewOrderClick() {
-    // Yeni sipariş tıklandı — aktif flow varsa uyar
+    // Yeni sipariş tıklandı — aktif flow varsa karar modalı aç (mecburi karar)
     if (myActiveFlow && !urlFlowId) {
-      toast.warning(
-        `Tamamlanmamış akış var: ${myActiveFlow.stateData.baslik || 'Sipariş akışı'} (${myActiveFlow.currentStep}). ` +
-        `Önce onu tamamla veya Topbar'dan iptal et.`,
-        { duration: 6000 }
-      )
+      // v15.64 — Toast yerine mecburi karar modalı (Devam Et / İptal Et)
+      setFlowDecisionOpen(true)
       return
     }
     setEditOrder(null); setShowForm(true)
@@ -385,6 +385,15 @@ export function Orders() {
       </div>
       {showForm && <OrderFormModal initial={editOrder} recipes={recipes} materials={materials} onClose={() => { setShowForm(false); setEditOrder(null) }} onSaved={async () => { setShowForm(false); setEditOrder(null); loadAll(); toast.success(editOrder ? 'Güncellendi' : 'Oluşturuldu'); await triggerRezerveSync() }} />}
       {showBulkImport && <BulkOrderImportModal existingOrders={orders} recipes={recipes} onClose={() => setShowBulkImport(false)} onComplete={async () => { setShowBulkImport(false); loadAll(); await triggerRezerveSync() }} />}
+
+      {/* v15.64 (madde 17) — Yarım kalan akış karar modalı */}
+      {flowDecisionOpen && myActiveFlow && (
+        <ActiveFlowDecisionModal
+          flow={myActiveFlow}
+          onResolved={() => { setFlowDecisionOpen(false); loadAll(); setEditOrder(null); setShowForm(true) }}
+          onClose={() => setFlowDecisionOpen(false)}
+        />
+      )}
       {selectedOrder && <OrderDetailModal order={selectedOrder} workOrders={workOrders.filter(w => w.orderId === selectedOrder.id)} logs={logs} onClose={() => setSelectedOrder(null)} />}
     </div>
   )

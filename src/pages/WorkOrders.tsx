@@ -11,6 +11,7 @@ import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { getPlanliWoIds, isKesimWO } from '@/lib/statusUtils'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
+import { ActiveFlowDecisionModal } from '@/components/ActiveFlowDecisionModal'
 import { stokKontrolWO } from '@/features/production/stokKontrol'
 import { isBarMaterialByKod } from '@/features/production/barModel'
 import { canDeleteWO } from '@/features/production/validations'
@@ -59,13 +60,12 @@ export function WorkOrders() {
   // component tanımı dosyada kaldı, ileride Sipariş modal'ında "tekil İE" tiki için
   // referans olabilir — madde 3'ün Faz A3'ünde değerlendirilir).
   const navigate = useNavigate()
+  // v15.64 (madde 17) — Yarım kalan akış için karar modalı
+  const [flowDecisionOpen, setFlowDecisionOpen] = useState(false)
   const handleYeniSiparis = () => {
     if (myActiveFlow) {
-      toast.warning(
-        `Tamamlanmamış akış var: ${myActiveFlow.stateData.baslik || 'Akış'} (${myActiveFlow.currentStep}). ` +
-        `Önce onu tamamla veya Topbar'dan iptal et.`,
-        { duration: 6000 }
-      )
+      // v15.64 — Toast yerine mecburi karar modalı (Devam Et / İptal Et)
+      setFlowDecisionOpen(true)
       return
     }
     navigate('/orders?yeni=1')
@@ -428,6 +428,15 @@ export function WorkOrders() {
 
       {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAll} />}
       {/* v15.57 — NewIEModal render kaldırıldı (madde 1: Yeni İE butonu Sipariş üzerinden) */}
+
+      {/* v15.64 (madde 17) — Yarım kalan akış karar modalı */}
+      {flowDecisionOpen && myActiveFlow && (
+        <ActiveFlowDecisionModal
+          flow={myActiveFlow}
+          onResolved={() => { setFlowDecisionOpen(false); loadAll(); navigate('/orders?yeni=1') }}
+          onClose={() => setFlowDecisionOpen(false)}
+        />
+      )}
     </div>
   )
 }
