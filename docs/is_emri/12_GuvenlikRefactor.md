@@ -27,17 +27,30 @@ UYS v3'te **Row Level Security (RLS)** açık görünüyor ama gerçekte koruma 
 
 ---
 
+## ⚠️ ÖNEMLİ KISIT (27 Nis 2026 keşfedildi)
+
+**Supabase'de Google OAuth provider DISABLED.** `auth.users` tablosu boş — kimse Google ile giriş yapmamış. Tüm kullanıcılar (admin dahil) `uys_kullanicilar` tablosu + plain text `sifre` ile custom auth path'inden giriyor.
+
+Bu kısıt orijinal Faz 1 planını (`Admin Google OAuth pilot`) **geçersiz kılıyor**. Yeni gerçeklik:
+- Admin Google OAuth ile login YAPMIYOR
+- 4 rol (admin + uretim_sor + planlama + depocu) hepsi aynı custom auth path'inde
+- Faz 1 ve Faz 2 doğal olarak birleşiyor → "Tüm AdminRole'leri Supabase Auth'a sıfırdan migrate"
+
+`useAuth.ts`'in `signInWithGoogle` fonksiyonu çağrıldığında `validation_failed: Unsupported provider` hatası alır.
+
+---
+
 ## YAKLAŞIM TERCİHİ
 
 3 yaklaşım analiz edildi (detay: `docs/UYS_v3_Bilgi_Bankasi.md` §20):
 
 | Yaklaşım | Açıklama | Süre | Risk |
 |---|---|---|---|
-| **A — Supabase Auth** | Tüm rolleri `auth.users`'a taşı, RLS `auth.uid()` ile | 1 hafta | Düşük (standart yol) |
+| **A — Supabase Auth (email/password)** | Tüm rolleri `auth.users`'a taşı, RLS `auth.uid()` ile | 1.5 hafta | Düşük (standart yol) |
 | B — Custom JWT Claims | Frontend kendi JWT'sini imzalar, RLS `jwt()` claim okur | 1.5 hafta | Yüksek (yanlış imp = felaket) |
 | C — Edge Function Hibrit | Hassas işlemler Function üzerinden, frontend `from()` çağırmaz | 2 hafta | Düşük ama kapsamlı refactor |
 
-**Seçilen: Yaklaşım A** (Supabase'in tasarlandığı yol; mevcut admin akışı [Google OAuth] genişletilir).
+**Seçilen: Yaklaşım A** (Supabase'in tasarlandığı yol). Email/password provider Supabase'de zaten default açık; Google OAuth açmaya gerek yok (gerekirse ayrı iş olarak ileride eklenir).
 
 ### Kapsam Dışı
 
@@ -45,79 +58,91 @@ UYS v3'te **Row Level Security (RLS)** açık görünüyor ama gerçekte koruma 
 - Audit log (ayrı iş)
 - 2FA (ayrı iş)
 - Session timeout policy (ayrı iş)
+- Google OAuth eklenmesi (ihtiyaç olursa ayrı iş)
 
 ---
 
-## FAZ 1 — ADMIN TAM TAŞIMA (PILOT, ~2 GÜN)
+## FAZ 1 — TÜM ADMINROLE'LER SUPABASE AUTH'A TAŞINIR (~5 GÜN)
 
-**Hedef:** Mevcut admin akışını (Google OAuth) RLS-uyumlu hale getirmek. **Risk en düşük** — sadece 1-2 admin var, sahayı etkilemez.
+**Hedef:** Mevcut 4 AdminRole (admin + uretim_sor + planlama + depocu) `uys_kullanicilar` custom auth + plain `sifre`'den Supabase Auth'a (email/password) taşınır. Operatörler Faz 2'de ele alınır.
 
-### Görev 1.1 — auth.users vs uys_kullanicilar Senkron
+**Pre-requisite:** v16.0.0 Faz 1.1a yapıldı (27 Nis 2026):
+- `uys_kullanicilar.auth_user_id` uuid kolonu eklendi
+- `idx_uys_kullanicilar_auth_user_id` index
+- `public.current_user_role()` SQL helper fonksiyonu
 
-`uys_kullanicilar` tablosuna `auth_user_id uuid` kolonu ekle. Admin Google OAuth ile login olunca:
-- `auth.users.id` (UUID) ↔ `uys_kullanicilar.auth_user_id`
-- Helper RPC: `current_user_role()` — `auth.uid()`'den `uys_kullanicilar.rol`'ü döner
+Bu altyapı şu an boş duruyor (RLS policy'leri henüz yok). Faz 1 devam edince doldurulacak.
 
-### Görev 1.2 — Pilot RLS Policy (Düşük Riskli Tablolar)
+### Görev 1.1 — Pilot Hesap (Admin = Buket)
 
-İlk olarak **sadece okuma odaklı** tablolarda RLS sıkılaştır:
-- `uys_operators` (sicil_hash sütunu hassas — admin hariç görünmez)
-- `uys_kullanicilar` (şifreler — admin hariç hiç görünmez)
+İlk **bir** kullanıcı için Auth hesabı manuel oluştur:
 
-Hedef: Admin login ile okuyabilir + yazabilir, anon hiçbir şey yapamaz.
+1. Supabase Studio → Authentication → Users → "Add user"
+2. Email: `<admin için sentetik veya gerçek email>` + güçlü şifre
+3. SQL ile `uys_kullanicilar.auth_user_id` set et:
+   ```sql
+   -- Auth user ID'yi al
+   SELECT id FROM auth.users WHERE email = '<email>';
+   -- Bağla
+   UPDATE public.uys_kullanicilar
+     SET auth_user_id = '<auth_user_id>'
+     WHERE rol = 'admin';
+   ```
+4. `current_user_role()` test:
+   ```sql
+   SELECT public.current_user_role();
+   -- Anonim çağrıda NULL dönmeli; auth ile çağrıda 'admin' dönmeli
+   ```
 
-### Görev 1.3 — Test
+### Görev 1.2 — Login.tsx Hibrit Akış
 
-- Admin login → operatör listesi açılıyor mu? ✓
-- Anon (logout) → operator listesi sorgusu fail oluyor mu? ✓
-- v15.52a Login.tsx hash migration hâlâ çalışıyor mu? ✓ (kritik regression)
+`signIn(username, password)` fonksiyonuna **fallback chain** ekle:
+1. Önce `supabase.auth.signInWithPassword({ email, password })` dene
+2. Başarısız olursa eski custom path (`uys_kullanicilar` + plain `sifre`) ile devam et
+3. Geriye uyumluluk: hem yeni hem eski yöntemle giriş çalışır (transition period)
 
-**Kabul kriteri:** Sahadaki üretim kayıtları, kesim planları, MRP — hiçbiri etkilenmemeli.
+Test: Buket yeni Auth ile login → admin paneli normal çalışıyor mu?
+
+### Görev 1.3 — Pilot RLS Policy
+
+Hassas tablolarda **küçük adım** RLS sıkılaştır:
+- `uys_operators.sifre` ve `uys_operators.sicil_hash` kolonları → admin hariç görünmez
+- `uys_kullanicilar` tablosu → admin hariç görünmez
+
+Önemli: `allow_all` policy'leri **henüz silmiyoruz**. Yeni kısıtlı policy'ler ekleniyor; allow_all hâlâ aktif olduğu için test sırasında eski akış çalışmaya devam ediyor (kademe kademe geçiş). Sahada hiçbir kullanıcı fark etmiyor.
+
+### Görev 1.4 — Migration Script (3 AdminRole)
+
+Mevcut `uys_kullanicilar` kayıtları (uretim_sor, planlama, depocu) için `auth.users` hesabı oluştur:
+- Email: `<kullaniciAdi>@ozler.local` (sentetik email)
+- Şifre: ilk girişte değiştirme zorunlu (DEFAULT_PASSWORD geçici)
+- `auth_user_id` set et
+
+Kullanıcılara duyuru: "Yarın UYS'ye girince yeni şifre belirleme ekranı çıkacak."
+
+### Görev 1.5 — `allow_all` DROP (Faz 1 sonu)
+
+Pilot + tüm AdminRole'ler Auth'a taşındıktan ve test edildikten sonra (en az 2 gün gözlem) hassas tablolardaki `allow_all` policy'leri silinir. RLS artık gerçek koruma yapar.
+
+**Kabul kriteri:** Sahadaki dashboard, sipariş, kesim, MRP akışları aynen çalışmalı. Hiçbir kullanıcı değişikliği fark etmemeli (ilk login dışında — yeni şifre belirleme).
 
 ---
 
-## FAZ 2 — uretim_sor / planlama / depocu ROLLERİ (~3 GÜN)
+## FAZ 2 — OPERATOR ROLÜ (~3 GÜN)
 
-**Hedef:** Custom auth (uys_kullanicilar tablo + plain text şifre) → Supabase Auth taşı.
-
-### Görev 2.1 — Migration Script
-
-Mevcut `uys_kullanicilar` kayıtları için `auth.users`'da hesap oluştur. Şifre: ilk girişte değiştirme zorunlu (DEFAULT_PASSWORD geçici). Email: `<kullaniciAdi>@ozler.local` (sentetik email — Supabase email validation için).
-
-### Görev 2.2 — Login.tsx Refactor
-
-`signIn(username, password)` → önce `auth.users`'da signInWithPassword dener, fallback olarak eski custom path. 1-2 hafta transition sonrası fallback kaldırılır.
-
-### Görev 2.3 — RLS Policy Yayılımı
-
-10+ tablo (orders, work_orders, recipes, materials vb.) için role-based policy:
-```sql
-CREATE POLICY "planlama_can_insert_orders" ON public.uys_orders
-  FOR INSERT TO authenticated
-  WITH CHECK (current_user_role() IN ('admin', 'planlama'));
-```
-
-### Görev 2.4 — Test
-
-3 admin/uretim_sor/planlama/depocu test hesabı + sahada bir kullanıcının onayıyla pilot.
-
-**Kabul kriteri:** Sahadaki dashboard, sipariş, kesim, MRP akışları aynen çalışmalı. Hiçbir kullanıcı değişikliği fark etmemeli.
-
----
-
-## FAZ 3 — OPERATOR ROLÜ (~3 GÜN)
+**Pre-requisite:** v15.52a lazy migration tamamlanmalı (tüm operatörler hash'lenmiş olmalı).
 
 **Hedef:** Operatörleri Supabase Auth'a taşı. Mevcut sessionStorage `OPR_KEY` deseni kalkar, gerçek JWT gelir.
 
-### Görev 3.1 — Migration
+### Görev 2.1 — Migration
 
 Her operatör için `auth.users` hesabı: email `<sicilNo>@operator.ozler.local`, şifre = sicil_hash (bcrypt'e gerekirse migrate). İlk girişte v15.52a.1'in lazy migration mantığı korunur.
 
-### Görev 3.2 — useAuth.operatorLogin Refactor
+### Görev 2.2 — useAuth.operatorLogin Refactor
 
 `sessionStorage.OPR_KEY` set etmek yerine `supabase.auth.signInWithPassword({ email, password })` çağır. JWT otomatik header'a eklenir, RLS doğal olarak operator'ı tanır.
 
-### Görev 3.3 — Operatör RLS Policy
+### Görev 2.3 — Operatör RLS Policy
 
 ```sql
 -- Operatör kendi loglarını yazabilir, başkasının yazamaz
@@ -134,7 +159,7 @@ CREATE POLICY "operator_dept_workorders" ON public.uys_work_orders
   );
 ```
 
-### Görev 3.4 — Test (Sahada Pilot)
+### Görev 2.4 — Test (Sahada Pilot)
 
 Bir bölüm seç (örn. KESİM), 2-3 operatöre yeni Auth akışıyla giriş yaptır. Diğer bölümler eski akışla devam eder.
 
@@ -142,7 +167,7 @@ Bir bölüm seç (örn. KESİM), 2-3 operatöre yeni Auth akışıyla giriş yap
 
 ---
 
-## FAZ 4 — TÜM TABLOLAR İÇİN RLS YAYILIMI (~2 GÜN)
+## FAZ 3 — TÜM TABLOLAR İÇİN RLS YAYILIMI (~2 GÜN)
 
 8 ana tablo + diğer ~25 yardımcı tablo için RLS policy'leri tamamla. Pattern aynı: role-based + ownership-based.
 
@@ -168,7 +193,7 @@ Trigger ile hassas tablolarda her değişiklik kaydedilir. ISO 27001 audit için
 
 ---
 
-## FAZ 5 — TEMİZLİK + DOKÜMAN (~1 GÜN)
+## FAZ 4 — TEMİZLİK + DOKÜMAN (~1 GÜN)
 
 - Eski `signIn(username, password)` (custom path) kaldır
 - `uys_kullanicilar.sifre` kolonu DROP
@@ -212,16 +237,18 @@ Her görev için:
 
 | Faz | Süre | Kümülatif |
 |---|---|---|
-| Faz 1: Admin Pilot | 2 gün | 2 gün |
-| Faz 2: AdminRole'ler | 3 gün | 5 gün |
-| Faz 3: Operator | 3 gün | 8 gün |
-| Faz 4: RLS Yayılımı | 2 gün | 10 gün |
-| Faz 5: Temizlik | 1 gün | 11 gün |
+| Faz 1: Tüm AdminRole'leri Auth'a | 5 gün | 5 gün |
+| Faz 2: Operator Auth'a | 3 gün | 8 gün |
+| Faz 3: RLS Yayılımı | 2 gün | 10 gün |
+| Faz 4: Temizlik | 1 gün | 11 gün |
 
-**Toplam:** ~11 gün (tam zamanlı bir Claude oturumunun yapacağı varsayımıyla). Buket'in günlük iş yükü düşünülürse **3-4 hafta'ya yayılır**.
+**Toplam:** ~11 gün (tam zamanlı bir Claude oturumunun yapacağı varsayımıyla). Buket'in günlük iş yüküyle **3-4 hafta'ya yayılır**.
 
-**Pre-requisite:** v15.52a lazy migration tamamlanmalı (tüm operatörler hash'lenmiş olmalı) — Faz 3'e başlamadan önce.
+**Pre-requisite checklist:**
+- [x] v15.52a lazy migration başlatıldı (tüm operatörler hash'lenmiş olmalı — Faz 2 öncesi kontrol)
+- [x] v16.0.0 Faz 1.1a altyapı kuruldu (auth_user_id kolonu + current_user_role helper)
+- [ ] Faz 1 başlangıcı için zaman ayrılmalı (en az 1 hafta yarım gün, gözleme açık)
 
 ---
 
-*Bu spec 27 Nis 2026'da hazırlandı. RLS audit sonucu (`allow_all` keşfi) Bilgi Bankası §20'de detaylı.*
+*Bu spec 27 Nis 2026'da hazırlandı, aynı gün revize edildi (Google OAuth disabled keşfi sonrası). RLS audit sonucu (`allow_all` keşfi) Bilgi Bankası §20'de detaylı.*

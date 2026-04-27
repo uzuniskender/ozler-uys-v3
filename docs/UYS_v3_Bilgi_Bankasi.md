@@ -1173,6 +1173,29 @@ ALTER TABLE uys_operators ADD COLUMN sicil_hash text;
 
 8 ana tablo (`uys_operators`, `uys_logs`, `uys_fire_logs`, `uys_active_work`, `uys_operator_notes`, `uys_stok_hareketler`, `uys_work_orders`, `uys_orders`) RLS açık görünüyor ama tek `allow_all` policy (`cmd: ALL, qual: true, with_check: true`) ile korumasız. Pratik etki: anon key sahibi (yani frontend'i açan herkes) DB'deki tüm verileri okuyup yazabilir.
 
+### Önemli Kısıt — Google OAuth DISABLED (27 Nis 2026 keşfedildi)
+
+Supabase'de Google OAuth provider **kapalı**. `auth.users` tablosu **boş** — kimse Google ile giriş yapmamış. Tüm kullanıcılar (admin dahil) `uys_kullanicilar` tablosu + plain text `sifre` ile custom auth path'inden giriyor.
+
+Bu kısıt İş Emri #12'nin orijinal Faz 1 planını ("Admin Google OAuth pilot") **geçersiz kılıyor**. Spec aynı gün revize edildi:
+- Eski Faz 1 (Admin Google OAuth) ve Faz 2 (AdminRole'ler) → **birleştirildi**, yeni Faz 1 = "Tüm AdminRole'leri Supabase Auth'a sıfırdan migrate"
+- Yaklaşım A korundu (email/password provider — Supabase'de default açık)
+- Faz sayısı 5 → 4'e düştü, toplam süre değişmedi (~11 gün full-time)
+
+`useAuth.ts` dosyasındaki `signInWithGoogle` fonksiyonu çağrıldığında `validation_failed: Unsupported provider` hatası verir.
+
+### v16.0.0 Faz 1.1a — Altyapı (27 Nis 2026 yapıldı)
+
+İş Emri #12'nin başlangıç altyapısı kuruldu (sahaya etki sıfır):
+- `uys_kullanicilar.auth_user_id uuid` kolonu (nullable, mevcut satırlar bozulmadı)
+- `idx_uys_kullanicilar_auth_user_id` index (RLS lookup performansı için)
+- `public.current_user_role()` SQL helper — `auth.uid()` → `uys_kullanicilar.rol`. SECURITY DEFINER + STABLE. Anon çağrıda NULL döner.
+
+Hiçbir RLS policy değişmedi, hiçbir tablo etkilenmedi. Faz 1.2+ devam edince bu altyapı kullanılacak.
+
+Migration: `sql/20260427_v16_0_0_faz1_1a_auth_alti.sql` — idempotent (`IF NOT EXISTS`), `public.` prefix kullanıyor (§18.5).
+
+
 ### Niye Şu An Risk Düşük
 
 1. **İç ağ kullanımı** — sahaya internet açık değil, dışarıdan erişim yok

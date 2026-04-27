@@ -1,17 +1,22 @@
 # Yeni Oturum Devam Notu
 
-**Tarih:** 27 Nisan 2026 (v15.52a.1 sonrası — Operatör güvenlik patch'i + audit hotfix)
-**Son canlı sürüm:** v15.52a.1
+**Tarih:** 27 Nisan 2026 (akşam — v16.0.0 Faz 1.1a sonrası)
+**Son canlı sürüm:** v15.52a.1 (kod) + v16.0.0 Faz 1.1a (sadece DB altyapı)
 
 ---
 
 ## Hemen Yap (Yeni Oturumda İlk Adım)
 
 ```
-UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 MRP sözleşmesi + §20 tehdit modeli) + docs/is_emri/00_BACKLOG_Master.md oku.
-Son iş: v15.52a + v15.52a.1 (Operatör güvenlik: sicil hash lazy migration + RBAC operator actions + SQL public. prefix hotfix).
-İş Emri #1 (Operatör Paneli) KAPANDI — sahada zaten %95 yapılmıştı, eksik güvenlik gap'leri kapatıldı.
-Sıradaki: İş Emri #2 (Yedekleme) veya İş Emri #12 (Güvenlik Refactoru — RLS) veya küçük UX patch'leri.
+UYS v3 devamı. docs/DEVAM_NOTU.md + docs/UYS_v3_Bilgi_Bankasi.md (özellikle §18 ailesi 5 kalıcı kural + §19 + §20) + docs/is_emri/00_BACKLOG_Master.md + docs/is_emri/12_GuvenlikRefactor.md (revize edildi 27 Nis akşam) oku.
+Son durum: v15.52a.1 canlıda, İş Emri #1 + #3 KAPANDI. v16.0.0 Faz 1.1a (auth altyapı) DB'de hazır ama hiçbir RLS değişmedi.
+İş Emri #12 (Güvenlik Refactoru) kapsamı revize edildi: Google OAuth DISABLED keşfedildi, Faz 1+2 birleştirildi (4 faz toplam).
+Sıradaki adaylar:
+  - Topbar KESİM uyarısı Orders.tsx'te (~30 dk, yarım kalan UX iş)
+  - İş Emri #2 Yedekleme (production-blocker, büyük)
+  - İş Emri #12 Faz 1 (büyük, mimari — 1 hafta)
+  - UYS dışı işler (Mavvo, Libya, kalite, vb.)
+Buket önceliği belirler.
 ```
 
 ---
@@ -64,26 +69,40 @@ Remove-Item "$env:TEMP\uys-audit-scripts.rar" -Force -ErrorAction SilentlyContin
 
 ---
 
+## Bu Akşam Yapılan İşler (27 Nis akşam)
+
+1. **İş Emri #12 başlangıç denemesi** — Yaklaşım A (Supabase Auth) ile Faz 1.1a yapıldı:
+   - Migration: `sql/20260427_v16_0_0_faz1_1a_auth_alti.sql` (canlıda)
+   - `uys_kullanicilar.auth_user_id` kolonu + index + `current_user_role()` helper
+   - **Saha etki sıfır** (RLS henüz değişmedi)
+
+2. **Sürpriz keşif (RLS audit denemesinde):** Google OAuth Supabase'de DISABLED. `auth.users` tablosu boş — kimse Google ile giriş yapmamış. Bu, İş Emri #12 spec'inin Faz 1'i (Admin Google OAuth pilot) **geçersiz** kılıyor.
+
+3. **İş Emri #12 spec revize edildi:**
+   - Eski Faz 1 (Admin Google OAuth) ve Faz 2 (AdminRole'ler) → birleştirildi
+   - Yeni Faz 1 = "Tüm AdminRole'leri Supabase Auth'a sıfırdan migrate" (~5 gün)
+   - Faz sayısı 5 → 4'e düştü, toplam süre değişmedi (~11 gün full-time, 3-4 hafta yayılmış)
+
+4. **Karar:** Faz 1'in geri kalanı (1.2+) **şu an yapılmıyor**. Buket'in günlük iş yükü düşünüldüğünde 1-2 haftalık mimari refactor için doğru zamanlama değil. Backlog'da bekliyor.
+
+---
+
 ## Sıradaki Adaylar
 
-**Adim B — İş Emri #2 (Yedekleme Yönetimi):**
-- `/backup` route — production-blocker
-- `pt_yedekler` tablosu Tip D, önceden tip ataması yapıldı (§18.2 tablosu)
-- Mevcut `apply.ps1`'de "Bilgi bankası backup" mantığı var, repo bilinci var
+**Hızlı kazanım (~30 dk):**
+- **Topbar KESİM uyarısı** — v15.50a.6'da Topbar düzeltildi ama Orders.tsx'teki uyarı eklenmemişti. Küçük UX iş, hemen biter.
 
-**Adim D — Topbar KESİM badge'i Siparişler sayfasında uyarı:**
-- v15.50a.6'da Topbar düzeltildi ama Orders.tsx'teki uyarı eklenmemişti
-- Küçük UX patch — 30 dakikalık iş
+**Production-blocker (büyük, ~1 hafta):**
+- **İş Emri #2 Yedekleme** — `/backup` route, JSON snapshot/restore. `pt_yedekler` tablosu Tip D, önceden tip ataması yapıldı (§18.2 tablosu).
+- **İş Emri #5 Sevkiyat Formu** — Mevcut sevk listesi var, oluşturma formu yok.
 
-**Adim E — Plain `sifre` kolonu DROP (1-2 hafta sonra):**
-- v15.52a lazy migration tamamlanınca (tüm aktif operatörler login olduktan sonra)
-- Kontrol: `SELECT count(*) FROM uys_operators WHERE sifre IS NOT NULL AND aktif IS NOT FALSE` → 0 olmalı
-- Sonra: `ALTER TABLE public.uys_operators DROP COLUMN sifre;`
+**Mimari büyük iş (1-2 hafta):**
+- **İş Emri #12 Faz 1** — Tüm AdminRole'leri Supabase Auth'a migrate. Pre-requisite altyapı zaten kuruldu (Faz 1.1a). Buket vakit ayırınca yapılır.
 
-**Adim F — İş Emri #12 (Güvenlik Refactoru — RLS):**
-- 1-2 haftalık büyük iş
-- `docs/is_emri/12_GuvenlikRefactor.md` (bu patch'le birlikte oluşturuldu)
-- Faz 1'le başlanır (Admin'leri Supabase Auth'a tam taşıma — düşük risk pilot)
+**Küçük temizlikler:**
+- **Plain `sifre` kolonu DROP** — v15.52a lazy migration tamamlanınca (1-2 hafta sonra). Kontrol: `SELECT count(*) FROM uys_operators WHERE sifre IS NOT NULL AND aktif IS NOT FALSE` → 0 olmalı, sonra `ALTER TABLE public.uys_operators DROP COLUMN sifre;`
+
+**UYS dışı işler:** Mavvo BOM-to-recipe, Libya order documentation, TL-ISG-017, Compaco 8D, ERP demo karşılaştırması, vb.
 
 Buket önceliği belirler.
 
