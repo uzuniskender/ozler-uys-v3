@@ -102,6 +102,13 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
     { key: 'hmt_edit', label: 'Düzenleme' },
     { key: 'hmt_delete', label: 'Silme' },
   ]},
+  // v15.53 Adım 1 — Yedekleme yetki grubu
+  { group: 'Yedekleme', actions: [
+    { key: 'backup_view', label: 'Yedek listesi görme' },
+    { key: 'backup_create', label: 'Manuel yedek alma' },
+    { key: 'backup_restore', label: 'Geri yükleme (TEHLİKELİ)' },
+    { key: 'backup_delete', label: 'Yedek silme' },
+  ]},
 ]
 
 export const DEFAULTS: Record<string, AdminRole[]> = {
@@ -132,6 +139,11 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   data_backup:['planlama'], data_import:[], data_export:[], data_test:['planlama'], data_syscheck:[], data_reset:[], data_pass:[],
   pt_add:['uretim_sor','planlama','depocu'], pt_edit:['uretim_sor','planlama','depocu'], pt_delete:[],
   hmt_add:['uretim_sor'], hmt_edit:['uretim_sor'], hmt_delete:[],
+  // v15.53 Adım 1 — Yedekleme yetkileri
+  backup_view:['planlama'],     // planlama yedek listesini görebilir
+  backup_create:['planlama'],   // planlama manuel yedek alabilir
+  backup_restore:[],            // sadece admin (TEHLİKELİ — Faz 3'te kullanılacak)
+  backup_delete:[],             // sadece admin
 }
 
 export const ROLE_LIST: { key: AdminRole; label: string }[] = [
