@@ -35,6 +35,7 @@ const STORE_WHITELIST = new Set([
   'uys_chat_attachments', // ÖzlerMsg v1
   'uys_v15_31_silinen_hareketler', // v15.31 bar model göç audit — runtime'da kullanılmaz, kanıt amaçlı
   'uys_mrp_calculations', // v15.47 — MRP run snapshot, Faz 3'te (v15.49) MRP modal yazınca dolacak. Şu an global state'e gerek yok; modal kendi fetch edecek.
+  'uys_yedekler',         // v15.53 — Tip D, büyük JSONB blob (1MB+), frontend store'a girmez; backup.ts kendi fetch ediyor.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -43,6 +44,7 @@ const STORE_WHITELIST = new Set([
 const DATA_MGMT_WHITELIST = new Set([
   'uys_v15_31_silinen_hareketler', // v15.31 göç audit — tek seferlik, backup zorunlu değil
   'uys_mrp_calculations',          // v15.47 — MRP run snapshot, yeniden hesaplanabilir, backup gereksiz
+  'uys_yedekler',                  // v15.53 — backup tablosunun kendisi yedeklenmez (recursion engellenir)
 ])
 
 // ═══════════════════════════════════════════════════════════════
