@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
 import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle } from '@/features/production/mrp'
@@ -897,12 +897,21 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
 }
 
 function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order; workOrders: any[]; loadAll: () => void; onClose: () => void }) {
+  // v15.51 — Faz 4: RBAC + concurrent lock + hesaplayan + hata sonrası kapatma butonu
+  const { can, user } = useAuth()
   const [running, setRunning] = useState(false)
   const [adimlar, setAdimlar] = useState<string[]>([])
   const [sonuc, setSonuc] = useState<{ woCount: number; kesimCount: number; mrpCount: number; tedCount: number; eksikler: any[] } | null>(null)
+  // Concurrent guard: aynı sipariş için ikinci tetik atlanır.
+  const lockRef = useRef(false)
+
+  // RBAC: yetki yoksa buton hiç render olmasın (manuel akışlar zaten can('orders_mrp')/can('tedarik_auto') ile sarılı).
+  if (!can('auto_chain_run')) return null
 
   async function run() {
+    if (lockRef.current) { toast.info('Zincir zaten çalışıyor'); return }
     if (!await showConfirm('Tam Zincir: İE → Kesim Planı → MRP → Tedarik çalıştırılacak. Devam?')) return
+    lockRef.current = true
     setRunning(true)
     setAdimlar(['⏳ İş emirleri kontrol ediliyor...'])
     try {
@@ -921,18 +930,26 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
       setAdimlar(['✅ ' + woCount + ' iş emri hazır'])
 
       const cpMapped = s.cuttingPlans.map((p: any) => ({ id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy, hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '', tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0 }))
+      // v15.51 — hesaplayan: Faz 3 modal'daki MRP snapshot ile aynı fallback zinciri.
+      const hesaplayan = user?.username || user?.email || user?.dbId || 'system'
       const result = await autoZincir(
         order.id, woCount,
         s.orders as any, s.workOrders, s.recipes, s.operations as any,
         s.materials, s.stokHareketler, s.tedarikler,
         s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
         cpMapped,
+        hesaplayan,
         (steps) => setAdimlar([...steps])
       )
       setSonuc(result)
       loadAll()
     } catch (e: any) {
       setAdimlar(prev => [...prev, '❌ Hata: ' + e.message])
+      // v15.51 — Hata catch'inde boş sonuç struct'ı setlenir → "Kapat" butonu görünür hale gelir
+      // (eski davranış: modal stuck kalıyordu, kullanıcı sayfayı yenilemek zorunda kalıyordu).
+      setSonuc({ woCount: 0, kesimCount: 0, mrpCount: 0, tedCount: 0, eksikler: [] })
+    } finally {
+      lockRef.current = false
     }
   }
 

@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
-import { hesaplaMRP } from './mrp'
+import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, type MRPRow } from './mrp'
 
 // ═══ İE OLUŞTUR — reçeteden iş emirleri ═══
 export async function buildWorkOrders(
@@ -85,8 +85,15 @@ export interface ZincirSonuc {
   woCount: number; kesimCount: number; mrpCount: number; tedCount: number
   eksikler: { malkod: string; malad: string; brut: number; stok: number; net: number }[]
   adimlar: string[]
+  // v15.51 — Faz 4 hizalama: snapshot insert sonucunda oluşan calc id (raporlama/audit için)
+  mrpCalculationId?: string | null
 }
 
+// v15.51 — Faz 4 hizalama: Faz 3 (MRP modal v15.50b) standardına geçiş
+//   1) MRP run sonrası `uys_mrp_calculations` snapshot insert (Tip C, §18.2 uyumlu)
+//   2) `uys_orders.mrp_durum` güncellenir (eksik/tamam) — manuel akışla aynı davranış
+//   3) Tedarik insert artık `mrpTedarikOlustur(opts)` ile yapılır (auto=true + mrp_calculation_id FK)
+//   4) `hesaplayan` parametresi eklendi (Orders.tsx'ten useAuth().user üzerinden geçer)
 export async function autoZincir(
   orderId: string,
   woCount: number,
@@ -95,6 +102,7 @@ export async function autoZincir(
   materials: Material[], stokHareketler: StokHareket[], tedarikler: Tedarik[],
   logs: { woId: string; qty: number }[],
   cuttingPlans: any[],
+  hesaplayan: string,
   onProgress?: (adimlar: string[]) => void
 ): Promise<ZincirSonuc> {
   const adimlar: string[] = []
@@ -135,12 +143,50 @@ export async function autoZincir(
     gerekliAdet: r.gerekli_adet, satirlar: r.satirlar || [],
   })) || cuttingPlans
 
-  // ADIM 3: MRP
-  let mrpSonuc: any[] = []
+  // ADIM 3: MRP + Snapshot + mrp_durum
+  let mrpSonuc: MRPRow[] = []
+  let calcId: string | null = null
   try {
     mrpSonuc = hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, tedarikler, allCP, materials)
     const eksikSay = mrpSonuc.filter(x => x.durum === 'eksik').length
     adimlar.push(`✅ MRP: ${mrpSonuc.length} kalem${eksikSay ? ' · ' + eksikSay + ' eksik' : ''}`)
+
+    // v15.51 — Snapshot insert (Faz 3 modal pattern'i ile birebir aynı: Tip C, §18.2 uyumlu).
+    // JSONB formatı: {malkod: miktar}. Aynı malkod farklı termin satırlarında olabilir → toplam alınır.
+    const newCalcId = uid()
+    const brut: Record<string, number> = {}
+    const stok: Record<string, number> = {}
+    const acik: Record<string, number> = {}
+    const net:  Record<string, number> = {}
+    for (const r of mrpSonuc) {
+      brut[r.malkod] = (brut[r.malkod] || 0) + r.brut
+      stok[r.malkod] = r.stok
+      acik[r.malkod] = r.acikTedarik
+      net[r.malkod]  = (net[r.malkod]  || 0) + r.net
+    }
+    try {
+      await supabase.from('uys_mrp_calculations').insert({
+        id: newCalcId,
+        order_id: orderId,
+        hesaplayan,
+        brut_ihtiyac: brut,
+        stok_durumu: stok,
+        acik_tedarik: acik,
+        net_ihtiyac: net,
+        durum: 'tamamlandi',
+      })
+      calcId = newCalcId
+    } catch (e) {
+      // Snapshot insert sessiz başarısız olursa zincir akışı bozulmamalı
+      console.warn('[v15.51] uys_mrp_calculations insert (autoZincir) failed:', e)
+    }
+
+    // mrp_durum güncellemesi — Faz 3 modal davranışıyla hizalı (eksik/tamam)
+    const yeniDurum = mrpSonuc.some(r => r.net > 0) ? 'eksik' : 'tamam'
+    await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', orderId)
+
+    // Rezerve kayıtları (manuel akıştaki runMRP de yapıyor)
+    await rezerveYaz(orderId, mrpSonuc)
   } catch (e: any) {
     adimlar.push('⚠️ MRP hatası: ' + e.message)
   }
@@ -150,27 +196,27 @@ export async function autoZincir(
   let tedCount = 0
   try {
     const ord = orders.find((o: any) => o.id === orderId)
-    const eksikler = mrpSonuc.filter(x => x.durum === 'eksik' && x.net > 0)
-    for (const x of eksikler) {
-      // v15.50a — Faz B P2: termin gruplaması sonrası aynı malkod farklı termine düşebilir.
-      // mevcut tedarik kontrolü termin'i de eşleştirmeli, yoksa ikinci satır atlanır.
-      const xTermin = x.termin || ''
+    // Termin-bazlı duplicate filter (autoZincir'e özgü — mrpTedarikOlustur bunu yapmıyor):
+    // Aynı malkod + aynı orderId + aynı teslim tarihi + henüz gelmemiş bir tedarik varsa atla.
+    // Bu, autoZincir'in iki kez tetiklenmesi durumunda duplicate insert'i engeller.
+    const filteredRows = mrpSonuc.filter(r => {
+      if (r.net <= 0) return false
+      const xTermin = r.termin || ''
       const mevcutTed = tedarikler.find(t =>
-        t.malkod === x.malkod
+        t.malkod === r.malkod
         && t.orderId === orderId
         && (t.teslimTarihi || '') === xTermin
         && !t.geldi
       )
-      if (mevcutTed) continue
-      await supabase.from('uys_tedarikler').insert({
-        id: uid(), malkod: x.malkod, malad: x.malad, miktar: x.net,
-        birim: x.birim || 'Adet', tarih: today(),
-        order_id: orderId, siparis_no: ord?.siparisNo || '',
-        teslim_tarihi: xTermin || null,
-        durum: 'bekliyor', geldi: false, not_: 'Otomatik (Sipariş Zinciri)',
-      })
-      tedCount++
-    }
+      return !mevcutTed
+    })
+    // v15.51 — Tedarik insert artık mrpTedarikOlustur(opts) ile (Faz 3 standardı):
+    //   - auto_olusturuldu: true (otomatik akış)
+    //   - mrp_calculation_id: snapshot ID (audit için MRP run ile bağ)
+    tedCount = await mrpTedarikOlustur(orderId, ord?.siparisNo || '', filteredRows, {
+      mrpCalculationId: calcId || undefined,
+      auto: true,
+    })
     adimlar.push(tedCount > 0 ? `✅ ${tedCount} tedarik oluşturuldu` : '✅ Tüm malzemeler yeterli')
   } catch (e: any) {
     adimlar.push('⚠️ Tedarik hatası: ' + e.message)
@@ -181,5 +227,5 @@ export async function autoZincir(
     malkod: x.malkod, malad: x.malad, brut: x.brut, stok: x.stok, net: x.net,
   }))
 
-  return { woCount, kesimCount, mrpCount: mrpSonuc.length, tedCount, eksikler, adimlar }
+  return { woCount, kesimCount, mrpCount: mrpSonuc.length, tedCount, eksikler, adimlar, mrpCalculationId: calcId }
 }
