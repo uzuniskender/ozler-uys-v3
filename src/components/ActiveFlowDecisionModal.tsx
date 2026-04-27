@@ -1,23 +1,23 @@
 /**
  * v15.64 (İş Emri #13 madde 17) — Aktif Akış Karar Modalı
+ * v15.65 — Beklet butonu eklendi (3-buton)
  *
  * Spec: "Yeni iş emri yaratmak için taslak ya beklet, ya iptal, ya tamamla."
  *
- * Bu modal kullanıcı yeni iş emri açmaya çalıştığında, yarım kalmış bir akış varsa
- * gösterilir ve mecburi karar isteğinde bulunur:
+ * Bu modal kullanıcı yeni iş emri açmaya çalıştığında, yarım kalmış aktif bir akış
+ * varsa gösterilir ve mecburi karar isteğinde bulunur:
  *   - Devam Et: mevcut akışın sayfasına yönlendirir
+ *   - Beklet: durumu 'beklet' yapar (Topbar'da kalır, yeni iş açılır)
  *   - İptal Et: cancelFlow() ile akış sonlandırılır, yeni iş emri yolu açılır
- *
- * "Beklet" durumu ileride eklenir (DB'de yeni durum string'i + UI buton).
  */
-import { cancelFlow, stepToRoute } from '@/lib/pendingFlow'
+import { cancelFlow, bekletFlow, stepToRoute } from '@/lib/pendingFlow'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, X, Pause } from 'lucide-react'
 import type { PendingFlow } from '@/types'
 
 export function ActiveFlowDecisionModal({ flow, onResolved, onClose }: {
   flow: PendingFlow
-  onResolved: () => void  // İptal sonrası çağrılır — yeni iş emri akışı başlayabilir
+  onResolved: () => void  // İptal/Beklet sonrası çağrılır — yeni iş emri akışı başlayabilir
   onClose: () => void
 }) {
   function devamEt() {
@@ -25,6 +25,16 @@ export function ActiveFlowDecisionModal({ flow, onResolved, onClose }: {
     const hash = (route.startsWith('#') ? route : '#' + route) + '?flow=' + flow.id
     window.location.hash = hash.startsWith('#') ? hash.slice(1) : hash
     onClose()
+  }
+
+  async function bekletEt() {
+    const ok = await bekletFlow(flow.id)
+    if (ok) {
+      toast.success('Akış bekletildi — Topbar\'dan tekrar açabilirsin')
+      onResolved()
+    } else {
+      toast.error('Beklet işlemi başarısız')
+    }
   }
 
   async function iptalEt() {
@@ -50,19 +60,24 @@ export function ActiveFlowDecisionModal({ flow, onResolved, onClose }: {
         <div className="p-5 space-y-3">
           <p className="text-sm text-zinc-300 leading-relaxed">
             <strong className="text-amber">"{flow.stateData?.baslik || flow.flowType || 'Bilinmeyen akış'}"</strong> akışı tamamlanmadı.
-            Yeni iş emri yaratabilmek için bu akışı <strong>devam ettirmeli</strong> veya <strong>iptal etmelisin</strong>.
+            Yeni iş emri yaratabilmek için bu akışı <strong>devam ettirmeli</strong>, <strong>bekletmeli</strong> veya <strong>iptal etmelisin</strong>.
           </p>
           <div className="text-xs text-zinc-500 bg-bg-2 border border-border rounded-lg p-3 space-y-1">
             <div>Mevcut Adım: <span className="font-mono text-zinc-300">{flow.currentStep || '—'}</span></div>
             <div>Tip: <span className="font-mono text-zinc-300">{flow.flowType || '—'}</span></div>
           </div>
-          <p className="text-xs text-zinc-500 italic">
-            "Beklet" seçeneği yakında eklenecek (İş Emri #13 madde 17 ileri faz).
-          </p>
+          <div className="text-xs text-zinc-500 bg-bg-2 border border-border rounded-lg p-3 space-y-1.5">
+            <div><strong className="text-accent">Devam Et:</strong> akışın bulunduğu sayfaya git, işi bitir.</div>
+            <div><strong className="text-purple-400">Beklet:</strong> akış arşive alınır, Topbar'dan istediğinde geri açabilirsin. Yeni iş emri açılabilir.</div>
+            <div><strong className="text-red">İptal Et:</strong> akış kapatılır (geri alınmaz). Yeni iş emri açılır.</div>
+          </div>
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border flex-wrap">
           <button onClick={iptalEt} className="px-3 py-2 bg-red/10 hover:bg-red/20 text-red border border-red/25 rounded-lg text-xs font-semibold flex items-center gap-1.5">
             <X size={13} /> İptal Et
+          </button>
+          <button onClick={bekletEt} className="px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 rounded-lg text-xs font-semibold flex items-center gap-1.5">
+            <Pause size={13} /> Beklet
           </button>
           <button onClick={devamEt} className="px-3 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold flex items-center gap-1.5">
             <ArrowRight size={13} /> Devam Et

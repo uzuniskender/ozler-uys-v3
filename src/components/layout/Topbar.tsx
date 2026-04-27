@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
-import { cancelFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
+import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
 import { isOrderMrpPending, isWorkOrderOpen, isCuttingPlanActive, isProcurementPending } from '@/lib/statusUtils'
 
 interface TopbarProps {
@@ -26,9 +26,11 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const chatMentions = useChatNotifStore(s => s.unreadMentionCount)
 
   // v15.36 — Aktif yarım işler (sadece bu kullanıcıya ait)
+  // v15.65 (madde 17) — 'beklet' durumlu flow'lar da Topbar'da görünür (kullanıcı geri açabilsin)
   const myUserId = user?.dbId || user?.email || user?.username || ''
   const activeFlows = pendingFlows.filter(f =>
-    f.durum === 'aktif' && (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
+    (f.durum === 'aktif' || f.durum === 'beklet') &&
+    (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
   const flowCount = activeFlows.length
 
@@ -207,6 +209,16 @@ function FlowModal({ flows, onClose, onAction }: {
     else toast.error('İptal başarısız')
   }
   function devam(flowId: string, step: string) {
+    // v15.65 (madde 17) — Eğer bekletilen flow ise önce durumu 'aktif' yap
+    const flow = flows.find(f => f.id === flowId)
+    if (flow?.durum === 'beklet') {
+      devamEttirFlow(flowId).then(() => {
+        const hash = stepToRoute(step as any) + '?flow=' + flowId
+        window.location.hash = hash.startsWith('#') ? hash.slice(1) : hash
+        onClose()
+      })
+      return
+    }
     const hash = stepToRoute(step as any) + '?flow=' + flowId
     window.location.hash = hash.startsWith('#') ? hash.slice(1) : hash
     onClose()
@@ -222,10 +234,15 @@ function FlowModal({ flows, onClose, onAction }: {
         <div className="flex-1 overflow-y-auto divide-y divide-border/50">
           {!flows.length && <div className="p-8 text-center text-zinc-500 text-xs">Yarım iş yok</div>}
           {flows.map(f => (
-            <div key={f.id} className="p-3 flex items-center justify-between gap-3">
+            <div key={f.id} className={`p-3 flex items-center justify-between gap-3 ${f.durum === 'beklet' ? 'bg-purple-500/5' : ''}`}>
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-zinc-200 truncate">
+                <div className="text-xs text-zinc-200 truncate flex items-center gap-2">
                   {f.stateData.baslik || (f.stateData.siparisNo ? `Sipariş ${f.stateData.siparisNo}` : f.flowType)}
+                  {f.durum === 'beklet' && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30 font-semibold">
+                      ⏸ BEKLETİLDİ
+                    </span>
+                  )}
                 </div>
                 <div className="text-[10px] text-zinc-500 mt-0.5">
                   Adım: <span className="text-amber">{stepLabel(f.currentStep)}</span>

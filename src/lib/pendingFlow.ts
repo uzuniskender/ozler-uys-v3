@@ -140,6 +140,45 @@ export async function cancelFlow(flowId: string, not?: string): Promise<boolean>
   return true
 }
 
+/**
+ * v15.65 (İş Emri #13 madde 17) — Akışı beklet.
+ * Bekletilen akış kullanıcının aktif iş listesinden çıkar (yeni iş emri yapabilir),
+ * ama Topbar'da görünmeye devam eder; istediğinde "Devam Et" ile geri açılabilir.
+ *
+ * 'durum' kolonunda CHECK constraint yok (kontrol edildi 27 Nis 2026), 'beklet' string'i
+ * doğrudan yazılabilir. Eğer ileride enum/check eklenirse migration gerek olur.
+ */
+export async function bekletFlow(flowId: string, not?: string): Promise<boolean> {
+  if (!flowId) return false
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      durum: 'beklet',
+      son_aktivite: new Date().toISOString(),
+      not_: not || 'Kullanıcı bekletti',
+    })
+    .eq('id', flowId)
+  if (error) { console.error('[pendingFlow] bekletFlow:', error); return false }
+  return true
+}
+
+/**
+ * v15.65 — Bekletilen akışı tekrar aktif yap.
+ * Topbar'da "Devam Et" butonuna tıklandığında çağrılır (eğer flow durumu 'beklet' ise).
+ */
+export async function devamEttirFlow(flowId: string): Promise<boolean> {
+  if (!flowId) return false
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      durum: 'aktif',
+      son_aktivite: new Date().toISOString(),
+    })
+    .eq('id', flowId)
+  if (error) { console.error('[pendingFlow] devamEttirFlow:', error); return false }
+  return true
+}
+
 /** Step → route map (Topbar badge "devam et"e basınca nereye gidilecek) */
 export function stepToRoute(step: FlowStep): string {
   switch (step) {
