@@ -110,6 +110,10 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
     { key: 'backup_restore', label: 'Geri yükleme (TEHLİKELİ)' },
     { key: 'backup_delete', label: 'Yedek silme' },
   ]},
+  // v15.75 — Loglar yetki grubu (madde 14)
+  { group: 'Loglar', actions: [
+    { key: 'log_view', label: 'Sistem loglarını görme' },
+  ]},
 ]
 
 export const DEFAULTS: Record<string, AdminRole[]> = {
@@ -146,6 +150,9 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   backup_create:['planlama'],   // planlama manuel yedek alabilir
   backup_restore:[],            // sadece admin (TEHLİKELİ — Faz 3'te kullanılacak)
   backup_delete:[],             // sadece admin
+
+  // v15.75 — Loglar (madde 14)
+  log_view:['planlama','uretim_sor'],   // planlama + üretim sorumlusu görebilir; depocu hariç
 }
 
 export const ROLE_LIST: { key: AdminRole; label: string }[] = [

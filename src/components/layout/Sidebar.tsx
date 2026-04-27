@@ -6,7 +6,7 @@ import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -44,6 +44,7 @@ const NAV = [
     { path: '/problem-takip', label: 'Problem Takip', icon: AlertOctagon, badge: 'problemlerOpen', guest: false },
     { path: '/test-mode', label: 'Test Modu', icon: FlaskConical, badge: 'activeTest', guest: false },
     { path: '/test', label: 'Smoke Test', icon: FlaskConical, guest: false, adminOnly: true },
+    { path: '/logs', label: 'Loglar', icon: Activity, guest: false },
     { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
     { path: '/backup', label: 'Yedekler', icon: Save, guest: false },
     { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
@@ -133,6 +134,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 if (item.path === '/backup' && !can('backup_view')) return null
                 // v15.72 — /test (Smoke Test) sadece admin'e (madde 8 — atıl kod analizi sıra 8)
                 if ((item as any).adminOnly && user?.role !== 'admin') return null
+                // v15.75 — /logs sadece log_view yetkisi olanlara (madde 14)
+                if (item.path === '/logs' && !can('log_view')) return null
                 const active = location.pathname === item.path
                 // Chat için özel: mention + unread count store'dan; diğerleri için getBadge (v15.17)
                 const badge = item.path === '/chat'
