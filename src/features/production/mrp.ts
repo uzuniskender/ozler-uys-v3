@@ -398,6 +398,19 @@ export function hesaplaMRP(
 //   - mrpCalculationId: uys_mrp_calculations snapshot id (varsa tedarikler.mrp_calculation_id'ye yazılır)
 //   - auto: tedarik kaydının auto_olusturuldu bayrağı (default true — toplu/otomatik akış)
 // Geri uyumluluk: opts yoksa eski davranış (auto=true, calc_id=null).
+//
+// v15.56 (F-21) — İDEMPOTENT KONTROL:
+//   Aynı orderId + malkod + termin için zaten BEKLEYEN tedarik varsa, miktar farkı (delta) kadar açar.
+//   - Mevcut miktar >= ihtiyaç → HİÇ AÇMA (atla)
+//   - Mevcut miktar < ihtiyaç → SADECE FARKI AÇ
+//   - Mevcut tedarik yok → ihtiyaç kadar aç (eski davranış)
+//
+//   Bug kanıtı: 27 Nis 2026'da S26A_02981_2 siparişi için aynı malkod (H0102C030093044) için
+//   35 saniye arayla 2 ayrı tedarik kaydı açıldı (114 + 207 = 321 birim, oysa gerçek ihtiyaç 207).
+//   Bu fonksiyonun açık tedarik kontrolü yapmamasından kaynaklandı.
+//
+//   Dönüş: KAYITLI (insert edilen) tedarik sayısı. Hepsi atlandıysa 0 döner — çağıran taraf
+//   "Tüm ihtiyaçlar karşılanmış" mesajını gösterir.
 export async function mrpTedarikOlustur(
   orderId: string, siparisNo: string, mrpRows: MRPRow[],
   opts?: { mrpCalculationId?: string; auto?: boolean }
@@ -406,19 +419,72 @@ export async function mrpTedarikOlustur(
   if (!ihtiyaclar.length) return 0
   const auto = opts?.auto ?? true
   const calcId = opts?.mrpCalculationId || null
+
+  // v15.56 F-21 — Mevcut bekleyen tedarikleri tek seferde çek (performans için)
+  // Lookup: malkod + termin → toplam mevcut bekleyen miktar
+  let mevcutMap: Record<string, number> = {}
+  if (orderId) {
+    const { data: mevcutTedarikler, error: tErr } = await supabase
+      .from('uys_tedarikler')
+      .select('malkod, miktar, teslim_tarihi')
+      .eq('order_id', orderId)
+      .eq('geldi', false)
+    if (tErr) {
+      // Sorgu fail olursa eski davranışa düş — bug duruma sebep olur ama akış bozulmaz.
+      console.warn('[v15.56 mrpTedarikOlustur] Mevcut tedarik kontrolü fail, eski davranışa düşüyor:', tErr.message)
+      mevcutMap = {}
+    } else {
+      for (const t of (mevcutTedarikler || [])) {
+        const key = `${(t.malkod || '').trim().toLowerCase()}__${t.teslim_tarihi || ''}`
+        mevcutMap[key] = (mevcutMap[key] || 0) + (t.miktar || 0)
+      }
+    }
+  }
+
+  let kayitliSay = 0
+  const atlananLog: string[] = []
+  const kismiLog: string[] = []
+
   for (const r of ihtiyaclar) {
+    const termin = r.termin || ''
+    const key = `${(r.malkod || '').trim().toLowerCase()}__${termin}`
+    const mevcut = mevcutMap[key] || 0
+    const fark = r.net - mevcut
+
+    if (fark <= 0) {
+      // Mevcut bekleyen tedarik yeterli — yeni kayıt açma
+      atlananLog.push(`${r.malkod}@${termin || '-'}: ihtiyaç ${r.net}, mevcut ${mevcut}`)
+      continue
+    }
+
+    if (mevcut > 0) {
+      kismiLog.push(`${r.malkod}@${termin || '-'}: ihtiyaç ${r.net}, mevcut ${mevcut}, fark ${fark}`)
+    }
+
     await supabase.from('uys_tedarikler').insert({
-      id: uid(), malkod: r.malkod, malad: r.malad, miktar: r.net, birim: r.birim,
+      id: uid(), malkod: r.malkod, malad: r.malad, miktar: fark, birim: r.birim,
       order_id: orderId, siparis_no: siparisNo,
-      durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: r.termin || null,
+      durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: termin || null,
       not_: auto ? 'MRP otomatik' : 'MRP',
       auto_olusturuldu: auto,
       mrp_calculation_id: calcId,
     })
+    kayitliSay++
+
+    // Lookup'ı güncelle — aynı malkod + termin tekrar gelirse çift sayım olmasın
+    mevcutMap[key] = mevcut + fark
   }
+
+  if (atlananLog.length > 0) {
+    console.log('[v15.56 mrpTedarikOlustur] Atlandı (mevcut yeterli):', atlananLog.join(' | '))
+  }
+  if (kismiLog.length > 0) {
+    console.log('[v15.56 mrpTedarikOlustur] Kısmi (delta):', kismiLog.join(' | '))
+  }
+
   // Siparisin mrp_durum'u 'tamam' olsun (MRP akisi kapandi)
   if (orderId) await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', orderId)
-  return ihtiyaclar.length
+  return kayitliSay
 }
 
 // ═══ MRP REZERVE YAZMA — Faz B Parça 2C ═══
