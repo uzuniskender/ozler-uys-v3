@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle } from '@/features/production/stokTuketim'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
+import { isKesimWO, getPlanliWoIds } from '@/lib/statusUtils'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -209,7 +210,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   defaultOprId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, durusKodlari, stokHareketler, recipes, materials } = useStore()
+  const { workOrders, logs, durusKodlari, stokHareketler, recipes, materials, cuttingPlans } = useStore()
   const { can } = useAuth()
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
@@ -309,6 +310,23 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
     if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Miktar, fire veya duruş girmelisiniz'); return }
     if (q < 0 || f < 0) { toast.error('Negatif değer girilemez'); return }
+
+    // v15.55 — Kesim planı zorunluluğu (HARD BLOCK)
+    // Kesim opsiyonlu WO için aktif bir kesim planına atanmamışsa üretim girişi yapılamaz.
+    // Sebep: barModelSync sadece plana bağlı WO'ları yakalar; plan yoksa bar_acilis ve
+    // uys_acik_barlar kayıtları yazılmaz, stok bütünlüğü bozulur (Sağlık Raporu Kontrol #11).
+    // Memory: 27 Nis 2026 — manuel İE açanların kesim planını atlatması bu hatayı yarattı.
+    if (isKesimWO(w)) {
+      const planliWoIds = getPlanliWoIds(cuttingPlans)
+      if (!planliWoIds.has(woId)) {
+        toast.error(
+          `Kesim planı zorunlu! Bu İE (${w.ieNo}) "${w.opAd}" operasyonu içeriyor ama hiçbir kesim planına atanmamış. ` +
+          `Önce Kesim Planları sayfasında bu İE için plan oluşturun, sonra üretim girişi yapın.`,
+          { duration: 10000 }
+        )
+        return
+      }
+    }
     // #2: Fazla üretim kontrolü — HARD BLOCK (fire dahil)
     // Güncel üretim + fire'ı Supabase'den çek (stale data riski)
     const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
@@ -593,15 +611,27 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
     if (!validRows.length) { toast.error('En az bir satıra miktar girin'); return }
     setSaving(true)
 
+    // v15.55 — Kesim planı zorunluluğu (toplu girişte)
+    // Plana atanmamış kesim WO'ları için tek seferde uyar — döngü öncesi cache.
+    const planliWoIds = getPlanliWoIds(cuttingPlans)
+
     const opr = operators.find(o => o.id === oprId)
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
 
+    let kesimPlaniAtlananSay = 0
     for (const r of validRows) {
       const q = parseInt(r.qty) || 0
       const f = parseInt(r.fire) || 0
       const wo = acikWOs.find(w => w.id === r.woId)
       if (!wo || (q <= 0 && f <= 0)) continue
+
+      // v15.55 — Kesim planı zorunluluğu (HARD BLOCK her satır için)
+      if (isKesimWO(wo) && !planliWoIds.has(r.woId)) {
+        kesimPlaniAtlananSay++
+        toast.error(`${wo.ieNo}: Kesim planı yok, atlandı`, { duration: 5000 })
+        continue
+      }
 
       // Hedef kontrolü — güncel veri ile (fire dahil)
       const { data: fLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', r.woId)
