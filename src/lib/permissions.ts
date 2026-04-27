@@ -76,6 +76,7 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
   ]},
   { group: 'Sevkiyat', actions: [
     { key: 'sevk_add', label: 'Oluşturma' }, { key: 'sevk_edit', label: 'Düzenleme' }, { key: 'sevk_delete', label: 'Silme' },
+    { key: 'sevk_print', label: 'İrsaliye yazdırma (PDF)' },
   ]},
   { group: 'Duruş Kodları', actions: [
     { key: 'durus_add', label: 'Ekleme' }, { key: 'durus_edit', label: 'Düzenleme' }, { key: 'durus_delete', label: 'Silme' },
@@ -133,6 +134,7 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   tedci_add:['planlama'], tedci_edit:['planlama'], tedci_delete:['planlama'],
   must_add:['planlama'], must_edit:['planlama'], must_delete:['planlama'],
   sevk_add:['planlama','depocu'], sevk_edit:['planlama','depocu'], sevk_delete:['planlama','depocu'],
+  sevk_print:['planlama','depocu'],   // v15.54 — irsaliye PDF yazdırma (Faz 2'de UI eklenir)
   durus_add:[], durus_edit:[], durus_delete:[],
   rapor_view:['uretim_sor','planlama'], rapor_excel:['uretim_sor','planlama','depocu'],
   check_add:[], check_edit:[], check_delete:[],
