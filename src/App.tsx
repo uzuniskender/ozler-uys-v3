@@ -34,6 +34,7 @@ import { ProblemTakip } from '@/pages/ProblemTakip'
 import Chat from '@/pages/Chat'
 import { HmTipleri } from '@/pages/HmTipleri'
 import { Backup } from '@/pages/Backup'
+import { ensureDailyAutoBackup } from '@/lib/backup'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
 
@@ -111,7 +112,22 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 }
 
 export default function App() {
-  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role } = useAuth()
+  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role, can } = useAuth()
+
+  // v15.53 Adım 4 — Admin login olunca otomatik günlük yedek (fire-and-forget)
+  // Idempotent: günde defalarca tetiklenebilir, ensureDailyAutoBackup içeride
+  // 'bugün için yedek var mı?' kontrolü yapar. Sahaya etki: ilk login sonrası
+  // arka planda ~5sn iş — render bloklamaz, sessiz fail (kullanıcıya gösterilmez).
+  useEffect(() => {
+    if (!session) return
+    if (!can('backup_create')) return
+    const alanKisi = session.username || session.email || (session as any).dbId || 'system'
+    ensureDailyAutoBackup(alanKisi).then(r => {
+      if (r.ok) console.log('[v15.53] Otomatik günlük yedek alındı (eski silinen: %s)', r.deletedOld)
+      else if (r.skipped) console.log('[v15.53] Otomatik yedek bugün için zaten alınmış')
+      else if (r.error) console.warn('[v15.53] Otomatik yedek alınamadı:', r.error)
+    })
+  }, [session?.dbId, session?.email, session?.username])
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>

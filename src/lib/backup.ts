@@ -362,10 +362,84 @@ export async function restoreBackup(
   }
 }
 
-// ─── Faz 4+ için stub'lar ──────────────────────────────────────────────
+// ─── Faz 4 — Otomatik Yedek + Temizleme ────────────────────────────────
 
 /**
- * STUB — Faz 4'te implementasyon eklenecek.
- * 30 günden eski otomatik yedekleri siler. Manuel yedekler etkilenmez.
+ * 30 günden (veya keepDays kadar günden) eski OTOMATİK yedekleri siler.
+ *
+ * Sadece tip='otomatik' olan kayıtları etkiler — manuel yedekler kalıcıdır
+ * (kullanıcı bilinçli kaydetmiş, etiket koymuş olabilir).
+ *
+ * @param keepDays Kaç günden eskileri silsin (default 30)
+ * @returns silinen kayıt sayısı + olası hata
  */
-// export async function cleanOldBackups(keepDays = 30): Promise<number> { ... }
+export async function cleanOldBackups(
+  keepDays = 30
+): Promise<{ deleted: number; error?: string }> {
+  if (keepDays < 1) return { deleted: 0, error: 'keepDays en az 1 olmalı' }
+  try {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - keepDays)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+    // 30 günden eski + otomatik yedekleri sil, silinen ID'leri al
+    const { data, error } = await supabase
+      .from('uys_yedekler')
+      .delete()
+      .lt('alindi_tarih', cutoffStr)
+      .eq('tip', 'otomatik')
+      .select('id')
+
+    if (error) return { deleted: 0, error: error.message }
+    return { deleted: data?.length || 0 }
+  } catch (e: any) {
+    return { deleted: 0, error: e?.message || 'Bilinmeyen hata' }
+  }
+}
+
+/**
+ * Bugün için otomatik yedek alındı mı kontrol et; alınmadıysa bir tane al.
+ * Sonra eski yedekleri temizle.
+ *
+ * App.tsx'te admin login olunca fire-and-forget olarak çağrılır:
+ *   ensureDailyAutoBackup(user.username).catch(() => null)
+ *
+ * Idempotent: günde defalarca çağrılsa bile sadece ilk çağrı yedek alır,
+ * diğerleri 'skipped' döner.
+ *
+ * @param alanKisi Yedek alan kullanıcı (audit için)
+ */
+export async function ensureDailyAutoBackup(
+  alanKisi: string
+): Promise<{ skipped?: boolean; ok?: boolean; deletedOld?: number; error?: string }> {
+  if (!alanKisi || alanKisi.trim() === '') {
+    return { error: 'alanKisi boş olamaz' }
+  }
+  try {
+    // 1) Bugün otomatik yedek var mı?
+    const today = new Date().toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('uys_yedekler')
+      .select('id')
+      .eq('alindi_tarih', today)
+      .eq('tip', 'otomatik')
+      .limit(1)
+
+    if (error) return { error: error.message }
+    if (data && data.length > 0) {
+      // Bugün zaten alınmış — atla
+      return { skipped: true }
+    }
+
+    // 2) Yedek al
+    const result = await takeBackup(alanKisi, 'otomatik', 'Otomatik günlük yedek')
+    if (!result.ok) return { error: result.error }
+
+    // 3) Eski yedekleri sessizce temizle (hata olursa görmezden gel — kritik değil)
+    const cleanResult = await cleanOldBackups(30).catch(() => ({ deleted: 0 }))
+
+    return { ok: true, deletedOld: cleanResult.deleted }
+  } catch (e: any) {
+    return { error: e?.message || 'Bilinmeyen hata' }
+  }
+}
