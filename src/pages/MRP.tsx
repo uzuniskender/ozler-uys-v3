@@ -7,7 +7,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
-import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, type MRPRow } from '@/features/production/mrp'
+import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, type MRPRow } from '@/features/production/mrp'
 import { isOrderArchived } from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
@@ -234,24 +234,24 @@ export function MRP() {
     if (!overrideMalkods) {
       if (!await showConfirm(`${secili.length} malzeme için tedarik oluşturulacak. Devam?`)) return
     }
-    let count = 0
-    for (const s of secili) {
-      // Aynı malkod için zaten açık tedarik var mı?
-      const mevcut = tedarikler.find(t => t.malkod === s.malkod && !t.geldi)
-      if (mevcut) { toast.info(s.malkod + ' için zaten açık tedarik var — atlandı'); continue }
-      await supabase.from('uys_tedarikler').insert({
-        id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
-        birim: s.birim || 'Adet', tarih: today(), durum: 'bekliyor', geldi: false, not_: 'MRP önerisi',
-        order_id: [...selectedOrders][0] || null, siparis_no: orders.find(o => o.id === [...selectedOrders][0])?.siparisNo || null,
-      })
-      count++
-    }
-    // Seçili siparişleri 'tamam' yap — MRP akışı kapandı (eksik → tedarik oluşturuldu)
+
+    // v15.62 — F-21 idempotent kontrolünü kullan: mrpTedarikOlustur'a delege.
+    // Önceki kod: doğrudan supabase insert + zayıf "mevcut var mı?" kontrolü.
+    // Sorun: 27 Nis 2026 12:21'de S26A_02707 siparişi için bu fonksiyondan 207 birim
+    // FAZLA tedarik açıldı (mevcut zaten 34 idi, ihtiyaç da ~34, ama yine 207 eklendi).
+    // mrpTedarikOlustur F-21 ile bekleyen tedarikleri kontrol eder, sadece farkı açar.
+    let toplam = 0
     for (const oid of selectedOrders) {
+      const o = orders.find(x => x.id === oid)
+      if (!o) continue
+      const count = await mrpTedarikOlustur(oid, o.siparisNo, secili, { auto: false })
+      toplam += count
+      // Bu sipariş için mrp_durum tamam (bekleyen tedarik yetiyor veya yeni açıldı)
       await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
     }
     loadAll(); setSelectedRows(new Set())
-    toast.success(count + ' tedarik oluşturuldu')
+    if (toplam > 0) toast.success(toplam + ' tedarik oluşturuldu')
+    else toast.info('İhtiyaçlar mevcut bekleyen tedariklerle karşılanıyor — yeni tedarik açılmadı')
 
     // v15.36 — Flow sonlandır (tedarik oluşturuldu) + Procurement sayfasına git
     if (activeFlowId) {
