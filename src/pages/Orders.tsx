@@ -720,9 +720,37 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', order.id)
     // Rezerve kayıtları yaz
     await rezerveYaz(order.id, rows)
+
+    // v15.56 F-19/20 — Otomatik tedarik açma (İş Emri #13 madde 19, 20)
+    // Spec: "İE girildi + stok yetersiz → MRP tedarik açar, tedarik adımına geçilir."
+    // F-21 (mrpTedarikOlustur idempotent) ile birleştiğinde: kullanıcı MRP'yi defalarca
+    // tıklasa bile yalnızca eksik kalan miktar açılır, çift kayıt riski yok.
+    let acilanTedarikSay = 0
+    if (yeniDurum === 'eksik' && can('tedarik_auto')) {
+      try {
+        acilanTedarikSay = await mrpTedarikOlustur(order.id, order.siparisNo, rows, {
+          mrpCalculationId: calcId || undefined,
+          auto: true,
+        })
+      } catch (e) {
+        console.warn('[v15.56 runMRP] Otomatik tedarik açma hatası:', e)
+      }
+    }
+
     loadAll()
     await triggerRezerveSync()
-    toast.success(rows.length + ' malzeme hesaplandı')
+
+    // Toast mesajı duruma göre (eski: hep "X malzeme hesaplandı"; yeni: kullanıcı net bilgilendirilir)
+    if (yeniDurum === 'tamam') {
+      toast.success(`${rows.length} malzeme hesaplandı — tüm stoklar yeterli ✓`)
+    } else if (acilanTedarikSay > 0) {
+      toast.success(`${rows.length} malzeme hesaplandı — ${acilanTedarikSay} tedarik otomatik açıldı`)
+    } else if (!can('tedarik_auto')) {
+      toast.warning(`${rows.length} malzeme hesaplandı — eksikler var, otomatik tedarik yetkiniz yok`)
+    } else {
+      // Eksik var ama açılan 0 → tüm ihtiyaçlar zaten bekleyen tedarikle karşılanıyor (F-21 idempotent skip)
+      toast.info(`${rows.length} malzeme hesaplandı — eksikler mevcut bekleyen tedariklerle karşılanıyor`)
+    }
   }
 
   async function createTedarik() {
