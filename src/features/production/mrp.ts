@@ -563,50 +563,29 @@ export async function mrpTedarikDuzelt(
   return { azaltilan, iptalEdilen }
 }
 
-// ═══ MRP REZERVE YAZMA — Faz B Parça 2C ═══
-// MRP hesabından sonra ilgili siparişe ait rezervasyon kayıtları oluşturur.
-// Önce o siparişin eski rezervasyonlarını siler, sonra yeni kayıtları yazar.
-// Rezerve sadece MRP hesabında 'kullanılabilir stok' düşümü için kullanılır;
-// fiziksel stok kullanımında (üretim/çıkış) dikkate alınmaz.
+// ═══ MRP REZERVE — v15.70: SİSTEM KALDIRILDI ═══
+// v15.63'te stokPool rezerve düşürmesi kaldırıldı (Buket'in formülü: BRÜT-STOK-YOLDA).
+// Rezerve kayıtları MRP hesabını etkilemiyordu, sadece DB'ye yazılıyordu (ölü kayıt).
+// v15.70'te tüm rezerve fonksiyonları no-op yapıldı:
+//   - DB'ye yeni rezerve YAZILMAZ (uys_mrp_rezerve insertion durdu)
+//   - Mevcut DB kayıtları dokunulmaz (1-2 hafta sonra DROP TABLE migration)
+//   - Caller imzaları korundu (Orders.tsx, MRP.tsx, Procurement, vb. değişmeden çalışır)
+//
+// 2-aşamalı plan:
+//   Aşama 1 (v15.70): Fonksiyonlar no-op (BU PATCH)
+//   Aşama 2 (1-2 hafta sonra, sahada sorun yoksa): Fonksiyon tanımları + tablo + tip + store kaldırılır
 export async function rezerveYaz(
-  orderId: string,
-  mrpRows: MRPRow[]
+  _orderId: string,
+  _mrpRows: MRPRow[]
 ): Promise<number> {
-  if (!orderId) return 0
-  // Eski rezervasyonları sil (sipariş revize olabilir, yeni hesap yapıldı)
-  await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
-  // Brüt > 0 ve stok var (net eksik olsa bile, stok kadar rezerve edilmeli)
-  // Rezerve miktarı = min(brüt, fiziksel stok) — gerçekten ayrılabilecek miktar
-  // Case-insensitive gruplama: aynı malzeme farklı yazılmışsa tek kayıtta topla
-  const grupMap: Record<string, { malkod: string; malad: string; miktar: number; birim: string }> = {}
-  mrpRows
-    .filter(r => r.brut > 0 && r.stok > 0)
-    .forEach(r => {
-      const key = (r.malkod || '').trim().toLowerCase()
-      if (!grupMap[key]) {
-        grupMap[key] = { malkod: r.malkod, malad: r.malad, miktar: 0, birim: r.birim }
-      }
-      grupMap[key].miktar += Math.min(r.brut, r.stok)
-    })
-  const rezerveler = Object.values(grupMap).map(g => ({
-    id: uid(),
-    order_id: orderId,
-    malkod: g.malkod,
-    malad: g.malad,
-    miktar: g.miktar,
-    birim: g.birim,
-    tarih: today(),
-  }))
-  if (!rezerveler.length) return 0
-  await supabase.from('uys_mrp_rezerve').insert(rezerveler)
-  return rezerveler.length
+  // v15.70: no-op (rezerve sistemi kapatıldı)
+  return 0
 }
 
-// Bir siparişe ait tüm rezerveleri siler
-// (sipariş iptal/revize/üretim tamamlandığında çağrılır)
-export async function rezerveSil(orderId: string): Promise<void> {
-  if (!orderId) return
-  await supabase.from('uys_mrp_rezerve').delete().eq('order_id', orderId)
+// Bir siparişe ait tüm rezerveleri siler — v15.70: no-op
+export async function rezerveSil(_orderId: string): Promise<void> {
+  // v15.70: no-op (rezerve sistemi kapatıldı)
+  return
 }
 
 // ═══ KESİM PLANI TEMİZLEME HELPER — woId bazlı ═══
@@ -734,70 +713,14 @@ export async function siparisSilKapsamli(
 //   - Tedarik geldi=true işaretlenmesi
 //   - Stok hareketi (manuel giriş/çıkış)
 export async function rezerveleriSenkronla(
-  orders: any[],
-  workOrders: WorkOrder[],
-  recipes: Recipe[],
-  stokHareketler: StokHareket[],
-  tedarikler: Tedarik[],
-  cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
-  materials: Material[],
+  _orders: any[],
+  _workOrders: WorkOrder[],
+  _recipes: Recipe[],
+  _stokHareketler: StokHareket[],
+  _tedarikler: Tedarik[],
+  _cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
+  _materials: Material[],
 ): Promise<{ siparisSayisi: number; rezerveSayisi: number }> {
-  // 1. Aktif siparişler — iptal/tamamlandı hariç
-  const aktif = orders
-    .filter((o: any) => o.durum !== 'İptal' && o.durum !== 'Tamamlandı')
-    .slice()
-    .sort((a: any, b: any) => {
-      // Termine göre FIFO — erken termin önce
-      const at = a.termin || '9999-99-99'
-      const bt = b.termin || '9999-99-99'
-      if (at !== bt) return at.localeCompare(bt)
-      // Aynı termin: önce oluşturulan önce (ikincil FIFO)
-      return (a.olusturma || '').localeCompare(b.olusturma || '')
-    })
-
-  console.log('[REZERVE SYNC] Aktif sipariş sayısı:', aktif.length, '| Sıra:', aktif.map((o: any) => ({ id: o.id, siparisNo: o.siparisNo, termin: o.termin })))
-
-  // 2. Sıralı işleme — önceki siparişlerin yeni rezervesi sonrakinin hesabına girer
-  const guncelRezerveler: MrpRezerve[] = []
-  let toplamRezerve = 0
-
-  for (const o of aktif) {
-    // Bu sipariş için MRP — önceki rezerveler dahil, kendisi hariç
-    const satirlar = hesaplaMRP(
-      [o.id],
-      aktif,
-      workOrders,
-      recipes,
-      stokHareketler,
-      tedarikler,
-      cuttingPlans,
-      materials,
-      null,
-      guncelRezerveler,
-      o.id,
-    )
-
-    // Eski rezerveyi sil + yeni yaz
-    const sayi = await rezerveYaz(o.id, satirlar)
-    toplamRezerve += sayi
-
-    // Bu siparişin yeni rezervelerini guncelRezerveler'e ekle (sonraki siparişler için)
-    satirlar
-      .filter(r => r.brut > 0 && r.stok > 0)
-      .forEach(r => {
-        guncelRezerveler.push({
-          id: '',
-          orderId: o.id,
-          malkod: r.malkod,
-          malad: r.malad,
-          miktar: Math.min(r.brut, r.stok),
-          birim: r.birim,
-          mrpRunId: '',
-          tarih: today(),
-        } as MrpRezerve)
-      })
-  }
-
-  console.log('[REZERVE SYNC] ✓ Tamamlandı. Sipariş:', aktif.length, '| Toplam rezerve kaydı:', toplamRezerve)
-  return { siparisSayisi: aktif.length, rezerveSayisi: toplamRezerve }
+  // v15.70: no-op (rezerve sistemi kapatıldı). Caller imzaları korundu.
+  return { siparisSayisi: 0, rezerveSayisi: 0 }
 }
