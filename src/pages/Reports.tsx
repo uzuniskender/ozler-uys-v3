@@ -11,7 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export function Reports() {
-  const { workOrders, logs, operators, fireLogs, orders, operations, loadAll } = useStore()
+  const { workOrders, logs, operators, fireLogs, orders, operations, recipes, stokHareketler, materials, loadAll } = useStore()
   const { can } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState('ozet')
@@ -450,16 +450,18 @@ export function Reports() {
                     disabled={telafiRunning}
                     onClick={async () => {
                       const ok = await showConfirm(
-                        `${telafisiz} fire için sipariş dışı (telafi) İE oluşturulacak. \n\n` +
-                        `Her fire → yeni İE (aynı ürün, aynı operasyon, aynı hammadde ihtiyacı)\n` +
-                        `İE No formatı: ORİJİNAL-F1234\n` +
-                        `Sipariş bağlantısı yok, bağımsız üretim.\n\nDevam?`
+                        `${telafisiz} fire için telafi İE'si oluşturulacak.\n\n` +
+                        `v15.76 (madde 13): Telafi İE'leri orijinal SİPARİŞ'E BAĞLI olarak açılır.\n` +
+                        `Alt basamak yarımamul stoğu yetersizse otomatik alt operasyon İE'si de açılır.\n` +
+                        `Hammadde eksiği varsa MRP'de görünür (Tedarik sayfasından açılır).\n\n` +
+                        `İE No formatı: ORİJİNAL-FT1234\n\nDevam?`
                       )
                       if (!ok) return
                       setTelafiRunning(true)
-                      const sonuc = await topluFireTelafi(parcaFireLogs, workOrders)
+                      // v15.76 — recursive akış için recipes + stokHareketler + materials geçilir
+                      const sonuc = await topluFireTelafi(parcaFireLogs, workOrders, recipes, stokHareketler, materials)
                       setTelafiRunning(false)
-                      if (sonuc.basarili > 0) toast.success(`${sonuc.basarili} telafi İE oluşturuldu`)
+                      if (sonuc.basarili > 0) toast.success(`${sonuc.basarili} fire için telafi açıldı (alt basamaklar dahil)`)
                       if (sonuc.hata > 0) toast.error(`${sonuc.hata} hata — konsol kontrol et`)
                       if (sonuc.hatalar.length) console.warn('Fire telafi hataları:', sonuc.hatalar)
                       loadAll()
