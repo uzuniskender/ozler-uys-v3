@@ -480,8 +480,12 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     for (let i = 0; i < kalemler.length; i++) {
       const k = kalemler[i]
       if (!k.rcId) { setError(`${i + 1}. kalem için ürün / reçete seçilmedi`); return }
-      // v15.58 — Stok modunda termin opsiyonel (madde 5)
-      if (!isStokIE && !k.termin) { setError(`${i + 1}. kalem termini boş (Stok modunda boş bırakılabilir — "Müşteri yok" tikini açın)`); return }
+      // v15.82 — Termin her durumda zorunlu (Senaryo 12 FIFO için).
+      // Stok modunda (Müşteri yok tiki) bile termin gerek — manuel İE'ler
+      // diğer siparişlerle aynı FIFO kuralında yarışır.
+      // Saha modeli (28 Nis 2026, saha_model_28nis2026.md Senaryo 12.3):
+      //   "Manuel iş emrine de termin girerek çelişki biter."
+      if (!k.termin) { setError(`${i + 1}. kalem termini boş (FIFO sıralaması için zorunlu)`); return }
       if (!k.adet || k.adet < 1) { setError(`${i + 1}. kalem adedi 1'den küçük`); return }
       // v15.36 — Sıkı reçete kontrolü: reçete gerçekten var ve satırlı mı?
       const rc = recipes.find(r => r.id === k.rcId)

@@ -1058,14 +1058,21 @@ export async function senaryo7(ctx: RunnerContext): Promise<SenaryoRapor> {
       return { tip: kd.tip, fark: kd.fark }
     }, ctx)
 
-    // ═══ 7.4 — AZALIS BLOCK (üretim > yeniAdet) ═══
-    await adim(state, '4. AZALIS BLOCK — 50→45, üretim=47 (hata beklenir)', async () => {
+    // ═══ 7.4 — AZALIS izin (üretim > yeniAdet, v15.82 sonrası izin verilir) ═══
+    // v15.82'den önce: BLOCK (hata atılır)
+    // v15.82 sonrası: izin verilir, hedef = max(üretildi, yeniHedef) (saha kuralı, Senaryo 5)
+    await adim(state, '4. AZALIS izin — 50→45, üretim=47 (v15.82: izin, hata YOK)', async () => {
       const wo = _fakeWO(baseOld.id, 'rc-1', 100)
       const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
       const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 45)] }
       const d = siparisDelta(eski, yeni, [wo], [{ woId: wo.id, qty: 47 }])
-      if (d.hatalar.length === 0) throw new Error('BEKLENEN BLOCK ÇALIŞMADI: 47 üretildi, 45 olamaz')
-      return { engellendi: true, hata: d.hatalar[0], uretildi: d.kalemDeltalari[0]?.uretildiAdet }
+      // YENİ DAVRANIŞ: hata olmamalı
+      if (d.hatalar.length !== 0) throw new Error('v15.82 fix: BLOCK kuralı kaldırılmıştı, hata olmamalı: ' + d.hatalar.join(', '))
+      const kd = d.kalemDeltalari[0]
+      if (kd.tip !== 'azalis') throw new Error('Tip yanlış: ' + kd.tip)
+      if (kd.uretildiAdet !== 47) throw new Error('Üretildi 47 olmalı: ' + kd.uretildiAdet)
+      // Beklenti: izin var, siparisRevizeUygula hedefi max(47, ...) yaparak koruyacak
+      return { izinVerildi: true, uretildi: kd.uretildiAdet, yeniAdet: kd.yeniAdet, mesaj: 'v15.82 saha kuralı: fazla üretim serbest stoğa' }
     }, ctx)
 
     // ═══ 7.5 — TERMIN değişimi ═══

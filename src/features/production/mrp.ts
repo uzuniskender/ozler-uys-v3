@@ -751,7 +751,10 @@ export async function rezerveleriSenkronla(
 // ═══ v15.74 — SİPARİŞ DELTA HESABI (İş Emri #13 madde 11) ═══
 // Sipariş edit edildiğinde "ne değişti" tespit eder. 8 senaryo:
 //   1 ARTIS    — kalem adet ↑     → WO hedefleri × mpm ile artar (yeni İE açılmaz)
-//   2 AZALIS   — kalem adet ↓     → WO hedefleri azalır (üretildi > yeniAdet ise BLOCK)
+//   2 AZALIS   — kalem adet ↓     → WO hedefleri azalır.
+//                                    v15.82'den önce: üretildi > yeniAdet → BLOCK
+//                                    v15.82 sonrası: izin verilir, hedef = max(üretildi, yeniHedef)
+//                                    Fazla üretim serbest stoğa (saha kuralı, Senaryo 5)
 //   3 IPTAL    — sipariş iptal    → tüm açık WO durum='iptal', tedarik düzelt
 //   4 RECETE   — kalem rcId değişti → eski WO'lar 'iptal', yeni WO'lar açılır (loglar korunur)
 //   5 TERMIN   — kalem termin değişti → WO termin update
@@ -882,12 +885,13 @@ export function siparisDelta(
         })
         result.toplamSenaryoSayisi++
       } else {
-        // AZALIS — üretildi > yeniAdet ise hata
-        if (uretildi > yeniK.adet) {
-          result.hatalar.push(
-            `Reçete ${rcId} için ${uretildi} adet üretildi, yeni adet ${yeniK.adet} olamaz (azaltma kabul edilmez)`
-          )
-        }
+        // v15.82 — AZALIS: üretildi > yeniAdet artık BLOCK DEĞİL.
+        // Saha modeli (28 Nis 2026, saha_model_28nis2026.md Senaryo 5):
+        //   "Üretildi 35, sipariş 30'a düştü → IE.hedef=35'te dondurulur,
+        //    sipariş kalemi=30 (müşteriye 30), fazla 5 → SERBEST stoğa."
+        // siparisRevizeUygula zaten Math.max(uretildiAdet, ...) ile hedefi
+        // koruyor. Burada hata atmak gereksizdi — kullanıcı engelleniyordu.
+        // Eski kuralı kaldırdık (Senaryo 7 Adım 4 testi de güncellendi).
         result.kalemDeltalari.push({
           rcId, tip: 'azalis',
           eskiAdet: oldK.adet, yeniAdet: yeniK.adet, fark,
