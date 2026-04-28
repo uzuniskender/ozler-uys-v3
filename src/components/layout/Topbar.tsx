@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
 import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
-import { isOrderMrpPending, isWorkOrderOpen, isProcurementPending, isKesimWO, getPlanliWoIds } from '@/lib/statusUtils'
+import { isOrderMrpPending, isWorkOrderOpen, isProcurementPending, isKesimWO, getPlanliWoIds, getPlanBekleyenWoIds } from '@/lib/statusUtils'
+import { Hourglass } from 'lucide-react'
 
 interface TopbarProps {
   onMenuClick: () => void
@@ -14,7 +15,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
-  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler } = useStore()
+  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs } = useStore()
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
   const [showFlowModal, setShowFlowModal] = useState(false)
@@ -41,8 +42,6 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   //   Bkz: docs/UYS_v3_Bilgi_Bankasi.md §18.3 Durum String Konvansiyonu
   const zincirCounts = useMemo(() => {
     // v15.73 — Duplicate kod kaldırıldı, statusUtils helper'ları kullanılıyor (atıl kod sıra 7)
-    // Eski: KESIM_OPS list, isKesimWO inline fn, planliWoIds inline build (50+ satır)
-    // Yeni: isKesimWO + getPlanliWoIds tek satır helper (statusUtils.ts'te tanımlı)
     const planliWoIds = getPlanliWoIds(cuttingPlans as any)
     const kesim = workOrders.filter(w =>
       isWorkOrderOpen(w) && isKesimWO(w) && !planliWoIds.has(w.id)
@@ -51,8 +50,14 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
     const mrp = orders.filter(isOrderMrpPending).length
     const tedarik = tedarikler.filter(isProcurementPending).length
 
-    return { kesim, mrp, tedarik }
-  }, [workOrders, orders, cuttingPlans, tedarikler])
+    // v15.79 — Plan Bekleyen: Üretilebilir olmayan açık WO'ların toplamı.
+    // Kapsamı KESİM/MRP/TEDARİK'ten daha geniş — operatör panelinde görünmeyen tüm engellileri toplar.
+    const planBekleyen = getPlanBekleyenWoIds(
+      workOrders, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any,
+    ).size
+
+    return { kesim, mrp, tedarik, planBekleyen }
+  }, [workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs])
 
   // Renk eşiği: 0=yeşil, 1-5=sarı, 6+=kırmızı
   function badgeColor(n: number): string {
@@ -112,6 +117,18 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
           <Truck size={10} />
           <span className="font-semibold">TEDARİK</span>
           <span className="font-bold tabular-nums">{zincirCounts.tedarik}</span>
+        </button>
+        {/* v15.79 (İş Emri #13 madde 8+9) — Plan Bekleyen rozeti.
+            Açık ama Üretilebilir olmayan tüm WO'ları sayar (kesim plan eksik + tedarik açılmamış + yolda).
+            KESİM/MRP/TEDARİK rozetleri sebep ayrımı, bu rozet TOPLAM görünüm. */}
+        <button
+          onClick={() => navTo('/workorders')}
+          className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 ${badgeColor(zincirCounts.planBekleyen)}`}
+          title={`${zincirCounts.planBekleyen} iş emri Üretilebilir değil (Plan Bekliyor)`}
+        >
+          <Hourglass size={10} />
+          <span className="font-semibold">PLAN BEKLEYEN</span>
+          <span className="font-bold tabular-nums">{zincirCounts.planBekleyen}</span>
         </button>
       </div>
 

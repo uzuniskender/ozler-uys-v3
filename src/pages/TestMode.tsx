@@ -13,7 +13,7 @@ import {
   startTestRun, finishTestRun, cancelTestRun,
   getActiveTestRunId, cascadeDeleteTestRun,
 } from '@/lib/testRun'
-import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
+import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, senaryo11, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
 
 export function TestMode() {
   const { testRuns, recipes, loadAll } = useStore()
@@ -134,10 +134,9 @@ export function TestMode() {
     }
   }
 
-  // v15.37 Part 3 — Senaryo çalıştırıcı (v15.38: Senaryo 6, v15.77: Senaryo 7/8/9, v15.78: Senaryo 10)
-  // Senaryo 7 saf-fonksiyon test (reçete gerektirmez), Senaryo 8/10 reçete gerektirir,
-  // Senaryo 9 saf DB testi (reçete gerektirmez).
-  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10) {
+  // v15.37 Part 3 — Senaryo çalıştırıcı (v15.38: 6, v15.77: 7/8/9, v15.78: 10, v15.79: 11)
+  // Senaryo 7/9/11 saf-fonksiyon (reçete gerektirmez), 8/10 reçete gerektirir.
+  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11) {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
     const receteGerekli = num === 1 || num === 2 || num === 3 || num === 4 || num === 5 || num === 8 || num === 10
     if (receteGerekli && !recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
@@ -154,10 +153,11 @@ export function TestMode() {
       num === 7 ? senaryo7 :
       num === 8 ? senaryo8 :
       num === 9 ? senaryo9 :
-      senaryo10
+      num === 10 ? senaryo10 :
+      senaryo11
     try {
       const rapor = await fn({
-        recipeKod: recipeKod.trim() || 'N/A',  // S6/S7/S9 reçeteye dokunmaz
+        recipeKod: recipeKod.trim() || 'N/A',
         adet,
         onLog: (adim) => setCanliLog(prev => [...prev, adim]),
       })
@@ -184,7 +184,7 @@ export function TestMode() {
     setLoading(true)
     try {
       let toplam = 0
-      for (const suffix of ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10']) {
+      for (const suffix of ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11']) {
         const silinen = await cascadeDeleteTestRun(`${aktifTestId}_${suffix}`)
         toplam += Object.values(silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
       }
@@ -195,7 +195,7 @@ export function TestMode() {
     }
   }
 
-  // v15.37 Part 3 v2 / v15.38 / v15.77 / v15.78 — 10 senaryoyu ardışık çalıştır
+  // v15.79 — 11 senaryoyu ardışık çalıştır
   async function tumSenaryolarCalistir() {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
     if (!recipeKod.trim()) { toast.error('Reçete kodu gir (Senaryo 1-5, 8, 10 için gerekli)'); return }
@@ -204,7 +204,7 @@ export function TestMode() {
     setCanliLog([])
     setSonRapor(null)
 
-    for (const num of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const) {
+    for (const num of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const) {
       setCalisan(`Senaryo ${num}`)
       const fn =
         num === 1 ? senaryo1 :
@@ -216,7 +216,8 @@ export function TestMode() {
         num === 7 ? senaryo7 :
         num === 8 ? senaryo8 :
         num === 9 ? senaryo9 :
-        senaryo10
+        num === 10 ? senaryo10 :
+        senaryo11
       try {
         const rapor = await fn({
           recipeKod: recipeKod.trim() || 'N/A',
@@ -225,11 +226,9 @@ export function TestMode() {
         })
         tumRaporlar.push(rapor)
         setSonRapor(rapor)
-
-        // v15.37 Part 3 v3: Her senaryodan sonra sub-run temizlik (son dahil)
         await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
         await loadAll()
-        if (num < 10) await new Promise(r => setTimeout(r, 500))
+        if (num < 11) await new Promise(r => setTimeout(r, 500))
       } catch (e: any) {
         toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)
         console.error('[senaryo]', e)
@@ -237,7 +236,6 @@ export function TestMode() {
     }
     setCalisan(null)
 
-    // Toplu rapor indir
     const tumRapor = {
       baslangic: tumRaporlar[0]?.baslangic,
       bitis: tumRaporlar[tumRaporlar.length - 1]?.bitis,
@@ -256,7 +254,7 @@ export function TestMode() {
     a.click()
     URL.revokeObjectURL(url)
 
-    toast.success(`10 senaryo tamamlandı — ${tumRapor.genelDurum === 'ALL_PASS' ? 'TÜMÜ PASS' : 'KARIŞIK'}`, { duration: 10000 })
+    toast.success(`11 senaryo tamamlandı — ${tumRapor.genelDurum === 'ALL_PASS' ? 'TÜMÜ PASS' : 'KARIŞIK'}`, { duration: 10000 })
   }
 
   function raporIndir() {
@@ -315,15 +313,15 @@ export function TestMode() {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(n => (
               <button
                 key={n}
-                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10)}
+                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11)}
                 disabled={!!calisan || loading}
                 className={
                   n === 6
                     ? "px-3 py-2 bg-red/10 hover:bg-red/20 border border-red/30 text-red rounded text-[11px] font-semibold text-left"
-                    : (n === 7 || n === 9)
+                    : (n === 7 || n === 9 || n === 11)
                     ? "px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded text-[11px] font-semibold text-left"
                     : n === 8
                     ? "px-3 py-2 bg-amber/10 hover:bg-amber/20 border border-amber/30 text-amber rounded text-[11px] font-semibold text-left"
@@ -334,7 +332,7 @@ export function TestMode() {
               >
                 {calisan === `Senaryo ${n}` ? '⏳ ' :
                   n === 6 ? '⛔ ' :
-                  (n === 7 || n === 9) ? '🧪 ' :
+                  (n === 7 || n === 9 || n === 11) ? '🧪 ' :
                   n === 8 ? '🔥 ' :
                   n === 10 ? '🛠 ' :
                   '🤖 '}
@@ -348,7 +346,8 @@ export function TestMode() {
                   n === 7 ? 'Sipariş Delta (v15.74) — saf fonk.' :
                   n === 8 ? 'Fire Telafi Recursive (v15.76)' :
                   n === 9 ? 'Loglar Sayfası DB Akışı (v15.75)' :
-                  'Manuel İE MRP Görünürlüğü (v15.78)'
+                  n === 10 ? 'Manuel İE MRP Görünürlüğü (v15.78)' :
+                  'Efektif Durum (v15.79) — saf fonk.'
                 }
               </button>
             ))}

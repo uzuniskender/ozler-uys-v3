@@ -9,6 +9,7 @@ import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-r
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { canProduceWO, canDurus } from '@/features/production/validations'
+import { getEffectiveStatus } from '@/lib/statusUtils'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -168,7 +169,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
-  const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll } = useStore()
+  const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler } = useStore()
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
 
   // Bu operatöre yönetimden gelen okunmamış mesaj sayısı
@@ -178,13 +179,22 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
 
   const acikWOs = useMemo(() => {
     const bolumUpper = (opr.bolum || '').trim().toUpperCase()
+
+    // v15.79 (İş Emri #13 madde 8+9) — Operatöre sadece Üretilebilir + Üretimde göster.
+    // Plan Bekliyor olanlar (kesim plan eksik / tedarik açılmamış / yolda) listede GÖRÜNMEZ.
+    // Eski filtre: durum !== iptal/tamamlandi/beklemede (3 DB durumu yetiyor değildi)
+    // Yeni filtre: getEffectiveStatus(w).status === 'Uretilebilir' || 'uretimde'
+    function isOperatable(w: typeof workOrders[number]): boolean {
+      if (w.hedef <= 0) return false
+      const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+      if (prod >= w.hedef) return false
+      const eff = getEffectiveStatus(w, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any)
+      return eff.status === 'Uretilebilir' || eff.status === 'uretimde'
+    }
+
     if (!bolumUpper) {
-      // Bölüm yoksa tüm açık İE'leri göster
-      return workOrders.filter(w => {
-        if (w.hedef <= 0) return false
-        const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-        return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
-      })
+      // Bölüm yoksa tüm açık + üretilebilir İE'leri göster
+      return workOrders.filter(isOperatable)
     }
 
     // v2 mantığı: operasyonların BÖLÜM alanı ile eşleştir
@@ -192,7 +202,6 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     operations.forEach(o => {
       const oBolum = (o.bolum || '').trim().toUpperCase()
       const oAd = (o.ad || '').trim().toUpperCase()
-      // Bölüm eşleşmesi VEYA operasyon adı içeriyor VEYA bölüm adı operasyonda geçiyor
       if ((oBolum && oBolum === bolumUpper) || oAd === bolumUpper || oAd.includes(bolumUpper) || bolumUpper.includes(oAd)) {
         if (!myOpIds.includes(o.id)) myOpIds.push(o.id)
       }
@@ -209,12 +218,10 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     }
 
     return workOrders.filter(w => {
-      if (w.hedef <= 0) return false
       if (!myOpIds.includes(w.opId)) return false
-      const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-      return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'beklemede'
+      return isOperatable(w)
     })
-  }, [workOrders, logs, operations, opr.bolum])
+  }, [workOrders, logs, operations, opr.bolum, cuttingPlans, tedarikler, stokHareketler])
 
   const myActiveList = activeWork.filter(a => a.opId === oprId)
 

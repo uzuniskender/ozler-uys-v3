@@ -8,7 +8,7 @@ import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
-import { getPlanliWoIds, isKesimWO } from '@/lib/statusUtils'
+import { getPlanliWoIds, isKesimWO, getEffectiveStatus, type StatusReason } from '@/lib/statusUtils'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { ActiveFlowDecisionModal } from '@/components/ActiveFlowDecisionModal'
@@ -37,22 +37,26 @@ export function WorkOrders() {
     (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
 
-  // v15.61 (İş Emri #13 madde 17) — "Plan Bekliyor" rozet hesabı:
-  // Kesim opsiyonlu + aktif kesim planına atanmamış WO'lar UI'da uyarı rozetiyle gösterilir.
-  // Plan Bekliyor durumu DB'de değil — UI türetilmiş; v15.55 hard block'la birlikte
-  // kullanıcı bu satırların üretime başlatılamayacağını fark eder.
+  // v15.79 (İş Emri #13 madde 8+9) — Efektif durum map'i.
+  // Eski planBekliyorIds (sadece kesim plan eksiği) yerine genel getEffectiveStatus.
+  // Şimdi hammadde stoğu/tedarik durumu da bakılıyor. tooltip'te eksik ne ise o yazar.
+  const effectiveStatusMap = useMemo(() => {
+    const map: Record<string, StatusReason> = {}
+    for (const w of workOrders) {
+      map[w.id] = getEffectiveStatus(w, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any)
+    }
+    return map
+  }, [workOrders, cuttingPlans, tedarikler, stokHareketler, logs])
+
+  // Geriye uyum: planBekliyorIds eski ad — hala kod altında kullanılıyor olabilir
   const planBekliyorIds = useMemo(() => {
-    const planli = getPlanliWoIds(cuttingPlans)
     const set = new Set<string>()
     for (const w of workOrders) {
-      if (!isKesimWO(w)) continue
-      if (planli.has(w.id)) continue
-      // Sadece aktif WO'lar için göster (iptal/tamamlandi'da anlamı yok)
-      if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
-      set.add(w.id)
+      const eff = effectiveStatusMap[w.id]
+      if (eff && eff.status === 'PlanBekliyor') set.add(w.id)
     }
     return set
-  }, [workOrders, cuttingPlans])
+  }, [workOrders, effectiveStatusMap])
 
   // v15.57 (İş Emri #13 madde 1+2) — "Yeni İE" butonu kaldırıldı.
   // Tüm yeni iş emirleri Siparişler sayfasındaki "Yeni İş Emri" butonu üzerinden açılır.
@@ -403,17 +407,27 @@ export function WorkOrders() {
                           <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (w.durum === 'tamamlandi') return 'tamamlandi'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
                             <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                           </select>
-                          {/* v15.61 — Plan Bekliyor rozeti (madde 17): kesim opsiyonlu + plana atanmamış İE */}
-                          {/* v15.68 — Tıklanabilir: kullanıcıyı Kesim Planları sayfasına yönlendirir (one-click fix) */}
-                          {planBekliyorIds.has(w.id) && (
-                            <button
-                              onClick={() => navigate('/cutting?wo=' + w.id)}
-                              className="text-[9px] px-1.5 py-0.5 rounded bg-amber/15 hover:bg-amber/25 text-amber border border-amber/30 font-semibold whitespace-nowrap cursor-pointer transition-colors"
-                              title="Bu İE kesim opsiyonu içeriyor ama hiçbir kesim planına atanmamış. Tıkla → Kesim Planları sayfasına git, plan oluştur."
-                            >
-                              ⚠ Plan Bekliyor →
-                            </button>
-                          )}
+                          {/* v15.79 — Plan Bekliyor rozeti (madde 8+9): efektif duruma göre.
+                              Eksik ne ise tooltip'e yazar (kesim planı / tedarik açılmamış / yolda).
+                              Tıklandığında blockedBy'a göre doğru sayfaya yönlendirir. */}
+                          {(() => {
+                            const eff = effectiveStatusMap[w.id]
+                            if (!eff || eff.status !== 'PlanBekliyor') return null
+                            const targetUrl =
+                              eff.blockedBy === 'kesim_plan' ? '/cutting?wo=' + w.id :
+                              eff.blockedBy === 'tedarik_yok' ? '/mrp' :
+                              eff.blockedBy === 'tedarik_yolda' ? '/procurement' :
+                              '/cutting?wo=' + w.id
+                            return (
+                              <button
+                                onClick={() => navigate(targetUrl)}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-amber/15 hover:bg-amber/25 text-amber border border-amber/30 font-semibold whitespace-nowrap cursor-pointer transition-colors"
+                                title={eff.reason + ' · Tıkla → ilgili sayfaya git'}
+                              >
+                                ⚠ Plan Bekliyor →
+                              </button>
+                            )
+                          })()}
                           </div>
                         </td>
                         <td className="px-3 py-1.5 text-right"><button onClick={() => setDetailWO(w.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={13} /></button></td>

@@ -224,3 +224,135 @@ export function getKesimEksikWoIds(
   return eksik
 }
 
+
+// ─── EFEKTİF DURUM (v15.79 — İş Emri #13 madde 8+9) ─────────────
+// "Plan Bekliyor" / "Üretilebilir" durumları DB'ye yazılmaz, anlık türetilir.
+// Operatör paneli sadece Üretilebilir + Üretimde görür → yanılma riski yok.
+// Detay: docs/UYS_v3_Bilgi_Bankasi.md §24
+
+import type { StokHareket } from '@/types'
+
+export type EffectiveWoStatus =
+  | 'iptal' | 'tamamlandi' | 'beklemede' | 'uretimde'  // mevcut DB durumları
+  | 'PlanBekliyor' | 'Uretilebilir'                     // türetilmiş
+
+export interface StatusReason {
+  status: EffectiveWoStatus
+  /** Tooltip metni — eksik ne ise onu yazar (boş string Üretilebilir için) */
+  reason: string
+  /** Hangi adım bloke ediyor (ileride ayrı sayım için) */
+  blockedBy: 'kesim_plan' | 'tedarik_yok' | 'tedarik_yolda' | null
+}
+
+/**
+ * v15.79 — Bir WO'nun anlık efektif durumunu hesaplar.
+ *
+ * Karar sırası (öncelik yukarıdan aşağı):
+ *   1. DB durumu zorlayıcı (iptal/tamamlandi/beklemede/uretimde) → onu döndür
+ *   2. Kesim opsiyonlu + plan yok → 'PlanBekliyor', reason='Kesim planı oluşturulmamış'
+ *   3. Hammadde stoğu yeterli → 'Uretilebilir', reason=''
+ *   4. Hammadde eksik + tedarik açılmamış → 'PlanBekliyor', reason='X malzeme tedariki açılmamış'
+ *   5. Hammadde eksik + tedarik yolda → 'PlanBekliyor', reason='X malzeme tedariki yolda'
+ *
+ * "Eksik tedarik" hangi varyant: ÖNCELİK tedarik_yok > tedarik_yolda. Yani aynı anda
+ * 2 hammadde eksikse ve birinin tedariği açılmamış birinin yoldaysa, açılmamış olan
+ * tooltip'e yazılır (operatöre "ilk yapılması gereken" bildirilir).
+ */
+export function getEffectiveStatus(
+  w: WorkOrder,
+  cuttingPlans: CuttingPlan[],
+  tedarikler: Tedarik[],
+  stokHareketler: StokHareket[],
+  logs?: { woId: string; qty: number }[],
+): StatusReason {
+  // 1. DB durumu zorlayıcı
+  const d = (w.durum || '').toLowerCase().trim()
+  if (d === 'iptal') return { status: 'iptal', reason: 'İptal edilmiş', blockedBy: null }
+  if (d === 'tamamlandi') return { status: 'tamamlandi', reason: 'Tamamlandı', blockedBy: null }
+  if (d === 'beklemede') return { status: 'beklemede', reason: 'Bekletiliyor', blockedBy: null }
+  if (d === 'uretimde') return { status: 'uretimde', reason: 'Üretimde', blockedBy: null }
+
+  // 2. Kesim opsiyonlu + plan yok
+  if (isKesimWO(w)) {
+    const planli = getPlanliWoIds(cuttingPlans)
+    if (!planli.has(w.id)) {
+      return { status: 'PlanBekliyor', reason: 'Kesim planı oluşturulmamış', blockedBy: 'kesim_plan' }
+    }
+  }
+
+  // 3-5. Hammadde stoğu kontrolü
+  const hm = (w.hm || []) as Array<{ malkod: string; malad: string; miktarTotal: number }>
+  if (hm.length === 0) {
+    // BOM tanımsız İE — varsayılan Üretilebilir (operatör panel canProduceWO ek koruma)
+    return { status: 'Uretilebilir', reason: '', blockedBy: null }
+  }
+
+  // Üretim ilerlemesi → kalan hammadde ihtiyacı
+  const uretildi = logs ? logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) : 0
+  const kalanOran = w.hedef > 0 ? Math.max(0, (w.hedef - uretildi) / w.hedef) : 0
+  if (kalanOran === 0) {
+    // Üretim tamamlandı (DB durumu update gecikmiş olabilir)
+    return { status: 'Uretilebilir', reason: '', blockedBy: null }
+  }
+
+  let ilkTedarikYok: { malkod: string; malad: string } | null = null
+  let ilkTedarikYolda: { malkod: string; malad: string } | null = null
+
+  for (const h of hm) {
+    const stok = stokHareketler
+      .filter(s => s.malkod === h.malkod)
+      .reduce((a, s) => a + (s.tip === 'giris' ? s.miktar : -s.miktar), 0)
+    const kalanIhtiyac = h.miktarTotal * kalanOran
+    if (stok >= kalanIhtiyac) continue  // bu hammadde yeterli
+
+    // Eksik — tedarik durumu
+    const acikTedarik = tedarikler.find(t => t.malkod === h.malkod && !t.geldi)
+    if (!acikTedarik) {
+      if (!ilkTedarikYok) ilkTedarikYok = { malkod: h.malkod, malad: h.malad }
+    } else {
+      if (!ilkTedarikYolda) ilkTedarikYolda = { malkod: h.malkod, malad: h.malad }
+    }
+  }
+
+  // Öncelik: tedarik_yok > tedarik_yolda
+  if (ilkTedarikYok) {
+    return {
+      status: 'PlanBekliyor',
+      reason: `${ilkTedarikYok.malad || ilkTedarikYok.malkod} tedariki açılmamış`,
+      blockedBy: 'tedarik_yok',
+    }
+  }
+  if (ilkTedarikYolda) {
+    return {
+      status: 'PlanBekliyor',
+      reason: `${ilkTedarikYolda.malad || ilkTedarikYolda.malkod} tedariki yolda (geliş bekleniyor)`,
+      blockedBy: 'tedarik_yolda',
+    }
+  }
+
+  // Tüm hammadde yeterli
+  return { status: 'Uretilebilir', reason: '', blockedBy: null }
+}
+
+/**
+ * v15.79 — Plan Bekleyen WO ID'leri.
+ * Topbar [PLAN BEKLEYEN N] rozeti için. Açık (iptal/tamamlandi/beklemede dışı) WO'lar arasında
+ * effective status === 'PlanBekliyor' olanları sayar.
+ *
+ * Performans: 1000 WO için tipik 50-100ms (her WO için 1 status hesabı). Topbar'da useMemo ile cache.
+ */
+export function getPlanBekleyenWoIds(
+  workOrders: WorkOrder[],
+  cuttingPlans: CuttingPlan[],
+  tedarikler: Tedarik[],
+  stokHareketler: StokHareket[],
+  logs?: { woId: string; qty: number }[],
+): Set<string> {
+  const set = new Set<string>()
+  for (const w of workOrders) {
+    if (!isWorkOrderOpen(w)) continue
+    const eff = getEffectiveStatus(w, cuttingPlans, tedarikler, stokHareketler, logs)
+    if (eff.status === 'PlanBekliyor') set.add(w.id)
+  }
+  return set
+}

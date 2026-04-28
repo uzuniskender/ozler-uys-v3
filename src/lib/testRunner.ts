@@ -1626,3 +1626,165 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
     return finalize(state, 'Senaryo 10: Manuel İE MRP Görünürlüğü (v15.78 saha bug fix)', t0)
   })
 }
+
+// ═══ SENARYO 11 — EFEKTİF DURUM (v15.79 / İş Emri #13 madde 8+9) ═══
+// getEffectiveStatus saf-fonksiyon — operatör panelinin filtresinin doğruluğunu doğrular.
+// 8 alt-test: tüm karar yolları (DB durumu öncelik + kesim plan + tedarik yok/yolda + üretilebilir).
+//
+// KRİTİK: Operatör paneli sadece Üretilebilir + Üretimde gösteriyor.
+//         Bu fonksiyonun yanlış sonuç vermesi = operatör hayalet İE görür / gerçek İE göremez.
+
+import { getEffectiveStatus as gefs } from './statusUtils'
+
+function _fakeWoForS11(overrides: Partial<WorkOrder> = {}): WorkOrder {
+  return {
+    id: 'wo-' + uid(),
+    orderId: '', rcId: '', sira: 0, kirno: '0',
+    opId: '', opKod: '', opAd: '',
+    istId: '', istKod: '', istAd: '',
+    malkod: 'YMH-TEST', malad: 'Test',
+    hedef: 100, mpm: 1,
+    hm: [{ malkod: 'HM-A', malad: 'Hammadde A', miktarTotal: 200 }],
+    ieNo: 'IE-S11-' + uid().slice(-4),
+    whAlloc: 0, hazirlikSure: 0, islemSure: 0,
+    durum: 'bekliyor',
+    bagimsiz: false, siparisDisi: false,
+    termin: '2026-05-15',
+    mamulKod: 'YMH-TEST', mamulAd: 'Test',
+    mamulAuto: false,
+    operatorId: null, not: '', olusturma: today(),
+    ...overrides,
+  }
+}
+
+export async function senaryo11(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S11', async (state, t0) => {
+    // ═══ 11.1 — DB durumu 'iptal' önceliği ═══
+    await adim(state, '1. DB durumu IPTAL → "iptal" döner (öncelik)', async () => {
+      const w = _fakeWoForS11({ durum: 'iptal' })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'iptal') throw new Error('Beklenen iptal: ' + e.status)
+      return { status: e.status, reason: e.reason }
+    }, ctx)
+
+    // ═══ 11.2 — DB durumu 'beklemede' önceliği ═══
+    await adim(state, '2. DB durumu BEKLEMEDE → "beklemede" döner', async () => {
+      const w = _fakeWoForS11({ durum: 'beklemede' })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'beklemede') throw new Error('Beklenen beklemede: ' + e.status)
+      return { status: e.status, reason: e.reason }
+    }, ctx)
+
+    // ═══ 11.3 — DB durumu 'uretimde' önceliği ═══
+    await adim(state, '3. DB durumu URETIMDE → "uretimde" döner (operatör listede görür)', async () => {
+      const w = _fakeWoForS11({ durum: 'uretimde' })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'uretimde') throw new Error('Beklenen uretimde: ' + e.status)
+      return { status: e.status }
+    }, ctx)
+
+    // ═══ 11.4 — Kesim opsiyonlu + plan yok → PlanBekliyor ═══
+    await adim(state, '4. Kesim opsiyonlu (opAd="KESIM") + plan yok → PlanBekliyor (kesim_plan)', async () => {
+      const w = _fakeWoForS11({ opAd: 'KESIM', hm: [] })  // hm boş → kesim+plan kontrolü dominant
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'PlanBekliyor') throw new Error('Beklenen PlanBekliyor: ' + e.status)
+      if (e.blockedBy !== 'kesim_plan') throw new Error('Beklenen kesim_plan: ' + e.blockedBy)
+      if (!/kesim plan/i.test(e.reason)) throw new Error('Reason kesim plan içermeli: ' + e.reason)
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.5 — Hammadde yeterli → Uretilebilir ═══
+    await adim(state, '5. Hammadde stoğu yeterli → Uretilebilir', async () => {
+      const w = _fakeWoForS11()
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 500, tip: 'giris' as const, tarih: today() },
+      ] as any
+      const e = gefs(w, [], [], stokHareketler)
+      if (e.status !== 'Uretilebilir') throw new Error('Beklenen Uretilebilir: ' + e.status + ' / reason: ' + e.reason)
+      return { status: e.status }
+    }, ctx)
+
+    // ═══ 11.6 — Hammadde eksik + tedarik açılmamış ═══
+    await adim(state, '6. Hammadde eksik + tedarik açılmamış → PlanBekliyor (tedarik_yok)', async () => {
+      const w = _fakeWoForS11()
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 50, tip: 'giris' as const, tarih: today() },
+      ] as any
+      const e = gefs(w, [], [], stokHareketler)
+      if (e.status !== 'PlanBekliyor') throw new Error('Beklenen PlanBekliyor: ' + e.status)
+      if (e.blockedBy !== 'tedarik_yok') throw new Error('Beklenen tedarik_yok: ' + e.blockedBy)
+      if (!/tedarik/i.test(e.reason)) throw new Error('Reason tedarik içermeli: ' + e.reason)
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.7 — Hammadde eksik + tedarik yolda ═══
+    await adim(state, '7. Hammadde eksik + tedarik yolda → PlanBekliyor (tedarik_yolda)', async () => {
+      const w = _fakeWoForS11()
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 50, tip: 'giris' as const, tarih: today() },
+      ] as any
+      const tedarikler = [
+        { id: 't1', malkod: 'HM-A', malad: 'Hammadde A', miktar: 200, geldi: false } as any,
+      ]
+      const e = gefs(w, [], tedarikler, stokHareketler)
+      if (e.status !== 'PlanBekliyor') throw new Error('Beklenen PlanBekliyor: ' + e.status)
+      if (e.blockedBy !== 'tedarik_yolda') throw new Error('Beklenen tedarik_yolda: ' + e.blockedBy)
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.8 — Çok hammadde, biri açılmamış biri yolda → tedarik_yok öncelik ═══
+    await adim(state, '8. 2 HM eksik (biri açılmamış, biri yolda) → tedarik_yok ÖNCELİK', async () => {
+      const w = _fakeWoForS11({
+        hm: [
+          { malkod: 'HM-A', malad: 'Hammadde A', miktarTotal: 200 },
+          { malkod: 'HM-B', malad: 'Hammadde B', miktarTotal: 200 },
+        ],
+      })
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 50, tip: 'giris' as const, tarih: today() },
+        { id: 's2', malkod: 'HM-B', miktar: 50, tip: 'giris' as const, tarih: today() },
+      ] as any
+      // HM-A için tedarik yolda, HM-B için tedarik açılmamış
+      const tedarikler = [
+        { id: 't1', malkod: 'HM-A', malad: 'Hammadde A', miktar: 200, geldi: false } as any,
+      ]
+      const e = gefs(w, [], tedarikler, stokHareketler)
+      if (e.blockedBy !== 'tedarik_yok') {
+        throw new Error('Öncelik kuralı: tedarik_yok > tedarik_yolda. Bulundu: ' + e.blockedBy)
+      }
+      // Reason HM-B'yi içermeli (açılmamış olan)
+      if (!/Hammadde B/.test(e.reason)) {
+        throw new Error('Reason HM-B içermeli (açılmamış olan): ' + e.reason)
+      }
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.9 — Üretim ilerlemesi: yarısı bitti → kalan ihtiyaç düşük ═══
+    await adim(state, '9. 50% üretildi → kalan ihtiyaç yarıya düşer, az stok yeter', async () => {
+      const w = _fakeWoForS11({ id: 'wo-s11-9' })
+      // 100 hedef, 50 üretildi → kalan 50 → kalan HM ihtiyacı 100 (200×0.5)
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 110, tip: 'giris' as const, tarih: today() },  // 110 stok yeter
+      ] as any
+      const logs = [{ woId: 'wo-s11-9', qty: 50 }]
+      const e = gefs(w, [], [], stokHareketler, logs)
+      if (e.status !== 'Uretilebilir') {
+        throw new Error('İlerleme dahil edilmedi: 50% üretildiyse kalan 100 HM lazım, stok 110 yeterli olmalı. Bulundu: ' + e.status + ' / reason: ' + e.reason)
+      }
+      return { status: e.status }
+    }, ctx)
+
+    // ═══ 11.10 — Hammadde tanımsız (hm=[]) → varsayılan Uretilebilir ═══
+    await adim(state, '10. hm=[] (BOM tanımsız) → varsayılan Uretilebilir (operatör paneldeki canProduceWO ek koruma sağlar)', async () => {
+      const w = _fakeWoForS11({ hm: [] })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'Uretilebilir') throw new Error('hm=[] varsayılan Uretilebilir: ' + e.status)
+      return { status: e.status }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 11: Efektif Durum (v15.79 — getEffectiveStatus)', t0)
+  })
+}
