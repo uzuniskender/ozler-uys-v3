@@ -161,14 +161,14 @@ export function DataManagement() {
       // gerçek tutarlılık kontrolleri konuldu.
 
       // 5. MRP §21 Sözleşmesi — Toplam ihtiyaç ≤ stok + yolda mı (genel mod)
-      const cpMapped5 = cps.map((p: any) => ({
+      const cpMapped5 = plans.map((p: any) => ({
         hamMalkod: p.ham_malkod, hamMalad: p.ham_malad, durum: p.durum || '',
         gerekliAdet: p.gerekli_adet || 0, satirlar: p.satirlar || [],
       }))
       // Tüm aktif siparişler + manuel İE'ler — ymSet boş çünkü "tüm açık WO'lar dahil olsun"
       const allSonuc = (() => {
         try {
-          return hesaplaMRP(null, ords as any, wos as any, recipes as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [])
+          return hesaplaMRP(null, orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [])
         } catch { return [] }
       })()
       const eksiklerEvrim = allSonuc.filter((r: any) => r.net > 0)
@@ -221,7 +221,7 @@ export function DataManagement() {
       for (const o of aktifOrders) {
         if (o.mrp_durum !== 'tamam' && o.mrp_durum !== 'tamamlandi') continue
         try {
-          const sonuc = hesaplaMRP([o.id], ords as any, wos as any, recipes as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id)
+          const sonuc = hesaplaMRP([o.id], orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id)
           const eksikSayisi = sonuc.filter((r: any) => r.net > 0).length
           if (eksikSayisi > 0) {
             tutmazSiparisler.push({ id: o.id, no: o.siparis_no || '(no yok)', eksikSayisi })
