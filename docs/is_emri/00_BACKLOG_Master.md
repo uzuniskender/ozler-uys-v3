@@ -1,7 +1,9 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 28 Nisan 2026 öğlen (v15.79-v15.81 tek oturumda — MRP temel hesabı saha bug fix + Plan Bekliyor/Üretilebilir efektif durum + sağlık raporu §21 sözleşmesi)
+**Son güncelleme:** 28 Nisan 2026 öğleden sonra (saha model konuşması — 13 senaryo, Madde 15 girdi)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
+
+📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi
 
 ---
 

@@ -1848,3 +1848,82 @@ Yeni eklemeler:
 ## Atıl Kod Analizi A2 — Yeniden Doğrulandı
 
 v15.78'de geri eklenen "Bağımsız YM İE" UI bölümü v15.81'de logs parametresi eklenmesiyle artık doğru hesap yapıyor. Manuel İE'lerin MRP'de görünür olması + ihtiyacın gerçek kalan üzerinden hesaplanması — ikisi birden çalışınca saha modeline tam oturuyor.
+
+---
+
+# §25. 28 NİSAN 2026 ÖĞLEDEN SONRA — SAHA MODEL KONUŞMASI
+
+15:37 → ~17:00 oturumu. Önceki oturumlarda kod tarafı çözüldükten sonra **kafadaki saha modeli** yazılı hale getirildi.
+
+**Çıktı:** `docs/saha_model_28nis2026.md` (516 satır, 13 senaryo).
+
+## Konuşulan 13 senaryo
+
+```
+1. Sipariş geldi
+2. Manuel İE açıldı (siparişsiz, stok için)
+3. Tedarik geldi
+4. Sipariş arttı
+5. Sipariş azaldı
+6. Sipariş iptal
+7. Tedarik yaklaşan termin / gecikme / iptal
+8. Üretim girildi (normal, fire'sız)
+9. Fire çıktı (telafi)
+10. Manuel stok çıkışı (Madde 15 onay sisteminin kalbi)
+11. Manuel stok girişi
+12. 2 sipariş aynı malzeme (FIFO)
+13. Hammadde alternatifi
+```
+
+## Ana keşifler
+
+**Mamul/hammadde simetrik rezerv-tahsis modeli:**
+```
+                    MAMUL                        HAMMADDE
+─────────────────────────────────────────────────────────
+Otomatik bağlama    İE üretim → order_id        FIFO tahsis (termin)
+                    rezerv
+
+Görünürlük          Stok kartında rezerv         Stok kartında tahsis
+                    dağılımı                     dağılımı
+
+Manuel müdahale     Rezerv → başka sipariş       Tahsis → başka sipariş
+                    Sebep+açıklama zorunlu       Sebep+açıklama zorunlu
+
+Sonuç               Etkilenen sipariş için       Etkilenen sipariş için
+                    EK İE                        ek tedarik/İE
+```
+
+**🔔 Bildirim merkezi (yeni özellik):**
+Topbar'a yeni badge — sistem uyarıları için (chat/operatör mesajından ayrı). 7+ uyarı kaynağı (tedarik gecikme/iptal, sevkiyat termin, düşük stok, fire, manuel rezerv'e dokunma, vs).
+
+**Madde 15 onay sistemi mimarisi netleşti:**
+3 aşamalı kontrol modeli (serbest → rezerv → üretim ihtiyacı). Mamul ve hammadde için ayrı 2'şer aşama. Detay: saha_model_28nis2026.md.
+
+## Kod tarafında EKSİK olan kavramlar
+
+1. Mamul stok rezerv/serbest ayrımı (sipariş bazlı, order_id ile)
+2. Hammadde stok tahsis dağılımı (FIFO termin)
+3. Manuel müdahale modalı (rezerv'e dokunma + sebep zorunlu)
+4. 🔔 Bildirim merkezi (Topbar badge + uys_bildirimler tablosu)
+5. Senaryo 1 modalı doğrulaması ("55 mi 50 mi?")
+6. Manuel İE termin zorunlu (Senaryo 2 + 12)
+7. Malzeme kartı kalite/cins/standart/kaplama alanları
+8. Malzeme alternatifleri tablosu + UI
+9. Kesim planı alternatif boy desteği
+
+## DÜZELTME gerek
+
+**v15.74 AZALIS BLOCK kuralı yanlış:** Senaryo 5'te "üretildi > yeni adet → engel" kuralı saha modeline ters. Saha kuralı: fazla üretim engel değil, serbest stoğa. Senaryo 7 testi "doğru çalışıyor" demişti ama spec yanlıştı.
+
+## Backlog senaryolar
+
+1. İade akışı (Senaryo 5.4, 6.5)
+2. Fire raporlama (Senaryo 9.8)
+3. Çoklu admin oturumu (önceki tespit)
+4. Operatör entry modal — kendini çıkaramama bug'ı (Senaryo 8.2)
+
+## Sıradaki adım
+
+Madde 15 onay sistemini tasarlamak. saha_model_28nis2026.md tüm girdileri sağlıyor — yeni Claude oturumu o dökümanı okur, kod patch'i çıkarır.
+
