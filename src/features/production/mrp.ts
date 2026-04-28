@@ -170,6 +170,9 @@ function bomPatlaNet(
 }
 
 // ═══ ANA MRP HESAPLAMA — v2 hesaplaMRP port'u ═══
+// v15.81 — logs parametresi eklendi (saha bug fix).
+// Önceden 'uretilen=0' hardcode'du → tamamlanmış WO'lar bile hammadde "ihtiyacı" üretiyordu.
+// (Bilgi Bankası §25). Yeni: kalan = max(0, hedef - log toplam). logs verilmezse eski davranış.
 export function hesaplaMRP(
   ordIds: string[] | null,
   orders: { id: string; adet: number; mamulKod: string; receteId: string; durum: string; termin?: string; urunler?: { mamulKod: string; adet: number; termin?: string }[] }[],
@@ -181,7 +184,8 @@ export function hesaplaMRP(
   materials: Material[],
   secilenYMIds?: Set<string> | null,
   mrpRezerve?: MrpRezerve[],
-  currentOrderId?: string
+  currentOrderId?: string,
+  logs?: { woId: string; qty: number }[]
 ): MRPRow[] {
   // brutIhtiyac ANAHTARLARI case-insensitive (.trim().toLowerCase())
   // ama her kaydın .malkod field'ı orijinal case'de saklanır (final çıktıda kullanmak için)
@@ -203,21 +207,36 @@ export function hesaplaMRP(
     const urunler = o.urunler?.length ? o.urunler : [{ mamulKod: o.mamulKod, adet: o.adet }]
     for (const u of urunler) {
       if (!u.mamulKod || !u.adet) continue
-      // Net adet: toplam sipariş - zaten üretilmiş
+
+      // v15.81 — Bu kalemin üretilen miktarını hesapla.
+      // Eski kod: prod=0 hardcode (yorum: "v2 uses wProd which needs logs").
+      // Yeni: WO'nun mamul kodu ile eşleşen logların qty toplamı.
       const urunWOs = workOrders.filter(w =>
         w.orderId === o.id && (w.mamulKod === u.mamulKod || w.malkod === u.mamulKod) && !w.kirno?.includes('.')
       )
-      const uretilen = urunWOs.reduce((a, w) => {
-        const prod = stokHareketler.filter(h => h.woId === w.id).length > 0 ? 0 : 0 // simplify
-        return a
-      }, 0)
-      // For now just use full adet (v2 uses wProd which needs logs)
-      const netAdet = u.adet
+      const uretilen = logs
+        ? urunWOs.reduce((a, w) => a + logs.filter(l => l.woId === w.id).reduce((b, l) => b + (l.qty || 0), 0), 0)
+        : 0  // logs verilmezse eski davranış (geriye uyum)
+
+      // Net adet: toplam sipariş - üretilmiş (mpm yok burada — siparis düzeyinde hedef)
+      // Not: WO hedef = adet × mpm; üretilen de mpm cinsinden. Karşılaştırma için
+      // adet düzeyine indirgemek lazım. Basit yaklaşım: ürünün toplam WO hedefini
+      // referans al, oran hesapla.
+      let netAdet = u.adet
+      if (logs && uretilen > 0) {
+        const toplamHedef = urunWOs.reduce((a, w) => a + (w.hedef || 0), 0)
+        if (toplamHedef > 0) {
+          // İlerleme oranı: uretilen / toplamHedef
+          const oran = Math.min(1, uretilen / toplamHedef)
+          netAdet = Math.max(0, Math.ceil(u.adet * (1 - oran)))
+        }
+      }
+      if (netAdet === 0) continue  // Bu ürün tamamen üretilmiş, BOM patlatmaya gerek yok
 
       const urunTermin = (u as any).termin || o.termin || ''
       const p = bomPatlaNet(u.mamulKod, netAdet, 0, {}, recipes, stokHareketler, materials)
       // DEBUG — bomPatlaNet ne çıkarmış?
-      dbg(`[MRP DEBUG] Sipariş ${o.id} kalem ${u.mamulKod} x${netAdet} → BOM sonuç:`, Object.keys(p).length, 'malzeme:', Object.keys(p))
+      dbg(`[MRP DEBUG] Sipariş ${o.id} kalem ${u.mamulKod} x${netAdet} (asıl ${u.adet}, üretildi ${uretilen}) → BOM:`, Object.keys(p).length)
       Object.keys(p).forEach(k => {
         const v = p[k]
         const key = (k || '').trim().toLowerCase()
@@ -232,12 +251,11 @@ export function hesaplaMRP(
   // 2. Bağımsız YM + Sipariş Dışı İş Emirleri
   // v15.35.3: siparisDisi bayrağı da kapsama dahil (manuel kesim İE'leri hammadde ihtiyacı çıkarsın)
   // v15.78: secilenYMIds explicit seçim → ordIdSet'i bypass eder.
-  //   Saha bug'ı: Manuel İE'ler (orderId boş) sipariş bazlı çağrıda atlıyordu.
-  //   Çözüm: UI'da kullanıcı manuel İE seçtiyse, sipariş listesi dolu olsa bile dahil.
-  //   Sipariş bazlı view (örn. Orders.tsx detay) secilenYMIds göndermez → eski davranış korunur.
+  // v15.81: Tamamlanmış WO'lar atlanır (saha bug fix — saha 7 IE-MANUAL tamamlandı durumda
+  //         hammadde ihtiyacı üretiyordu çünkü 'uretilen=0' hardcode'du, iptal/tamamlandi filtresi yoktu).
   const ymIEs = workOrders.filter(w => {
     if (!w.bagimsiz && !w.siparisDisi) return false
-    if (w.durum === 'iptal') return false
+    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false  // v15.81 — tamamlandi eklendi
     // Explicit YM seçimi varsa override: sadece set içindekiler dahil, ordIdSet bypass.
     if (secilenYMIds) return secilenYMIds.has(w.id)
     // Explicit seçim yok → sipariş kapsamına bak
@@ -248,14 +266,15 @@ export function hesaplaMRP(
   })
   dbg('[MRP DEBUG] Bağımsız/SiparisDisi YM İE sayısı:', ymIEs.length, '| IDs:', ymIEs.map(w => w.id))
   for (const w of ymIEs) {
-    // v15.35.3: Kalan hesabı = hedef - üretilen (daha doğru)
-    const uretilen = stokHareketler.filter(h => (h as any).woId === w.id || h.woId === w.id).length > 0
-      ? 0 : 0  // (log bazlı hesaplama bu dosyada yok — şimdilik hedef kullanılır)
-    const kalan = w.hedef - uretilen
+    // v15.81 — Log bazlı kalan hesabı (eski kod: 'uretilen=0' hardcode'du).
+    const uretilen = logs
+      ? logs.filter(l => l.woId === w.id).reduce((a, l) => a + (l.qty || 0), 0)
+      : 0
+    const kalan = Math.max(0, w.hedef - uretilen)
     if (!kalan || !w.malkod) continue
     const wTermin = (w as any).termin || ''
     const p = bomPatlaNet(w.malkod, kalan, 0, {}, recipes, stokHareketler, materials)
-    dbg('[MRP DEBUG] İE', w.id, w.ieNo, w.malkod, 'x', kalan, 'bagimsiz:', w.bagimsiz, 'siparisDisi:', w.siparisDisi, '→ BOM:', Object.keys(p).length, 'malzeme:', Object.keys(p))
+    dbg('[MRP DEBUG] İE', w.id, w.ieNo, w.malkod, 'kalan:', kalan, '(hedef', w.hedef, '- üretildi', uretilen, ')', '→ BOM:', Object.keys(p).length)
     Object.keys(p).forEach(k => {
       if (k === w.malkod) return
       const v = p[k]

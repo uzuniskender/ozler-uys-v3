@@ -147,7 +147,7 @@ export async function autoZincir(
   let mrpSonuc: MRPRow[] = []
   let calcId: string | null = null
   try {
-    mrpSonuc = hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, tedarikler, allCP, materials)
+    mrpSonuc = hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, tedarikler, allCP, materials, null, [], orderId, logs)
     const eksikSay = mrpSonuc.filter(x => x.durum === 'eksik').length
     adimlar.push(`✅ MRP: ${mrpSonuc.length} kalem${eksikSay ? ' · ' + eksikSay + ' eksik' : ''}`)
 

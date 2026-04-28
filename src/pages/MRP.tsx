@@ -53,7 +53,7 @@ export function MRP() {
       // Kilitli ise atla — zaten gizlenecek
       if (isOrderArchived(o)) { map[o.id] = false; continue }
       try {
-        const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id)
+        const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id, logs)
         map[o.id] = sonuc.some(r => r.net > 0)
       } catch {
         map[o.id] = false
@@ -89,7 +89,7 @@ export function MRP() {
     const map: Record<string, boolean> = {}
     for (const w of aktifManualIesAll) {
       try {
-        const sonuc = hesaplaMRP([], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, new Set([w.id]), mrpRezerve)
+        const sonuc = hesaplaMRP([], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, new Set([w.id]), mrpRezerve, undefined, logs)
         map[w.id] = sonuc.some(r => r.net > 0)
       } catch {
         map[w.id] = false
@@ -207,13 +207,13 @@ export function MRP() {
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs)
     setSonuc(result)
     setHesaplandi(true)
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz (manuel İE'lerde mrp_durum kolonu yok, atla)
     for (const oid of ordIds) {
-      const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid)
+      const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid)
       // Rezerve kayıtları yaz (eskileri silip yenilerini oluştur)

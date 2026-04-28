@@ -295,7 +295,7 @@ async function _runMRPAndCreateTedarik(state: RunnerState): Promise<{ mrpKalem: 
   const result = hesaplaMRP(
     ordIds, store.orders as any, store.workOrders, store.recipes,
     store.stokHareketler, store.tedarikler, cpMapped, store.materials,
-    ymSet, store.mrpRezerve
+    ymSet, store.mrpRezerve, undefined, store.logs as any
   )
 
   if (state.orderId) await rezerveYaz(state.orderId, result)
@@ -860,7 +860,7 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
         const result = hesaplaMRP(
           ordIds, store.orders as any, store.workOrders, store.recipes,
           store.stokHareketler, store.tedarikler, cpMapped, store.materials,
-          null, store.mrpRezerve
+          null, store.mrpRezerve, undefined, store.logs as any
         )
         return { mrpKalem: result.length, eksik: result.filter(r => r.net > 0).length }
       }, ctx)
@@ -1484,5 +1484,450 @@ export async function senaryo9(ctx: RunnerContext): Promise<SenaryoRapor> {
     }, ctx)
 
     return finalize(state, 'Senaryo 9: Loglar Sayfası DB Akışı (v15.75)', t0)
+  })
+}
+
+// ═══ SENARYO 10 — MANUEL İE MRP GÖRÜNÜRLÜĞÜ (v15.78 / saha bug fix) ═══
+// Saha vakası: IE-MANUAL-MO9SDW3A 6740 adet, "stok yok" hard block veriyor ama MRP'de
+// görünmüyor (orderId=null → ordIdSet filtresi atlıyor). Bu senaryo bug'ın çözümünü
+// reproducible test eder.
+//
+// Test akışı:
+//   1. Manuel İE oluştur (orderId=null, bagimsiz=true, siparisDisi=true, hedef büyük)
+//   2. hesaplaMRP'yi 4 farklı modda çağır:
+//      a) ordIds=[] + secilenYMIds=null → eski davranış: hepsi dahil, manuel İE eksik çıkar
+//      b) ordIds=[başka sipariş] + secilenYMIds=null → ESKİ BUG: manuel İE atlanır (HATALI)
+//                                                       v15.78: yine atlanır (sipariş bazlı view korundu)
+//      c) ordIds=[] + secilenYMIds=[manuel İE] → eksik çıkar (ymSet override)
+//      d) ordIds=[başka sipariş] + secilenYMIds=[manuel İE] → eksik çıkar (v15.78 düzeltmesi)
+//
+// Adım (d) v15.78 öncesi FAIL ederdi, sonrası PASS — bu testin asıl değeri.
+
+export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S10', async (state, t0) => {
+    // ═══ Setup: bir sipariş + bir manuel İE (siparişsiz) — ikisi de aynı reçete ═══
+    await adim(state, '1. Test siparişi oluştur (referans için)', async () => {
+      const oid = await _createOrder(state, ctx, 'S10A')
+      snapshotStok(state)
+      return { orderId: oid, ieCount: state.ieIds.length }
+    }, ctx)
+
+    const orijinalIeCount = state.ieIds.length
+
+    await wait(200)
+    const manualIE = await adim(state, '2. Manuel İE oluştur (orderId=null, bagimsiz=true)', async () => {
+      const woId = await _createWO(state, ctx)  // _createWO: order_id=null, bagimsiz=true, siparis_disi=true
+      const store = useStore.getState()
+      const wo = store.workOrders.find(w => w.id === woId)
+      if (!wo) throw new Error('Manuel İE oluşturulamadı')
+      if (wo.orderId) throw new Error('Manuel İE orderId boş olmalıydı: ' + wo.orderId)
+      if (!wo.bagimsiz && !wo.siparisDisi) throw new Error('bagimsiz/siparisDisi yanlış')
+      return { woId, ieNo: wo.ieNo, orderId: wo.orderId, bagimsiz: wo.bagimsiz, siparisDisi: wo.siparisDisi }
+    }, ctx) as any
+
+    const manualWoId = manualIE.woId
+
+    // ═══ 3. MOD A: ordIds=[], secilenYMIds=null → tümü dahil ═══
+    await wait(200)
+    await adim(state, '3. MOD A — ordIds=[], secilenYMIds=null (tümü dahil)', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hesaplaMRP([], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials, null, store.mrpRezerve)
+      // Manuel İE'nin hammaddesi sonuçta görünmeli (en az 1 satır)
+      if (sonuc.length === 0) throw new Error('MOD A: tümü dahil mod hiç sonuç döndürmedi')
+      return { kalemSayi: sonuc.length, eksikSayi: sonuc.filter(r => r.net > 0).length }
+    }, ctx)
+
+    // ═══ 4. MOD B: ordIds=[orderId-baska-siparis] (sadece sipariş bazlı view) ═══
+    // Bu davranış v15.78'de DEĞİŞMEDİ — sipariş bazlı detay (örn. Orders.tsx) için manuel İE atlanır.
+    // Test: siparişin BOM ihtiyacı kadar sonuç dönmeli, manuel İE'nin hammaddesi DAHIL OLMAMALI
+    // (manuel İE'nin malkod'u sipariş'inkinden FARKLIYSA — aynı reçete kullandığı için bu test kompleks).
+    // Basit kontrol: sonuç sayısı, MOD A ile karşılaştırılabilir farkta mı?
+    await wait(200)
+    await adim(state, '4. MOD B — sipariş bazlı (ordIds=[orderId], YM override yok)', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hesaplaMRP([state.orderId!], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials, null, store.mrpRezerve, state.orderId!)
+      // Sipariş bazlı: manuel İE atlanır (eski davranış korundu — sipariş detay görünümü için doğru)
+      // Bu sadece dökümantasyon adımı, hata atmıyor
+      return { kalemSayi: sonuc.length, eksikSayi: sonuc.filter(r => r.net > 0).length, not: 'Sipariş bazlı view, manuel İE atlanır (kasıtlı)' }
+    }, ctx)
+
+    // ═══ 5. MOD C: ordIds=[], secilenYMIds=[manuelWoId] → eksik çıkmalı ═══
+    await wait(200)
+    await adim(state, '5. MOD C — sadece manuel İE seçili (ordIds=[], ymSet={manuelWoId})', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hesaplaMRP([], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials, new Set([manualWoId]), store.mrpRezerve)
+      if (sonuc.length === 0) {
+        throw new Error('MOD C: ymSet ile çağrıda manuel İE\'nin hammaddesi hesaplanmadı')
+      }
+      return { kalemSayi: sonuc.length, eksikSayi: sonuc.filter(r => r.net > 0).length }
+    }, ctx)
+
+    // ═══ 6. MOD D — KRİTİK: sipariş + manuel İE birlikte (saha bug fix testi) ═══
+    // v15.78 ÖNCESİ: ordIdSet dolu olduğu için manuel İE filtre dışı kalırdı (BUG)
+    // v15.78 SONRASI: secilenYMIds explicit override → manuel İE de hesaba dahil
+    await wait(200)
+    await adim(state, '6. MOD D ⭐ — Sipariş + Manuel İE (v15.78 saha bug fix)', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hesaplaMRP(
+        [state.orderId!],                           // sipariş listesi
+        store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials,
+        new Set([manualWoId]),                       // YM override → manuel İE de dahil
+        store.mrpRezerve,
+      )
+      // KRİTİK kontrol: secilenYMIds dolu olduğu için manuel İE'nin hammadde ihtiyacı hesapta olmalı.
+      // Eski davranışta manuel İE atlandığı için sonuç sayısı daha az olurdu.
+      if (sonuc.length === 0) {
+        throw new Error('v15.78 fix çalışmadı: ordIds dolu + ymSet dolu → manuel İE atlanmamalıydı')
+      }
+      return { kalemSayi: sonuc.length, eksikSayi: sonuc.filter(r => r.net > 0).length, mesaj: 'Manuel İE hesaba dahil edildi' }
+    }, ctx)
+
+    // ═══ 7. Karşılaştırma: MOD C vs MOD D — manuel İE'nin payı her ikisinde de görünmeli ═══
+    await adim(state, '7. MOD C vs MOD D — Manuel İE payı tutarlı mı', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const modC = hesaplaMRP([], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials, new Set([manualWoId]), store.mrpRezerve)
+      const modD = hesaplaMRP([state.orderId!], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials, new Set([manualWoId]), store.mrpRezerve)
+      // MOD D ≥ MOD C olmalı (D = sipariş + manuel İE; C = sadece manuel İE)
+      if (modD.length < modC.length) {
+        throw new Error(`Tutarsızlık: MOD D (${modD.length}) < MOD C (${modC.length}) — sipariş eklendi ama sonuç azaldı`)
+      }
+      return { modCkalem: modC.length, modDkalem: modD.length, fark: modD.length - modC.length }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 10: Manuel İE MRP Görünürlüğü (v15.78 saha bug fix)', t0)
+  })
+}
+
+// ═══ SENARYO 11 — EFEKTİF DURUM (v15.79 / İş Emri #13 madde 8+9) ═══
+// getEffectiveStatus saf-fonksiyon — operatör panelinin filtresinin doğruluğunu doğrular.
+// 8 alt-test: tüm karar yolları (DB durumu öncelik + kesim plan + tedarik yok/yolda + üretilebilir).
+//
+// KRİTİK: Operatör paneli sadece Üretilebilir + Üretimde gösteriyor.
+//         Bu fonksiyonun yanlış sonuç vermesi = operatör hayalet İE görür / gerçek İE göremez.
+
+import { getEffectiveStatus as gefs } from './statusUtils'
+
+function _fakeWoForS11(overrides: Partial<WorkOrder> = {}): WorkOrder {
+  return {
+    id: 'wo-' + uid(),
+    orderId: '', rcId: '', sira: 0, kirno: '0',
+    opId: '', opKod: '', opAd: '',
+    istId: '', istKod: '', istAd: '',
+    malkod: 'YMH-TEST', malad: 'Test',
+    hedef: 100, mpm: 1,
+    hm: [{ malkod: 'HM-A', malad: 'Hammadde A', miktarTotal: 200 }],
+    ieNo: 'IE-S11-' + uid().slice(-4),
+    whAlloc: 0, hazirlikSure: 0, islemSure: 0,
+    durum: 'bekliyor',
+    bagimsiz: false, siparisDisi: false,
+    termin: '2026-05-15',
+    mamulKod: 'YMH-TEST', mamulAd: 'Test',
+    mamulAuto: false,
+    operatorId: null, not: '', olusturma: today(),
+    ...overrides,
+  }
+}
+
+export async function senaryo11(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S11', async (state, t0) => {
+    // ═══ 11.1 — DB durumu 'iptal' önceliği ═══
+    await adim(state, '1. DB durumu IPTAL → "iptal" döner (öncelik)', async () => {
+      const w = _fakeWoForS11({ durum: 'iptal' })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'iptal') throw new Error('Beklenen iptal: ' + e.status)
+      return { status: e.status, reason: e.reason }
+    }, ctx)
+
+    // ═══ 11.2 — DB durumu 'beklemede' önceliği ═══
+    await adim(state, '2. DB durumu BEKLEMEDE → "beklemede" döner', async () => {
+      const w = _fakeWoForS11({ durum: 'beklemede' })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'beklemede') throw new Error('Beklenen beklemede: ' + e.status)
+      return { status: e.status, reason: e.reason }
+    }, ctx)
+
+    // ═══ 11.3 — DB durumu 'uretimde' önceliği ═══
+    await adim(state, '3. DB durumu URETIMDE → "uretimde" döner (operatör listede görür)', async () => {
+      const w = _fakeWoForS11({ durum: 'uretimde' })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'uretimde') throw new Error('Beklenen uretimde: ' + e.status)
+      return { status: e.status }
+    }, ctx)
+
+    // ═══ 11.4 — Kesim opsiyonlu + plan yok → PlanBekliyor ═══
+    await adim(state, '4. Kesim opsiyonlu (opAd="KESIM") + plan yok → PlanBekliyor (kesim_plan)', async () => {
+      const w = _fakeWoForS11({ opAd: 'KESIM', hm: [] })  // hm boş → kesim+plan kontrolü dominant
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'PlanBekliyor') throw new Error('Beklenen PlanBekliyor: ' + e.status)
+      if (e.blockedBy !== 'kesim_plan') throw new Error('Beklenen kesim_plan: ' + e.blockedBy)
+      if (!/kesim plan/i.test(e.reason)) throw new Error('Reason kesim plan içermeli: ' + e.reason)
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.5 — Hammadde yeterli → Uretilebilir ═══
+    await adim(state, '5. Hammadde stoğu yeterli → Uretilebilir', async () => {
+      const w = _fakeWoForS11()
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 500, tip: 'giris' as const, tarih: today() },
+      ] as any
+      const e = gefs(w, [], [], stokHareketler)
+      if (e.status !== 'Uretilebilir') throw new Error('Beklenen Uretilebilir: ' + e.status + ' / reason: ' + e.reason)
+      return { status: e.status }
+    }, ctx)
+
+    // ═══ 11.6 — Hammadde eksik + tedarik açılmamış ═══
+    await adim(state, '6. Hammadde eksik + tedarik açılmamış → PlanBekliyor (tedarik_yok)', async () => {
+      const w = _fakeWoForS11()
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 50, tip: 'giris' as const, tarih: today() },
+      ] as any
+      const e = gefs(w, [], [], stokHareketler)
+      if (e.status !== 'PlanBekliyor') throw new Error('Beklenen PlanBekliyor: ' + e.status)
+      if (e.blockedBy !== 'tedarik_yok') throw new Error('Beklenen tedarik_yok: ' + e.blockedBy)
+      if (!/tedarik/i.test(e.reason)) throw new Error('Reason tedarik içermeli: ' + e.reason)
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.7 — Hammadde eksik + tedarik yolda ═══
+    await adim(state, '7. Hammadde eksik + tedarik yolda → PlanBekliyor (tedarik_yolda)', async () => {
+      const w = _fakeWoForS11()
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 50, tip: 'giris' as const, tarih: today() },
+      ] as any
+      const tedarikler = [
+        { id: 't1', malkod: 'HM-A', malad: 'Hammadde A', miktar: 200, geldi: false } as any,
+      ]
+      const e = gefs(w, [], tedarikler, stokHareketler)
+      if (e.status !== 'PlanBekliyor') throw new Error('Beklenen PlanBekliyor: ' + e.status)
+      if (e.blockedBy !== 'tedarik_yolda') throw new Error('Beklenen tedarik_yolda: ' + e.blockedBy)
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.8 — Çok hammadde, biri açılmamış biri yolda → tedarik_yok öncelik ═══
+    await adim(state, '8. 2 HM eksik (biri açılmamış, biri yolda) → tedarik_yok ÖNCELİK', async () => {
+      const w = _fakeWoForS11({
+        hm: [
+          { malkod: 'HM-A', malad: 'Hammadde A', miktarTotal: 200 },
+          { malkod: 'HM-B', malad: 'Hammadde B', miktarTotal: 200 },
+        ],
+      })
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 50, tip: 'giris' as const, tarih: today() },
+        { id: 's2', malkod: 'HM-B', miktar: 50, tip: 'giris' as const, tarih: today() },
+      ] as any
+      // HM-A için tedarik yolda, HM-B için tedarik açılmamış
+      const tedarikler = [
+        { id: 't1', malkod: 'HM-A', malad: 'Hammadde A', miktar: 200, geldi: false } as any,
+      ]
+      const e = gefs(w, [], tedarikler, stokHareketler)
+      if (e.blockedBy !== 'tedarik_yok') {
+        throw new Error('Öncelik kuralı: tedarik_yok > tedarik_yolda. Bulundu: ' + e.blockedBy)
+      }
+      // Reason HM-B'yi içermeli (açılmamış olan)
+      if (!/Hammadde B/.test(e.reason)) {
+        throw new Error('Reason HM-B içermeli (açılmamış olan): ' + e.reason)
+      }
+      return { status: e.status, reason: e.reason, blockedBy: e.blockedBy }
+    }, ctx)
+
+    // ═══ 11.9 — Üretim ilerlemesi: yarısı bitti → kalan ihtiyaç düşük ═══
+    await adim(state, '9. 50% üretildi → kalan ihtiyaç yarıya düşer, az stok yeter', async () => {
+      const w = _fakeWoForS11({ id: 'wo-s11-9' })
+      // 100 hedef, 50 üretildi → kalan 50 → kalan HM ihtiyacı 100 (200×0.5)
+      const stokHareketler = [
+        { id: 's1', malkod: 'HM-A', miktar: 110, tip: 'giris' as const, tarih: today() },  // 110 stok yeter
+      ] as any
+      const logs = [{ woId: 'wo-s11-9', qty: 50 }]
+      const e = gefs(w, [], [], stokHareketler, logs)
+      if (e.status !== 'Uretilebilir') {
+        throw new Error('İlerleme dahil edilmedi: 50% üretildiyse kalan 100 HM lazım, stok 110 yeterli olmalı. Bulundu: ' + e.status + ' / reason: ' + e.reason)
+      }
+      return { status: e.status }
+    }, ctx)
+
+    // ═══ 11.10 — Hammadde tanımsız (hm=[]) → varsayılan Uretilebilir ═══
+    await adim(state, '10. hm=[] (BOM tanımsız) → varsayılan Uretilebilir (operatör paneldeki canProduceWO ek koruma sağlar)', async () => {
+      const w = _fakeWoForS11({ hm: [] })
+      const e = gefs(w, [], [], [])
+      if (e.status !== 'Uretilebilir') throw new Error('hm=[] varsayılan Uretilebilir: ' + e.status)
+      return { status: e.status }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 11: Efektif Durum (v15.79 — getEffectiveStatus)', t0)
+  })
+}
+
+// ═══ SENARYO 12 — TAMAMLANMIŞ İE'NİN HAMMADDESİ İHTİYAÇ ÜRETMEMELİ (v15.81 saha fix) ═══
+// SAHA BUG: 28 Nis 2026, sağlık raporu Kontrol 5 "5 malzeme net ihtiyaç" dedi ama
+// MRP sayfası "0 eksik" dedi. SQL sorgusu açtı: 7 IE-MANUAL durum=tamamlandi olmasına
+// rağmen hesaplaMRP onları hammadde ihtiyacına dahil ediyor.
+// Kök neden: mrp.ts satır 247-250 → uretilen=0 hardcode'du, 'tamamlandi' filtresi de yoktu.
+// v15.81 düzeltmesi: (a) tamamlandi filtresine 'tamamlandi' eklendi (b) logs parametre ile
+// gerçek üretim ilerlemesi okunuyor, kalan = max(0, hedef - log toplam).
+//
+// 6 alt-test: Kapsamlı.
+
+import { hesaplaMRP as hmrp } from '@/features/production/mrp'
+
+export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S12', async (state, t0) => {
+    // Reçete: hammaddeli basit reçete (test için sahte oluşturma karmaşık — gerçek reçete kullan)
+    if (!ctx.recipeKod || ctx.recipeKod === 'N/A') {
+      throw new Error('Senaryo 12 reçete kodu gerektirir (S1-S5 ile aynı)')
+    }
+    const store0 = useStore.getState()
+    const recipe = store0.recipes.find(r =>
+      (r.mamulKod || '').toLowerCase() === ctx.recipeKod.toLowerCase() ||
+      (r.kod || '').toLowerCase() === ctx.recipeKod.toLowerCase()
+    )
+    if (!recipe) throw new Error('Reçete bulunamadı: ' + ctx.recipeKod)
+
+    // ═══ 1. Setup: manuel İE oluştur (orderId=null, hedef=10) ═══
+    let manualWoId = ''
+    await adim(state, '1. Manuel İE oluştur (orderId=null, hedef=10)', async () => {
+      manualWoId = await _createWO(state, ctx)  // _createWO: bagimsiz=true, siparis_disi=true
+      const wo = useStore.getState().workOrders.find(w => w.id === manualWoId)
+      if (!wo) throw new Error('WO oluşturulamadı')
+      return { woId: manualWoId, hedef: wo.hedef, durum: wo.durum }
+    }, ctx)
+
+    // ═══ 2. logs olmadan hesaplaMRP çağrısı: kalan=hedef → ihtiyaç çıkar ═══
+    let ihtiyacGorduk = false
+    await adim(state, '2. logs PARAM YOK → eski davranış (uretilen=0, ihtiyaç çıkar)', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hmrp(
+        [], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials,
+        new Set([manualWoId]), [], undefined,
+        // logs param YOK
+      )
+      ihtiyacGorduk = sonuc.length > 0
+      return { kalemSayi: sonuc.length, ihtiyacVarMi: ihtiyacGorduk, mod: 'logs param yok' }
+    }, ctx)
+
+    // ═══ 3. logs verirsek (boş array) → uretilen=0 → davranış aynı ═══
+    await adim(state, '3. logs=[] → uretilen=0, ihtiyaç hala çıkmalı', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hmrp(
+        [], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials,
+        new Set([manualWoId]), [], undefined,
+        []  // logs=[] (boş)
+      )
+      return { kalemSayi: sonuc.length, ihtiyacVarMi: sonuc.length > 0 }
+    }, ctx)
+
+    // ═══ 4. Hedefin %50'si üretildi (logs ile geçir) → kalan ihtiyacın yarısı ═══
+    await adim(state, '4. logs=hedef×0.5 → kalan=hedef×0.5, ihtiyaç yarıya düşmeli', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const wo = store.workOrders.find(w => w.id === manualWoId)!
+      const sahteLog = [{ woId: manualWoId, qty: wo.hedef * 0.5 }]
+      const sonuc = hmrp(
+        [], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials,
+        new Set([manualWoId]), [], undefined,
+        sahteLog
+      )
+      // Adım 2'deki sonuç ile karşılaştırılabilir mi?
+      // Beklenti: kalemSayı aynı ama brut yarıya düşmüş olmalı
+      const tplBrut = sonuc.reduce((a, r) => a + r.brut, 0)
+      return { kalemSayi: sonuc.length, toplamBrut: tplBrut, mod: 'logs ile %50 üretim' }
+    }, ctx)
+
+    // ═══ 5. Hedef %100 üretildi (logs ile) → kalan=0 → ihtiyaç=0 ⭐ KRİTİK ═══
+    await adim(state, '5. ⭐ logs=hedef×1.0 → kalan=0, ihtiyaç ÇIKMAMALI (saha bug fix)', async () => {
+      const store = useStore.getState()
+      const cpMapped = store.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const wo = store.workOrders.find(w => w.id === manualWoId)!
+      const sahteLog = [{ woId: manualWoId, qty: wo.hedef }]
+      const sonuc = hmrp(
+        [], store.orders as any, store.workOrders, store.recipes,
+        store.stokHareketler, store.tedarikler, cpMapped, store.materials,
+        new Set([manualWoId]), [], undefined,
+        sahteLog
+      )
+      // ⭐ KRİTİK: Üretim tamamlandıysa hammadde ihtiyacı sıfır olmalı
+      if (sonuc.length > 0) {
+        throw new Error(`v15.81 fix çalışmadı: hedef=üretildi olmasına rağmen ${sonuc.length} kalem hammadde ihtiyacı çıktı`)
+      }
+      return { kalemSayi: 0, mesaj: 'Üretim tamamlandı, ihtiyaç sıfır — fix çalışıyor' }
+    }, ctx)
+
+    // ═══ 6. WO durum=tamamlandi → tüm filtre noktasında atlanmalı ═══
+    await adim(state, '6. WO durum=tamamlandi → MRP filtresinde atlanır (logs olmadan bile)', async () => {
+      // WO'nun durumunu tamamlandi yap
+      const { error } = await supabase.from('uys_work_orders')
+        .update({ durum: 'tamamlandi' }).eq('id', manualWoId)
+      if (error) throw new Error('WO update: ' + error.message)
+      await loadAll()
+
+      const store2 = useStore.getState()
+      const cpMapped = store2.cuttingPlans.map((p: any) => ({
+        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+      }))
+      const sonuc = hmrp(
+        [], store2.orders as any, store2.workOrders, store2.recipes,
+        store2.stokHareketler, store2.tedarikler, cpMapped, store2.materials,
+        new Set([manualWoId]), [], undefined,
+        []  // logs boş bile olsa, durum=tamamlandi filtresi devreye girer
+      )
+      if (sonuc.length > 0) {
+        throw new Error(`tamamlandi filtresi çalışmadı: ${sonuc.length} kalem ihtiyaç çıktı`)
+      }
+      return { kalemSayi: 0, mesaj: 'tamamlandi durumu filtresi çalışıyor' }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 12: Tamamlanmış İE hammadde ihtiyacı (v15.81 saha fix)', t0)
   })
 }

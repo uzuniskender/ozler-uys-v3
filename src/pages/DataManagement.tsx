@@ -160,6 +160,9 @@ export function DataManagement() {
       // tarzı kontroller artık anlamsız. Yerine §21 sözleşmesi (NET=İHTİYAÇ-STOK-YOLDA) ile
       // gerçek tutarlılık kontrolleri konuldu.
 
+      // v15.81 — logs camelCase'e çevir (DB snake_case, hesaplaMRP camelCase bekliyor)
+      const logsMapped = logs.map((l: any) => ({ woId: l.wo_id, qty: l.qty || 0 }))
+
       // 5. MRP §21 Sözleşmesi — Toplam ihtiyaç ≤ stok + yolda mı (genel mod)
       const cpMapped5 = plans.map((p: any) => ({
         hamMalkod: p.ham_malkod, hamMalad: p.ham_malad, durum: p.durum || '',
@@ -168,7 +171,7 @@ export function DataManagement() {
       // Tüm aktif siparişler + manuel İE'ler — ymSet boş çünkü "tüm açık WO'lar dahil olsun"
       const allSonuc = (() => {
         try {
-          return hesaplaMRP(null, orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [])
+          return hesaplaMRP(null, orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], undefined, logsMapped)
         } catch { return [] }
       })()
       const eksiklerEvrim = allSonuc.filter((r: any) => r.net > 0)
@@ -219,7 +222,7 @@ export function DataManagement() {
       for (const o of aktifOrders) {
         if (o.mrp_durum !== 'tamam' && o.mrp_durum !== 'tamamlandi') continue
         try {
-          const sonuc = hesaplaMRP([o.id], orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id)
+          const sonuc = hesaplaMRP([o.id], orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id, logsMapped)
           const eksikSayisi = sonuc.filter((r: any) => r.net > 0).length
           if (eksikSayisi > 0) {
             tutmazSiparisler.push({ id: o.id, no: o.siparis_no || '(no yok)', eksikSayisi })
@@ -649,7 +652,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.80a', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.81', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')

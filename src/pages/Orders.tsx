@@ -230,7 +230,7 @@ export function Orders() {
   }
 
   async function topluMRP() {
-    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos, cuttingPlans: cp, materials: mats, mrpRezerve } = useStore.getState()
+    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos, cuttingPlans: cp, materials: mats, mrpRezerve, logs: allLogs } = useStore.getState()
     const hedefOrders = selIds.size > 0
       ? orders.filter(o => selIds.has(o.id))
       : orders.filter(o => orderPct(o.id) < 100 && ((o.urunler && o.urunler.length > 0 && o.urunler.some(u => u.rcId)) || o.receteId))
@@ -240,12 +240,12 @@ export function Orders() {
 
     const ordIds = hedefOrders.map(o => o.id)
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
-    const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve)
+    const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, undefined, allLogs)
     const count = await mrpTedarikOlustur(ordIds[0] || '', hedefOrders[0]?.siparisNo || '', mrpRows)
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
     for (const o of hedefOrders) {
-      const tekMrpRows = hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, o.id)
+      const tekMrpRows = hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, o.id, allLogs)
       const yeniDurum = tekMrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
       // Rezerve kayıtları yaz
@@ -825,7 +825,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
 
   async function runMRP() {
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
-    const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, order.id)
+    const rows = hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, order.id, logs)
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
 
     // v15.50b — uys_mrp_calculations snapshot insert (Tip C, §18.2 uyumlu).
