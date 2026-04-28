@@ -1703,3 +1703,148 @@ S10 koşturulup PASS doğrulanırsa § güncellenecek. Şimdilik sıradaki önce
 4. **Madde 16 kesim artık ürün sorma**
 
 Senaryo 3'ün adet bağımlılığı (testRunner.ts:569 `if (tedarik === 0) throw`) küçük bir improvement: dynamically detect "stok yetiyor mu" ve PASS dön (FAIL yerine). Backlog'a düşüldü, kritik değil.
+
+# §24. 28 NİSAN 2026 — MRP TEMEL HESABI SAHA BUG FİX (v15.79-v15.81)
+
+§23'ün devamı. Sabah 28 Nis 2026 — bir oturumda 5 sürüm sahaya çıktı, MRP'nin temel hesabındaki 13+ sürümlük gizli bug bulundu ve düzeltildi.
+
+## Sürüm sırası ve odak
+
+| Sürüm | Konu | Tetik |
+|---|---|---|
+| v15.79 | "Plan Bekliyor / Üretilebilir" efektif durum (#13 madde 8+9) | Buket'in "kullanıcı yanılmasın" kararı |
+| v15.80 | Sağlık raporu Kontrol 5/6/7 — §21 sözleşmesine uygun revize | Kontrol 7 "rezerve yok = warn" mantığı v15.70'te anlamsızlaştı |
+| v15.80a | plans/orders/recs değişken adı hotfix | İlk patch'te yanlış değişken adları kullanıldı |
+| v15.80b | Kontrol 11 legacy IE-MANUAL filtresi | 2 eski IE-MANUAL satırı bar_acilis olmadan tamamlanmıştı (v15.55 öncesi) |
+| **v15.81** | **MRP temel hesabı saha bug fix** | Kontrol 5 ↔ MRP sayfası çelişkisi — 7 IE-MANUAL tamamlandı durumda hammadde ihtiyacı üretiyordu |
+
+## v15.79 — Plan Bekliyor / Üretilebilir Efektif Durum
+
+İş Emri #13 madde 8+9. Kararlar (Buket):
+- **DB'ye yazma yok** — UI türetimi (`getEffectiveStatus`)
+- **Sadece 2 yeni durum:** `PlanBekliyor` ve `Uretilebilir`
+- **Operatör paneli sadece üretilebilir + üretimde** görür (Plan Bekliyor olanlar GÖRÜNMEZ)
+- **Tooltip dinamik:** eksik ne ise yazar (kesim plan / tedarik açılmamış / tedarik yolda)
+- **Topbar yeni rozet:** `[PLAN BEKLEYEN N]` — toplam görünüm (mevcut KESİM/MRP/TEDARİK sebep ayrımı kalıyor)
+
+Karar sırası (`getEffectiveStatus` içinde):
+1. DB durumu zorlayıcı (iptal/tamamlandi/beklemede/uretimde) → onu döndür
+2. Kesim opsiyonlu + plan yok → PlanBekliyor (kesim_plan)
+3. Hammadde stoğu yeterli → Uretilebilir
+4. Hammadde eksik + tedarik açılmamış → PlanBekliyor (tedarik_yok) ← öncelik
+5. Hammadde eksik + tedarik yolda → PlanBekliyor (tedarik_yolda)
+
+**Senaryo 11** (saf-fonksiyon, 10 alt-test, ~5 ms): DB durum öncelikleri, kesim plan, hammadde yeterli, tedarik yok/yolda, çoklu eksikte tedarik_yok öncelik kuralı, üretim ilerlemesi etkisi, BOM tanımsız edge case.
+
+## v15.80 — Sağlık Raporu §21 Sözleşmesi
+
+v15.70'te rezerve mantığı kaldırıldığı için Kontrol 5/6/7 anlamsızlaştı. Yeni mantık:
+
+| Kontrol | Eski | Yeni |
+|---|---|---|
+| 5 | "Rezerve toplamı stok aşıyor mu" (anlamsız) | "MRP §21: tüm aktif sipariş+İE'ler için NET>0 var mı" — gerçek tutarlılık |
+| 6 | "Orphan rezerve" | "Eski Rezerve Verisi (v15.70 sonrası kapsam dışı, ileride DROP)" — auto-fix korundu |
+| 7 | "MRP tamam ama rezerve yok" (anlamsız) | "MRP tamam ama hesapla net>0 var mı" — gerçek tutarlılık |
+
+**v15.80a hotfix:** İlk patch `cps`/`ords`/`recipes` yazılmıştı, doğrusu `plans`/`orders`/`recs` (Supabase fetch sonuçlarına verilen yerel adlar). Test ortamında çalıştırmadan kod yazma riski.
+
+## v15.80b — Kontrol 11 Legacy IE-MANUAL Filtresi
+
+Saha vakası: 2 plan satırı `bar_acilis` eksik raporlanıyordu — IE-MANUAL-MOCWQYNL ve IE-MANUAL-MOCWJRK6, 760/760 üretim tamamlandı, v15.55 hard block öncesi açılmış.
+
+Filtre: Tüm WO'lar IE-MANUAL prefix'li + hiç bar_acilis yoksa → legacy, sessiz atla. Yeni vakalar (v15.55 sonrası) yine yakalanır (hard block ile zaten engellenmiş, yarım iş varsa bar_acilis 1+ olur).
+
+## ⭐ v15.81 — MRP TEMEL HESABI SAHA BUG FİX
+
+### Saha vakası (28 Nis sabahı tespit)
+
+Sağlık raporu **Kontrol 5: 5 malzeme net ihtiyaç** dedi. MRP sayfası (Hesapla butonu sonrası) **0 eksik · 24 yeterli** dedi. İki kaynak aynı `hesaplaMRP` fonksiyonunu çağırıyor — farklı sonuç dönüyor.
+
+SQL sorgusu 7 WO çıkardı: hepsi `IE-MANUAL-*`, hepsi `durum=tamamlandi`, üretim 100% bitmiş ama `hesaplaMRP` bunların hammadde ihtiyacını hâlâ üretiyor.
+
+### Kök neden — pre-existing bug, port'tan beri
+
+`mrp.ts` iki yerde:
+
+```typescript
+// Sipariş bazlı (satır 211, v2 port'undan beri):
+const uretilen = urunWOs.reduce((a, w) => {
+  const prod = stokHareketler.filter(h => h.woId === w.id).length > 0 ? 0 : 0 // simplify
+  return a
+}, 0)
+const netAdet = u.adet  // ← üretim ilerlemesi yok sayıldı
+
+// Bağımsız İE / manuel İE (satır 248, v15.35.3'ten beri):
+const uretilen = stokHareketler.filter(h => h.woId === w.id).length > 0 ? 0 : 0
+// (log bazlı hesaplama bu dosyada yok — şimdilik hedef kullanılır)
+const kalan = w.hedef - uretilen  // ← her zaman hedef kadar kalan görünüyor
+```
+
+Yorumlar açık: "v2 uses wProd which needs logs" — port sırasında atlanmış. **uretilen=0 hardcode**'lanmış. Ek olarak manuel İE filtresinde sadece `iptal` filtreleniyor, `tamamlandi` filtre dışı.
+
+13+ sürüm boyunca **tedarik fazla görünüyordu sürekli** ama kimse fark etmedi çünkü sahada bu farkı yakalamak zor.
+
+### Düzeltme (mrp.ts, 3 değişiklik)
+
+**1. `logs` parametresi eklendi (opsiyonel, geriye uyum):**
+```typescript
+hesaplaMRP(..., logs?: { woId: string; qty: number }[])
+```
+
+**2. Sipariş bazlı: gerçek üretim oranı:**
+```typescript
+const uretilen = logs ? urunWOs.reduce((a, w) =>
+  a + logs.filter(l => l.woId === w.id).reduce((b, l) => b + l.qty, 0), 0) : 0
+const oran = Math.min(1, uretilen / toplamHedef)
+const netAdet = Math.max(0, Math.ceil(u.adet * (1 - oran)))
+if (netAdet === 0) continue  // tamamen üretilmiş, BOM patlatma
+```
+
+**3. Manuel İE: gerçek kalan + tamamlandi filtresi:**
+```typescript
+if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false  // ← tamamlandi eklendi
+// ...
+const uretilen = logs ? logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) : 0
+const kalan = Math.max(0, w.hedef - uretilen)
+```
+
+### Caller'lar (10 çağrı)
+
+`autoChain.ts` (1), `Orders.tsx` (3), `MRP.tsx` (4), `DataManagement.tsx` (2). Tümü `logs` parametresini geçiriyor. `logs` opsiyonel olduğu için eski caller'lar (varsa) kırılmıyor — eski davranış (uretilen=0) geriye uyumlu.
+
+### Senaryo 12 — Saha Bug Fix Kanıtı
+
+6 alt-test:
+1. Manuel İE oluştur (orderId=null, hedef=10)
+2. logs param yok → eski davranış (ihtiyaç çıkar)
+3. logs=[] → uretilen=0, ihtiyaç hâlâ çıkar
+4. logs=hedef×0.5 → toplamBrut yarıya düşer
+5. ⭐ logs=hedef×1.0 → ihtiyaç **0** (saha bug fix kanıtı)
+6. WO durum=tamamlandi → filtreden atılır (logs olmadan bile)
+
+TEST_20260428_05: 12/12 senaryo PASS. Adım 5 her zaman 0 dönmek zorunda — saha vakası tekrarlanamaz.
+
+### Sahaya etki
+
+Sağlık raporu sonrası:
+- **Önce:** 9 PASS · 1 WARN · 1 FAIL (Kontrol 5: 7 eksik, sonra 5 eksik)
+- **Sonra:** 10 PASS · 1 WARN · 0 FAIL (Kontrol 5: PASS — "tüm hammaddeler stok veya yolda")
+
+Kalan WARN: IE-AUTO-MOI5FZ2S `mrp_durum='tamam'` ama gerçekte 1 eksik (Kontrol 7). MRP koşturmak çözer.
+
+## §22 Yarın TODO Güncel
+
+İlk 4 madde duruyor:
+1. MRP senaryoları konuşması (DEVAM_NOTU §22)
+2. Madde 15 onay sistemi (planlama onayı, rezerve değil)
+3. Madde 8+9 ✅ TAMAMLANDI (v15.79)
+4. Madde 16 kesim artık ürün
+
+Yeni eklemeler:
+5. **Çoklu admin oturumu sorunu** (28 Nis tespit) — backlog. Aynı hesapla 2+ cihazdan login mümkün, race condition + state senkronsuzluğu. Test Modu cross-device sorunu bunun parçası: localStorage cihaz bazlı ama DB paylaşılır.
+6. **uys_mrp_rezerve DROP** (atıl kod A3) — v15.81 ile MRP rezerve sistemi tamamen anlamsızlaştı. 1-2 hafta gözlem sonra DROP.
+7. **Senaryo 3 adet bağımlılığı** (testRunner.ts:569) — `if tedarik===0 throw`, dynamically detect "stok yetiyor mu" + PASS dön. Düşük öncelik.
+
+## Atıl Kod Analizi A2 — Yeniden Doğrulandı
+
+v15.78'de geri eklenen "Bağımsız YM İE" UI bölümü v15.81'de logs parametresi eklenmesiyle artık doğru hesap yapıyor. Manuel İE'lerin MRP'de görünür olması + ihtiyacın gerçek kalan üzerinden hesaplanması — ikisi birden çalışınca saha modeline tam oturuyor.

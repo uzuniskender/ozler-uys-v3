@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 28 Nisan 2026 sabahı (v15.77 test senaryoları + v15.78 manuel İE saha fix; v15.74/75/76 test geçti)
+**Son güncelleme:** 28 Nisan 2026 öğlen (v15.79-v15.81 tek oturumda — MRP temel hesabı saha bug fix + Plan Bekliyor/Üretilebilir efektif durum + sağlık raporu §21 sözleşmesi)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 ---
@@ -41,7 +41,12 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | **v16.0.0 Faz 1.1a** | İş Emri #12 başlangıç (DB altyapı: auth_user_id + current_user_role helper) — saha etki sıfır |
 | **v15.53 Adım 1-5** | **İş Emri #2 KAPANIŞ → Yedekleme tam pakedi** (tablo + servis + UI + restore + otomatik) |
 | **v15.77** | Test Senaryo 7/8/9 (sipariş delta, fire telafi recursive, loglar DB) — v15.74/75/76 test ispatı (8/8 PASS) |
-| **v15.78** | **Manuel İE MRP görünürlüğü saha fix** (IE-MANUAL-MO9SDW3A 6740 adet bug'ı) + Senaryo 10 reproducible test |
+| **v15.78** | Manuel İE MRP görünürlüğü saha fix (IE-MANUAL-MO9SDW3A 6740 adet bug'ı) + Senaryo 10 reproducible test |
+| **v15.79** | Plan Bekliyor/Üretilebilir efektif durum (#13 madde 8+9) — UI türetimi, Topbar [PLAN BEKLEYEN N] rozeti, Senaryo 11 |
+| **v15.80** | Sağlık raporu Kontrol 5/6/7 §21 sözleşmesine uygun revize (rezerve mantığı kalktı) |
+| **v15.80a** | plans/orders/recs değişken adı hotfix |
+| **v15.80b** | Sağlık raporu Kontrol 11 legacy IE-MANUAL filtresi |
+| **v15.81** | **MRP temel hesabı saha bug fix** — `uretilen=0` hardcode'u (v2 port'tan beri 13+ sürüm) düzeltildi. logs parametresi eklendi, tamamlandi filtresi, Senaryo 12 saha bug fix kanıtı |
 
 ---
 
@@ -103,7 +108,7 @@ Detaylı iş emirleri `docs/is_emri/01_*.md` ... `06_*.md` dosyalarındadır. He
 | # | Özellik | İş Emri | Tag | Durum |
 |---|---------|---------|-----|-------|
 | 12 | **Güvenlik Refactoru — RLS Tam Uygulama** (Supabase Auth + RLS policy yayılımı) | `12_GuvenlikRefactor.md` | v16.0.0 | 🟡 Backlog (27 Nis 2026 keşfedildi — `allow_all` policy ile gerçek koruma yok) |
-| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.76 | 🟢 17/22 TAMAM (1, 2, 3, 4, 5, 6, 7, 10, 11, 13, 14, 17, 18, 19, 20, 21, 22). Kalan: 8, 9, 12 (zaten kısmi), 15, 16. **v15.74/75/76 28 Nis 2026 test geçti (S7/8/9 ALL_PASS).** v15.78 manuel İE MRP görünürlüğü saha fix. |
+| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.81 | 🟢 19/22 TAMAM (1-7, 8, 9, 10, 11, 13, 14, 17, 18, 19, 20, 21, 22). Kalan: 12 (kısmi), 15, 16. **v15.79: madde 8+9 TAMAMLANDI** (Plan Bekliyor/Üretilebilir efektif durum). v15.81 MRP temel hesabı saha bug fix (pre-existing 13+ sürümlük "uretilen=0" hardcode). |
 
 ---
 
