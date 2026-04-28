@@ -215,8 +215,6 @@ export function DataManagement() {
       })
 
       // 7. MRP Durumu Tutarlılığı — sipariş "MRP tamam" diyor ama gerçekten yeterli mi
-      // Önce: rezerve var mı kontrolü (v15.70'te anlamsızlaştı)
-      // Şimdi: sipariş bazlı hesaplaMRP çağırıp net>0 olan satır var mı bakıyoruz
       const tutmazSiparisler: { id: string; no: string; eksikSayisi: number }[] = []
       for (const o of aktifOrders) {
         if (o.mrp_durum !== 'tamam' && o.mrp_durum !== 'tamamlandi') continue
@@ -600,6 +598,16 @@ export function DataManagement() {
             if (barAcilisSet.has(`bar-open-${plan.id}-${satir.id}-${i}`)) mevcut++
           }
           if (mevcut < hamAdet) {
+            // v15.80a — Legacy IE-MANUAL filtresi
+            // v15.55 öncesi yapılmış manuel İE'ler bar_acilis olmadan tamamlanmış (hard block yoktu).
+            // Bu plan satırının tüm WO'ları IE-MANUAL ile başlıyorsa ve hiçbir bar_acilis yoksa
+            // (mevcut === 0) → legacy, sağlık raporu kirletmesin.
+            // Yeni vakalarda barModelSync hard block ile zorunlu, bu filtre o vakaları yakalamaz.
+            const allManuelLegacy = mevcut === 0 && kesimler.every((k: any) => {
+              const wo = wos.find((w: any) => w.id === k.woId)
+              return wo && (wo.ie_no || '').startsWith('IE-MANUAL-')
+            })
+            if (allManuelLegacy) continue  // Sessiz atla — legacy veri
             normalEksikler.push({ planId: plan.id, satirId: satir.id, hamMalkod: hamMalkodRaw, beklenen: hamAdet, mevcut })
           }
         }
@@ -641,7 +649,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.80', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.80a', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')
