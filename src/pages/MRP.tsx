@@ -73,19 +73,71 @@ export function MRP() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, orderHasEksik, showTamamlanan])
 
+  // v15.78 — Manuel İE'ler (siparişe bağlı değil) sipariş kartlarıyla aynı listede.
+  // Saha vakası: IE-MANUAL-MO9SDW3A 6740 adet, "stok yok" hard block veriyor ama MRP'de
+  // görünmüyordu (orderId=null + ordIdSet filtresi). v15.59'da kaldırılan UI bölümü
+  // burada §13 madde 18 felsefesine uygun şekilde geri geldi: ayrı kart değil, tek liste.
+  const aktifManualIesAll = useMemo(() => workOrders.filter(w =>
+    (w.bagimsiz || w.siparisDisi) &&
+    !w.orderId &&
+    w.durum !== 'iptal' &&
+    w.durum !== 'tamamlandi'
+  ), [workOrders])
+
+  // Her manuel İE için "eksik var mı?" — explicit seçimle çağırırsak ordIdSet bypass.
+  const manualIeHasEksik = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const w of aktifManualIesAll) {
+      try {
+        const sonuc = hesaplaMRP([], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, new Set([w.id]), mrpRezerve)
+        map[w.id] = sonuc.some(r => r.net > 0)
+      } catch {
+        map[w.id] = false
+      }
+    }
+    return map
+  }, [aktifManualIesAll, orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
+
+  const aktifManualIes = useMemo(() => {
+    return aktifManualIesAll.filter(w => {
+      const eksikVar = manualIeHasEksik[w.id] ?? false
+      return showTamamlanan ? !eksikVar : eksikVar
+    }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
+  }, [aktifManualIesAll, manualIeHasEksik, showTamamlanan])
+
+  const arsivManualIes = useMemo(() =>
+    aktifManualIesAll.filter(w => !(manualIeHasEksik[w.id] ?? false)).length
+  , [aktifManualIesAll, manualIeHasEksik])
+
   const arsivSayisi = useMemo(() =>
     orders.filter(o => {
       if (isOrderArchived(o)) return true
       return !(orderHasEksik[o.id] ?? false)
-    }).length
+    }).length + arsivManualIes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [orders, orderHasEksik])
+  , [orders, orderHasEksik, arsivManualIes])
 
   // v15.71 — ymIEs + ymTamamSayisi useMemo kaldırıldı (madde 18)
 
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-  function selectAll() { setSelectedOrders(new Set(aktifOrders.map(o => o.id))) }
+  function selectAll() {
+    // v15.78 — sipariş ID'leri + manuel İE WO ID'leri birlikte
+    const ids = [...aktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
+    setSelectedOrders(new Set(ids))
+  }
   function selectNone() { setSelectedOrders(new Set()) }
+
+  // v15.78 — selectedOrders set'i hem order_id hem manuel WO_id taşıyabilir.
+  // Hesapla() çağrısında ayrıştırılır.
+  function splitSelected(sel: Set<string>): { ordIds: string[]; ymIds: string[] } {
+    const ordIds: string[] = []
+    const ymIds: string[] = []
+    for (const id of sel) {
+      if (orders.some(o => o.id === id)) ordIds.push(id)
+      else if (workOrders.some(w => w.id === id)) ymIds.push(id)
+    }
+    return { ordIds, ymIds }
+  }
 
   // Tarih filtre: termini bu tarihe kadar olan siparişleri seç
   function filterByDate(tarih: string) {
@@ -136,13 +188,20 @@ export function MRP() {
 
   async function hesapla(overrideOrderIds?: string[], overrideYMs?: Set<string>) {
     // v15.36: override parametreleri auto-run için (state async olduğundan state'e güvenilemez)
+    // v15.78: selectedOrders set'i sipariş + manuel İE id'leri içerebilir → splitSelected ile ayır
     const useOverride = overrideOrderIds !== undefined
-    const ordIds = useOverride ? overrideOrderIds : [...selectedOrders]
-    const ymSet = useOverride
-      ? (overrideYMs && overrideYMs.size > 0 ? overrideYMs : null)
-      : null  // v15.71 — selectedYMs kaldırıldı (madde 18)
+    let ordIds: string[]
+    let ymSet: Set<string> | null
+    if (useOverride) {
+      ordIds = overrideOrderIds
+      ymSet = (overrideYMs && overrideYMs.size > 0) ? overrideYMs : null
+    } else {
+      const split = splitSelected(selectedOrders)
+      ordIds = split.ordIds
+      ymSet = split.ymIds.length > 0 ? new Set(split.ymIds) : null
+    }
 
-    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş seçin'); return }
+    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş veya iş emri seçin'); return }
 
     const cpMapped = cuttingPlans.map((p: any) => ({
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
@@ -152,7 +211,7 @@ export function MRP() {
     setSonuc(result)
     setHesaplandi(true)
 
-    // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
+    // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz (manuel İE'lerde mrp_durum kolonu yok, atla)
     for (const oid of ordIds) {
       const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid)
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
@@ -188,16 +247,17 @@ export function MRP() {
 
   // v15.36 — Flow auto-run: ?flow=xxx ile gelindi, sayfa açılışında otomatik hesapla
   // v15.36.1 — Flow olmasa da sayfa ilk açılışında otomatik seç+hesapla (boş ekran önlenir)
+  // v15.78 — Manuel İE'ler de auto-select'e dahil
   useEffect(() => {
     if (flowAutoDone || hesaplandi) return
     if (!orders.length || !workOrders.length) return  // Store hazır olana kadar bekle
-    // v15.71 — Sadece aktif siparişleri seç (YM İE bölümü kaldırıldı, madde 18)
     const ordIds = aktifOrders.map(o => o.id)
-    if (!ordIds.length) return  // Seçilecek bir şey yoksa dokunma
-    setSelectedOrders(new Set(ordIds))
+    const ymIds = aktifManualIes.map(w => w.id)
+    if (!ordIds.length && !ymIds.length) return  // Seçilecek bir şey yoksa dokunma
+    setSelectedOrders(new Set([...ordIds, ...ymIds]))
     setFlowAutoDone(true)
     // Doğrudan override ile hesapla — state async, closure bug önlenir
-    hesapla(ordIds, undefined)
+    hesapla(ordIds, ymIds.length > 0 ? new Set(ymIds) : undefined)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders.length, workOrders.length])
 
@@ -214,13 +274,12 @@ export function MRP() {
       if (!await showConfirm(`${secili.length} malzeme için tedarik oluşturulacak. Devam?`)) return
     }
 
+    // v15.78: selectedOrders set'inde manuel İE id'leri olabilir → mrpTedarikOlustur'a sadece gerçek sipariş id'leri ver
+    const { ordIds, ymIds } = splitSelected(selectedOrders)
+
     // v15.62 — F-21 idempotent kontrolünü kullan: mrpTedarikOlustur'a delege.
-    // Önceki kod: doğrudan supabase insert + zayıf "mevcut var mı?" kontrolü.
-    // Sorun: 27 Nis 2026 12:21'de S26A_02707 siparişi için bu fonksiyondan 207 birim
-    // FAZLA tedarik açıldı (mevcut zaten 34 idi, ihtiyaç da ~34, ama yine 207 eklendi).
-    // mrpTedarikOlustur F-21 ile bekleyen tedarikleri kontrol eder, sadece farkı açar.
     let toplam = 0
-    for (const oid of selectedOrders) {
+    for (const oid of ordIds) {
       const o = orders.find(x => x.id === oid)
       if (!o) continue
       const count = await mrpTedarikOlustur(oid, o.siparisNo, secili, { auto: false })
@@ -228,6 +287,34 @@ export function MRP() {
       // Bu sipariş için mrp_durum tamam (bekleyen tedarik yetiyor veya yeni açıldı)
       await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
     }
+
+    // v15.78: Manuel İE seçiliyse, order_id=null tedarik aç (ie_no not'a yazılır).
+    // Basit idempotency: aynı malkod + geldi=false varsa atla.
+    // (mrpTedarikOlustur ie_id desteklemiyor, manuel İE için ayrı yol — ileride şema genişletilebilir.)
+    if (ymIds.length > 0) {
+      const ilkYmId = ymIds[0]
+      const ilkWO = workOrders.find(w => w.id === ilkYmId)
+      const ieNot = ymIds.length === 1
+        ? 'MRP — Manuel İE: ' + (ilkWO?.ieNo || ilkYmId)
+        : 'MRP — Manuel İE x' + ymIds.length + ' (ilki: ' + (ilkWO?.ieNo || ilkYmId) + ')'
+      for (const s of secili) {
+        const mevcut = tedarikler.find(t => t.malkod === s.malkod && !t.geldi)
+        if (mevcut) continue
+        // Eğer aynı malkod sipariş ordIds'inde de eklendiyse (mrpTedarikOlustur tarafından), tekrar açma
+        // (mrpTedarikOlustur F-21 ile yeni tedarik açtıysa, secili'deki net düşmedi ama supabase'de var)
+        const yeniMevcut = (await supabase.from('uys_tedarikler')
+          .select('id').eq('malkod', s.malkod).eq('geldi', false).limit(1)).data
+        if (yeniMevcut && yeniMevcut.length > 0) continue
+        await supabase.from('uys_tedarikler').insert({
+          id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
+          birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null,
+          durum: 'bekliyor', geldi: false, not_: ieNot,
+          order_id: null, siparis_no: null,
+        })
+        toplam++
+      }
+    }
+
     loadAll(); setSelectedRows(new Set())
     if (toplam > 0) toast.success(toplam + ' tedarik oluşturuldu')
     else toast.info('İhtiyaçlar mevcut bekleyen tedariklerle karşılanıyor — yeni tedarik açılmadı')
@@ -282,7 +369,7 @@ export function MRP() {
 
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">📊 MRP — Malzeme İhtiyaç Planlaması</h1>
-          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş</p></div>
+          <p className="text-xs text-zinc-500">{aktifOrders.length} aktif sipariş{aktifManualIes.length > 0 ? ` · ${aktifManualIes.length} manuel İE` : ''}</p></div>
         {hesaplandi && <div className="flex gap-2">
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> MRP Excel</button>
           {eksikler.length > 0 && <button onClick={() => {
@@ -339,17 +426,38 @@ export function MRP() {
               </button>
             )
           })}
+          {/* v15.78 — Manuel İE'ler aynı görselde, "STOK" rozetiyle.
+              Saha vakası IE-MANUAL-MO9SDW3A bug'ı bu sayede MRP'de görünür hale gelir. */}
+          {aktifManualIes.map(w => {
+            const sel = selectedOrders.has(w.id)
+            const uretildi = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+            const pct = w.hedef > 0 ? Math.min(100, Math.round(uretildi / w.hedef * 100)) : 0
+            return (
+              <button key={w.id} onClick={() => toggleOrder(w.id)}
+                className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : 'bg-bg-3 border border-amber/20'}`}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={sel} readOnly className="accent-accent" />
+                  <span className="font-mono font-medium">{w.ieNo}</span>
+                  <span className="px-1 py-0.5 bg-amber/15 text-amber rounded text-[9px]" title="Siparişe bağlı değil — stok için açılmış manuel İE">STOK</span>
+                  <span className="text-zinc-500 ml-auto">{pct}%</span>
+                </div>
+                <div className="text-zinc-500 truncate mt-0.5">{w.malad || w.malkod}</div>
+              </button>
+            )
+          })}
         </div>
-        {aktifOrders.length === 0 && !showTamamlanan && (
+        {aktifOrders.length === 0 && aktifManualIes.length === 0 && !showTamamlanan && (
           <div className="p-3 text-center text-xs text-green">
-            ✓ Aktif sipariş yok.{arsivSayisi > 0 ? ` Arşivdeki ${arsivSayisi} kapalı siparişi görmek için "+ Arşiv" butonuna tıklayın.` : ''}
+            ✓ Aktif sipariş veya manuel İE yok.{arsivSayisi > 0 ? ` Arşivdeki ${arsivSayisi} kapalı kaydı görmek için "+ Arşiv" butonuna tıklayın.` : ''}
           </div>
         )}
 
-        {/* v15.59 (İş Emri #13 madde 18) — "Bağımsız YM İş Emirleri" bölümü kaldırıldı.
-            Yapı birleşti: yeni iş emirleri sipariş listesinde görünür (IE-AUTO-... siparis_no ile).
-            Eski IE-MANUAL bağımsız WO'ları artık MRP'de gösterilmiyor — geçmiş veri olarak kabul edildi.
-            ymIEs/selectedYMs/mrpDoneYMs state ve useMemo'ları dursun (ölü kod, ileride temizlenir).
+        {/* v15.78 (saha bug'ı düzeltmesi): "Bağımsız YM İş Emirleri" bölümü #13 madde 18
+            felsefesine uygun şekilde geri eklendi — ayrı kart değil, sipariş kartlarıyla
+            aynı listede "STOK" rozetiyle. v15.59 öncesinden farkı: tek liste, tek "Hesapla".
+            Saha vakası: IE-MANUAL-MO9SDW3A 6740 adet, hammadde yetersiz, hard block veriyordu
+            ama MRP'de görünmüyordu (orderId=null + ordIdSet filtresi). Şimdi UI explicit
+            seçim → mrp.ts secilenYMIds override → ihtiyaç çıkar.
         */}
 
         <div className="flex items-center gap-3 mt-3">
@@ -357,7 +465,7 @@ export function MRP() {
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             Hesapla →
           </button>
-          <span className="text-xs text-zinc-500">{selectedOrders.size} sipariş seçili</span>
+          <span className="text-xs text-zinc-500">{selectedOrders.size} kayıt seçili</span>
           <span className="flex-1" />
           <button onClick={senkronla} disabled={!can('mrp_calc')}
             title="Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar"

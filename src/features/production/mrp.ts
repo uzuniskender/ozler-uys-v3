@@ -231,12 +231,16 @@ export function hesaplaMRP(
 
   // 2. Bağımsız YM + Sipariş Dışı İş Emirleri
   // v15.35.3: siparisDisi bayrağı da kapsama dahil (manuel kesim İE'leri hammadde ihtiyacı çıkarsın)
-  // KAPSAM FİLTRESİ: sipariş seçildiyse sadece o siparişlerle bağlantılı İE'ler (orderId eşleşmeli)
+  // v15.78: secilenYMIds explicit seçim → ordIdSet'i bypass eder.
+  //   Saha bug'ı: Manuel İE'ler (orderId boş) sipariş bazlı çağrıda atlıyordu.
+  //   Çözüm: UI'da kullanıcı manuel İE seçtiyse, sipariş listesi dolu olsa bile dahil.
+  //   Sipariş bazlı view (örn. Orders.tsx detay) secilenYMIds göndermez → eski davranış korunur.
   const ymIEs = workOrders.filter(w => {
     if (!w.bagimsiz && !w.siparisDisi) return false
     if (w.durum === 'iptal') return false
-    if (secilenYMIds && !secilenYMIds.has(w.id)) return false
-    // Sipariş seçildiyse: orderId eşleşmeli (yoksa atla)
+    // Explicit YM seçimi varsa override: sadece set içindekiler dahil, ordIdSet bypass.
+    if (secilenYMIds) return secilenYMIds.has(w.id)
+    // Explicit seçim yok → sipariş kapsamına bak
     if (ordIdSet) {
       if (!w.orderId || !ordIdSet.has(w.orderId)) return false
     }
