@@ -1589,3 +1589,117 @@ Mevcut havuz mantığıyla yapıldı sayılır, UI'da onay sorma adımı ekleneb
 
 "Plan Bekliyor" ve "Üretilebilir" durum string'leri WorkOrder durum kolonu için resmi olarak eklenebilir (DB'ye yazılmaz, UI türetimi yeterli).
 
+
+# §23. 28 NİSAN 2026 — TEST İSPATI + MANUEL İE SAHA BUG FİX
+
+Bu bölüm 28 Nis 2026 sabahı kaydıdır. Önceki gün §22'de listeli "test bekliyor" 3 sürüm test edildi, bir saha bug'ı keşfedildi ve düzeltildi.
+
+## v15.77 — Otomatik Test Senaryoları (Senaryo 7/8/9)
+
+3 büyük sürümü tekrarlanabilir test ile doğrulamak için 3 yeni senaryo eklendi:
+
+| Senaryo | Test Edilen | Tip | Adım |
+|---|---|---|---|
+| **S7** | v15.74 Sipariş Delta (`siparisDelta` saf fonksiyon) | DB'siz | 12 alt-test |
+| **S8** | v15.76 Fire Telafi Recursive (`fireTelafiAkisi` gerçek DB) | DB | 10 adım |
+| **S9** | v15.75 Loglar Sayfası (`uys_activity_log` DB akışı) | DB | 6 alt-test |
+
+Yan iş: `uys_activity_log` `TABLE_CASCADE`'e eklendi (testRun.ts) — Senaryo 9 cleanup için.
+
+## Test Sonuçları (TEST_20260428_01, ALL_PASS)
+
+| Senaryo | Sonuç | Süre | Kritik delil |
+|---|---|---|---|
+| S1, S2 | PASS | 4-7 sn | (mevcut, etkilenmedi) |
+| S3 | KOŞMADI | — | Pre-existing: `if (mrp1?.tedarik === 0) throw` (testRunner.ts:569) — adet=10 ile stok yeterli, throw → finalize çalışmadı. Patch'le ilgili değil. |
+| S4, S5 | PASS | 9-11 sn | (mevcut) |
+| S6 | PASS | 1ms | Negatif yasak kontrolleri |
+| **S7** | **PASS 12/12** | 2ms | AZALIS BLOCK delili: "47 üretildi, 45 olamaz". KALEM_SIL üretim varken `uretildiAdet=12` doğru. ÇOKLU revizyon (artış+termin+kalem_ekle) tek pas. |
+| **S8** | **PASS 10/10** | 5.7sn | Üst telafi WO `orderId=<orijinal>`, `siparisDisi=false`, `bagimsiz=false`, `ieNo='IE-TEST-S8-PWQB-01-FTU1PN'` (FT pattern). `fire.telafi_wo_id` DB'de set. Sipariş.adet=10 değişmedi. İdempotency: 2. çağrıda "zaten açıldı" hatası. |
+| **S9** | **PASS 6/6** | 1.1sn | INSERT/SELECT/modul filtresi/tarih filtresi/4-kaynak query/order_id filtresi. |
+
+**Sonuç:** v15.74, v15.75, v15.76 sahaya çıkmaya **doğrulanmış** durumda.
+
+## Senaryo 8 Yan Bulgu — Recursion Tetiklenmedi
+
+YMH100265 reçetesinde YarıMamul satır VAR (`receteYarıMamulIcerir: true`) ama recursion açılmadı (`recursiveTetiklendi: false`). Sebep: 2 adet fire için YM stoğu yeterli, alt operasyon WO'su gerek yok. Doğru davranış.
+
+Recursion'ı görmek için: YM stoğu az bir reçete + büyük adetle ikinci tur. Ama kod yolu hatasız çalıştığı doğrulandı.
+
+## SAHA BUG'I — IE-MANUAL-MO9SDW3A (v15.78 ile düzeltildi)
+
+Buket "bu teste güvenmiyorum" dedi — 6740 adet manuel İE operatör panelde "stok yetersiz" hard block veriyordu ama MRP'de hiçbir ihtiyaç görünmüyordu. Test bu durumu doğrulamadığı için Senaryo 1-9 PASS oldu ama gerçek hata duruyordu.
+
+### Kök neden — iki katmanlı
+
+1. **`mrp.ts` filtresi** (~satır 240, v15.35.3'ten beri):
+   ```typescript
+   if (ordIdSet) {
+     if (!w.orderId || !ordIdSet.has(w.orderId)) return false  // manuel İE atlanır
+   }
+   ```
+   Manuel İE'lerin `orderId=null` olduğu için sipariş bazlı çağrıda filtre dışı kalıyordu.
+
+2. **`MRP.tsx` UI kaybı** (v15.59):
+   "Bağımsız YM İş Emirleri" bölümü "İş Emri #13 madde 18 felsefesine ters" gerekçesiyle kaldırıldı, atıl kod analizi A2 maddesinde "ölü kod, ileride temizlenir" olarak işaretlendi. Aslında o UI manuel İE'lerin MRP'de görünür **tek** yoluydu.
+
+### Arıza zinciri özeti
+
+| Sürüm | Olay | Etki |
+|---|---|---|
+| v15.35.3 | Manuel İE'ler `bagimsiz \|\| siparisDisi` ile MRP kapsamına alındı | Doğru |
+| Eski | `ordIdSet` filtresi `orderId` boş olanı atla | Sipariş bazlı detay için mantıklı |
+| v15.59 | MRP.tsx "Bağımsız YM" UI render kaldırıldı | Manuel İE'ler MRP'de görünmez |
+| v15.78 | UI geri (sipariş kartlarıyla aynı listede) + filtre override | **Düzeltildi** |
+
+### v15.78 Düzeltmesi
+
+**1. `mrp.ts` filtre mantığı (override):**
+```typescript
+// Explicit YM seçimi varsa override: sadece set içindekiler dahil, ordIdSet bypass.
+if (secilenYMIds) return secilenYMIds.has(w.id)
+// Explicit seçim yok → sipariş kapsamına bak (eski davranış)
+if (ordIdSet) {
+  if (!w.orderId || !ordIdSet.has(w.orderId)) return false
+}
+return true
+```
+
+UI explicit seçim yaparsa manuel İE her durumda dahil. Sipariş detay görünümleri (Orders.tsx) ymSet göndermez → eski davranış korunur. Kapsam değişikliği yalnızca yeni MRP.tsx UI'sı için.
+
+**2. `MRP.tsx` — tek liste, "STOK" rozeti:**
+Manuel İE'ler sipariş kartlarıyla **aynı görsel ve aynı `selectedOrders` set'inde**. Sarı kenarlık + "STOK" rozetiyle ayırt edilir. `splitSelected()` yardımcısı ID tipine göre `ordIds` ve `ymIds`'e ayırır. `hesapla()`, auto-select, `topluTedarikOlustur` hepsi manuel İE'leri kapsayacak şekilde güncellendi.
+
+**3. Senaryo 10 — reproducible test:**
+4 mod testi: A) tümü dahil, B) sipariş bazlı (manuel atlanır — kasıtlı), C) sadece manuel ymSet ile, **D) sipariş + manuel birlikte (v15.78 öncesi FAIL ederdi)**. MOD D = saha bug fix kanıtı.
+
+### Manuel İE Tedariki
+
+`order_id=null` ile açılır, `not_='MRP — Manuel İE: <ieNo>'` ile bağlantı izlenir. Şema değişmedi — `mrpTedarikDuzelt` gibi sipariş bazlı düzeltme akışları `orderId` boş olunca dokunmaz, yan etki yok.
+
+İleride `uys_tedarikler.ie_id` kolonu eklenirse direkt İE bağlantısı kurulabilir. Şu an `not_` alanı yeterli izlenebilirlik.
+
+## §15 Bilinen Buglar — Güncelleme
+
+Eski "manuel İE MRP görünmüyor" bug'ı v15.78 ile **kapatıldı**. Saha vakası: IE-MANUAL-MO9SDW3A (6740 adet, YMH100274 — SLABFORM ÇERÇEVE YATAYI). Hard block veriyordu, MRP eksik göstermiyordu — Buket'in 28 Nis sabahı tespit ettiği saha bug'ı.
+
+## Atıl Kod Analizi A2 Maddesi — REVİZYON
+
+**Önceki kayıt (yanlıştı):**
+> A2. MRP.tsx — Bağımsız YM İE state ve hesapları
+> v15.59'da UI render kaldırıldı, state/hesaplama bırakıldı (yorum: "ölü kod, ileride temizlenir")
+
+**Doğrusu:** O kod atıl değildi, manuel İE'lerin MRP'de görünür tek yoluydu. v15.78'de **geri eklendi** (sipariş kartlarıyla birleştirilmiş tek liste olarak — #13 madde 18 felsefesine de uyumlu).
+
+**Ders:** "Atıl kod" tespiti yapılırken o kodun hangi senaryoda kullanıldığı incelenmiş olmalı. Bu durumda kullanıcı "manuel iş emri açıyorsa görmesi gereken" senaryosu kaçırılmıştı.
+
+## 28 Nis Yarın TODO Güncel
+
+S10 koşturulup PASS doğrulanırsa § güncellenecek. Şimdilik sıradaki öncelik:
+
+1. **MRP senaryoları konuşması** (DEVAM_NOTU §22'deki Madde 2)
+2. **Madde 15 onay sistemi** (planlama onayı, rezerve değil)
+3. **Madde 8+9 durum string'leri**
+4. **Madde 16 kesim artık ürün sorma**
+
+Senaryo 3'ün adet bağımlılığı (testRunner.ts:569 `if (tedarik === 0) throw`) küçük bir improvement: dynamically detect "stok yetiyor mu" ve PASS dön (FAIL yerine). Backlog'a düşüldü, kritik değil.

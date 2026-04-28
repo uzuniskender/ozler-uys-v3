@@ -15,19 +15,24 @@
 - **Kullanan yer yok**
 - **Karar:** Sil. Eğer ileride Orders.tsx'in OrderFormModal'ında "Tekil İE" tikinin başka davranışa ihtiyacı olursa, mantığı oradan al.
 
-### A2. `MRP.tsx` — Bağımsız YM İE state ve hesapları
+### A2. `MRP.tsx` — Bağımsız YM İE state ve hesapları ⚠️ **REVİZYON (28 Nis 2026)**
 
-- **Konum:** `src/pages/MRP.tsx` line ~22-106 arası
-- **Durum:** v15.59'da UI render kaldırıldı, state/hesaplama bırakıldı (yorum: "ölü kod, ileride temizlenir")
-- **Atıl olanlar:**
-  - `selectedYMs`, `setSelectedYMs` state
-  - `showYMTamamlanan`, `setShowYMTamamlanan` state
-  - `mrpDoneYMs` useMemo
-  - `ymIEs` useMemo
-  - `ymTamamSayisi` useMemo
-  - `toggleYM` fonksiyonu
-- **Toplam:** ~30 satır
-- **Karar:** Sil.
+> **DİKKAT:** Bu madde başlangıçta yanlış teşhis edildi. Aşağıdaki orijinal kayıt **iptal edilmiştir**.
+>
+> O kod atıl değildi — `bagimsiz=true / siparisDisi=true / orderId=null` olan manuel İE'lerin MRP sayfasında görünür **tek** yoluydu. v15.59'da UI render kaldırılınca (1) operatör panel "stok yok" hard block veriyordu ama (2) MRP eksik göstermiyordu → kullanıcı tedarik açamıyordu.
+>
+> **Saha vakası:** IE-MANUAL-MO9SDW3A (6740 adet, YMH100274) — Buket 28 Nis 2026 sabahı tespit etti.
+>
+> **v15.78'de geri eklendi** — sipariş kartlarıyla aynı listede (#13 madde 18 felsefesine uyumlu birleşik UI). Detay: Bilgi Bankası §23.
+>
+> Ders: "Atıl kod" tespiti yapılırken o kodun hangi senaryoda kullanıldığı incelenmiş olmalı.
+
+~~- **Konum:** `src/pages/MRP.tsx` line ~22-106 arası~~
+~~- **Durum:** v15.59'da UI render kaldırıldı, state/hesaplama bırakıldı (yorum: "ölü kod, ileride temizlenir")~~
+~~- **Atıl olanlar:** `selectedYMs`, `mrpDoneYMs`, `ymIEs`, `ymTamamSayisi`, `toggleYM`...~~
+~~- **Karar:** Sil.~~
+
+**Yeni karar (v15.78 sonrası):** UI ve state geri eklendi, **kullanımda**. Aşağıdaki manuel İE'lerle ilgili state ve helper'lar (`aktifManualIes`, `manualIeHasEksik`, `splitSelected`) artık aktif kullanım — atıl kod analizinden çıkarılmıştır.
 
 ### A3. `mrp.ts` — Rezerve Sistemi (BÜYÜK)
 
@@ -178,7 +183,7 @@ Sidebar'a "Test" menüsü ekle ama sadece **admin** rolüne göster (`can('admin
 | 1 | Sağlık raporu auto-fix (Kontrol 3, 5, 6) | 5 dk | Düşük |
 | 2 | **Rezerve sistemini kod düzeyinde kapat** (A3) | 1 saat | Orta |
 | 3 | `NewIEModal` component sil (A1) | 5 dk | Düşük |
-| 4 | MRP.tsx — ymIEs vs state'leri sil (A2) | 10 dk | Düşük |
+| 4 | ~~MRP.tsx — ymIEs vs state'leri sil (A2)~~ ⚠️ **İPTAL — v15.78'de geri eklendi (saha bug fix)** | — | — |
 | 5 | Sağlık Raporu Kontrol 11 (bar_acilis eksik) — manuel İE'ler için elle SQL düzelt veya akış geliştir | 30 dk - 2 saat | Orta |
 | 6 | İş Emri açma duplicate (B1) — WorkOrders.tsx'e modal direkt render | 30 dk | Düşük |
 | 7 | Topbar → statusUtils helper'larına taşı (B2) | 20 dk | Düşük |

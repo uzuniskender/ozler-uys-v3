@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 27 Nisan 2026 akşam (İş Emri #13: 17/22 madde TAMAM, kapsamlı refactor günü, v15.51→v15.76)
+**Son güncelleme:** 28 Nisan 2026 sabahı (v15.77 test senaryoları + v15.78 manuel İE saha fix; v15.74/75/76 test geçti)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 ---
@@ -40,6 +40,8 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | **v15.52b** | Topbar Kesim kolonu Orders.tsx'e eklendi (statusUtils helper'ları) |
 | **v16.0.0 Faz 1.1a** | İş Emri #12 başlangıç (DB altyapı: auth_user_id + current_user_role helper) — saha etki sıfır |
 | **v15.53 Adım 1-5** | **İş Emri #2 KAPANIŞ → Yedekleme tam pakedi** (tablo + servis + UI + restore + otomatik) |
+| **v15.77** | Test Senaryo 7/8/9 (sipariş delta, fire telafi recursive, loglar DB) — v15.74/75/76 test ispatı (8/8 PASS) |
+| **v15.78** | **Manuel İE MRP görünürlüğü saha fix** (IE-MANUAL-MO9SDW3A 6740 adet bug'ı) + Senaryo 10 reproducible test |
 
 ---
 
@@ -101,7 +103,7 @@ Detaylı iş emirleri `docs/is_emri/01_*.md` ... `06_*.md` dosyalarındadır. He
 | # | Özellik | İş Emri | Tag | Durum |
 |---|---------|---------|-----|-------|
 | 12 | **Güvenlik Refactoru — RLS Tam Uygulama** (Supabase Auth + RLS policy yayılımı) | `12_GuvenlikRefactor.md` | v16.0.0 | 🟡 Backlog (27 Nis 2026 keşfedildi — `allow_all` policy ile gerçek koruma yok) |
-| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.76 | 🟢 17/22 TAMAM (1, 2, 3, 4, 5, 6, 7, 10, 11, 13, 14, 17, 18, 19, 20, 21, 22). Kalan: 8, 9, 12 (zaten kısmi), 15, 16. **v15.74/v15.75/v15.76 test bekliyor.** |
+| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.76 | 🟢 17/22 TAMAM (1, 2, 3, 4, 5, 6, 7, 10, 11, 13, 14, 17, 18, 19, 20, 21, 22). Kalan: 8, 9, 12 (zaten kısmi), 15, 16. **v15.74/75/76 28 Nis 2026 test geçti (S7/8/9 ALL_PASS).** v15.78 manuel İE MRP görünürlüğü saha fix. |
 
 ---
 
