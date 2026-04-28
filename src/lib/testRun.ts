@@ -92,6 +92,7 @@ const TABLE_CASCADE = [
   'uys_acik_barlar',        // açık bar havuzu
   'uys_sevkler',            // sevkler
   'uys_kesim_planlari',     // kesim planları
+  'uys_activity_log',       // v15.77 — sistem aktivite logu (Senaryo 9 için)
   'uys_work_orders',        // iş emirleri
   'uys_orders',             // siparişler (en son, diğerleri buna ref eder)
 ]

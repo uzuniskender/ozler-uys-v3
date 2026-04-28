@@ -11,12 +11,12 @@ import { uid, today } from './utils'
 import { getActiveTestRunId, tempSetActiveTestRunId, cascadeDeleteTestRun, newTestRunId } from './testRun'
 import { buildWorkOrders } from '@/features/production/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cutting'
-import { hesaplaMRP, rezerveYaz } from '@/features/production/mrp'
+import { hesaplaMRP, rezerveYaz, siparisDelta } from '@/features/production/mrp'
 import { markTedarikGeldi } from './tedarikHelpers'
-import { fireTelafiIeOlustur } from '@/features/production/fireTelafi'
+import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/features/production/fireTelafi'
 import { canProduceWO, canDurus, canDeleteWO } from '@/features/production/validations'
 import { useStore } from '@/store'
-import type { Recipe } from '@/types'
+import type { Recipe, WorkOrder, OrderItem, FireLog } from '@/types'
 
 // ═══ TİPLER ═══
 
@@ -974,5 +974,515 @@ export async function senaryo6(ctx: RunnerContext): Promise<SenaryoRapor> {
     }, ctx)
 
     return finalize(state, 'Senaryo 6: Negatif Test — Yasak Kontrolleri (Stok/Duruş/Silme)', t0)
+  })
+}
+
+// ═══ SENARYO 7 — SİPARİŞ DELTA (v15.77 / İş Emri #13 madde 11) ═══
+// v15.74'te eklenen siparisDelta saf-fonksiyonunu sahte verilerle test eder.
+// Senaryo 6 deseni — DB'ye dokunmaz, validation testi.
+// Eski "delete + recreate" akışı yerine delta-based revizyon doğru çalışıyor mu?
+
+/** Test için sahte OrderItem üretici */
+function _fakeKalem(rcId: string, adet: number, termin = '2026-05-15', mamulKod?: string): OrderItem {
+  return { rcId, mamulKod: mamulKod || ('M-' + rcId), mamulAd: 'Test ' + rcId, adet, termin }
+}
+
+/** Test için sahte WorkOrder üretici (yalnız siparisDelta'nın baktığı alanlar dolu) */
+function _fakeWO(orderId: string, rcId: string, hedef = 100, ekstra: Partial<WorkOrder> = {}): WorkOrder {
+  return {
+    id: 'fake-wo-' + uid(),
+    orderId, rcId,
+    sira: 0, kirno: '0', opId: '', opKod: '', opAd: '',
+    istId: '', istKod: '', istAd: '',
+    malkod: 'M-' + rcId, malad: 'Test',
+    hedef, mpm: 1, hm: [],
+    ieNo: 'IE-FAKE-' + rcId,
+    whAlloc: 0, hazirlikSure: 0, islemSure: 0,
+    durum: 'bekliyor',
+    bagimsiz: false, siparisDisi: false,
+    termin: '2026-05-15',
+    mamulKod: 'M-' + rcId, mamulAd: 'Test',
+    mamulAuto: false,
+    operatorId: null, not: '', olusturma: today(),
+    ...ekstra,
+  }
+}
+
+export async function senaryo7(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S7', async (state, t0) => {
+    const baseOld = {
+      id: 'order-fake-1', siparisNo: 'SIP-T7-001', musteri: 'Test Müşteri',
+      not: '', durum: '',
+    }
+
+    // ═══ 7.1 — ARTIS (üretim yok) ═══
+    await adim(state, '1. ARTIS — 50→55, üretim=0', async () => {
+      const wo = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 55)] }
+      const d = siparisDelta(eski, yeni, [wo], [])
+      if (d.kalemDeltalari.length !== 1) throw new Error('Delta sayısı yanlış: ' + d.kalemDeltalari.length)
+      const kd = d.kalemDeltalari[0]
+      if (kd.tip !== 'artis') throw new Error('Tip yanlış: ' + kd.tip)
+      if (kd.fark !== 5) throw new Error('Fark yanlış: ' + kd.fark)
+      if (d.hatalar.length !== 0) throw new Error('Beklenmeyen hata: ' + d.hatalar.join(', '))
+      return { tip: kd.tip, fark: kd.fark, etkilenen: kd.etkilenenWoIds.length }
+    }, ctx)
+
+    // ═══ 7.2 — ARTIS (mevcut üretim var) ═══
+    await adim(state, '2. ARTIS — 50→60, üretim=10 (artış engellenmemeli)', async () => {
+      const wo = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 60)] }
+      const d = siparisDelta(eski, yeni, [wo], [{ woId: wo.id, qty: 10 }])
+      const kd = d.kalemDeltalari[0]
+      if (kd.tip !== 'artis') throw new Error('Tip yanlış: ' + kd.tip)
+      if (kd.uretildiAdet !== 10) throw new Error('Üretildi yanlış: ' + kd.uretildiAdet)
+      if (d.hatalar.length !== 0) throw new Error('Artışta hata olmamalı: ' + d.hatalar.join(', '))
+      return { tip: kd.tip, uretildi: kd.uretildiAdet, fark: kd.fark }
+    }, ctx)
+
+    // ═══ 7.3 — AZALIS (üretim yok, izin verilir) ═══
+    await adim(state, '3. AZALIS — 50→45, üretim=0', async () => {
+      const wo = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 45)] }
+      const d = siparisDelta(eski, yeni, [wo], [])
+      const kd = d.kalemDeltalari[0]
+      if (kd.tip !== 'azalis') throw new Error('Tip yanlış: ' + kd.tip)
+      if (kd.fark !== -5) throw new Error('Fark yanlış: ' + kd.fark)
+      if (d.hatalar.length !== 0) throw new Error('Üretim yokken hata olmamalı: ' + d.hatalar.join(', '))
+      return { tip: kd.tip, fark: kd.fark }
+    }, ctx)
+
+    // ═══ 7.4 — AZALIS BLOCK (üretim > yeniAdet) ═══
+    await adim(state, '4. AZALIS BLOCK — 50→45, üretim=47 (hata beklenir)', async () => {
+      const wo = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 45)] }
+      const d = siparisDelta(eski, yeni, [wo], [{ woId: wo.id, qty: 47 }])
+      if (d.hatalar.length === 0) throw new Error('BEKLENEN BLOCK ÇALIŞMADI: 47 üretildi, 45 olamaz')
+      return { engellendi: true, hata: d.hatalar[0], uretildi: d.kalemDeltalari[0]?.uretildiAdet }
+    }, ctx)
+
+    // ═══ 7.5 — TERMIN değişimi ═══
+    await adim(state, '5. TERMIN — adet aynı, termin değişti', async () => {
+      const wo = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50, '2026-05-15')] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 50, '2026-06-01')] }
+      const d = siparisDelta(eski, yeni, [wo], [])
+      const kd = d.kalemDeltalari[0]
+      if (kd.tip !== 'termin') throw new Error('Tip yanlış: ' + kd.tip)
+      if (kd.fark !== 0) throw new Error('Termin değişiminde fark 0 olmalı: ' + kd.fark)
+      if (kd.eskiTermin !== '2026-05-15' || kd.yeniTermin !== '2026-06-01') {
+        throw new Error('Termin değerleri yanlış')
+      }
+      return { tip: kd.tip, eski: kd.eskiTermin, yeni: kd.yeniTermin }
+    }, ctx)
+
+    // ═══ 7.6 — KALEM_EKLE ═══
+    await adim(state, '6. KALEM_EKLE — yeni reçete ekle', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 50), _fakeKalem('rc-2', 30)] }
+      const d = siparisDelta(eski, yeni, [wo1], [])
+      const ekle = d.kalemDeltalari.find(k => k.tip === 'kalem_ekle')
+      if (!ekle) throw new Error('kalem_ekle delta yok')
+      if (ekle.rcId !== 'rc-2') throw new Error('rcId yanlış: ' + ekle.rcId)
+      if (ekle.yeniAdet !== 30) throw new Error('Yeni adet yanlış')
+      if (ekle.etkilenenWoIds.length !== 0) throw new Error('Yeni kalemde etkilenen WO olmamalı')
+      return { tip: ekle.tip, rcId: ekle.rcId, yeniAdet: ekle.yeniAdet }
+    }, ctx)
+
+    // ═══ 7.7 — KALEM_SIL (üretim yok) ═══
+    await adim(state, '7. KALEM_SIL — kalem çıkar, üretim=0', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const wo2 = _fakeWO(baseOld.id, 'rc-2', 60)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50), _fakeKalem('rc-2', 30)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const d = siparisDelta(eski, yeni, [wo1, wo2], [])
+      const sil = d.kalemDeltalari.find(k => k.tip === 'kalem_sil')
+      if (!sil) throw new Error('kalem_sil delta yok')
+      if (sil.rcId !== 'rc-2') throw new Error('rcId yanlış')
+      if (sil.uretildiAdet !== 0) throw new Error('Üretim yokken uretildiAdet 0 olmalı')
+      if (sil.etkilenenWoIds.length !== 1) throw new Error('Silinecek 1 WO olmalı')
+      return { tip: sil.tip, etkilenen: sil.etkilenenWoIds.length, uretildi: sil.uretildiAdet }
+    }, ctx)
+
+    // ═══ 7.8 — KALEM_SIL (üretim var, log korunur) ═══
+    await adim(state, '8. KALEM_SIL — üretim var, uretildiAdet doğru olmalı (loglar korunur)', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const wo2 = _fakeWO(baseOld.id, 'rc-2', 60)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50), _fakeKalem('rc-2', 30)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const d = siparisDelta(eski, yeni, [wo1, wo2], [{ woId: wo2.id, qty: 12 }])
+      const sil = d.kalemDeltalari.find(k => k.tip === 'kalem_sil')
+      if (!sil) throw new Error('kalem_sil delta yok')
+      if (sil.uretildiAdet !== 12) throw new Error('uretildiAdet 12 olmalı: ' + sil.uretildiAdet)
+      // Spec: kalem_sil + üretim → blocking değil. WO durum=iptal, log korunur.
+      return { tip: sil.tip, uretildi: sil.uretildiAdet, hata: d.hatalar.length }
+    }, ctx)
+
+    // ═══ 7.9 — METADATA değişimi (siparişNo) ═══
+    await adim(state, '9. METADATA — siparisNo değişti, kalemler aynı', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, siparisNo: 'SIP-T7-OLD', urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, siparisNo: 'SIP-T7-NEW', urunler: [_fakeKalem('rc-1', 50)] }
+      const d = siparisDelta(eski, yeni, [wo1], [])
+      if (!d.metadataDegisti) throw new Error('metadataDegisti true olmalı')
+      if (d.kalemDeltalari.length !== 0) throw new Error('Kalem değişmedi, delta olmamalı')
+      if (d.toplamSenaryoSayisi !== 1) throw new Error('Sadece metadata değişmeli')
+      return { metadata: d.metadataDegisti, kalemSayisi: d.kalemDeltalari.length }
+    }, ctx)
+
+    // ═══ 7.10 — NOOP (hiç değişiklik yok) ═══
+    await adim(state, '10. NOOP — hiç değişiklik yok', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, urunler: [_fakeKalem('rc-1', 50)] }
+      const d = siparisDelta(eski, yeni, [wo1], [])
+      if (d.toplamSenaryoSayisi !== 0) throw new Error('Hiç değişiklik yok, toplam 0 olmalı')
+      if (d.kalemDeltalari.length !== 0) throw new Error('Delta olmamalı')
+      if (d.metadataDegisti) throw new Error('Metadata değişmemiş olmalı')
+      return { toplamSenaryo: 0, durum: 'NOOP' }
+    }, ctx)
+
+    // ═══ 7.11 — IPTAL ═══
+    await adim(state, '11. IPTAL — durum=iptal yapıldı', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, durum: '', urunler: [_fakeKalem('rc-1', 50)] }
+      const yeni = { ...baseOld, durum: 'iptal', urunler: [_fakeKalem('rc-1', 50)] }
+      const d = siparisDelta(eski, yeni, [wo1], [])
+      if (!d.iptalEdildi) throw new Error('iptalEdildi true olmalı')
+      return { iptalEdildi: d.iptalEdildi, toplamSenaryo: d.toplamSenaryoSayisi }
+    }, ctx)
+
+    // ═══ 7.12 — ÇOKLU değişim ═══
+    await adim(state, '12. ÇOKLU — artış + termin + kalem_ekle aynı anda', async () => {
+      const wo1 = _fakeWO(baseOld.id, 'rc-1', 100)
+      const eski = { ...baseOld, urunler: [_fakeKalem('rc-1', 50, '2026-05-15')] }
+      const yeni = {
+        ...baseOld, siparisNo: 'SIP-T7-CHANGED',
+        urunler: [_fakeKalem('rc-1', 60, '2026-06-01'), _fakeKalem('rc-3', 20)],
+      }
+      const d = siparisDelta(eski, yeni, [wo1], [])
+      // rc-1 adet 50→60 = artis (termin de değişti ama artis baskın çünkü adetDegisti önce kontrol ediliyor)
+      // rc-3 yeni = kalem_ekle
+      // siparisNo değişti = metadata
+      if (d.kalemDeltalari.length !== 2) throw new Error('2 kalem delta beklenir: ' + d.kalemDeltalari.length)
+      if (!d.metadataDegisti) throw new Error('metadataDegisti true olmalı')
+      const tipler = d.kalemDeltalari.map(k => k.tip).sort()
+      // 'artis' ve 'kalem_ekle' beklenir
+      if (!tipler.includes('artis') || !tipler.includes('kalem_ekle')) {
+        throw new Error('Beklenen tipler yok: ' + tipler.join(','))
+      }
+      return { kalemSayi: d.kalemDeltalari.length, tipler, metadata: d.metadataDegisti, toplam: d.toplamSenaryoSayisi }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 7: Sipariş Delta Revizyonu (v15.74)', t0)
+  })
+}
+
+// ═══ SENARYO 8 — FİRE TELAFİ RECURSIVE (v15.77 / İş Emri #13 madde 13) ═══
+// v15.76'da eklenen fireTelafiAkisi'nın gerçek DB akışını test eder.
+// Senaryo 5 deseninin üzerine kurulur — fire'lı üretim sonrası eski API
+// (fireTelafiIeOlustur) yerine yeni API (fireTelafiAkisi) çağrılır.
+//
+// SAHA UYUMU DOĞRULAMASI:
+//   - Telafi WO order_id = orijinal sipariş (eski: '')
+//   - Telafi WO siparis_disi = false (eski: true)
+//   - Telafi WO bagimsiz = false (eski: true)
+//   - Sipariş.adet değişmedi (50 müşteriye gider, üretim hedefi 50+fire)
+//   - fire.telafiWoId DB'de set edildi
+//
+// RECURSIVE DAVRANIŞ:
+//   - Reçetede YarıMamul satırı varsa alt-WO açılma kontrolü yapılır
+//   - Sadece Hammadde varsa hammaddeAcigi populated kontrolü yapılır
+
+export async function senaryo8(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S8', async (state, t0) => {
+    // ═══ Setup: Senaryo 5'in özeti ═══
+    await adim(state, '1. Sipariş + İE oluştur', async () => {
+      const oid = await _createOrder(state, ctx, 'S8')
+      snapshotStok(state)
+      return { orderId: oid, ieCount: state.ieIds.length }
+    }, ctx)
+
+    await wait(200)
+    await adim(state, '2. Kesim planı', async () => await _createCuttingPlans(state), ctx)
+
+    await wait(200)
+    const mrp = await adim(state, '3. MRP + tedarik', async () =>
+      await _runMRPAndCreateTedarik(state), ctx) as any
+
+    if (mrp?.tedarik > 0) {
+      await wait(200)
+      await adim(state, '4. Teslim al', async () => ({
+        geldiSayisi: await _teslimAl(state),
+      }), ctx)
+    } else {
+      adimSkip(state, '4. Teslim', 'Tedarik yok', ctx)
+    }
+
+    // ═══ Fire'lı üretim ═══
+    await wait(200)
+    const uretim = await adim(state, '5. Fire\'lı üretim (qty=6, fire=2)', async () => {
+      if (!state.ieIds.length) throw new Error('Üretecek İE yok')
+      const r = await _uretimGirisiFire(state, 6, 2, [])
+      return { logId: r.logId, fireLogId: r.fireLogId }
+    }, ctx, { bypassNotu: BYPASS_NOTU_URETIM }) as any
+
+    if (!uretim?.fireLogId) throw new Error('Fire logId yok, devam edilemez')
+
+    // ═══ ASIL TEST: fireTelafiAkisi çağrısı ═══
+    await wait(200)
+    const akisSonuc = await adim(state, '6. fireTelafiAkisi çağrısı (yeni recursive API)', async () => {
+      const store = useStore.getState()
+      const fire = store.fireLogs.find(f => f.id === uretim.fireLogId) as FireLog | undefined
+      if (!fire) throw new Error('Fire DB\'de yok')
+      const origWo = store.workOrders.find(w => w.id === fire.woId)
+      if (!origWo) throw new Error('Orijinal İE yok')
+      const recipe = store.recipes.find(r => r.id === origWo.rcId)
+      if (!recipe) throw new Error('Reçete yok')
+
+      const akis = await fireTelafiAkisi(
+        fire as FireLog,
+        origWo as WorkOrder,
+        recipe,
+        store.stokHareketler as any,
+        store.workOrders,
+        store.materials as any,
+      )
+      await loadAll()
+      state.ozet.telafiIE += akis.acilenWoIds.length
+      // state.ieIds'e telafi WO'ları ekle (cleanup için cascade yakalar zaten ama ozet için)
+      for (const wid of akis.acilenWoIds) state.ieIds.push(wid)
+
+      if (akis.acilenWoIds.length === 0) {
+        throw new Error('En az 1 telafi WO açılmalı: hatalar=' + akis.hatalar.join(', '))
+      }
+
+      // Reçete YarıMamul içeriyor mu — recursive davranış kontrolü
+      const ymVar = (recipe.satirlar || []).some(s => s.tip === 'YarıMamul')
+      return {
+        acilenWoSayisi: akis.acilenWoIds.length,
+        hammaddeAcigiSayisi: akis.hammaddeAcigi.length,
+        hatalar: akis.hatalar,
+        receteYarıMamulIcerir: ymVar,
+        recursiveTetiklendi: akis.acilenWoIds.length > 1,
+      }
+    }, ctx) as any
+
+    // ═══ 7. Üst telafi WO doğrulama: order_id = orijinal sipariş ═══
+    await wait(200)
+    await adim(state, '7. Üst telafi WO: order_id = orijinal sipariş (v15.76)', async () => {
+      const store = useStore.getState()
+      // Telafi WO'lar fireTelafi.telafiWoOlustur içinde ieNo='<orig>-FT<fireId>' pattern'iyle açılır.
+      // Orijinal sipariş'e bağlı, ieNo'da '-FT' içeren WO'lar = telafiler
+      const telafiWOs = store.workOrders.filter(w =>
+        w.orderId === state.orderId && /-FT/i.test(w.ieNo || '')
+      )
+      if (telafiWOs.length === 0) throw new Error('Telafi WO bulunamadı (-FT pattern eşleşmedi)')
+      // Üst telafi: en eski (recursive alt'lar daha sonra açılıyor)
+      const ustWO = telafiWOs.sort((a, b) => (a.olusturma || '').localeCompare(b.olusturma || ''))[0]
+      if (!ustWO.orderId) throw new Error('order_id boş — eski API davranışı (siparişe bağlı değil)')
+      if (ustWO.orderId !== state.orderId) {
+        throw new Error('order_id orijinal sipariş değil: beklenen ' + state.orderId + ', bulunan ' + ustWO.orderId)
+      }
+      if (ustWO.siparisDisi !== false) throw new Error('siparis_disi=false olmalı, değil')
+      if (ustWO.bagimsiz !== false) throw new Error('bagimsiz=false olmalı, değil')
+      return {
+        woId: ustWO.id, ieNo: ustWO.ieNo, orderId: ustWO.orderId,
+        siparisDisi: ustWO.siparisDisi, bagimsiz: ustWO.bagimsiz,
+        hedef: ustWO.hedef, durum: ustWO.durum,
+        toplamTelafiSayisi: telafiWOs.length,
+      }
+    }, ctx)
+
+    // ═══ 8. fire.telafiWoId DB'de set edildi mi ═══
+    await adim(state, '8. fire.telafi_wo_id DB\'de set edildi', async () => {
+      const { data, error } = await supabase
+        .from('uys_fire_logs').select('telafi_wo_id').eq('id', uretim.fireLogId).single()
+      if (error) throw new Error('DB read: ' + error.message)
+      if (!data || !(data as any).telafi_wo_id) {
+        throw new Error('telafi_wo_id boş — fireTelafiAkisi update yapmadı')
+      }
+      return { telafiWoId: (data as any).telafi_wo_id }
+    }, ctx)
+
+    // ═══ 9. Sipariş.adet değişmedi (saha uyumu) ═══
+    await adim(state, '9. Sipariş.adet değişmedi (50 müşteriye gider, üretim hedefi=50+fire)', async () => {
+      const store = useStore.getState()
+      const order = store.orders.find(o => o.id === state.orderId) as any
+      if (!order) throw new Error('Sipariş bulunamadı')
+      // Bu senaryoda ctx.adet (default 10 ya da kullanıcının girdiği) = orijinal sipariş.adet
+      // İlk kalemin adeti = ctx.adet olmalı
+      const ilkKalem = (order.urunler || [])[0]
+      if (!ilkKalem) throw new Error('Sipariş kalemi yok')
+      if (ilkKalem.adet !== ctx.adet) {
+        throw new Error('Sipariş kalem.adet değişti: bekledik ' + ctx.adet + ', bulundu ' + ilkKalem.adet)
+      }
+      return { siparisAdet: ilkKalem.adet, mesaj: 'Sipariş adeti korundu, telafi ek WO olarak açıldı' }
+    }, ctx)
+
+    // ═══ 10. İdempotency: ikinci kez aynı fire için çağır → hata beklenir ═══
+    await adim(state, '10. İdempotency — aynı fire için 2. kez çağırırsa zaten açıldı hatası', async () => {
+      const store = useStore.getState()
+      const fire = store.fireLogs.find(f => f.id === uretim.fireLogId) as FireLog | undefined
+      if (!fire) throw new Error('Fire bulunamadı')
+      const origWo = store.workOrders.find(w => w.id === fire.woId) as WorkOrder | undefined
+      if (!origWo) throw new Error('Orijinal İE yok')
+      const recipe = store.recipes.find(r => r.id === origWo.rcId)
+      if (!recipe) throw new Error('Reçete yok')
+
+      const akis2 = await fireTelafiAkisi(
+        fire as FireLog, origWo, recipe,
+        store.stokHareketler as any, store.workOrders, store.materials as any,
+      )
+      // Zaten açılmış — yeni WO açılmamalı, hata mesajı 'zaten açıldı' içermeli
+      if (akis2.acilenWoIds.length > 0) {
+        throw new Error('İdempotency başarısız: 2. çağrıda yeni WO açıldı (' + akis2.acilenWoIds.length + ')')
+      }
+      const zatenAcildi = akis2.hatalar.some(h => /zaten/i.test(h))
+      if (!zatenAcildi) throw new Error('Beklenen hata mesajı yok: ' + akis2.hatalar.join(', '))
+      return { idempotent: true, hatalar: akis2.hatalar }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 8: Fire Telafi Recursive Akışı (v15.76)', t0)
+  })
+}
+
+// ═══ SENARYO 9 — LOGLAR SAYFASI (v15.77 / İş Emri #13 madde 14) ═══
+// v15.75'te eklenen uys_activity_log tablosunu + 4-source query yeteneğini test eder.
+// DB seviyesinde — Logs.tsx UI'sine dokunmaz, alttaki veri akışını doğrular.
+
+export async function senaryo9(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S9', async (state, t0) => {
+    // ═══ 9.1 — uys_activity_log INSERT + tablo yapısı ═══
+    const aktiviteId = uid()
+    await adim(state, '1. uys_activity_log INSERT (test_run_id\'li)', async () => {
+      const { error } = await supabase.from('uys_activity_log').insert({
+        id: aktiviteId,
+        ts: new Date().toISOString(),
+        kullanici: 'test-user',
+        aksiyon: 'Test sipariş açıldı',
+        detay: 'S9 senaryo testi',
+        modul: 'siparis',
+        order_id: 'test-order-9-1',
+        // Not: test_run_id supabase proxy ile otomatik eklenir (state.testRunId)
+        test_run_id: state.testRunId,
+      })
+      if (error) throw new Error('INSERT hata: ' + error.message)
+      return { id: aktiviteId, modul: 'siparis' }
+    }, ctx)
+
+    // ═══ 9.2 — INSERT'lenen satır SELECT ile dönüyor mu ═══
+    await adim(state, '2. INSERT\'lenen satır SELECT ile dönüyor', async () => {
+      const { data, error } = await supabase
+        .from('uys_activity_log').select('*').eq('id', aktiviteId).single()
+      if (error) throw new Error('SELECT hata: ' + error.message)
+      if (!data) throw new Error('Kayıt yok')
+      const r = data as any
+      if (r.aksiyon !== 'Test sipariş açıldı') throw new Error('aksiyon yanlış: ' + r.aksiyon)
+      if (r.modul !== 'siparis') throw new Error('modul yanlış: ' + r.modul)
+      if (r.test_run_id !== state.testRunId) {
+        throw new Error('test_run_id yanlış — cascade cleanup çalışmaz')
+      }
+      return { id: r.id, modul: r.modul, kullanici: r.kullanici, testRunId: r.test_run_id }
+    }, ctx)
+
+    // ═══ 9.3 — Modul filtresi ═══
+    const aktiviteId2 = uid()
+    await adim(state, '3. 2. modul (uretim) ekle, modul filtresi çalışıyor', async () => {
+      const { error } = await supabase.from('uys_activity_log').insert({
+        id: aktiviteId2,
+        ts: new Date().toISOString(),
+        kullanici: 'test-user',
+        aksiyon: 'Üretim girişi',
+        detay: 'S9 — modul filtre testi',
+        modul: 'uretim',
+        wo_id: 'test-wo-9-3',
+        test_run_id: state.testRunId,
+      })
+      if (error) throw new Error('2. INSERT hata: ' + error.message)
+
+      const { data: siparisRows } = await supabase
+        .from('uys_activity_log').select('*')
+        .eq('test_run_id', state.testRunId).eq('modul', 'siparis')
+      const { data: uretimRows } = await supabase
+        .from('uys_activity_log').select('*')
+        .eq('test_run_id', state.testRunId).eq('modul', 'uretim')
+
+      if ((siparisRows?.length || 0) !== 1) {
+        throw new Error('siparis modulü 1 dönmeli, döndü: ' + siparisRows?.length)
+      }
+      if ((uretimRows?.length || 0) !== 1) {
+        throw new Error('uretim modulü 1 dönmeli, döndü: ' + uretimRows?.length)
+      }
+      return { siparisCount: siparisRows?.length, uretimCount: uretimRows?.length }
+    }, ctx)
+
+    // ═══ 9.4 — Tarih filtresi ═══
+    await adim(state, '4. Tarih filtresi — gelecek tarihte 0 sonuç', async () => {
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      const { data, error } = await supabase
+        .from('uys_activity_log').select('id')
+        .eq('test_run_id', state.testRunId).gte('ts', future)
+      if (error) throw new Error('Tarih filtre hata: ' + error.message)
+      if ((data?.length || 0) !== 0) {
+        throw new Error('Gelecek tarih filtresi 0 dönmeli, döndü: ' + data?.length)
+      }
+      return { gelecekTarihEslesme: 0 }
+    }, ctx)
+
+    // ═══ 9.5 — 4-source query (Logs.tsx'in kullandığı kombinasyon) ═══
+    await adim(state, '5. 4 kaynak (activity/logs/stok/fire) sorgu — hata atmıyor', async () => {
+      const sonuc = { activity: 0, logs: 0, stok: 0, fire: 0 }
+      try {
+        const r1 = await supabase.from('uys_activity_log').select('id', { count: 'exact', head: true })
+          .eq('test_run_id', state.testRunId)
+        sonuc.activity = r1.count || 0
+      } catch (e: any) { throw new Error('uys_activity_log: ' + e.message) }
+      try {
+        const r2 = await supabase.from('uys_logs').select('id', { count: 'exact', head: true })
+          .eq('test_run_id', state.testRunId)
+        sonuc.logs = r2.count || 0
+      } catch (e: any) { throw new Error('uys_logs: ' + e.message) }
+      try {
+        const r3 = await supabase.from('uys_stok_hareketler').select('id', { count: 'exact', head: true })
+          .eq('test_run_id', state.testRunId)
+        sonuc.stok = r3.count || 0
+      } catch (e: any) { throw new Error('uys_stok_hareketler: ' + e.message) }
+      try {
+        const r4 = await supabase.from('uys_fire_logs').select('id', { count: 'exact', head: true })
+          .eq('test_run_id', state.testRunId)
+        sonuc.fire = r4.count || 0
+      } catch (e: any) { throw new Error('uys_fire_logs: ' + e.message) }
+      // 4 query'nin her biri çalıştı, sonuç dön
+      return sonuc
+    }, ctx)
+
+    // ═══ 9.6 — order_id filtresi (Logs.tsx sağ panel link'leri için) ═══
+    await adim(state, '6. order_id filtresi — Logs.tsx link\'leri için', async () => {
+      const { data, error } = await supabase
+        .from('uys_activity_log').select('*')
+        .eq('test_run_id', state.testRunId).eq('order_id', 'test-order-9-1')
+      if (error) throw new Error('order_id filtre hata: ' + error.message)
+      if ((data?.length || 0) !== 1) {
+        throw new Error('order_id eşleşmesi 1 dönmeli, döndü: ' + data?.length)
+      }
+      return { eslesme: data?.length }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 9: Loglar Sayfası DB Akışı (v15.75)', t0)
   })
 }
