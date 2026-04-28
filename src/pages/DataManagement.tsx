@@ -155,66 +155,88 @@ export function DataManagement() {
         detay: tedStokEksik.length ? { tedarikler: tedStokEksik.map((t: any) => ({ id: t.id, malkod: t.malkod, miktar: t.miktar, tarih: t.tarih, siparisNo: t.siparis_no || '(yok)' })) } : undefined,
       })
 
-      // 5. Rezerve–Stok dengesi
-      const fizMap = new Map<string, number>()
-      stoks.forEach((h: any) => {
-        const key = (h.malkod || '').trim().toLowerCase()
-        if (!key) return
-        fizMap.set(key, (fizMap.get(key) || 0) + (h.tip === 'giris' ? (h.miktar || 0) : -(h.miktar || 0)))
-      })
-      const rezMap = new Map<string, number>()
-      rezs.forEach((r: any) => {
-        const key = (r.malkod || '').trim().toLowerCase()
-        if (!key) return
-        rezMap.set(key, (rezMap.get(key) || 0) + (r.miktar || 0))
-      })
-      const asimlar: any[] = []
-      rezMap.forEach((rezerve, key) => {
-        const stok = fizMap.get(key) || 0
-        if (rezerve > stok + 0.01) asimlar.push({ malkod: key, rezerve, stok })
-      })
+      // v15.80 — Kontrol 5/6/7 revize edildi.
+      // v15.70'te rezerve mantığı kaldırıldığı için (Bilgi Bankası §21) "rezerve yoksa warn"
+      // tarzı kontroller artık anlamsız. Yerine §21 sözleşmesi (NET=İHTİYAÇ-STOK-YOLDA) ile
+      // gerçek tutarlılık kontrolleri konuldu.
+
+      // 5. MRP §21 Sözleşmesi — Toplam ihtiyaç ≤ stok + yolda mı (genel mod)
+      const cpMapped5 = cps.map((p: any) => ({
+        hamMalkod: p.ham_malkod, hamMalad: p.ham_malad, durum: p.durum || '',
+        gerekliAdet: p.gerekli_adet || 0, satirlar: p.satirlar || [],
+      }))
+      // Tüm aktif siparişler + manuel İE'ler — ymSet boş çünkü "tüm açık WO'lar dahil olsun"
+      const allSonuc = (() => {
+        try {
+          return hesaplaMRP(null, ords as any, wos as any, recipes as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [])
+        } catch { return [] }
+      })()
+      const eksiklerEvrim = allSonuc.filter((r: any) => r.net > 0)
       kontroller.push({
-        no: 5, ad: 'Rezerve–Stok dengesi',
-        durum: asimlar.length ? 'fail' : 'pass',
-        mesaj: asimlar.length ? `${asimlar.length} malzemede toplam rezerve fiziksel stoğu aşıyor` : `${rezMap.size} rezerveli malzemede aşım yok`,
-        neden: asimlar.length ? 'Rezerve dağılımı bozulmuş. Stok hareketi silinmiş veya eski rezerve kaydı kalmış.' : undefined,
-        aksiyon: asimlar.length ? 'Otomatik Düzelt — rezerveleri termin-FIFO ile tüm aktif siparişler için yeniden dağıtır.' : undefined,
-        autoFixEtiket: asimlar.length ? 'Rezerveleri yeniden senkronize et' : undefined,
-        autoFix: asimlar.length ? async () => {
-          const s = useStore.getState()
-          const cpMapped = s.cuttingPlans.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
-          await rezerveleriSenkronla(s.orders as any, s.workOrders, s.recipes, s.stokHareketler, s.tedarikler, cpMapped, s.materials)
-          return 'Rezerveler yeniden dağıtıldı'
+        no: 5, ad: 'MRP §21 Sözleşmesi (NET=İHTİYAÇ−STOK−YOLDA)',
+        durum: eksiklerEvrim.length === 0 ? 'pass' : eksiklerEvrim.length <= 5 ? 'warn' : 'fail',
+        mesaj: eksiklerEvrim.length === 0
+          ? `${aktifOrders.length} sipariş + bağımsız İE: tüm hammaddeler stok veya yolda`
+          : `${eksiklerEvrim.length} malzemede net ihtiyaç var (stok+yolda yetmiyor) — tedarik açılmalı`,
+        neden: eksiklerEvrim.length > 0 ? 'İhtiyaç > stok + bekleyen tedarik. Sahada üretim sürerken bu malzemeler stoğa girmeli.' : undefined,
+        aksiyon: eksiklerEvrim.length > 0 ? 'MRP sayfasında "Tümünü Seç" → "Hesapla" → "Toplu Tedarik" akışını çalıştırın.' : undefined,
+        detay: eksiklerEvrim.length > 0 ? {
+          eksikler: eksiklerEvrim.slice(0, 20).map((r: any) => ({
+            malkod: r.malkod, malad: r.malad,
+            net: Math.ceil(r.net), birim: r.birim || 'Adet',
+            termin: r.termin || '(termin yok)',
+          })),
+          toplamSayisi: eksiklerEvrim.length,
         } : undefined,
-        detay: asimlar.length ? { asimlar } : undefined,
       })
 
-      // 6. Rezerve–Sipariş eşleşmesi (orphan rezerve)
+      // 6. Eski Rezerve Verisi Temizliği (orphan rezerve kayıtları)
+      // v15.70 sonrası rezerve sistemi kapatıldı ama tabloda eski veri kalmış olabilir.
+      // Atıl Kod Analizi A3: bu tablo ileride DROP edilecek. Şimdilik orphan'lar temizlensin.
       const orphanRez = rezs.filter((r: any) => r.order_id && !aktifOrderIds.has(r.order_id))
+      const totalRez = rezs.length
       kontroller.push({
-        no: 6, ad: 'Rezerve–Sipariş eşleşmesi',
-        durum: orphanRez.length ? 'warn' : 'pass',
-        mesaj: orphanRez.length ? `${orphanRez.length} rezerve kaydı silinmiş/kapalı siparişe bağlı (orphan)` : `${rezs.length} rezerve kaydı temiz`,
-        neden: orphanRez.length ? 'Sipariş silindi veya kapatıldı ama rezerve temizlenmedi.' : undefined,
-        aksiyon: orphanRez.length ? 'Otomatik Düzelt — orphan rezerveleri sil.' : undefined,
-        autoFixEtiket: orphanRez.length ? 'Orphan rezerveleri sil' : undefined,
-        autoFix: orphanRez.length ? async () => {
+        no: 6, ad: 'Eski Rezerve Verisi (v15.70 sonrası kapsam dışı)',
+        durum: totalRez === 0 ? 'pass' : orphanRez.length > 0 ? 'warn' : 'pass',
+        mesaj: totalRez === 0
+          ? 'Rezerve tablosu boş (v15.70 sonrası beklenen durum)'
+          : orphanRez.length > 0
+          ? `${totalRez} eski rezerve kaydı var · ${orphanRez.length} orphan (silinmiş siparişe bağlı). Tablo ileride DROP edilecek (Atıl Kod A3).`
+          : `${totalRez} eski rezerve kaydı duruyor — DROP öncesi kalıntı, MRP'yi etkilemiyor`,
+        neden: orphanRez.length > 0 ? 'v15.70 öncesi sipariş silindiğinde rezerve temizleme tetiklenmemiş.' : undefined,
+        aksiyon: orphanRez.length > 0 ? 'Otomatik Düzelt — orphan rezerveleri sil. Hepsini topyekûn silmek için Atıl Kod A3 (DROP TABLE) bekleniyor.' : undefined,
+        autoFixEtiket: orphanRez.length > 0 ? 'Orphan rezerveleri sil' : undefined,
+        autoFix: orphanRez.length > 0 ? async () => {
           const ids = orphanRez.map((r: any) => r.id)
           for (let i = 0; i < ids.length; i += 50) await supabase.from('uys_mrp_rezerve').delete().in('id', ids.slice(i, i + 50))
           return `${ids.length} orphan rezerve silindi`
         } : undefined,
-        detay: orphanRez.length ? { rezerveIds: orphanRez.map((r: any) => r.id) } : undefined,
+        detay: orphanRez.length > 0 ? { rezerveIds: orphanRez.map((r: any) => r.id).slice(0, 50), toplam: orphanRez.length } : undefined,
       })
 
-      // 7. MRP durumu senkron (basit: tamam diyor ama rezerve yok)
-      const mrpSenkronsuz = aktifOrders.filter((o: any) => o.mrp_durum === 'tamam' && !rezs.some((r: any) => r.order_id === o.id))
+      // 7. MRP Durumu Tutarlılığı — sipariş "MRP tamam" diyor ama gerçekten yeterli mi
+      // Önce: rezerve var mı kontrolü (v15.70'te anlamsızlaştı)
+      // Şimdi: sipariş bazlı hesaplaMRP çağırıp net>0 olan satır var mı bakıyoruz
+      const tutmazSiparisler: { id: string; no: string; eksikSayisi: number }[] = []
+      for (const o of aktifOrders) {
+        if (o.mrp_durum !== 'tamam' && o.mrp_durum !== 'tamamlandi') continue
+        try {
+          const sonuc = hesaplaMRP([o.id], ords as any, wos as any, recipes as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id)
+          const eksikSayisi = sonuc.filter((r: any) => r.net > 0).length
+          if (eksikSayisi > 0) {
+            tutmazSiparisler.push({ id: o.id, no: o.siparis_no || '(no yok)', eksikSayisi })
+          }
+        } catch { /* skip */ }
+      }
       kontroller.push({
-        no: 7, ad: 'MRP durumu senkron',
-        durum: mrpSenkronsuz.length ? 'warn' : 'pass',
-        mesaj: mrpSenkronsuz.length ? `${mrpSenkronsuz.length} sipariş "MRP tamam" işaretli ama rezervesi yok` : `${aktifOrders.length} aktif sipariş MRP durumu uyumlu`,
-        neden: mrpSenkronsuz.length ? 'mrp_durum alanı eski veri migrasyonundan kalma veya senkron hatası.' : undefined,
-        aksiyon: mrpSenkronsuz.length ? 'Siparişler sayfasında "Toplu MRP" çalıştırın.' : undefined,
-        detay: mrpSenkronsuz.length ? { siparisler: mrpSenkronsuz.map((o: any) => ({ id: o.id, no: o.siparis_no })) } : undefined,
+        no: 7, ad: 'MRP durumu tutarlılığı',
+        durum: tutmazSiparisler.length === 0 ? 'pass' : 'warn',
+        mesaj: tutmazSiparisler.length === 0
+          ? `${aktifOrders.length} aktif sipariş: mrp_durum alanı gerçek hesapla uyumlu`
+          : `${tutmazSiparisler.length} sipariş "MRP tamam" işaretli ama hesapla net ihtiyaç çıkıyor`,
+        neden: tutmazSiparisler.length > 0 ? 'mrp_durum alanı son MRP koşusu sonrası güncellenmemiş veya stok değişmiş. Manuel İE/tedarik silme sonrası fark oluşur.' : undefined,
+        aksiyon: tutmazSiparisler.length > 0 ? 'MRP sayfasında "Tümünü Seç" → "Hesapla" çalıştırın — mrp_durum otomatik güncellenecek.' : undefined,
+        detay: tutmazSiparisler.length > 0 ? { siparisler: tutmazSiparisler.slice(0, 20) } : undefined,
       })
 
       // 8. Malzeme kartı tutarlılığı (kart duplicate + hareketlerde kart kodu varyasyonu)
@@ -619,7 +641,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.39', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.80', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')
