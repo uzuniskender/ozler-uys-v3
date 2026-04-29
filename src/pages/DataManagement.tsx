@@ -769,6 +769,70 @@ export function DataManagement() {
           })),
         } : undefined,
       })
+
+      // ═══════════════════════════════════════════════════════════════════
+      // v15.99 — #15 Recete ic tutarliligi (29 Nis 2026 saha vakasi)
+      // ═══════════════════════════════════════════════════════════════════
+      // Saha vakasi: S26A_03146 receteSinde mamul_kod = "Ø48,3X2,5MM - 1450 MM"
+      // ama YariMamul satirinda malkod = "Ø48,3X2,5MM - 1450MM" (boslukSiz).
+      // Kesim algoritmasi YM'leri grouplandirinca format farki nedeniyle IE-04 plansiz kaldi.
+      // Bu kontrol gelecekte ayni el kaymasini sentinel olarak yakalar.
+      const receteTutarsizliklari: Array<{ receteId: string; mamulKod: string; satirMalkod: string; tip: 'BOSLUK_FARKI' | 'TAMAMEN_FARKLI' }> = []
+      const norm = (s: string) => (s || '').replace(/\s+/g, '').toLowerCase()
+      for (const r of recipes as any[]) {
+        const receteMamulKod = (r.mamulKod || '').trim()
+        if (!receteMamulKod) continue
+        // YariMamul satirlarinin kirno=1 olanini ana mamul satiri olarak al
+        for (const s of (r.satirlar || [])) {
+          if (!s.tip) continue
+          const tipLower = String(s.tip).toLowerCase()
+          if (tipLower !== 'yarimamul' && tipLower !== 'yari_mamul' && tipLower !== 'mamul') continue
+          if (s.kirno !== '1') continue  // sadece ana mamul satiri
+          const satirMalkod = (s.malkod || '').trim()
+          if (!satirMalkod) continue
+          if (satirMalkod === receteMamulKod) continue  // OK
+          // Boşluk veya case farkı sadece mı, yoksa tamamen farklı mı?
+          if (norm(satirMalkod) === norm(receteMamulKod)) {
+            receteTutarsizliklari.push({
+              receteId: r.id,
+              mamulKod: receteMamulKod,
+              satirMalkod: satirMalkod,
+              tip: 'BOSLUK_FARKI',
+            })
+          } else {
+            // Tamamen farkliysa daha az ciddi (yan urun reçetesi olabilir)
+            receteTutarsizliklari.push({
+              receteId: r.id,
+              mamulKod: receteMamulKod,
+              satirMalkod: satirMalkod,
+              tip: 'TAMAMEN_FARKLI',
+            })
+          }
+        }
+      }
+      const boslukFarklilari = receteTutarsizliklari.filter(t => t.tip === 'BOSLUK_FARKI')
+      const tamamenFarklilari = receteTutarsizliklari.filter(t => t.tip === 'TAMAMEN_FARKLI')
+      const r15Sorun: string[] = []
+      if (boslukFarklilari.length) r15Sorun.push(`${boslukFarklilari.length} reçetede boşluk/case farkı`)
+      if (tamamenFarklilari.length) r15Sorun.push(`${tamamenFarklilari.length} reçetede tamamen farklı malkod`)
+
+      kontroller.push({
+        no: 15, ad: 'Reçete iç tutarlılığı (mamul_kod vs YarıMamul.malkod)',
+        durum: boslukFarklilari.length ? 'fail' : (tamamenFarklilari.length ? 'warn' : 'pass'),
+        mesaj: r15Sorun.length
+          ? r15Sorun.join(' · ')
+          : `${recipes.length} reçetede mamul_kod ile YarıMamul satırı uyumlu`,
+        neden: r15Sorun.length
+          ? 'Reçete oluştururken (Mavvo veya manuel) mamul_kod alanı ile iç YarıMamul satırının malkod alanına farklı format yazıldı. Kesim algoritması YM gruplaması yapamaz, İE plansız kalır (29 Nis 2026 IE-S26A_03146-04 vakası).'
+          : undefined,
+        aksiyon: r15Sorun.length
+          ? 'Boşluk farkı için: UPDATE uys_recipes SET satirlar=jsonb_set(satirlar,\'{0,malkod}\',\'"<dogru-malkod>"\') WHERE id=\'<recete_id>\'. Sonra IE\'lerin malkod\'larini da düzelt: UPDATE uys_work_orders SET malkod=<dogru> WHERE rc_id=<recete_id>.'
+          : undefined,
+        detay: r15Sorun.length ? {
+          boslukFarklilari: boslukFarklilari.slice(0, 10),
+          tamamenFarklilari: tamamenFarklilari.slice(0, 10),
+        } : undefined,
+      })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
       console.error(e)
@@ -781,7 +845,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.89', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.99', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')
