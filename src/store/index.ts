@@ -6,7 +6,7 @@ import type {
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem,
-  AcikBar, PendingFlow, TestRun
+  AcikBar, PendingFlow, TestRun, Bildirim
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -236,6 +236,21 @@ const M = {
     temizlenenKayitSayisi: (r.temizlenen_kayit_sayisi || {}) as TestRun['temizlenenKayitSayisi'],
     not: (r.not_ || '') as string,
   }),
+  // v15.90 — Madde 15 P1: Bildirim merkezi
+  bildirim: (r: Record<string, unknown>): Bildirim => ({
+    id: r.id as string,
+    tip: (r.tip || 'sari') as Bildirim['tip'],
+    kategori: (r.kategori || '') as string,
+    baslik: (r.baslik || '') as string,
+    mesaj: (r.mesaj || '') as string,
+    hedefKullaniciId: (r.hedef_kullanici_id || '') as string,
+    refId: (r.ref_id || '') as string,
+    refTip: (r.ref_tip || '') as string,
+    okundu: !!r.okundu,
+    okunduTarih: (r.okundu_tarih || '') as string,
+    olusturma: (r.olusturma || '') as string,
+    olusturan: (r.olusturan || '') as string,
+  }),
 }
 
 interface UYSStore {
@@ -251,6 +266,7 @@ interface UYSStore {
   acikBarlar: AcikBar[]
   pendingFlows: PendingFlow[]   // v15.36
   testRuns: TestRun[]             // v15.37
+  bildirimler: Bildirim[]         // v15.90 — Madde 15 P1
   loading: boolean; synced: boolean
   yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
@@ -288,6 +304,7 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
   { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
   { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
+  { key: 'bildirimler', table: 'uys_bildirimler', mapper: M.bildirim },   // v15.90 — Madde 15 P1
 ]
 
 // Tablo adı → TABLE_MAP entry lookup (realtime için)
@@ -302,6 +319,7 @@ export const useStore = create<UYSStore>((set) => ({
   acikBarlar: [],
   pendingFlows: [],
   testRuns: [],
+  bildirimler: [],   // v15.90 — Madde 15 P1
   loading: true, synced: false, yetkiMap: null,
 
   loadAll: async () => {

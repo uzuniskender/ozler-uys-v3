@@ -841,6 +841,7 @@ export function DataManagement() {
     { label: 'Açık Bar Havuzu', key: 'acikBarlar', table: 'uys_acik_barlar' },
     { label: 'Yarım İşler', key: 'pendingFlows', table: 'uys_pending_flows' },
     { label: 'Test Run\'ları', key: 'testRuns', table: 'uys_test_runs' },
+    { label: 'Bildirimler', key: 'bildirimler', table: 'uys_bildirimler' },   // v15.90 — Madde 15 P1
     { label: 'Tedarikçiler', key: 'tedarikciler', table: 'uys_tedarikciler' },
     { label: 'Duruş Kodları', key: 'durusKodlari', table: 'uys_durus_kodlari' },
     { label: 'Müşteriler', key: 'customers', table: 'uys_customers' },

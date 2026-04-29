@@ -38,6 +38,7 @@ const STORE_WHITELIST = new Set([
   'uys_yedekler',         // v15.53 — Tip D, büyük JSONB blob (1MB+), frontend store'a girmez; backup.ts kendi fetch ediyor.
   'uys_sevk_satirlari',   // v15.54 GEÇİCİ — Faz 1'de tablo eklendi, Faz 2'de store mapper'a taşınınca BU SATIRI SİL
   'uys_activity_log',     // v15.75 — Tip C, log tablosu (binlerce kayıt). Frontend store'a yüklenmez; Logs.tsx getDbActivityLog ile filtreli sorgular.
+  'uys_manuel_mudahale_log', // v15.90 — Madde 15 P1 audit log. Tip C (büyük log). Frontend state'e yüklenmez; tikalannca filtreli sorgu (UI Faz 2'de gelecek).
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -49,6 +50,7 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_yedekler',                  // v15.53 — backup tablosunun kendisi yedeklenmez (recursion engellenir)
   'uys_sevk_satirlari',            // v15.54 GEÇİCİ — Faz 2'de DataManagement'a + backup.ts BACKUP_TABLES'a eklenecek; o zaman BU SATIRI SİL
   'uys_activity_log',              // v15.75 — Tip C, log tablosu. Backup'a girmez (kalıcı/bağımsız). Restore log temizlemesi yanlış olur.
+  'uys_manuel_mudahale_log',       // v15.90 — Madde 15 P1 audit log. Backup'a girmez (audit kayıtları silinemez/restore edilemez prensibi).
 ])
 
 // ═══════════════════════════════════════════════════════════════

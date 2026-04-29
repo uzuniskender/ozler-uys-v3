@@ -473,3 +473,19 @@ export interface TestRun {
   temizlenenKayitSayisi: Record<string, number>
   not: string
 }
+
+// v15.90 — Madde 15 P1: Bildirim merkezi
+export interface Bildirim {
+  id: string
+  tip: 'sari' | 'kirmizi'
+  kategori: string
+  baslik: string
+  mesaj: string
+  hedefKullaniciId: string
+  refId: string
+  refTip: string
+  okundu: boolean
+  okunduTarih: string
+  olusturma: string
+  olusturan: string
+}
