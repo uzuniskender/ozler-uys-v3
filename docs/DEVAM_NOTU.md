@@ -91,6 +91,32 @@ Saha durum: 12 PASS · 2 WARN · 0 FAIL. WARN'lar saha aksiyon (kod sorunu deği
 
 ## YARIN İÇİN ÖNCELİKLER
 
+### ⚠️ KRİTİK — Yarın ilk iş
+**42 reçetede yuvarlama hatası kaldı** (gizli mayın). Belirti: hedef adedi yuvarlama hatasıyla eşleştiğinde "stok yetersiz" hatası → üretim engelleniyor. Saha vakası: IE-S26A_02808-01 (PROFIL 40x40x2.5 790mm, 700 hedef) bu yüzden başlamadı.
+
+Reçete listesi (29 Nis akşamı):
+- 1/6  (~0.1667 yuvarlanmış) — 13 reçete
+- 1/7  (~0.1429) — 7 reçete
+- 1/9  (~0.1111) — 6 reçete
+- 1/11 (~0.0909) — 4 reçete
+- 1/12 (~0.0833) — 11 reçete (`000zcxdee609`'da 2 satır)
+- 1/13 (~0.0769) — 3 reçete
+
+**Düzeltilen:** `mojob65vtlv7ib` (yarın yeniden kontrol etmeye gerek yok)
+
+**Yarın çözüm yolu:** Supabase Studio multi-statement çalıştırmadı (bilinen sorun, 5 farklı SQL strateji denendi başarısız). Yapılacak:
+- Node script (`scripts/fix-rounding.cjs`) — Supabase JS client ile her UPDATE ayrı request
+- veya `psql` CLI üzerinden direkt migration
+
+**Sentinel:** Yarın v15.99 Kontrol #15'e benzer bir kontrol eklenecek (ya `cuttingPlan.ts`'de tolerans ya da `canProduceWO` toleransı). Kullanılan SQL pattern (1/N tarama):
+```sql
+SELECT r.id, r.mamul_kod, s.value->>'miktar'
+FROM uys_recipes r, jsonb_array_elements(r.satirlar) s
+WHERE s.value->>'tip' = 'Hammadde'
+  AND ABS((s.value->>'miktar')::numeric - 1.0/N) < 0.001
+  AND (s.value->>'miktar')::numeric <> 1.0/N;
+```
+
 ### Hemen
 - **Sahada Madde 15 testi:** Mamul üret, depodan çıkış yap, manuel müdahale yap, bildirim gör
 - **MRP rozetleri kontrolü:** 🟢🟡🔴 sayaçlar gerçek siparişlerle doğru görünüyor mu
