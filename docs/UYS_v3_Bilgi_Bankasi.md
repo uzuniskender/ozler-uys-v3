@@ -2145,3 +2145,67 @@ v15.89 ile **3 yeni kontrol** eklendi (toplam 14):
 ---
 
 *Bu §26 oturumu 29 Nis 2026 akşamı (~17:00) tamamlandı. Madde 15 sahada, 15 sürüm tek günde rekor. Yarın yeni Claude oturumunun §26'yı + DEVAM_NOTU'yu okuması yeterli — chat aramaya gerek yok.*
+
+---
+
+## §26.8 — 29 Nis Akşam Eklemeleri (v15.97-v15.99)
+
+### v15.97 — Doc Kalıcı Kayıt
+DEVAM_NOTU + §26 + Backlog Master güncellendi. Yarınki yeni Claude oturumunun açılış kapısı.
+
+### v15.98 — Bulk Import Çoklu Kalem
+**Saha vakası:** S26A_03146 (MV GRUP, 5 Mayıs termin, 14 ürün kalemi) Excel ile yüklenirken "Excel içinde tekrar eden sipariş no" hatası.
+
+**Bug:** `BulkOrderImportModal` (Orders.tsx satır 1345) `excelSipNoSeen` set'iyle aynı `siparis_no`'lu satırları reddediyordu. Plus execute aşamasında her satır için ayrı `uys_orders.insert` atılıyordu — v15.91 UNIQUE constraint nedeniyle de patlardı.
+
+**Fix:** Parse'da duplicate kontrolü kaldırıldı. Execute'ta `siparis_no`'ya göre Map gruplaması:
+- 1 grup = 1 `uys_orders.insert` (urunler[] çoklu kalem)
+- Her kalem için `buildWorkOrders` (siraBaslangic offset, v15.87 idempotency korur)
+
+**Sonuç:** S26A_03146 → 1 sipariş + 14 kalem + 14 İE.
+
+### v15.99 — Reçete İç Tutarlılığı (#15 Sentinel)
+**Saha vakası (29 Nis ~17:00):** IE-S26A_03146-04 plansız kaldı.
+
+**Tanı:** Reçete (id=mojyurpq7b6xwz):
+- `mamul_kod` = "Ø48,3X2,5MM - 1450 MM" (boşluklu, Excel ile eşleşen)
+- İç YarıMamul satır `malkod` = "Ø48,3X2,5MM - 1450MM" (**boşluksuz**)
+
+`buildWorkOrders` İE'nin `malkod`'unu reçete YarıMamul satırından kopyalıyor → İE'de "1450MM" (boşluksuz). Kesim algoritması ham malzemeden kesilen YM'leri **boyut bazında gruplandırırken** format farkı nedeniyle IE-04'ü atladı.
+
+**Tek seferlik el kayması:** Tüm reçetelerde tarama yapıldı (B sorgusu) → **0 başka vaka**.
+
+**Veri fix:**
+```sql
+UPDATE uys_recipes SET satirlar=jsonb_set(satirlar,'{0,malkod}','"Ø48,3X2,5MM - 1450 MM"')
+WHERE id='mojyurpq7b6xwz';
+UPDATE uys_work_orders SET malkod='Ø48,3X2,5MM - 1450 MM'
+WHERE ie_no='IE-S26A_03146-04';
+```
+Sonra Otomatik Plan tekrar → IE-04 plana girdi.
+
+**Sentinel (v15.99):** Sağlık raporu Kontrol #15 eklendi.
+- Tüm reçetelerin `mamul_kod` ile `kirno=1` YarıMamul satır `malkod`'u karşılaştırılır
+- BOŞLUK_FARKI → FAIL (auto-fix mümkün)
+- TAMAMEN_FARKLI → WARN (manuel inceleme — yan ürün reçetesi olabilir)
+
+### v15.97-v15.99 Mimari Karar — "Sentinel İlkesi"
+
+29 Nis günü 5 saha bug'ı ortaya çıktı (v15.85, v15.86, v15.87, v15.91, v15.99). Hepsinin çözümünde aynı patern:
+
+1. **Reaktif fix** — Bug'ı düzelt
+2. **Veri temizliği** — Mevcut bozuk kayıtları SQL ile düzelt
+3. **Sentinel kontrolü** — Sağlık raporuna kontrol ekle (ileride aynı el kayması 5 dk'da yakalanır)
+
+Bu prensipte:
+- v15.85 → v15.89 #11 (Bar Model) sentinel
+- v15.86 → v15.89 #14 (ie_no format) sentinel
+- v15.87 → v15.89 #13 (sira unique) sentinel
+- v15.91 → v15.91 DB UNIQUE constraint (DB sentinel)
+- v15.99 → v15.99 #15 (reçete iç tutarlılık) sentinel
+
+**Toplam sağlık kontrolü: 15** (4'ü 29 Nis günü eklendi).
+
+---
+
+*Bu §26.8 ek bölümü 29 Nis 2026 ~17:00'da eklendi. Bugünün toplam push'u 18 sürüme ulaştı (v15.82 → v15.99).*

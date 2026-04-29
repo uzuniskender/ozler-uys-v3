@@ -1,8 +1,8 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
-**Tarih:** 29 Nisan 2026 akşam (oturum kapanışı)
-**Son canlı sürüm:** v15.96
-**Bugün push edilen:** 15 sürüm (v15.82 → v15.96) — **Madde 15 tam tur tamamlandı**
+**Tarih:** 29 Nisan 2026 akşam (oturum kapanışı, ~17:00)
+**Son canlı sürüm:** v15.99
+**Bugün push edilen:** **18 sürüm** (v15.82 → v15.99) — Madde 15 tam tur + bulk import çoklu kalem + reçete iç tutarlılığı sentinel
 
 ---
 
@@ -43,6 +43,9 @@ oku.
 | 13 | v15.94 | Audit senkronizasyonu (bildirimler store'a, mudahale log whitelist'e) |
 | 14 | v15.95 | **Madde 15 P3**: Hammadde FIFO termin tahsisi + MRP rozetleri |
 | 15 | v15.96 | **Madde 15 P4**: Bildirim merkezi (Topbar Bell + dropdown + MRP eksik üreticisi) |
+| 16 | v15.97 | Doc kalıcı kayıt (DEVAM_NOTU + Bilgi Bankası §26 + Backlog Madde 15 ✅) |
+| 17 | v15.98 | Bulk import çoklu kalem desteği (siparis_no'ya göre grupla) |
+| 18 | v15.99 | Sağlık raporu Kontrol #15 — Reçete iç tutarlılığı sentinel (29 Nis IE-04 saha vakası) |
 
 ---
 
@@ -137,4 +140,18 @@ Bugün ev makinesi (`iskender.uzun` profile) ana kullanım. NB081'de Node yok, G
 
 Yarın yeni Claude oturumunda chat aramaya **gerek yok**.
 
-İyi akşamlar Buket. 🌙 — 15 sürüm tek günde rekor. Madde 15 sahada.
+İyi akşamlar Buket. 🌙 — **18 sürüm tek günde rekor.** Madde 15 sahada + bulk import düzeldi + reçete sentinel eklendi.
+
+---
+
+## SON SAATTE EK ÇIKTILAR (29 Nis 17:00 ~)
+
+**v15.97 — Doc kalıcı kayıt:** Bu DEVAM_NOTU + §26 Bilgi Bankası + Backlog güncel.
+
+**v15.98 — Bulk import bugfix:** S26A_03146 14 kalemli sipariş Excel ile yüklendi. Eski kod "tekrar eden siparis_no" hata veriyordu, şimdi `siparis_no`'ya göre gruplanıyor. Önizlemede "📦 N sipariş (M kalem)" rozet eklendi.
+
+**v15.99 — Reçete iç tutarlılığı:** Saha vakası — IE-S26A_03146-04 plansız kaldı çünkü reçetenin `mamul_kod`'u "1450 MM" (boşluklu), iç YarıMamul satırının `malkod`'u "1450MM" (boşluksuz). Tek seferlik el kayması. Manuel SQL ile düzeltildi. Sağlık raporu **Kontrol #15** eklendi → gelecekte aynı el kayması 5 dakikada yakalanır.
+
+**Saha gerçek WARN'lar (kod değil):**
+- BORU Ø48,3x3 5500mm — net 154 adet, termin 5 Mayıs (tedarik açılmalı)
+- S26A_02808 + S26A_03146 mrp_durum bayat (Hesapla çalıştırılırsa düzelir, 30 sn iş)
