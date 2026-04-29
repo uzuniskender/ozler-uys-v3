@@ -366,6 +366,10 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
         id: uid(), tarih, malkod: w.malkod, malad: w.malad,
         miktar: q, tip: 'giris', log_id: logId, wo_id: woId,
         aciklama: 'Üretim — ' + w.ieNo,
+        // v15.92 — Madde 15 P2: rezerv_order_id propagation
+        // Eğer İE bir siparişe bağlıysa, üretilen mamul O sipariş için rezervdir.
+        // Tekil İE / manuel İE'de orderId NULL -> serbest stok olur.
+        rezerv_order_id: w.orderId || null,
       })
     }
 
@@ -655,6 +659,8 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
           id: uid(), tarih, malkod: wo.malkod, malad: wo.malad,
           miktar: q, tip: 'giris', log_id: logId, wo_id: r.woId,
           aciklama: 'Toplu üretim — ' + wo.ieNo,
+          // v15.92 — Madde 15 P2: rezerv_order_id propagation
+          rezerv_order_id: wo.orderId || null,
         })
       }
 

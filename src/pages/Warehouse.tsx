@@ -9,13 +9,17 @@ import { Search, Download, Plus, Upload } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/production/barModel'
+// v15.92 — Madde 15 P2: Mamul cikis 2-asama modal
+import { MamulCikisModal } from '@/components/MamulCikisModal'
 
 export function Warehouse() {
-  const { stokHareketler, materials, acikBarlar, loadAll } = useStore()
+  const { stokHareketler, materials, acikBarlar, orders, loadAll } = useStore()
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
   const [showGiris, setShowGiris] = useState(false)
+  // v15.92 — mamul cikis modal state (2-asama akisi)
+  const [cikisMalkod, setCikisMalkod] = useState<{ malkod: string; malad: string } | null>(null)
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [detayHam, setDetayHam] = useState<string | null>(null)  // v15.34 — açık bar detay modal
 
@@ -158,11 +162,13 @@ export function Warehouse() {
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
         {tab === 'stok' && (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th></tr></thead>
+            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th><th className="text-right px-3 py-2.5">Aksiyon</th></tr></thead>
             <tbody>
               {filteredStok.map(s => {
                 const mat = materials.find(m => m.kod === s.malkod)
                 const minStokAlt = mat?.minStok && s.miktar < mat.minStok
+                // v15.92 — Mamul tespiti: tip kontrolu (Mamul, Yari Mamul, mamul)
+                const isMamul = mat && (mat.tip === 'Mamul' || mat.tip === 'mamul' || mat.tip === 'YariMamul' || mat.tip === 'yari_mamul')
                 return (
                 <tr key={s.malkod} className={`border-b border-border/30 hover:bg-bg-3/30 ${minStokAlt ? 'bg-red/5' : ''}`}>
                   <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
@@ -171,6 +177,17 @@ export function Warehouse() {
                   <td className={`px-4 py-1.5 text-right font-mono font-semibold ${s.miktar < 0 ? 'text-red' : minStokAlt ? 'text-amber' : 'text-green'}`}>{Math.round(s.miktar)}</td>
                   <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{mat?.birim || 'Ad'}</td>
                   <td className="px-3 py-1.5 text-right font-mono text-zinc-600 text-[10px]">{mat?.minStok || '—'}</td>
+                  <td className="px-3 py-1.5 text-right">
+                    {isMamul && s.miktar > 0 && can('stok_cikis') && (
+                      <button
+                        onClick={() => setCikisMalkod({ malkod: s.malkod, malad: s.malad })}
+                        className="px-2 py-0.5 bg-amber/10 border border-amber/30 text-amber rounded text-[10px] hover:bg-amber/20"
+                        title="Mamul cikis (rezerv kontrol)"
+                      >
+                        📤 Çıkış
+                      </button>
+                    )}
+                  </td>
                 </tr>)
               })}
             </tbody>
@@ -505,6 +522,21 @@ export function Warehouse() {
           materials={materials}
           onClose={() => setShowGiris(false)}
           onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }}
+        />
+      )}
+
+      {/* v15.92 — Madde 15 P2: Mamul cikis 2-asama modal (rezerv kontrol) */}
+      {cikisMalkod && (
+        <MamulCikisModal
+          malkod={cikisMalkod.malkod}
+          malad={cikisMalkod.malad}
+          hareketler={stokHareketler}
+          orders={orders.map(o => ({ id: o.id, siparisNo: o.siparisNo, musteri: o.musteri, termin: o.termin })) as any}
+          canManuelMudahale={can('manuel_mudahale_yap')}
+          currentUserId={user?.dbId || user?.email || user?.username || ''}
+          currentUserAd={user?.username || ''}
+          onClose={() => setCikisMalkod(null)}
+          onSaved={() => { setCikisMalkod(null); loadAll(); toast.success('Mamul cikis kaydedildi') }}
         />
       )}
     </div>

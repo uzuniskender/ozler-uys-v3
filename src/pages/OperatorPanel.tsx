@@ -864,6 +864,8 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
           tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
           tarih, log_id: editLogId, wo_id: woId,
+          // v15.92 — Madde 15 P2: rezerv_order_id propagation
+          rezerv_order_id: w.orderId || null,
         })
       }
       // HM tüketim — sağlam + fire = toplam harcanan
@@ -911,6 +913,8 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
           id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
           tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
           tarih, log_id: logId, wo_id: woId,
+          // v15.92 — Madde 15 P2: rezerv_order_id propagation
+          rezerv_order_id: w.orderId || null,
         })
       }
       // HM tüketim — sağlam + fire = toplam harcanan
