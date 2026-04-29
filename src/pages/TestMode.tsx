@@ -13,7 +13,7 @@ import {
   startTestRun, finishTestRun, cancelTestRun,
   getActiveTestRunId, cascadeDeleteTestRun,
 } from '@/lib/testRun'
-import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, senaryo11, senaryo12, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
+import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, senaryo11, senaryo12, senaryo13, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
 
 export function TestMode() {
   const { testRuns, recipes, loadAll } = useStore()
@@ -135,9 +135,9 @@ export function TestMode() {
   }
 
   // v15.81 — Senaryo 12 (saha bug fix kanıtı: tamamlanmış WO ihtiyaç üretmemeli)
-  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
+  async function senaryoCalistir(num: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
-    const receteGerekli = num === 1 || num === 2 || num === 3 || num === 4 || num === 5 || num === 8 || num === 10 || num === 12
+    const receteGerekli = num === 1 || num === 2 || num === 3 || num === 4 || num === 5 || num === 8 || num === 10 || num === 12 || num === 13
     if (receteGerekli && !recipeKod.trim()) { toast.error('Reçete kodu gir'); return }
     setCalisan(`Senaryo ${num}`)
     setCanliLog([])
@@ -154,7 +154,8 @@ export function TestMode() {
       num === 9 ? senaryo9 :
       num === 10 ? senaryo10 :
       num === 11 ? senaryo11 :
-      senaryo12
+      num === 12 ? senaryo12 :
+      senaryo13
     try {
       const rapor = await fn({
         recipeKod: recipeKod.trim() || 'N/A',
@@ -198,13 +199,13 @@ export function TestMode() {
   // v15.81 — 12 senaryoyu ardışık çalıştır
   async function tumSenaryolarCalistir() {
     if (!aktifTestId) { toast.error('Önce test modunu başlat'); return }
-    if (!recipeKod.trim()) { toast.error('Reçete kodu gir (Senaryo 1-5, 8, 10, 12 için gerekli)'); return }
+    if (!recipeKod.trim()) { toast.error('Reçete kodu gir (Senaryo 1-5, 8, 10, 12, 13 için gerekli)'); return }
 
     const tumRaporlar: SenaryoRapor[] = []
     setCanliLog([])
     setSonRapor(null)
 
-    for (const num of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const) {
+    for (const num of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const) {
       setCalisan(`Senaryo ${num}`)
       const fn =
         num === 1 ? senaryo1 :
@@ -218,7 +219,8 @@ export function TestMode() {
         num === 9 ? senaryo9 :
         num === 10 ? senaryo10 :
         num === 11 ? senaryo11 :
-        senaryo12
+        num === 12 ? senaryo12 :
+        senaryo13
       try {
         const rapor = await fn({
           recipeKod: recipeKod.trim() || 'N/A',
@@ -229,7 +231,7 @@ export function TestMode() {
         setSonRapor(rapor)
         await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
         await loadAll()
-        if (num < 12) await new Promise(r => setTimeout(r, 500))
+        if (num < 13) await new Promise(r => setTimeout(r, 500))
       } catch (e: any) {
         toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)
         console.error('[senaryo]', e)
@@ -255,7 +257,7 @@ export function TestMode() {
     a.click()
     URL.revokeObjectURL(url)
 
-    toast.success(`12 senaryo tamamlandı — ${tumRapor.genelDurum === 'ALL_PASS' ? 'TÜMÜ PASS' : 'KARIŞIK'}`, { duration: 10000 })
+    toast.success(`13 senaryo tamamlandı — ${tumRapor.genelDurum === 'ALL_PASS' ? 'TÜMÜ PASS' : 'KARIŞIK'}`, { duration: 10000 })
   }
 
   function raporIndir() {
@@ -314,15 +316,15 @@ export function TestMode() {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => (
               <button
                 key={n}
-                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)}
+                onClick={() => senaryoCalistir(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13)}
                 disabled={!!calisan || loading}
                 className={
                   n === 6
                     ? "px-3 py-2 bg-red/10 hover:bg-red/20 border border-red/30 text-red rounded text-[11px] font-semibold text-left"
-                    : (n === 7 || n === 9 || n === 11)
+                    : (n === 7 || n === 9 || n === 11 || n === 13)
                     ? "px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded text-[11px] font-semibold text-left"
                     : (n === 8 || n === 12)
                     ? "px-3 py-2 bg-amber/10 hover:bg-amber/20 border border-amber/30 text-amber rounded text-[11px] font-semibold text-left"
@@ -333,7 +335,7 @@ export function TestMode() {
               >
                 {calisan === `Senaryo ${n}` ? '⏳ ' :
                   n === 6 ? '⛔ ' :
-                  (n === 7 || n === 9 || n === 11) ? '🧪 ' :
+                  (n === 7 || n === 9 || n === 11 || n === 13) ? '🧪 ' :
                   (n === 8 || n === 12) ? '🔥 ' :
                   n === 10 ? '🛠 ' :
                   '🤖 '}
@@ -349,7 +351,8 @@ export function TestMode() {
                   n === 9 ? 'Loglar Sayfası DB Akışı (v15.75)' :
                   n === 10 ? 'Manuel İE MRP Görünürlüğü (v15.78)' :
                   n === 11 ? 'Efektif Durum (v15.79) — saf fonk.' :
-                  'Tamamlanmış WO ihtiyaç (v15.81 saha fix)'
+                  n === 12 ? 'Tamamlanmış WO ihtiyaç (v15.81 saha fix)' :
+                  'Kesim Onay Modali (v15.83 — autoZincir+onKesimFark)'
                 }
               </button>
             ))}

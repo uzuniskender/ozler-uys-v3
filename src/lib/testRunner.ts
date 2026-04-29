@@ -9,7 +9,7 @@
 import { supabase } from './supabase'
 import { uid, today } from './utils'
 import { getActiveTestRunId, tempSetActiveTestRunId, cascadeDeleteTestRun, newTestRunId } from './testRun'
-import { buildWorkOrders } from '@/features/production/autoChain'
+import { buildWorkOrders, autoZincir, type KesimFarkItem } from '@/features/production/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cutting'
 import { hesaplaMRP, rezerveYaz, siparisDelta } from '@/features/production/mrp'
 import { markTedarikGeldi } from './tedarikHelpers'
@@ -1936,5 +1936,220 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
     }, ctx)
 
     return finalize(state, 'Senaryo 12: Tamamlanmış İE hammadde ihtiyacı (v15.81 saha fix)', t0)
+  })
+}
+
+// v15.83 — Senaryo 13: Kesim Plani Onayi Modali (autoZincir + onKesimFark callback)
+// Faz 1 MVP: kabul ve iptal yollari iki ayri sub-test halinde test edilir.
+// Modal UI'da gosterilmez — onKesimFark callback'i kod tarafindan otomatik resolve edilir.
+export async function senaryo13(ctx: RunnerContext): Promise<SenaryoRapor> {
+  const parentId = getActiveTestRunId() || ''
+  if (!parentId) throw new Error('Test modu aktif değil')
+
+  return runWithIsolation(parentId, 'S13', async (state, t0) => {
+    // Test reçetesinin kesim opsiyonu (op_id var) içermesi gerekiyor — kesim planı oluşamazsa
+    // bar çıkışı = 0 olur ve modal items dizisi boş döner. Bu durumda Adım 2 SKIP edilmeli.
+    const store = useStore.getState()
+    const rc = store.recipes.find(r => r.mamulKod === ctx.recipeKod || r.id === ctx.recipeKod)
+    if (!rc) throw new Error(`Reçete bulunamadı: ${ctx.recipeKod}`)
+    const kesimOpVar = (rc.satirlar || []).some(s => !!s.opId)
+
+    // ═══ KABUL YOLU ═══
+    let kabulOrderId = ''
+    let kabulItems: KesimFarkItem[] = []
+    let kabulSonuc: any = null
+
+    await adim(state, '1. Sipariş #1 oluştur (kabul yolu)', async () => {
+      kabulOrderId = await _createOrder(state, ctx, 'S13a')
+      return { orderId: kabulOrderId, ieCount: state.ieIds.length }
+    }, ctx)
+
+    if (!kesimOpVar) {
+      adimSkip(state, '2. autoZincir + onKesimFark=kabul', 'Reçetede kesim opsiyonu (opId) yok — modal tetiklenmez', ctx)
+      adimSkip(state, '3. Doğrulama (kabul)', 'Adım 2 SKIP', ctx)
+      adimSkip(state, '4. Sipariş #2 oluştur (iptal yolu)', 'Adım 2 SKIP', ctx)
+      adimSkip(state, '5. autoZincir + onKesimFark=iptal', 'Adım 2 SKIP', ctx)
+      adimSkip(state, '6. Doğrulama (iptal)', 'Adım 2 SKIP', ctx)
+      return finalize(state, 'Senaryo 13: Kesim Plani Onayi Modali (v15.83 — onKesimFark)', t0)
+    }
+
+    await wait(200)
+    await adim(state, '2. autoZincir + onKesimFark=kabul', async () => {
+      const s = useStore.getState()
+      const fresh = s.workOrders.filter(w => w.orderId === kabulOrderId)
+      const woCount = fresh.length
+
+      const cpMapped = s.cuttingPlans.map((p: any) => ({
+        id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy,
+        hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '',
+        tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0,
+      }))
+
+      kabulSonuc = await autoZincir(
+        kabulOrderId, woCount,
+        s.orders as any, s.workOrders, s.recipes, s.operations as any,
+        s.materials, s.stokHareketler, s.tedarikler,
+        s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
+        cpMapped,
+        'test_runner',
+        undefined, // onProgress yok (canlı log zaten test runner'da)
+        async (items) => {
+          // Items'i adim deli olarak kaydet
+          kabulItems = items.map(i => ({ ...i }))
+          return 'kabul'
+        }
+      )
+
+      return {
+        woCount: kabulSonuc.woCount,
+        kesimCount: kabulSonuc.kesimCount,
+        mrpCount: kabulSonuc.mrpCount,
+        tedCount: kabulSonuc.tedCount,
+        modalItemSayisi: kabulItems.length,
+        modalItems: kabulItems.map(i => ({
+          ieNo: i.ieNo, mamulAd: i.mamulAd,
+          siparisAdeti: i.siparisAdeti, barCikisi: i.barCikisi, fark: i.fark,
+        })),
+      }
+    }, ctx)
+
+    await wait(200)
+    await adim(state, '3. Doğrulama (kabul) — IE.hedef = barCikisi mi?', async () => {
+      if (kabulItems.length === 0) {
+        // Kesim planı oluşmadı (örn. kesim opsiyonu sadece op_id var ama plan satır üretmedi)
+        return { mesaj: 'Modal items boş — kesim planı bar çıkışı üretmedi', uyari: true }
+      }
+
+      // DB'den taze WO'ları al, hedef değerlerini kontrol et
+      const { data: dbWOs, error } = await supabase
+        .from('uys_work_orders')
+        .select('id, ie_no, hedef')
+        .eq('order_id', kabulOrderId)
+      if (error) throw new Error('WO fetch: ' + error.message)
+
+      const farkliItems = kabulItems.filter(i => i.fark !== 0)
+      const guncellenenler: any[] = []
+      const sorunlular: any[] = []
+
+      for (const item of farkliItems) {
+        const dbWO = dbWOs?.find(w => w.id === item.woId)
+        if (!dbWO) { sorunlular.push({ ieNo: item.ieNo, sebep: 'DB\'de bulunamadı' }); continue }
+        if (dbWO.hedef === item.barCikisi) {
+          guncellenenler.push({ ieNo: item.ieNo, eski: item.siparisAdeti, yeni: dbWO.hedef })
+        } else {
+          sorunlular.push({ ieNo: item.ieNo, beklenenHedef: item.barCikisi, dbHedef: dbWO.hedef })
+        }
+      }
+
+      if (sorunlular.length > 0) {
+        throw new Error(`Hedef güncellenmedi: ${sorunlular.length} IE — ${JSON.stringify(sorunlular).slice(0, 200)}`)
+      }
+
+      // mrp_durum kontrol: autoZincir tamam → mrp_durum 'tamam' veya 'eksik' olmalı, 'bekliyor' KALMAMALI
+      const { data: ord } = await supabase.from('uys_orders').select('mrp_durum').eq('id', kabulOrderId).single()
+      if (ord?.mrp_durum === 'bekliyor') {
+        throw new Error('mrp_durum bekliyor kaldı — autoZincir tamamlanmamış')
+      }
+
+      return {
+        guncellenenIE: guncellenenler.length,
+        farkOlmayan: kabulItems.length - farkliItems.length,
+        mrpDurum: ord?.mrp_durum,
+        guncellenenler,
+      }
+    }, ctx)
+
+    // ═══ İPTAL YOLU ═══
+    let iptalOrderId = ''
+    let iptalSonuc: any = null
+    let iptalItemsBeklenen: KesimFarkItem[] = []
+
+    await wait(200)
+    await adim(state, '4. Sipariş #2 oluştur (iptal yolu)', async () => {
+      iptalOrderId = await _createOrder(state, ctx, 'S13b')
+      return { orderId: iptalOrderId }
+    }, ctx)
+
+    await wait(200)
+    await adim(state, '5. autoZincir + onKesimFark=iptal', async () => {
+      const s = useStore.getState()
+      const fresh = s.workOrders.filter(w => w.orderId === iptalOrderId)
+      const woCount = fresh.length
+
+      const cpMapped = s.cuttingPlans.map((p: any) => ({
+        id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy,
+        hamEn: p.hamEn || 0, kesimTip: p.kesimTip || 'boy', durum: p.durum || '',
+        tarih: p.tarih || '', satirlar: p.satirlar || [], gerekliAdet: p.gerekliAdet || 0,
+      }))
+
+      iptalSonuc = await autoZincir(
+        iptalOrderId, woCount,
+        s.orders as any, s.workOrders, s.recipes, s.operations as any,
+        s.materials, s.stokHareketler, s.tedarikler,
+        s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
+        cpMapped,
+        'test_runner',
+        undefined,
+        async (items) => {
+          iptalItemsBeklenen = items.map(i => ({ ...i }))
+          return 'iptal'
+        }
+      )
+
+      // İptal yolunda mrpCount=0, tedCount=0 olmalı
+      if (iptalSonuc.mrpCount !== 0) {
+        throw new Error(`İptal sonrası mrpCount=${iptalSonuc.mrpCount} — sıfır olmalıydı`)
+      }
+      if (iptalSonuc.tedCount !== 0) {
+        throw new Error(`İptal sonrası tedCount=${iptalSonuc.tedCount} — sıfır olmalıydı`)
+      }
+
+      return {
+        woCount: iptalSonuc.woCount,
+        kesimCount: iptalSonuc.kesimCount,
+        mrpCount: iptalSonuc.mrpCount,
+        tedCount: iptalSonuc.tedCount,
+        modalItemSayisi: iptalItemsBeklenen.length,
+        adimUyari: iptalSonuc.adimlar.find((a: string) => a.includes('iptal')) || null,
+      }
+    }, ctx)
+
+    await wait(200)
+    await adim(state, '6. Doğrulama (iptal) — IE.hedef DEĞİŞMEMELİ', async () => {
+      if (iptalItemsBeklenen.length === 0) {
+        return { mesaj: 'Modal items boş — kesim planı bar çıkışı üretmedi', uyari: true }
+      }
+
+      const { data: dbWOs, error } = await supabase
+        .from('uys_work_orders')
+        .select('id, ie_no, hedef')
+        .eq('order_id', iptalOrderId)
+      if (error) throw new Error('WO fetch: ' + error.message)
+
+      const sorunlular: any[] = []
+      for (const item of iptalItemsBeklenen) {
+        const dbWO = dbWOs?.find(w => w.id === item.woId)
+        if (!dbWO) continue
+        // İptal yolunda hedef ORİJİNAL siparis adetinde kalmalı (item.siparisAdeti = update öncesi WO.hedef)
+        if (dbWO.hedef !== item.siparisAdeti) {
+          sorunlular.push({ ieNo: item.ieNo, beklenen: item.siparisAdeti, dbHedef: dbWO.hedef })
+        }
+      }
+
+      if (sorunlular.length > 0) {
+        throw new Error(`İptal'e rağmen hedef değişti: ${JSON.stringify(sorunlular).slice(0, 200)}`)
+      }
+
+      // mrp_durum 'bekliyor' kalmalı (autoZincir mrp adımı çalışmadı)
+      const { data: ord } = await supabase.from('uys_orders').select('mrp_durum').eq('id', iptalOrderId).single()
+
+      return {
+        kontrolEdilen: iptalItemsBeklenen.length,
+        hepsiKorundu: true,
+        mrpDurum: ord?.mrp_durum,
+      }
+    }, ctx)
+
+    return finalize(state, 'Senaryo 13: Kesim Plani Onayi Modali (v15.83 — onKesimFark)', t0)
   })
 }
