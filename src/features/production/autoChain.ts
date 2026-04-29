@@ -8,6 +8,12 @@ import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, type MRPRow } from './mrp'
 import { withTestRunId } from '@/lib/testRun'
 
 // ═══ İE OLUŞTUR — reçeteden iş emirleri ═══
+// v15.87 — Idempotency koruması:
+// `buildWorkOrders` ayni `orderId` icin 2 kez cagrildiginda (autoZincir tekrari,
+// kaydet butonu cifti, 2 kalem ayni recete + caller stale woTotal vs.) DB'deki
+// mevcut en buyuk sira'yi okur ve ondan sonra devam eder. Bu sayede sira numaralari
+// asla duplicate olmaz. Caller'in `siraBaslangic` parametresini kullanmak zorunda
+// degil -- her durumda dogru sonuc.
 export async function buildWorkOrders(
   orderId: string, siparisNo: string, recipeId: string, adet: number, recipes: Recipe[], termin?: string, siraBaslangic?: number
 ): Promise<number> {
@@ -29,8 +35,20 @@ export async function buildWorkOrders(
   const kirnoMap: Record<string, RecipeRow> = {}
   satirlar.forEach(s => { kirnoMap[s.kirno || ''] = s })
 
+  // v15.87 — siraBaslangic safety: caller verdiyse kullan, AMA DB'de daha buyuk
+  // sira varsa onu tercih et. Boylece caller stale state ile gelse bile (realtime
+  // yetismemis, modal cifti, autoZincir tekrari, vb) duplicate sira olmaz.
+  const { data: existingWOs } = await supabase
+    .from('uys_work_orders')
+    .select('sira')
+    .eq('order_id', orderId)
+    .order('sira', { ascending: false })
+    .limit(1)
+  const dbMaxSira = (existingWOs && existingWOs[0]?.sira) || 0
+  const callerSira = siraBaslangic || 0
+  let woIdx = Math.max(callerSira, dbMaxSira)
+
   const workOrders: Record<string, unknown>[] = []
-  let woIdx = siraBaslangic || 0
 
   for (const s of opRows) {
     const parcalar = (s.kirno || '1').split('.')
