@@ -3,6 +3,9 @@ import { uid, today } from '@/lib/utils'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
 import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, type MRPRow } from './mrp'
+// v15.85 — test_run_id propagation: autoZincir snapshot kayitlarinin
+// canli veriye karismasini onler. Etiketsiz kayit cleanup'a takilmazdi.
+import { withTestRunId } from '@/lib/testRun'
 
 // ═══ İE OLUŞTUR — reçeteden iş emirleri ═══
 export async function buildWorkOrders(
@@ -238,7 +241,9 @@ export async function autoZincir(
       net[r.malkod]  = (net[r.malkod]  || 0) + r.net
     }
     try {
-      await supabase.from('uys_mrp_calculations').insert({
+      // v15.85 — withTestRunId ile sar: test moduyken kayit etiketlenir,
+      // canli kullanimda hicbir degisiklik (LS_KEY yokken row degismeden gecer).
+      await supabase.from('uys_mrp_calculations').insert(withTestRunId({
         id: newCalcId,
         order_id: orderId,
         hesaplayan,
@@ -247,7 +252,7 @@ export async function autoZincir(
         acik_tedarik: acik,
         net_ihtiyac: net,
         durum: 'tamamlandi',
-      })
+      }))
       calcId = newCalcId
     } catch (e) {
       // Snapshot insert sessiz başarısız olursa zincir akışı bozulmamalı

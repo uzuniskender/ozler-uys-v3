@@ -82,12 +82,15 @@ export async function startTestRun(params: {
 
 // Cascade delete için tablo listesi — test_run_id kolonu olan tüm tablolar
 // Sıra: bağımlılıklar önce (child → parent değil, delete sırası önemli değil çünkü FK yok)
+// v15.85 — uys_mrp_calculations eklendi: autoZincir snapshot insert burayi etiketsiz
+//          dolduruyordu, dolayisiyla cascade sirasinda goz ardi ediliyordu.
 const TABLE_CASCADE = [
   'uys_logs',               // üretim girişleri
   'uys_stok_hareketler',    // stok hareketleri
   'uys_fire_logs',          // fire kayıtları
   'uys_active_work',        // aktif çalışma
   'uys_mrp_rezerve',        // rezerveler
+  'uys_mrp_calculations',   // v15.85 — MRP snapshot kayıtları (autoZincir + manuel runMRP)
   'uys_tedarikler',         // tedarikler
   'uys_acik_barlar',        // açık bar havuzu
   'uys_sevkler',            // sevkler
@@ -118,6 +121,27 @@ export async function cascadeDeleteTestRun(testRunId: string): Promise<Record<st
   return sayilar
 }
 
+// v15.85 — Dinamik sub-run id taramasi
+// Eski versiyon (v15.37 v2) statik [_s1, _s2, _s3, _s4, _s5] kullanıyordu.
+// Senaryo 6+ eklendikçe bu liste guncellenmedi ve _s6...s13 kalintıları
+// finishTestRun'da gozardi edildi. Bu fonksiyon tum cascade tablolarinda
+// `LIKE parentId%` ile tarayip aktif olan tum sub-run id'leri toplar.
+async function listSubRunIds(parentId: string): Promise<string[]> {
+  const ids = new Set<string>([parentId])
+  for (const tablo of TABLE_CASCADE) {
+    const { data, error } = await supabase
+      .from(tablo)
+      .select('test_run_id')
+      .like('test_run_id', `${parentId}%`)
+    if (error) continue  // tablo yoksa veya kolon yoksa sessiz devam
+    for (const row of (data || [])) {
+      const id = (row as any).test_run_id
+      if (id && typeof id === 'string') ids.add(id)
+    }
+  }
+  return Array.from(ids)
+}
+
 /** Test modu sonlandır — cascade delete + DB kaydı güncelle + localStorage temizle */
 export async function finishTestRun(testRunId: string, opts?: { cleanup?: boolean }): Promise<{
   ok: boolean
@@ -127,10 +151,9 @@ export async function finishTestRun(testRunId: string, opts?: { cleanup?: boolea
 
   let silinen: Record<string, number> = {}
   if (cleanup) {
-    // v15.37 v2: Parent + sub-run'ları (s1, s2, s3, s4, s5) hepsini temizle
-    const tumIds = [testRunId,
-      `${testRunId}_s1`, `${testRunId}_s2`, `${testRunId}_s3`,
-      `${testRunId}_s4`, `${testRunId}_s5`]
+    // v15.85 — Statik s1-s5 listesi yerine cascade tablolari tarayarak
+    // aktif olan TUM sub-run id'leri topla (s6, s7, ..., s13 dahil).
+    const tumIds = await listSubRunIds(testRunId)
     for (const id of tumIds) {
       const part = await cascadeDeleteTestRun(id)
       // Topla
