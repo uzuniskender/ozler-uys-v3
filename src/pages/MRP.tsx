@@ -66,9 +66,14 @@ export function MRP() {
     return orders.filter(o => {
       // Kilitli → arşiv
       if (isOrderArchived(o)) return showTamamlanan
-      // Açık → eksik varsa default'ta görünür, yoksa arşivde (toggle ile gösterilir)
+      // v15.88 — "Bekliyor" durumundaki siparis MRP henuz hesaplanmamis demek;
+      // ihtiyac belli olmadigi icin EKSIK gibi (aktif) gosterilmeli ki kullanici
+      // Hesapla butonuna basabilsin. Eski kod sadece eksikVar bakiyordu, yeni
+      // siparis acilip MRP hesaplanmamissa "0 aktif siparis" goruntusu cikiyordu.
       const eksikVar = orderHasEksik[o.id] ?? false
-      return showTamamlanan ? !eksikVar : eksikVar
+      const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
+      const aktifMi = eksikVar || henuzHesaplanmadi
+      return showTamamlanan ? !aktifMi : aktifMi
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, orderHasEksik, showTamamlanan])
