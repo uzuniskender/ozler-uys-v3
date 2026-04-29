@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
-import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck } from 'lucide-react'
+import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
@@ -15,11 +16,25 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
-  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs } = useStore()
+  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs, bildirimler } = useStore()
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
   const [showFlowModal, setShowFlowModal] = useState(false)
+  // v15.96 — Madde 15 P4: Bildirim merkezi
+  const [showBildirimPanel, setShowBildirimPanel] = useState(false)
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
+
+  // v15.96 — Okunmamis bildirimler (kendi hedef veya herkes hedefli)
+  const myUid = user?.dbId || user?.email || user?.username || ''
+  const okunmamisBildirimler = useMemo(() => {
+    return bildirimler
+      .filter(b => !b.okundu && (!b.hedefKullaniciId || b.hedefKullaniciId === myUid))
+      .sort((a, b) => (b.olusturma || '').localeCompare(a.olusturma || ''))
+  }, [bildirimler, myUid])
+  const bildirimSayisi = okunmamisBildirimler.length
+  const enYuksekTip: 'kirmizi' | 'sari' | null = okunmamisBildirimler.some(b => b.tip === 'kirmizi')
+    ? 'kirmizi'
+    : okunmamisBildirimler.some(b => b.tip === 'sari') ? 'sari' : null
 
   // Chat bildirim sistemi — realtime subscription + unread count (tek yerde çağrılmalı)
   useChatNotifications()
@@ -171,6 +186,29 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
         )}
       </button>
 
+      {/* v15.96 — Madde 15 P4: Bildirim merkezi (Bell icon + dropdown) */}
+      <div className="relative">
+        <button
+          onClick={() => setShowBildirimPanel(p => !p)}
+          className="relative text-zinc-400 hover:text-white transition-colors"
+          title={bildirimSayisi > 0 ? `${bildirimSayisi} okunmamis bildirim` : 'Bildirimler'}
+        >
+          <Bell size={16} />
+          {bildirimSayisi > 0 && (
+            <span className={`absolute -top-1.5 -right-1.5 ${enYuksekTip === 'kirmizi' ? 'bg-red text-white' : 'bg-amber text-black'} text-[9px] font-bold px-1 rounded-full min-w-[15px] text-center leading-[14px] ring-2 ring-bg-1`}>
+              {bildirimSayisi > 99 ? '99+' : bildirimSayisi}
+            </span>
+          )}
+        </button>
+        {showBildirimPanel && (
+          <BildirimPanel
+            bildirimler={okunmamisBildirimler}
+            onClose={() => setShowBildirimPanel(false)}
+            onAction={() => loadAll()}
+          />
+        )}
+      </div>
+
       {user && (
         <span className="text-[11px] text-zinc-500 font-mono">{user.email ? `${user.username} (${user.email})` : user.username}</span>
       )}
@@ -308,5 +346,102 @@ function PassModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// v15.96 — Madde 15 P4: Bildirim Merkezi Dropdown Panel
+function BildirimPanel({ bildirimler, onClose, onAction }: {
+  bildirimler: import('@/types').Bildirim[]
+  onClose: () => void
+  onAction: () => void
+}) {
+  async function isaretleOkundu(id: string) {
+    await supabase.from('uys_bildirimler').update({ okundu: true, okundu_tarih: new Date().toISOString() }).eq('id', id)
+    onAction()
+  }
+  async function hepsiniOkunduIsaretle() {
+    const ids = bildirimler.map(b => b.id)
+    if (!ids.length) return
+    await supabase.from('uys_bildirimler').update({ okundu: true, okundu_tarih: new Date().toISOString() }).in('id', ids)
+    onAction()
+    toast.success(`${ids.length} bildirim okundu isaretlendi`)
+  }
+  function tikla(b: import('@/types').Bildirim) {
+    isaretleOkundu(b.id)
+    if (b.refTip === 'order' && b.refId) {
+      window.location.hash = `/orders?orderId=${b.refId}`
+    } else if (b.refTip === 'wo' && b.refId) {
+      window.location.hash = `/workorders`
+    }
+    onClose()
+  }
+  function zamanFormat(iso: string) {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso)
+      const fark = (Date.now() - d.getTime()) / 1000
+      if (fark < 60) return 'şimdi'
+      if (fark < 3600) return Math.floor(fark / 60) + ' dk önce'
+      if (fark < 86400) return Math.floor(fark / 3600) + ' saat önce'
+      return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+    } catch { return iso }
+  }
+  return (
+    <>
+      {/* Backdrop tikla -> kapat */}
+      <div className="fixed inset-0 z-[55]" onClick={onClose} />
+      <div className="absolute right-0 top-7 z-[60] w-[380px] max-h-[480px] bg-bg-1 border border-border rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Bell size={14} className="text-amber" />
+            <span className="text-sm font-semibold">Bildirimler</span>
+            {bildirimler.length > 0 && <span className="text-[10px] text-zinc-500">({bildirimler.length} okunmamis)</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            {bildirimler.length > 0 && (
+              <button onClick={hepsiniOkunduIsaretle} className="text-[10px] text-zinc-500 hover:text-accent">
+                Hepsini okundu
+              </button>
+            )}
+            <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={14} /></button>
+          </div>
+        </div>
+        {/* Liste */}
+        <div className="flex-1 overflow-y-auto">
+          {bildirimler.length === 0 ? (
+            <div className="p-6 text-center text-xs text-zinc-500">
+              Okunmamis bildirim yok
+            </div>
+          ) : (
+            <div className="divide-y divide-border/50">
+              {bildirimler.slice(0, 20).map(b => (
+                <button
+                  key={b.id}
+                  onClick={() => tikla(b)}
+                  className={`w-full text-left px-3 py-2.5 hover:bg-bg-2 transition-colors flex gap-2 ${
+                    b.tip === 'kirmizi' ? 'border-l-2 border-red' : 'border-l-2 border-amber'
+                  }`}
+                >
+                  <span className="text-base mt-0.5 shrink-0">
+                    {b.tip === 'kirmizi' ? '🔴' : '🟡'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-zinc-200">{b.baslik}</div>
+                    <div className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2">{b.mesaj}</div>
+                    <div className="text-[10px] text-zinc-600 mt-0.5">{zamanFormat(b.olusturma)}{b.kategori ? ' · ' + b.kategori : ''}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {bildirimler.length > 20 && (
+          <div className="p-2 border-t border-border text-center text-[10px] text-zinc-500">
+            +{bildirimler.length - 20} daha (eski bildirimler)
+          </div>
+        )}
+      </div>
+    </>
   )
 }

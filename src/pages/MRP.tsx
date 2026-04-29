@@ -268,6 +268,41 @@ export function MRP() {
     const eksikSayi = result.filter(r => r.durum === 'eksik').length
     toast.success(result.length + ' kalem hesaplandı · ' + eksikSayi + ' eksik')
 
+    // v15.96 — Madde 15 P4: Bildirim üreticisi
+    // Her eksiği olan sipariş için sarı bildirim oluştur (idempotent: aynı kategori+ref_id varsa atla)
+    if (eksikSayi > 0) {
+      try {
+        for (const oid of ordIds) {
+          const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+          const eksikler = tekResult.filter(r => r.net > 0)
+          if (eksikler.length === 0) continue
+          const ord = orders.find(o => o.id === oid)
+          if (!ord) continue
+          // Aynı sipariş için açık (okunmamış) "mrp_eksik" bildirimi var mı?
+          const { data: mevcut } = await supabase
+            .from('uys_bildirimler')
+            .select('id')
+            .eq('kategori', 'mrp_eksik')
+            .eq('ref_id', oid)
+            .eq('okundu', false)
+            .limit(1)
+          if (mevcut && mevcut.length > 0) continue
+          await supabase.from('uys_bildirimler').insert({
+            id: uid(),
+            tip: 'sari',
+            kategori: 'mrp_eksik',
+            baslik: `MRP eksik — ${ord.siparisNo}`,
+            mesaj: `${ord.musteri || ''} · ${eksikler.length} malzeme eksik (toplam net: ${eksikler.reduce((a, r) => a + r.net, 0)})`,
+            ref_id: oid,
+            ref_tip: 'order',
+            olusturan: 'sistem',
+          })
+        }
+      } catch (e) {
+        console.warn('[v15.96] Bildirim olustururken hata:', e)
+      }
+    }
+
     // v15.36 — Flow akışında MRP'den tedarik adımına ilerle
     if (activeFlowId) {
       const eksikRows = result.filter(r => r.net > 0).map(r => ({ malkod: r.malkod, net: r.net }))
