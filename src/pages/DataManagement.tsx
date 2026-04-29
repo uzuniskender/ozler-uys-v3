@@ -640,6 +640,135 @@ export function DataManagement() {
           havuzAcikKalan: havuzAcikKalan.slice(0, 10),
         } : undefined,
       })
+
+      // ═══════════════════════════════════════════════════════════════════
+      // v15.89 — Yeni 3 kontrol (29 Nis 2026 saha bug analizinden cikti)
+      // ═══════════════════════════════════════════════════════════════════
+
+      // 12. Plansiz Kesim IE'si — kesim opsiyonlu olup hicbir kesim plani satirinda yer almayan IE'ler
+      // Saha vakasi (29 Nis): 16 plansiz IE -- gunluk yarim akis birakma, sonradan tespit edilemiyordu
+      const planliWoIds = new Set<string>()
+      for (const p of plans as any[]) {
+        for (const s of (p.satirlar || [])) {
+          for (const k of (s.kesimler || [])) {
+            if (k.woId) planliWoIds.add(k.woId)
+          }
+        }
+      }
+      // Kesim opsiyonu = op_kod 023, 025, 026, 027 (saha standart kodlari)
+      const KESIM_OPKODS = new Set(['023', '025', '026', '027'])
+      const plansizKesim = wos.filter((w: any) =>
+        KESIM_OPKODS.has(w.op_kod || '')
+        && w.durum !== 'iptal'
+        && w.durum !== 'tamamlandi'
+        && !planliWoIds.has(w.id)
+      )
+      kontroller.push({
+        no: 12, ad: 'Plansız Kesim İE\'si',
+        durum: plansizKesim.length ? 'warn' : 'pass',
+        mesaj: plansizKesim.length
+          ? `${plansizKesim.length} kesim İE\'si için kesim planı yok — yarım kalan akış`
+          : `Tüm aktif kesim İE\'leri planlı`,
+        neden: plansizKesim.length
+          ? 'Sipariş açılıp İE oluştu ama kesim planı yapılmadı (Tam Zincir basılmadı veya yarım bırakıldı). Manuel İE\'lerde de plan eksik olabilir.'
+          : undefined,
+        aksiyon: plansizKesim.length
+          ? 'İlgili siparişi aç → "Tam Zincir" çalıştır VEYA Kesim Planları sayfasında "Otomatik Plan" / "Manuel Plan" ile ekle.'
+          : undefined,
+        detay: plansizKesim.length ? {
+          ies: plansizKesim.slice(0, 20).map((w: any) => ({
+            ieNo: w.ie_no,
+            malad: w.malad,
+            durum: w.durum,
+            siparis: w.order_id ? (orders.find((o: any) => o.id === w.order_id)?.siparis_no || w.order_id) : '(manuel)',
+            olusturma: w.olusturma,
+          })),
+          toplam: plansizKesim.length,
+        } : undefined,
+      })
+
+      // 13. Siparis ici sira numarasi unique
+      // Saha vakasi (29 Nis): buildWorkOrders 2 kez cagrilinca duplicate sira (v15.87 ile fix edildi)
+      // Bu kontrol regression sentinel
+      const siraDuplicateMap = new Map<string, any[]>()
+      for (const w of wos as any[]) {
+        if (!w.order_id || w.durum === 'iptal') continue
+        const key = `${w.order_id}|${w.sira || 0}`
+        if (!siraDuplicateMap.has(key)) siraDuplicateMap.set(key, [])
+        siraDuplicateMap.get(key)!.push(w)
+      }
+      const siraDuplicates = Array.from(siraDuplicateMap.entries())
+        .filter(([_, list]) => list.length > 1)
+        .map(([key, list]) => {
+          const [orderId, sira] = key.split('|')
+          const ord = orders.find((o: any) => o.id === orderId)
+          return {
+            siparis: ord?.siparis_no || orderId,
+            sira: parseInt(sira),
+            adet: list.length,
+            ieNos: list.map((w: any) => w.ie_no),
+          }
+        })
+      kontroller.push({
+        no: 13, ad: 'Sipariş içi sıra numarası unique',
+        durum: siraDuplicates.length ? 'fail' : 'pass',
+        mesaj: siraDuplicates.length
+          ? `${siraDuplicates.length} sipariş+sıra çiftinde duplicate IE`
+          : `${wos.length} İE\'de sıra numarası tutarlı`,
+        neden: siraDuplicates.length
+          ? 'buildWorkOrders idempotency koruması atlanmış. v15.87 sonrası bu olmamalı; eski veride veya manuel insert\'te kalmış olabilir.'
+          : undefined,
+        aksiyon: siraDuplicates.length
+          ? 'İlgili siparişin İE\'lerini manuel inceleyin (DB\'de uys_work_orders WHERE order_id=...). Duplicate kayıtların durumuna göre eski olanı silin veya sira numarasını manuel düzeltin.'
+          : undefined,
+        detay: siraDuplicates.length ? {
+          duplicates: siraDuplicates.slice(0, 20),
+        } : undefined,
+      })
+
+      // 14. ie_no global unique
+      // Saha vakasi (29 Nis): "IE--01" bos prefix bug'i ayni isimde 6 IE uretti (v15.86 ile fix)
+      // Bu kontrol regression sentinel + bos prefix yakalayici
+      const ieNoMap = new Map<string, any[]>()
+      for (const w of wos as any[]) {
+        if (!w.ie_no || w.durum === 'iptal') continue
+        if (!ieNoMap.has(w.ie_no)) ieNoMap.set(w.ie_no, [])
+        ieNoMap.get(w.ie_no)!.push(w)
+      }
+      const ieNoDuplicates = Array.from(ieNoMap.entries())
+        .filter(([_, list]) => list.length > 1)
+        .map(([ie_no, list]) => ({
+          ie_no,
+          adet: list.length,
+          ids: list.map((w: any) => w.id).slice(0, 5),
+        }))
+      // Bos prefix tespit (IE-- ile baslayan = siparisNo bos gecilmis)
+      const bosPrefix = wos.filter((w: any) =>
+        w.ie_no && w.ie_no.startsWith('IE--') && w.durum !== 'iptal'
+      )
+      const ieNoSorunlar: string[] = []
+      if (ieNoDuplicates.length) ieNoSorunlar.push(`${ieNoDuplicates.length} ie_no duplicate`)
+      if (bosPrefix.length) ieNoSorunlar.push(`${bosPrefix.length} İE\'de boş prefix (IE--XX)`)
+      kontroller.push({
+        no: 14, ad: 'ie_no benzersizliği ve format',
+        durum: ieNoSorunlar.length ? 'fail' : 'pass',
+        mesaj: ieNoSorunlar.length
+          ? ieNoSorunlar.join(' · ')
+          : `${wos.length} İE\'de ie_no formatı temiz`,
+        neden: ieNoSorunlar.length
+          ? 'Duplicate ie_no veya boş prefix (IE--XX) tespit edildi. Boş prefix v15.86 ile fix edildi; eski kayıtlarda kalmış olabilir.'
+          : undefined,
+        aksiyon: ieNoSorunlar.length
+          ? 'Boş prefix\'i toplu UPDATE ile düzelt: UPDATE uys_work_orders SET ie_no = \'IE-\' || (SELECT siparis_no FROM uys_orders WHERE id=order_id) || \'-\' || lpad(sira::text, 2, \'0\') WHERE ie_no LIKE \'IE--%\'. Duplicate ie_no\'lar manuel inceleyin.'
+          : undefined,
+        detay: ieNoSorunlar.length ? {
+          duplicates: ieNoDuplicates.slice(0, 10),
+          bosPrefix: bosPrefix.slice(0, 10).map((w: any) => ({
+            ie_no: w.ie_no, sira: w.sira, malad: w.malad,
+            siparis: orders.find((o: any) => o.id === w.order_id)?.siparis_no || w.order_id,
+          })),
+        } : undefined,
+      })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
       console.error(e)
@@ -652,7 +781,7 @@ export function DataManagement() {
       warn: kontroller.filter(k => k.durum === 'warn').length,
       fail: kontroller.filter(k => k.durum === 'fail').length,
     }
-    setReport({ timestamp: new Date().toISOString(), version: 'v15.81', ozet, kontroller })
+    setReport({ timestamp: new Date().toISOString(), version: 'v15.89', ozet, kontroller })
     setRunning(false)
     if (ozet.fail || ozet.warn) toast.warning(`${ozet.fail} hata · ${ozet.warn} uyarı tespit edildi`)
     else toast.success('✓ Sistem tamamen sağlıklı')
