@@ -8,6 +8,8 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, type MRPRow } from '@/features/production/mrp'
+// v15.95 — Madde 15 P3: Hammadde tahsis FIFO
+import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
 import { isOrderArchived } from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
@@ -77,6 +79,37 @@ export function MRP() {
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, orderHasEksik, showTamamlanan])
+
+  // v15.95 — Madde 15 P3: Hammadde FIFO termin tahsisi
+  // Tum aktif siparişler arasinda hammadde paylastirmasi (request-time).
+  // Buradan donen tahsis -> her siparis kartinda rozet (yesil/sari/kirmizi).
+  const hammaddeTahsis = useMemo(() => {
+    try {
+      return hesaplaHammaddeTahsisi(
+        aktifOrders as any,
+        workOrders,
+        recipes,
+        stokHareketler,
+        tedarikler,
+        cpMappedAll,
+        materials,
+        logs.map(l => ({ woId: l.woId, qty: l.qty })),
+      )
+    } catch (e) {
+      console.error('[v15.95] hammaddeTahsis hesabi hata:', e)
+      return {}
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aktifOrders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, logs])
+
+  // Her siparis icin tahsis ozet rozet rengi (yesil/sari/kirmizi/yok)
+  const orderTahsisOzeti = useMemo(() => {
+    const map: Record<string, { durum: 'yesil' | 'sari' | 'kirmizi' | 'yok'; eksikSayi: number; toplamMalzeme: number }> = {}
+    for (const o of aktifOrders) {
+      map[o.id] = siparisTahsisOzeti(o.id, hammaddeTahsis)
+    }
+    return map
+  }, [aktifOrders, hammaddeTahsis])
 
   // v15.78 — Manuel İE'ler (siparişe bağlı değil) sipariş kartlarıyla aynı listede.
   // Saha vakası: IE-MANUAL-MO9SDW3A 6740 adet, "stok yok" hard block veriyor ama MRP'de
@@ -398,7 +431,28 @@ export function MRP() {
       {/* Sipariş Seçimi */}
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-semibold text-zinc-500 uppercase">Siparişler</div>
+          <div className="text-xs font-semibold text-zinc-500 uppercase">
+            Siparişler
+            {/* v15.95 — Madde 15 P3: Tahsis ozet sayaclari */}
+            {(() => {
+              let g = 0, s = 0, r = 0
+              for (const o of aktifOrders) {
+                const oz = orderTahsisOzeti[o.id]
+                if (!oz) continue
+                if (oz.durum === 'yesil') g++
+                else if (oz.durum === 'sari') s++
+                else if (oz.durum === 'kirmizi') r++
+              }
+              if (g + s + r === 0) return null
+              return (
+                <span className="ml-2 font-normal normal-case">
+                  {g > 0 && <span className="text-green">🟢 {g}</span>}
+                  {s > 0 && <span className="text-amber ml-1">🟡 {s}</span>}
+                  {r > 0 && <span className="text-red ml-1">🔴 {r}</span>}
+                </span>
+              )
+            })()}
+          </div>
           <div className="flex gap-2">
             <div className="flex items-center gap-1.5">
               <label className="text-[10px] text-zinc-500">Termin ≤</label>
@@ -418,6 +472,8 @@ export function MRP() {
           {aktifOrders.map(o => {
             const sel = selectedOrders.has(o.id); const pct = orderPct(o.id)
             const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
+            // v15.95 — Madde 15 P3: tahsis ozet rozet
+            const tahsisOzet = orderTahsisOzeti[o.id]
             return (
               <button key={o.id} onClick={() => toggleOrder(o.id)}
                 className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : mrpDone ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
@@ -425,6 +481,25 @@ export function MRP() {
                   <input type="checkbox" checked={sel} readOnly className="accent-accent" />
                   <span className="font-mono font-medium">{o.siparisNo}</span>
                   {mrpDone && <span className="px-1 py-0.5 bg-green/10 text-green rounded text-[9px]">MRP ✓</span>}
+                  {/* v15.95 — Hammadde tahsis durumu (FIFO termin) */}
+                  {tahsisOzet && tahsisOzet.durum !== 'yok' && (
+                    <span
+                      className={`px-1 py-0.5 rounded text-[9px] font-semibold ${
+                        tahsisOzet.durum === 'yesil' ? 'bg-green/15 text-green' :
+                        tahsisOzet.durum === 'sari' ? 'bg-amber/15 text-amber' :
+                        'bg-red/15 text-red'
+                      }`}
+                      title={
+                        tahsisOzet.durum === 'yesil' ? `Tum hammadde stokta (${tahsisOzet.toplamMalzeme} malzeme)` :
+                        tahsisOzet.durum === 'sari' ? `Stok yetersiz, tedarik yolda (${tahsisOzet.toplamMalzeme} malzemenin bir kismi)` :
+                        `${tahsisOzet.eksikSayi}/${tahsisOzet.toplamMalzeme} malzeme eksik (yeni tedarik gerek)`
+                      }
+                    >
+                      {tahsisOzet.durum === 'yesil' && '🟢'}
+                      {tahsisOzet.durum === 'sari' && '🟡'}
+                      {tahsisOzet.durum === 'kirmizi' && `🔴 ${tahsisOzet.eksikSayi}`}
+                    </span>
+                  )}
                   <span className="text-zinc-500 ml-auto">{pct}%</span>
                 </div>
                 <div className="text-zinc-500 truncate mt-0.5">{o.musteri} · {o.mamulAd || ''}</div>
