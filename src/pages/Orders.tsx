@@ -477,6 +477,28 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     if (!etkinSiparisNo) { setError('Sipariş No zorunlu (veya "Sipariş bağlı değil" tikini açın)'); return }
     if (!kalemler.length) { setError('En az bir ürün kalemi olmalı'); return }
 
+    // v15.91 — Madde 15 ek koruma: yeni sipariş açarken (initial yok) ayni siparis_no
+    // sahada zaten varsa zarif uyari + iptal. DB level UNIQUE constraint da var ama
+    // bu UI guard kullaniciya net mesaj verir ve mevcut siparise yonlendirir.
+    if (!initial) {
+      const { data: existing, error: dupErr } = await supabase
+        .from('uys_orders')
+        .select('id, siparis_no, musteri, olusturma, termin')
+        .eq('siparis_no', etkinSiparisNo)
+        .limit(1)
+        .maybeSingle()
+      if (dupErr && dupErr.code !== 'PGRST116') {
+        setError('Duplicate kontrolü başarısız: ' + dupErr.message); return
+      }
+      if (existing) {
+        setError(
+          `"${etkinSiparisNo}" zaten kayıtlı (${existing.olusturma || '-'}, ${existing.musteri || '-'}). ` +
+          `Mevcut siparişe ekleme yapmak için Siparişler sayfasında düzenleyin.`
+        )
+        return
+      }
+    }
+
     for (let i = 0; i < kalemler.length; i++) {
       const k = kalemler[i]
       if (!k.rcId) { setError(`${i + 1}. kalem için ürün / reçete seçilmedi`); return }
