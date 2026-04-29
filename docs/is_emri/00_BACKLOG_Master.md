@@ -1,9 +1,9 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 28 Nisan 2026 öğleden sonra (saha model konuşması — 13 senaryo, Madde 15 girdi)
+**Son güncelleme:** 29 Nisan 2026 akşam (15 sürüm push, **Madde 15 tam tur tamamlandı**)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
-📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi
+📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
 
 ---
 
@@ -49,6 +49,19 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | **v15.80a** | plans/orders/recs değişken adı hotfix |
 | **v15.80b** | Sağlık raporu Kontrol 11 legacy IE-MANUAL filtresi |
 | **v15.81** | **MRP temel hesabı saha bug fix** — `uretilen=0` hardcode'u (v2 port'tan beri 13+ sürüm) düzeltildi. logs parametresi eklendi, tamamlandi filtresi, Senaryo 12 saha bug fix kanıtı |
+| **v15.82-v15.96 (29 Nis)** | **15 sürüm tek günde rekor + Madde 15 tam tur** — Detay: §26 Bilgi Bankası |
+| | • v15.82: Saha model uyum (AZALIS BLOCK + manuel İE termin) |
+| | • v15.83-84: Senaryo 1 modal Faz 1 + otomatik test (Senaryo 13) |
+| | • v15.85: Test cleanup bug fix (3 katmanlı) |
+| | • v15.86-87: IE--01 boş prefix + buildWorkOrders idempotency |
+| | • v15.88: MRP "0 aktif" UX bug |
+| | • v15.89: Sağlık raporu 3 yeni kontrol (#12, #13, #14) |
+| | • **v15.90: Madde 15 P1** (veri modeli) |
+| | • v15.91: Sipariş no UNIQUE + UI duplicate koruması |
+| | • **v15.92: Madde 15 P2** (mamul rezerv UI + 2-aşama çıkış) |
+| | • v15.93-94: Audit schema + senkronizasyon |
+| | • **v15.95: Madde 15 P3** (hammadde FIFO tahsis + MRP rozetleri) |
+| | • **v15.96: Madde 15 P4** (bildirim merkezi — Topbar Bell) |
 
 ---
 
@@ -110,7 +123,7 @@ Detaylı iş emirleri `docs/is_emri/01_*.md` ... `06_*.md` dosyalarındadır. He
 | # | Özellik | İş Emri | Tag | Durum |
 |---|---------|---------|-----|-------|
 | 12 | **Güvenlik Refactoru — RLS Tam Uygulama** (Supabase Auth + RLS policy yayılımı) | `12_GuvenlikRefactor.md` | v16.0.0 | 🟡 Backlog (27 Nis 2026 keşfedildi — `allow_all` policy ile gerçek koruma yok) |
-| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.81 | 🟢 19/22 TAMAM (1-7, 8, 9, 10, 11, 13, 14, 17, 18, 19, 20, 21, 22). Kalan: 12 (kısmi), 15, 16. **v15.79: madde 8+9 TAMAMLANDI** (Plan Bekliyor/Üretilebilir efektif durum). v15.81 MRP temel hesabı saha bug fix (pre-existing 13+ sürümlük "uretilen=0" hardcode). |
+| 13 | **Ana Akış Refactoru (Sipariş↔İE↔Kesim↔MRP↔Tedarik)** — 22 madde | `13_AnaAkisRefactor.md` | v15.55-v15.96 | 🟢 **20/22 TAMAM** (1-7, 8, 9, 10, 11, 13, 14, **15**, 17, 18, 19, 20, 21, 22). Kalan: 12 (kısmi), 16. **v15.90-v15.96: Madde 15 TAM TUR** (P1 veri modeli + P2 mamul rezerv UI + P3 hammadde FIFO + P4 bildirim merkezi). v15.79: madde 8+9. v15.81: MRP saha bug fix. |
 
 ---
 

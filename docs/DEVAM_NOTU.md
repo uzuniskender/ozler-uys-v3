@@ -1,9 +1,8 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
-**Tarih:** 28 Nisan 2026 öğleden sonra (oturum kapanışı, ~16:00)
-**Son canlı sürüm:** v15.81
-**İş Emri #13 durum:** 19/22 madde TAMAM, sahada 0 FAIL · 1 WARN
-**Ek çıktı:** docs/saha_model_28nis2026.md (13 senaryo, Madde 15 girdi)
+**Tarih:** 29 Nisan 2026 akşam (oturum kapanışı)
+**Son canlı sürüm:** v15.96
+**Bugün push edilen:** 15 sürüm (v15.82 → v15.96) — **Madde 15 tam tur tamamlandı**
 
 ---
 
@@ -11,100 +10,131 @@
 
 ```
 UYS v3 devamı. Bilgi Bankası açılış kuralı (§0):
-docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §19, §20, §21 MRP Formülü, §22, §23 28 Nis sabah, §24 28 Nis öğlen) +
-docs/saha_model_28nis2026.md (13 senaryo — Madde 15 onay sistemi girdisi) +
+docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §19, §20, §21 MRP Formülü,
+  §22 (27 Nis), §23 (28 Nis sabah), §24 (28 Nis öğlen), §25 (28 Nis öğleden sonra),
+  §26 (29 Nis tam gün) ⭐ YENİ) +
+docs/saha_model_28nis2026.md (13 senaryo) +
 docs/DEVAM_NOTU.md +
 docs/is_emri/00_BACKLOG_Master.md +
-docs/is_emri/13_AnaAkisRefactor.md +
-docs/atil_kod_analizi_20260427.md
+docs/is_emri/13_AnaAkisRefactor.md
 oku.
 
-Önceki chat silindi/silinecek — bilgilerin tamamı docs'ta.
-
-Bugünkü ilk iş: saha_model_28nis2026.md sonundaki "ANA YAPISAL KARARLAR"
-listesinden Buket öncelik belirler:
-
-ÖNCELİK A — Madde 15 Onay Sistemi (mamul/hammadde aşamalı kontrol):
-  - Mamul stok serbest/rezerv ayrımı (yeni veri modeli)
-  - Manuel çıkış 2-aşama modalı (rezerv'e dokunma)
-  - Hammadde tahsis dağılımı + manuel müdahale
-  - 🔔 Bildirim merkezi altyapısı
-
-ÖNCELİK B — Hızlı kazanım maddeleri:
-  - Senaryo 1 modalı doğrulaması ("55 mi 50 mi?")
-  - Manuel İE termin zorunlu (Senaryo 2 + 12)
-  - v15.74 AZALIS BLOCK kuralı saha modeline aykırı, düzeltme
-
-ÖNCELİK C — Yeni özellikler:
-  - Malzeme kartı kalite/cins alanları + alternatifler (Senaryo 13)
-  - 🔔 Bildirim merkezi (Senaryo 7'den çıktı)
-  - Tedarik gecikme/yaklaşan termin tespiti
-
-Buket önceliği belirler.
+Önceki chat silindi/silinecek — tüm bilgi docs/'ta.
 ```
 
 ---
 
-## BUGÜN YAPILANLAR (28 Nis sabah → öğlen → öğleden sonra)
+## 29 NİSAN ÖZETİ (15 SÜRÜM)
 
-### Sabah oturumu
-
-- **v15.77:** Test Senaryo 7/8/9 — v15.74/75/76 test ispatı (8/8 PASS)
-- **v15.78:** Manuel İE MRP görünürlüğü saha fix — IE-MANUAL-MO9SDW3A 6740 adet hard block bug'ı
-
-### Öğlen oturumu
-
-- **v15.79:** Plan Bekliyor/Üretilebilir efektif durum (#13 madde 8+9)
-- **v15.80:** Sağlık raporu Kontrol 5/6/7 §21 sözleşmesine uygun revize
-- **v15.80a:** plans/orders/recs değişken adı hotfix
-- **v15.80b:** Kontrol 11 legacy IE-MANUAL filtresi
-- **v15.81 ⭐:** MRP temel hesabı saha bug fix — 13+ sürümlük "uretilen=0 hardcode"
-- **Test sonucu:** TEST_20260428_05 — 12/12 senaryo PASS · ALL_PASS
-
-### Öğleden sonra oturumu (15:37 → ~17:00)
-
-- **MRP saha modeli konuşması** — 13 senaryo soru-cevap formatında
-- **Çıktı:** docs/saha_model_28nis2026.md (516 satır)
-  - Senaryo 1-13 detaylı spec
-  - Mamul/hammadde stok rezerv/tahsis simetrik modeli
-  - Madde 15 onay sistemi tasarım girdisi
-  - 🔔 Bildirim merkezi yeni özellik tanımı
-  - Backlog senaryolar (iade, fire raporlama, çoklu admin, vs)
+| # | Sürüm | Konu |
+|---|---|---|
+| 1 | v15.82 | Saha model uyum: AZALIS BLOCK kaldırıldı + manuel İE termin zorunlu |
+| 2 | v15.83 | Senaryo 1 modal Faz 1 MVP — kesim planı sonrası onay (autoZincir + onKesimFark callback) |
+| 3 | v15.84 | Senaryo 13 otomatik test — v15.83 modal'ının testRunner ispatı |
+| 4 | v15.85 | Test cleanup bug fix (3 katmanlı: dinamik sub-run + mrp_calculations + autoChain etiketleme) |
+| 5 | v15.86 | "IE--01" boş prefix bug fix — Tekil İE'de etkinSiparisNo kullanımı |
+| 6 | v15.87 | buildWorkOrders idempotency — DB MAX(sira) ile duplicate sira imkansız |
+| 7 | v15.88 | MRP "0 aktif sipariş" UX bug — bekliyor durumu listede gözükür |
+| 8 | v15.89 | Sağlık raporu 3 yeni kontrol (#12 plansız İE, #13 sira unique, #14 ie_no unique) |
+| 9 | v15.90 | **Madde 15 P1**: Veri modeli (rezerv_order_id + uys_bildirimler + uys_manuel_mudahale_log + RBAC) |
+| 10 | v15.91 | Sipariş no UNIQUE constraint + UI duplicate koruması |
+| 11 | v15.92 | **Madde 15 P2**: Mamul rezerv/serbest UI + 2-aşama çıkış modalı |
+| 12 | v15.93 | Audit schema dosyaları sql/ klasörüne |
+| 13 | v15.94 | Audit senkronizasyonu (bildirimler store'a, mudahale log whitelist'e) |
+| 14 | v15.95 | **Madde 15 P3**: Hammadde FIFO termin tahsisi + MRP rozetleri |
+| 15 | v15.96 | **Madde 15 P4**: Bildirim merkezi (Topbar Bell + dropdown + MRP eksik üreticisi) |
 
 ---
 
-## BUGÜNÜN ANA YAPISAL ÇIKTILARI
+## ANA ÇIKTILAR
 
-| Konu | Karar | Kod durum |
+### Madde 15 Onay Sistemi — Tam Tur ✅
+
+| Faz | Sürüm | Ne |
 |---|---|---|
-| Mamul stok rezerv/serbest | Sipariş bazlı (order_id ile) | ❌ Eksik |
-| Hammadde tahsis dağılımı | FIFO termin sırası | ❌ Eksik |
-| Manuel müdahale (rezerv) | Sebep+açıklama zorunlu, ek İE/tedarik | ❌ Eksik |
-| 🔔 Bildirim merkezi | Topbar yeni badge, sarı/kırmızı uyarılar | ❌ Yeni özellik |
-| Manuel İE termin | Zorunlu yap | ❓ Kontrol |
-| v15.74 AZALIS BLOCK | Saha modeline ters, kaldır | ⚠️ Düzeltme |
-| Malzeme kalite/cins | Yeni alanlar gerek | ❌ Yeni alan |
-| Malzeme alternatifleri | Manuel tanımlama, çift yönlü | ❌ Yeni özellik |
+| P1 | v15.90 | Veri modeli + RBAC altyapısı |
+| P2 | v15.92 | Mamul stok rezerv/serbest ayrımı + 2-aşama çıkış modalı (sebep+açıklama zorunlu) |
+| P3 | v15.95 | Hammadde FIFO termin tahsisi (MRP sayfasında 🟢🟡🔴 rozetler) |
+| P4 | v15.96 | Bildirim merkezi (Topbar Bell + 2 otomatik bildirim üreticisi) |
+
+**Yeni tablolar:**
+- `uys_bildirimler` — bildirim merkezi (sarı/kırmızı, kategori, ref_id, okundu)
+- `uys_manuel_mudahale_log` — audit trail (sebep+açıklama zorunlu)
+
+**Yeni kolon:**
+- `uys_stok_hareketler.rezerv_order_id` — mamul rezerv/serbest ayrımı (giriş kayıtlarında dolu = rezerv, NULL = serbest)
+
+**Yeni RBAC:**
+- `bildirim_view`, `bildirim_okundu_isaretle` (planlama+uretim_sor+depocu)
+- `manuel_mudahale_yap` (planlama+depocu — rezerv'e dokunma yetkisi)
+- `manuel_mudahale_log_view` (sadece admin)
+
+### Sağlık Raporu — 14/14 PASS
+
+Yeni 3 kontrol eklendi (v15.89):
+- #12 Plansız Kesim İE
+- #13 Sipariş içi sıra numarası unique
+- #14 ie_no benzersizliği ve format
+
+Saha durum: 12 PASS · 2 WARN · 0 FAIL. WARN'lar saha aksiyon (kod sorunu değil).
+
+### Saha Bug Temizliği
+
+- 6 boş prefix İE düzeltildi (manuel SQL UPDATE)
+- 1 sipariş duplicate (S26A_03151) birleştirildi (DO bloğu, FIFO sıra ile devam)
+- DB UNIQUE constraint `uys_orders.siparis_no` eklendi (artık DB seviyesinde de korunuyor)
+
+---
+
+## YARIN İÇİN ÖNCELİKLER
+
+### Hemen
+- **Sahada Madde 15 testi:** Mamul üret, depodan çıkış yap, manuel müdahale yap, bildirim gör
+- **MRP rozetleri kontrolü:** 🟢🟡🔴 sayaçlar gerçek siparişlerle doğru görünüyor mu
+
+### Kısa vadede (Backlog'dan)
+- **#5 Sevkiyat Oluşturma Formu** — Production-blocker (UYS v3'te liste var, oluşturma yok)
+- **#7 Toplu Sipariş Excel İmport** — Pratik gereklilik
+- **#9 Stok Onarım** — Audit kritik
+
+### Madde 15'in açık ucu (Faz 2 — backlog)
+- Senaryo 1 modal "Düzenle" modu (kullanıcı manuel hedef girsin) — şimdilik atlandı, saha kullanımı sonrası ihtiyaç doğarsa
+- Hammadde manuel müdahale — P3'te tahsis görünür ama "rezerv kırma" UI'sı henüz yok (mamul tarafında var, hammaddeye taşınabilir)
+
+### Bilinen WARN'lar
+- BORU Ø48,3x3 5500mm — net 154 adet, termin 5 Mayıs (gerçek tedarik ihtiyacı)
+- S26A_02808 — mrp_durum bayat (MRP "Hesapla" çalıştırılırsa düzelir)
 
 ---
 
 ## MULTI-MACHINE NOTU
 
-NB081'de Node yok → npm/build doğrulanmadı, GitHub Actions build'e güveniliyor.
+Bugün ev makinesi (`iskender.uzun` profile) ana kullanım. NB081'de Node yok, GitHub Actions build'e güveniliyor. v15.94 audit kuralı sayesinde build artık DB şema uyumsuzluğunu yakalıyor — `sql/*.sql` dosyaları + kod tarafı senkron olmalı.
 
-Çoklu admin oturum sorunu (28 Nis tespit): aynı hesapla 2+ cihazdan login mümkün. Race condition + state senkronsuzluğu. Backlog'da.
+Çoklu admin oturum sorunu (28 Nis tespit) hala backlog'da.
+
+---
+
+## ÖNEMLİ KURALLAR (DEĞİŞMEDİ)
+
+- §18 (Downloads hijyen)
+- §18.2 (yeni tablo: DataManagement.tables + store TABLE_MAP + audit-schema.cjs whitelist eşzamanlı eklenmeli)
+- §18.3 (durum string normalize)
+- §18.4 (artık yönetimi havuz tek standart)
+- §18.5 (SQL `public.` prefix)
+- §20 (Tehdit modeli — RLS allow_all hala iç ağda kabul, yarın için değil)
+- §21 (MRP formülü: Net = İhtiyaç − Stok − Yolda)
 
 ---
 
 ## SİL UYARISI
 
-⚠️ **Bu chat 28 Nis 2026 öğleden sonra silinecek.** Bilgilerin tamamı:
-- `docs/UYS_v3_Bilgi_Bankasi.md` §22 (27 Nis) + §23 (28 Nis sabah) + §24 (28 Nis öğlen)
-- `docs/saha_model_28nis2026.md` ⭐ (13 senaryo, Madde 15 girdi)
-- `docs/DEVAM_NOTU.md` (bu dosya)
-- `docs/is_emri/00_BACKLOG_Master.md`
-- `docs/atil_kod_analizi_20260427.md`
+⚠️ **Bu chat 29 Nis 2026 akşamı silinecek.** Bilgilerin tamamı:
+- `docs/UYS_v3_Bilgi_Bankasi.md` §22 + §23 + §24 + §25 + **§26 (29 Nis tam gün) ⭐**
+- `docs/saha_model_28nis2026.md`
+- `docs/DEVAM_NOTU.md` (bu dosya — yenilendi)
+- `docs/is_emri/00_BACKLOG_Master.md` (Madde 15 ✅ işaretlendi)
 
-Yarın yeni Claude oturumda chat'i aramaya **gerek yok**.
+Yarın yeni Claude oturumunda chat aramaya **gerek yok**.
 
-İyi akşamlar Buket. 🌙
+İyi akşamlar Buket. 🌙 — 15 sürüm tek günde rekor. Madde 15 sahada.

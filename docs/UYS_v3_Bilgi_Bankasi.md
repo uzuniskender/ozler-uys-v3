@@ -1927,3 +1927,221 @@ Topbar'a yeni badge — sistem uyarıları için (chat/operatör mesajından ayr
 
 Madde 15 onay sistemini tasarlamak. saha_model_28nis2026.md tüm girdileri sağlıyor — yeni Claude oturumu o dökümanı okur, kod patch'i çıkarır.
 
+
+---
+
+# §26. 29 NİSAN 2026 — MADDE 15 TAM TUR + 15 SÜRÜM REKOR GÜNÜ
+
+**Tarih:** 29 Nisan 2026 (Çarşamba), sabah → akşam tek oturum
+**Push edilen:** v15.82 → v15.96 (15 sürüm)
+**Ana çıktı:** Madde 15 Onay Sistemi P1+P2+P3+P4 sahaya çıktı
+
+---
+
+## §26.1 — 15 Sürüm Listesi
+
+| # | Sürüm | Konu | Etki |
+|---|---|---|---|
+| 1 | v15.82 | Saha model uyum: AZALIS BLOCK kaldırıldı + manuel İE termin zorunlu | Sipariş azaltma akışı saha kuralına uydu |
+| 2 | v15.83 | Senaryo 1 modal Faz 1 MVP — kesim planı sonrası onay | autoZincir + onKesimFark callback |
+| 3 | v15.84 | Senaryo 13 otomatik test — v15.83 modal'ının testRunner ispatı | 6/6 PASS (12.6 saniye) |
+| 4 | v15.85 | Test cleanup bug fix (3 katmanlı) | 3 ay'lık birikmiş kalıntı sıfırlandı |
+| 5 | v15.86 | "IE--01" boş prefix bug fix | 7 İE elden düzeltildi, kod düzeltildi |
+| 6 | v15.87 | buildWorkOrders idempotency | DB MAX(sira) → duplicate sira imkansız |
+| 7 | v15.88 | MRP "0 aktif sipariş" UX bug | Bekliyor durumu listede gözükür |
+| 8 | v15.89 | Sağlık raporu 3 yeni kontrol | #12, #13, #14 sentinel'ler |
+| 9 | v15.90 | Madde 15 P1: Veri modeli | rezerv kolon + 2 tablo + 4 RBAC action |
+| 10 | v15.91 | Sipariş no UNIQUE constraint + UI duplicate koruması | DB sert + UI yumuşak hibrit |
+| 11 | v15.92 | Madde 15 P2: Mamul rezerv UI | 2-aşama çıkış modalı + audit log entegrasyonu |
+| 12 | v15.93 | Audit schema dosyaları | sql/ klasörüne v15.90 + v15.91 |
+| 13 | v15.94 | Audit senkronizasyonu | bildirimler store'a, mudahale log whitelist'e |
+| 14 | v15.95 | Madde 15 P3: Hammadde FIFO tahsis | MRP rozetleri (🟢🟡🔴) |
+| 15 | v15.96 | Madde 15 P4: Bildirim merkezi | Topbar Bell + dropdown + 2 üretici |
+
+---
+
+## §26.2 — Bug Bug Yakalama Hikayesi
+
+Bu gün dört ardışık bug yakalandı; her biri öncekiyle ilişkili. Saha gerçeği gizliydi, kademeli ortaya çıktı:
+
+### Bug 1: Test Cleanup Eksikliği (v15.85)
+**Tespit:** Sağlık raporu test sonrası TEST_S13 kalıntılarını gösterdi. 65 kayıt sahada.
+**Kök sebep:** 3 katmanlı eksiklik:
+1. `finishTestRun` statik `_s1`...`_s5` listesi → S6+ sub-run'lar gözden kaçtı (3 ay)
+2. `uys_mrp_calculations` cascade listede yok
+3. `autoChain.ts` mrp_calc insert'i `withTestRunId` ile sarılmamış (etiketsiz)
+
+**Fix:** Dinamik sub-run tarama (LIKE parentId%) + cascade'e ekle + autoChain etiketleme
+
+### Bug 2: IE--01 Boş Prefix (v15.86)
+**Tespit:** Sağlık raporu sonrası DB sorgusu — 7 İE'de `ie_no = "IE--01"` (boş prefix).
+**Kök sebep:** `Orders.tsx` satır 592 — Tekil İE modunda `siparisNo.trim()` (boş) kullanılıyordu, `etkinSiparisNo` (otomatik üretilmiş `IE-AUTO-...`) hazır olmasına rağmen.
+**Fix:** Tek satır değişikliği (siparisNo → etkinSiparisNo). Mevcut 7 İE manuel SQL UPDATE ile düzeltildi.
+
+### Bug 3: Duplicate Sira Numarası (v15.87)
+**Tespit:** Test sırasında 40 İE oluştu, her sira numarası 2 kez tekrar etmiş (1,1, 2,2, ..., 20,20).
+**Kök sebep:** `buildWorkOrders` aynı `orderId` için 2 kez çağrıldığında kalemden kaleme `siraBaslangic` doğru geçiyordu ama caller stale state durumunda woTotal=0 başlatabiliyordu.
+**Fix:** DB'den `MAX(sira)` oku, caller'ın `siraBaslangic`'iyle `Math.max` al. Idempotent koruma — duplicate sira imkansız.
+
+### Bug 4: Sipariş No Duplicate (v15.91)
+**Tespit:** S26A_03151 hem 28 Nis hem 29 Nis kayıtları çıktı. 4 İE duplicate ie_no'ya yol açtı.
+**Kök sebep:** Orders.tsx `siparis_no` UNIQUE değil — kullanıcı dikkatsiz girince veya müşteri tekrar gönderince 2 kayıt.
+**Fix:** Hibrit (UI uyarı + DB UNIQUE constraint). 29 Nis kayıt 28 Nis'e DO bloğu ile birleştirildi (sira offset).
+
+**Ders:** Sağlık raporu kontrolleri proaktif sentinel; sahaya yapışmış eski bug'ları açığa çıkardı. Yeni 3 kontrol (v15.89) sayesinde aynı bug ailesinden gelecek vakalar 5 dakikada yakalanacak.
+
+---
+
+## §26.3 — Madde 15 Mimarisi
+
+### Veri Modeli (P1, v15.90)
+
+**uys_stok_hareketler.rezerv_order_id (yeni kolon)**
+- `tip='giris' + rezerv_order_id=order_id` → O sipariş için rezerv mamul
+- `tip='giris' + rezerv_order_id=NULL` → Serbest stok
+- `tip='cikis'` → Mevcut akış (rezerv izleme yok, çıkış serbestten + sonra rezerv'den varsayılır)
+
+**uys_bildirimler (yeni tablo)**
+- `tip`: 'sari' | 'kirmizi'
+- `kategori`: 'stok' | 'rezerv_ihlali' | 'manuel_mudahale' | 'tedarik_gecikme' | 'termin_yaklasik' | 'mrp_eksik'
+- `okundu`, `okundu_tarih`
+- `ref_id` + `ref_tip` → tıklayınca yönlendirme
+- `hedef_kullanici_id` (NULL = herkes)
+- `test_run_id` (cleanup uyumlu)
+
+**uys_manuel_mudahale_log (yeni tablo) — audit trail**
+- `islem_tipi`: 'rezerv_kirma' | 'serbest_cikis' | 'fazla_cikis'
+- `sebep` zorunlu (dropdown 5 seçenek)
+- `aciklama` zorunlu (min 10 karakter)
+- `stok_hareket_id` ilişkisi (hangi çıkış kaydına denk)
+
+### Mamul Rezerv UI (P2, v15.92)
+
+**hesaplaMamulRezervDurum() saf fonksiyon:**
+- Toplam stok = giriş - çıkış
+- Rezerv toplam = sum(giriş where rezerv_order_id IS NOT NULL), max(0, toplamStok ile sınırla)
+- Serbest = max(0, toplamStok - rezervToplam)
+- Detay: rezerv siparişlerini termin yakından uzağa sırala
+
+**MamulCikisModal — 2-aşama akış:**
+- Aşama 1: Stok özet (rezerv X / serbest Y), miktar girişi
+  - Miktar ≤ serbest → tek tıkla "Cikisi Kaydet" (manuel müdahale değil)
+  - Miktar > serbest → "Mudahale ile Devam" → Aşama 2 (yetki kontrolü)
+- Aşama 2: Sebep dropdown + açıklama (min 10 char) → Onayla
+  - Stok hareket insert + manuel_mudahale_log insert + bildirim (kırmızı)
+
+**Yer:** Depolar → Anlık Stok tablosunda mamul satırlarında "📤 Çıkış" butonu
+
+### Hammadde FIFO Tahsis (P3, v15.95)
+
+**hesaplaHammaddeTahsisi() saf fonksiyon:**
+- Birden fazla siparişin aynı hammaddeye ihtiyacı olabilir
+- FIFO termin sırası: yakın termin önce alır
+- Her sipariş için: tahsisStok + tahsisYolda + eksik
+- **Request-time hesap** (DB'de saklanmaz, sayfa açılınca canlı)
+
+**siparisTahsisOzeti() saf fonksiyon:**
+- 🟢 yeşil: tüm hammadde stokta
+- 🟡 sarı: stok yetersiz, tedarik yolda
+- 🔴 kırmızı: yeni tedarik gerek (eksik)
+
+**Yer:** MRP sayfası — sipariş kartlarında rozet + üstte toplam sayaç
+
+### Bildirim Merkezi (P4, v15.96)
+
+**Topbar Bell icon:**
+- Chat icon yanında 🔔
+- Badge: okunmamış sayı, kırmızı varsa kırmızı, sadece sarı varsa sarı
+- Dropdown panel: son 20 okunmamış + "Hepsini okundu"
+- Tıklayınca: ref_id'ye navigate (Sipariş/WO sayfaları)
+
+**Bildirim üreticileri (otomatik):**
+1. **Manuel müdahale** (v15.92'den) → kırmızı + rezerv_ihlali
+2. **MRP eksik tespit** (v15.96'dan) → MRP "Hesapla" sonrası her eksik sipariş için sarı + mrp_eksik
+   - Idempotent: aynı sipariş için açık bildirim varsa tekrar oluşturmaz
+
+---
+
+## §26.4 — Sağlık Raporu Üst Düzey Sürümü
+
+v15.89 ile **3 yeni kontrol** eklendi (toplam 14):
+
+**#12 Plansız Kesim İE'si**
+- Kesim opsiyonlu (op_kod 023/025/026/027) İE'lerden hiçbir kesim plani satirinda yer almayanlar
+- Saha vakası (29 Nis): 16 plansız İE — günlük yarım akış bırakma yakalanır
+- Auto-fix yok (kullanıcı Tam Zincir bassın veya manuel plan yapsın)
+
+**#13 Sipariş içi sıra numarası unique**
+- v15.87 idempotency fix sentinel
+- Saha vakası: 40 İE'de duplicate sira yakalandı
+
+**#14 ie_no benzersizliği ve format**
+- v15.86 boş prefix fix sentinel
+- Plus global ie_no duplicate kontrolü
+- Saha vakası: IE--01 formatı + S26A_03151 duplicate yakalandı
+
+**Toplam kontrol durumu (29 Nis akşamı):**
+- 12 PASS / 2 WARN / 0 FAIL
+- WARN'lar saha aksiyon (BORU 5 Mayıs ihtiyaç + S26A_02808 mrp_durum bayat)
+
+---
+
+## §26.5 — Yarın İçin Açık Konular
+
+### Madde 15 Eksikleri (öncelik: düşük, sahaya çıktı çalışıyor)
+- Senaryo 1 modal **Düzenle modu** atlandı — kullanıcı manuel hedef girsin (Faz 2'ye ertelendi)
+- Hammadde manuel müdahale UI — P3'te tahsis görünür, ama "rezerv kırma" UI'sı henüz yok (mamul tarafında var, hammaddeye taşınabilir)
+
+### Backlog (öncelik: yüksek)
+- **#5 Sevkiyat Oluşturma Formu** — Production-blocker
+- **#7 Toplu Sipariş Excel İmport** — Pratik gereklilik
+- **#9 Stok Onarım** — Audit kritik
+
+### Bilinen WARN'lar (saha aksiyon, kod sorunu değil)
+- BORU Ø48,3x3 5500mm — net 154 adet, termin 5 Mayıs
+- S26A_02808 — mrp_durum bayat (MRP "Hesapla" çözer)
+
+### v15.89'un yakalayamadığı (yarın yeni kontrol fikri)
+- Aynı sipariş için açık bildirim sayısı limit kontrolü (şu an idempotent, ama eski okunmuşlar birikiyor)
+- Bar Model orphan'larda eski kalıntı (#11 zaten kapsıyor — ama performans iyileştirilebilir)
+
+---
+
+## §26.6 — Mimari Kararlar Kaydı
+
+**1. Mamul rezerv: kolon vs ayrı tablo?**
+- Karar: Kolon (`rezerv_order_id` on `uys_stok_hareketler`)
+- Sebep: Minimum değişiklik, mevcut sorgu paternlerini bozmaz
+
+**2. Hammadde tahsis: real-time vs request-time?**
+- Karar: Request-time (MRP sayfası açılınca hesapla)
+- Sebep: Performans (her stok hareketinde N sipariş tahsis hesabı çok ağır)
+
+**3. Manuel müdahale: sebep+açıklama zorunluluk seviyesi?**
+- Karar: Hibrit — sebep dropdown ZORUNLU + açıklama serbest text (min 10 char) ZORUNLU
+- Sebep: Audit log'un faydalı olması için bağlam şart, ama 5 sabit seçenek + serbest kombinasyonu pratik
+
+**4. Sipariş no duplicate: UI vs DB seviyesi?**
+- Karar: Hibrit — UI uyarı (yumuşak) + DB UNIQUE constraint (sert)
+- Sebep: UI bug olursa DB durdurur; DB sert hata mesajı çirkin, UI önce yakalar
+
+**5. Bildirim merkezi: realtime vs polling?**
+- Karar: Store TABLE_MAP entry (otomatik realtime subscription dinler)
+- Sebep: Mevcut altyapı yeterli, ek subscription gereksiz
+
+**6. Senaryo 1 modal "Düzenle" modu erteleme:**
+- Karar: Faz 2'ye ertelendi
+- Sebep: Buket "Faz 1 yeterli, plan revizyonu Faz 3'e bırakılsın" dedi. Modal saha gerçeğine zaten uygun — bar bütünlüğü fazla parçası stoğa, az üretmek isteyen sipariş düzenlesin.
+
+---
+
+## §26.7 — Performans / Risk Notları
+
+- **hammaddeTahsis hesabı:** N siparişe N MRP koşumu (N=10 için ~100ms). 50+ aktif sipariş varsa gecikme olabilir; ileride memo'lanabilir.
+- **Bildirim büyümesi:** Eski okunmuş bildirimler tabloya birikir. İleride `cleanOldNotifications(30 days)` cron eklenebilir.
+- **RLS hala `allow_all`:** §20'de planlı RLS Refactoru ile sıkıştırılacak. Yeni 2 tabloda da `allow_all` (mevcut sistemle uyumlu).
+- **Audit script:** Yeni tablo eklemede 3 yer eşzamanlı güncellenmeli (DataManagement.tables + store/TABLE_MAP + audit-schema.cjs whitelist). v15.94 bu kuralın canlı uygulaması.
+
+---
+
+*Bu §26 oturumu 29 Nis 2026 akşamı (~17:00) tamamlandı. Madde 15 sahada, 15 sürüm tek günde rekor. Yarın yeni Claude oturumunun §26'yı + DEVAM_NOTU'yu okuması yeterli — chat aramaya gerek yok.*
