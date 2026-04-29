@@ -94,6 +94,22 @@ export interface ZincirSonuc {
 //   2) `uys_orders.mrp_durum` güncellenir (eksik/tamam) — manuel akışla aynı davranış
 //   3) Tedarik insert artık `mrpTedarikOlustur(opts)` ile yapılır (auto=true + mrp_calculation_id FK)
 //   4) `hesaplayan` parametresi eklendi (Orders.tsx'ten useAuth().user üzerinden geçer)
+// v15.83 — Senaryo 1 modali (kesim plani sonrasi onay) icin callback tipi.
+//   - autoZincir kesim planini olusturduktan sonra her IE icin "bar cikisi"
+//     hesabi yapar ve `onKesimFark` callback'ini cagirir.
+//   - 'kabul'  : IE.hedef bar cikisina guncellenir, MRP + tedarik devam eder.
+//   - 'iptal'  : zincir ADIM 3'ten once durur, IE'ler taslak durumda kalir.
+//   - Callback verilmezse (eski cagri yerleri) modal akisi atlanir,
+//     hedef guncellenmez, MRP siparis adeti uzerinden calisir (geriye uyum).
+export interface KesimFarkItem {
+  woId: string
+  ieNo: string
+  mamulAd: string
+  siparisAdeti: number
+  barCikisi: number
+  fark: number
+}
+
 export async function autoZincir(
   orderId: string,
   woCount: number,
@@ -103,7 +119,8 @@ export async function autoZincir(
   logs: { woId: string; qty: number }[],
   cuttingPlans: any[],
   hesaplayan: string,
-  onProgress?: (adimlar: string[]) => void
+  onProgress?: (adimlar: string[]) => void,
+  onKesimFark?: (items: KesimFarkItem[]) => Promise<'kabul' | 'iptal'>
 ): Promise<ZincirSonuc> {
   const adimlar: string[] = []
   adimlar.push(`✅ ${woCount} iş emri oluşturuldu`)
@@ -142,6 +159,62 @@ export async function autoZincir(
     hamMalkod: r.ham_malkod, hamMalad: r.ham_malad, durum: r.durum,
     gerekliAdet: r.gerekli_adet, satirlar: r.satirlar || [],
   })) || cuttingPlans
+
+  // v15.83 — Senaryo 1 modali (Faz 1 MVP): Kesim plani olusturuldu,
+  // her WO icin bar cikisi hesabi yapilir; siparis adetiyle farkli (veya esit) olsa bile
+  // kullaniciya gosterilir. 'iptal' donerse zincir burada durur (MRP/tedarik calismaz),
+  // 'kabul' donerse fark olan WO'larin hedef'i bar cikisina cekilir ve MRP yeni hedeflerle calisir.
+  if (onKesimFark) {
+    const items: KesimFarkItem[] = []
+    const orderWOs = allWOs.filter(w => w.orderId === orderId)
+    for (const wo of orderWOs) {
+      let barCikisi = 0
+      for (const plan of allCP) {
+        for (const satir of (plan.satirlar || [])) {
+          const hamAdet = Number(satir.hamAdet || 0)
+          if (hamAdet <= 0) continue
+          for (const k of (satir.kesimler || [])) {
+            if (k.woId === wo.id) {
+              barCikisi += hamAdet * Number(k.adet || 0)
+            }
+          }
+        }
+      }
+      // Sadece kesim planinda yer alan WO'lar icin sor (kesim opsiyonu olmayanlari atlama)
+      if (barCikisi > 0) {
+        items.push({
+          woId: wo.id,
+          ieNo: wo.ieNo,
+          mamulAd: wo.malad || wo.mamulAd || '',
+          siparisAdeti: wo.hedef,
+          barCikisi,
+          fark: barCikisi - wo.hedef,
+        })
+      }
+    }
+
+    if (items.length) {
+      const sonuc = await onKesimFark(items)
+      if (sonuc === 'iptal') {
+        adimlar.push('⚠️ Kullanici zinciri iptal etti (kesim onayi)')
+        onProgress?.(adimlar)
+        return { woCount, kesimCount, mrpCount: 0, tedCount: 0, eksikler: [], adimlar, mrpCalculationId: null }
+      }
+      // Kabul: fark olan WO'lar icin DB UPDATE + bellek senkronu (MRP yeni hedef gorsun diye)
+      const farkliItems = items.filter(i => i.fark !== 0)
+      if (farkliItems.length) {
+        for (const item of farkliItems) {
+          await supabase.from('uys_work_orders').update({ hedef: item.barCikisi }).eq('id', item.woId)
+          const wo = allWOs.find(w => w.id === item.woId)
+          if (wo) wo.hedef = item.barCikisi
+        }
+        adimlar.push(`✅ Kesim onayi alindi · ${farkliItems.length} IE hedefi guncellendi`)
+      } else {
+        adimlar.push('✅ Kesim onayi alindi (fark yok)')
+      }
+      onProgress?.(adimlar)
+    }
+  }
 
   // ADIM 3: MRP + Snapshot + mrp_durum
   let mrpSonuc: MRPRow[] = []

@@ -15,6 +15,8 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
 import { startFlow, advanceFlow } from '@/lib/pendingFlow'
 import { getKesimEksikWoIds, isKesimWO } from '@/lib/statusUtils'
+// v15.83 — Senaryo 1 modali (kesim plani sonrasi onay)
+import { KesimFarkModal, type KesimFarkItem } from '@/components/KesimFarkModal'
 
 // Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar.
 // Sipariş ekleme/revize/silme/kapatma, toplu MRP, tedarik değişimi sonrası çağrılmalı.
@@ -1123,6 +1125,11 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
   const [running, setRunning] = useState(false)
   const [adimlar, setAdimlar] = useState<string[]>([])
   const [sonuc, setSonuc] = useState<{ woCount: number; kesimCount: number; mrpCount: number; tedCount: number; eksikler: any[] } | null>(null)
+  // v15.83 — Senaryo 1 modali state. autoZincir kesim sonrasi onKesimFark callback'ini cagirinca:
+  //   - farkItems doldurulur (modal acilir)
+  //   - farkResolverRef.current = Promise resolve fonksiyonu (kullanici secimi gelince cagirilir)
+  const [farkItems, setFarkItems] = useState<KesimFarkItem[] | null>(null)
+  const farkResolverRef = useRef<((r: 'kabul' | 'iptal') => void) | null>(null)
   // Concurrent guard: aynı sipariş için ikinci tetik atlanır.
   const lockRef = useRef(false)
 
@@ -1160,7 +1167,13 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
         s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
         cpMapped,
         hesaplayan,
-        (steps) => setAdimlar([...steps])
+        (steps) => setAdimlar([...steps]),
+        // v15.83 — Senaryo 1 modali: kesim plani sonrasi UI'dan onay bekler.
+        // Promise olusturup resolver'i ref'e koyar; kullanici Kabul/Iptal'e basinca resolve cagrilir.
+        (items) => new Promise<'kabul' | 'iptal'>(resolve => {
+          farkResolverRef.current = resolve
+          setFarkItems(items)
+        })
       )
       setSonuc(result)
       loadAll()
@@ -1183,6 +1196,25 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-1">⚙ Sipariş Zinciri</h3>
         <div className="text-xs text-zinc-500 mb-4">{order.siparisNo} · {order.musteri}</div>
+
+        {/* v15.83 — Senaryo 1: kesim onay modali (ust katmanda, z-[70]) */}
+        {farkItems && (
+          <KesimFarkModal
+            items={farkItems}
+            onConfirm={() => {
+              const r = farkResolverRef.current
+              farkResolverRef.current = null
+              setFarkItems(null)
+              r?.('kabul')
+            }}
+            onCancel={() => {
+              const r = farkResolverRef.current
+              farkResolverRef.current = null
+              setFarkItems(null)
+              r?.('iptal')
+            }}
+          />
+        )}
 
         <div className="space-y-2 mb-4">
           {adimlar.map((a, i) => (
