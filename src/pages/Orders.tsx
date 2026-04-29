@@ -1313,7 +1313,10 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
       if (!raw.length) { toast.error('Excel boş'); setParsing(false); return }
 
       const existingSipNoSet = new Set(existingOrders.map(o => o.siparisNo))
-      const excelSipNoSeen = new Set<string>()
+      // v15.98 — Bulk import refactor: ayni siparis_no satirlari ARTIK
+      // tek siparise ait coklu kalem olarak gruplanir (eskiden "tekrar eden"
+      // diye reddediliyordu). Excel sablonunda siparis_no = group key.
+      // excelSipNoSeen kaldirildi.
 
       const parsed: BulkRow[] = raw.map((r, i) => {
         const siparisNo = String(r['Sipariş No'] || r['SiparisNo'] || r['siparis_no'] || '').trim()
@@ -1342,8 +1345,7 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
         }
 
         if (!siparisNo) { out.durum = 'error'; out.mesaj = 'Sipariş No boş'; return out }
-        if (excelSipNoSeen.has(siparisNo)) { out.durum = 'error'; out.mesaj = 'Excel içinde tekrar eden sipariş no'; return out }
-        excelSipNoSeen.add(siparisNo)
+        // v15.98 — duplicate siparis_no kontrolu kaldirildi (artik gruplaniyor).
         if (existingSipNoSet.has(siparisNo)) { out.durum = 'skip'; out.mesaj = 'Bu sipariş no zaten var — atlanacak'; return out }
         if (!termin) { out.durum = 'error'; out.mesaj = 'Termin tarihi geçersiz'; return out }
         if (!adet || adet < 1) { out.durum = 'error'; out.mesaj = 'Adet 1\'den küçük'; return out }
@@ -1363,37 +1365,80 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
     const kabul = rows.filter(r => r.durum === 'ok' || r.durum === 'warn')
     if (!kabul.length) { toast.error('İçeri alınacak geçerli satır yok'); return }
 
+    // v15.98 — siparis_no'ya gore grupla (coklu kalem destegi)
+    const grupMap = new Map<string, typeof kabul>()
+    for (const r of kabul) {
+      const list = grupMap.get(r.siparisNo) || []
+      list.push(r)
+      grupMap.set(r.siparisNo, list)
+    }
+
     setImporting(true)
-    setProgress({ cur: 0, total: kabul.length })
+    setProgress({ cur: 0, total: grupMap.size })
 
     const { recipes: fullRecipes } = useStore.getState()
 
-    const insertRows = kabul.map(r => ({
-      id: uid(),
-      siparis_no: r.siparisNo, musteri: r.musteri, tarih: today(), termin: r.termin,
-      mamul_kod: r.mamulKod, mamul_ad: r.mamulAd, adet: r.adet,
-      recete_id: r.receteId, not_: r.not,
-      mrp_durum: 'bekliyor', olusturma: today(),
-      urunler: r.receteId ? [{ rcId: r.receteId, mamulKod: r.mamulKod, mamulAd: r.mamulAd, adet: r.adet, termin: r.termin, not: r.not }] : [],
-    }))
-
-    const { error } = await supabase.from('uys_orders').insert(insertRows)
-    if (error) {
-      toast.error('DB hatası: ' + error.message); setImporting(false); return
-    }
-
+    let siparisToplam = 0
     let woTotal = 0
-    for (let i = 0; i < kabul.length; i++) {
-      const r = kabul[i]
-      const ins = insertRows[i]
-      if (r.receteId) {
-        woTotal += await buildWorkOrders(ins.id, r.siparisNo, r.receteId, r.adet, fullRecipes, r.termin)
+    let kalemToplam = 0
+
+    // Her grup = 1 siparis (1 insert + N kalem icin buildWorkOrders)
+    let idx = 0
+    for (const [siparisNo, kalemler] of grupMap) {
+      idx++
+      const ilk = kalemler[0]
+      // En yakin termin = bu siparisin termin'i (urunler[].termin ayri tutuluyor zaten)
+      const enYakinTermin = kalemler.map(k => k.termin).filter(Boolean).sort()[0] || ''
+      const orderId = uid()
+
+      const insertRow = {
+        id: orderId,
+        siparis_no: siparisNo,
+        musteri: ilk.musteri,
+        tarih: today(),
+        termin: enYakinTermin,
+        // Çoklu kalem: ana row'da ilk kalemi referans olarak yaz, gerçek kalemler urunler[]
+        mamul_kod: ilk.mamulKod,
+        mamul_ad: ilk.mamulAd,
+        recete_id: ilk.receteId,
+        adet: kalemler.reduce((a, k) => a + k.adet, 0),
+        not_: ilk.not,
+        mrp_durum: 'bekliyor',
+        olusturma: today(),
+        urunler: kalemler
+          .filter(k => k.receteId)
+          .map(k => ({
+            rcId: k.receteId,
+            mamulKod: k.mamulKod,
+            mamulAd: k.mamulAd,
+            adet: k.adet,
+            termin: k.termin,
+            not: k.not,
+          })),
       }
-      setProgress({ cur: i + 1, total: kabul.length })
-      try { logAction('Sipariş oluşturuldu (toplu)', r.siparisNo) } catch { /* */ }
+
+      const { error: ordErr } = await supabase.from('uys_orders').insert(insertRow)
+      if (ordErr) {
+        toast.error(`${siparisNo} hatasi: ${ordErr.message}`)
+        continue
+      }
+      siparisToplam++
+
+      // Her kalem icin buildWorkOrders -- siraBaslangic v15.87 idempotency ile tutulacak
+      let woTotalSip = 0
+      for (const k of kalemler) {
+        if (!k.receteId) continue
+        const c = await buildWorkOrders(orderId, siparisNo, k.receteId, k.adet, fullRecipes, k.termin, woTotalSip)
+        woTotalSip += c
+        woTotal += c
+        kalemToplam++
+      }
+
+      setProgress({ cur: idx, total: grupMap.size })
+      try { logAction('Sipariş oluşturuldu (toplu)', siparisNo) } catch { /* */ }
     }
 
-    toast.success(`${kabul.length} sipariş oluşturuldu · ${woTotal} İE üretildi`)
+    toast.success(`${siparisToplam} sipariş · ${kalemToplam} kalem · ${woTotal} İE üretildi`)
     setImporting(false)
     onComplete()
   }
@@ -1476,6 +1521,16 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
               {warnCount > 0 && <span className="px-2 py-0.5 bg-amber/10 text-amber rounded">⚠ {warnCount} uyarı</span>}
               {skipCount > 0 && <span className="px-2 py-0.5 bg-zinc-700/30 text-zinc-400 rounded">⏩ {skipCount} atlanacak</span>}
               {errorCount > 0 && <span className="px-2 py-0.5 bg-red/10 text-red rounded">✗ {errorCount} hata</span>}
+              {/* v15.98 — Bulk import gruplama: "Y satir Y siparis (X kalem)" */}
+              {(okCount + warnCount) > 0 && (() => {
+                const kabulSet = new Set(rows.filter(r => r.durum === 'ok' || r.durum === 'warn').map(r => r.siparisNo))
+                const sipSayi = kabulSet.size
+                const kalemSayi = okCount + warnCount
+                if (sipSayi !== kalemSayi) {
+                  return <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 rounded">📦 {sipSayi} sipariş ({kalemSayi} kalem)</span>
+                }
+                return null
+              })()}
             </div>
             <div className="flex-1 overflow-auto">
               <table className="w-full text-xs">
