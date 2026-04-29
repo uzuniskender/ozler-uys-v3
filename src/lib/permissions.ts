@@ -114,6 +114,13 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
   { group: 'Loglar', actions: [
     { key: 'log_view', label: 'Sistem loglarını görme' },
   ]},
+  // v15.90 — Madde 15 P1: Bildirim merkezi + Manuel müdahale yetki grubu
+  { group: 'Bildirim & Müdahale', actions: [
+    { key: 'bildirim_view',           label: 'Bildirim merkezini görme' },
+    { key: 'bildirim_okundu_isaretle', label: 'Bildirim okundu işaretleme' },
+    { key: 'manuel_mudahale_yap',     label: 'Manuel müdahale (rezerve dokunma)' },
+    { key: 'manuel_mudahale_log_view', label: 'Manuel müdahale audit log görme' },
+  ]},
 ]
 
 export const DEFAULTS: Record<string, AdminRole[]> = {
@@ -153,6 +160,12 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
 
   // v15.75 — Loglar (madde 14)
   log_view:['planlama','uretim_sor'],   // planlama + üretim sorumlusu görebilir; depocu hariç
+
+  // v15.90 — Madde 15 P1: Bildirim & Müdahale
+  bildirim_view:['planlama','uretim_sor','depocu'],            // herkese acik (sadece operator haric)
+  bildirim_okundu_isaretle:['planlama','uretim_sor','depocu'], // herkese
+  manuel_mudahale_yap:['planlama','depocu'],                   // sahada uygulayan: planlama + depocu
+  manuel_mudahale_log_view:[],                                  // sadece admin (audit gizli)
 }
 
 export const ROLE_LIST: { key: AdminRole; label: string }[] = [

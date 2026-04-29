@@ -84,20 +84,23 @@ export async function startTestRun(params: {
 // Sıra: bağımlılıklar önce (child → parent değil, delete sırası önemli değil çünkü FK yok)
 // v15.85 — uys_mrp_calculations eklendi: autoZincir snapshot insert burayi etiketsiz
 //          dolduruyordu, dolayisiyla cascade sirasinda goz ardi ediliyordu.
+// v15.90 — Madde 15 P1: bildirimler + manuel_mudahale_log eklendi (yeni tablolar).
 const TABLE_CASCADE = [
-  'uys_logs',               // üretim girişleri
-  'uys_stok_hareketler',    // stok hareketleri
-  'uys_fire_logs',          // fire kayıtları
-  'uys_active_work',        // aktif çalışma
-  'uys_mrp_rezerve',        // rezerveler
-  'uys_mrp_calculations',   // v15.85 — MRP snapshot kayıtları (autoZincir + manuel runMRP)
-  'uys_tedarikler',         // tedarikler
-  'uys_acik_barlar',        // açık bar havuzu
-  'uys_sevkler',            // sevkler
-  'uys_kesim_planlari',     // kesim planları
-  'uys_activity_log',       // v15.77 — sistem aktivite logu (Senaryo 9 için)
-  'uys_work_orders',        // iş emirleri
-  'uys_orders',             // siparişler (en son, diğerleri buna ref eder)
+  'uys_logs',                    // üretim girişleri
+  'uys_stok_hareketler',         // stok hareketleri
+  'uys_fire_logs',               // fire kayıtları
+  'uys_active_work',             // aktif çalışma
+  'uys_mrp_rezerve',             // rezerveler
+  'uys_mrp_calculations',        // v15.85 — MRP snapshot kayıtları (autoZincir + manuel runMRP)
+  'uys_bildirimler',             // v15.90 — Madde 15 P1: bildirim merkezi
+  'uys_manuel_mudahale_log',     // v15.90 — Madde 15 P1: manuel müdahale audit trail
+  'uys_tedarikler',              // tedarikler
+  'uys_acik_barlar',             // açık bar havuzu
+  'uys_sevkler',                 // sevkler
+  'uys_kesim_planlari',          // kesim planları
+  'uys_activity_log',            // v15.77 — sistem aktivite logu (Senaryo 9 için)
+  'uys_work_orders',             // iş emirleri
+  'uys_orders',                  // siparişler (en son, diğerleri buna ref eder)
 ]
 
 /** Cascade delete — sadece bu test_run_id'ye ait kayıtları sil */
