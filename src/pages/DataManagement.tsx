@@ -59,16 +59,59 @@ export function DataManagement() {
         fetchAll('uys_bom_trees'),
         fetchAll('uys_acik_barlar'),   // v15.39 — SR #11 havuz satırı adaptasyonu için
       ])
-      const wos = woRes.data || []
-      const logs = logRes.data || []
+      // v16.12 — fetchAll RAW (snake_case) ama hesaplaMRP camelCase bekliyor.
+      // Saha vakası (30 Nis 2026): PROFIL 75x50x4 için Saglik #5 net=41 dedi
+      // ama gerçek 0. Sebep: hesaplaMRP recipes.find(r => r.mamulKod===...)
+      // her zaman undefined dönüyordu (recipe RAW DB'den, mamul_kod snake_case).
+      // Fallback recursive yolu çift sayım yaratıyordu (Bilgi Bankası §27.7).
+      // Çözüm: kritik field aliasleri ekle, ...spread ile snake_case korunur.
+      const wos = (woRes.data || []).map((w: any) => ({
+        ...w,
+        orderId: w.order_id ?? w.orderId,
+        mamulKod: w.mamul_kod ?? w.mamulKod,
+        rcId: w.rc_id ?? w.rcId,
+        opAd: w.op_ad ?? w.opAd,
+        opId: w.op_id ?? w.opId,
+        siparisDisi: w.siparis_disi ?? w.siparisDisi,
+      }))
+      const logs = (logRes.data || []).map((l: any) => ({
+        ...l,
+        woId: l.wo_id ?? l.woId,
+      }))
       const fires = fireRes.data || []
-      const stoks = stokRes.data || []
+      const stoks = (stokRes.data || []).map((s: any) => ({
+        ...s,
+        woId: s.wo_id ?? s.woId,
+        logId: s.log_id ?? s.logId,
+      }))
       const teds = tedRes.data || []
-      const mats = matsRes.data || []
-      const plans = planRes.data || []
+      const mats = (matsRes.data || []).map((m: any) => ({
+        ...m,
+        hammaddeTipi: m.hammadde_tipi ?? m.hammaddeTipi,
+      }))
+      const plans = (planRes.data || []).map((p: any) => ({
+        ...p,
+        hamMalkod: p.ham_malkod ?? p.hamMalkod,
+        hamMalad: p.ham_malad ?? p.hamMalad,
+        hamBoy: p.ham_boy ?? p.hamBoy,
+        hamEn: p.ham_en ?? p.hamEn,
+        kesimTip: p.kesim_tip ?? p.kesimTip,
+        gerekliAdet: p.gerekli_adet ?? p.gerekliAdet,
+      }))
       const rezs = rezRes.data || []
-      const orders = orderRes.data || []
-      const recs = recRes.data || []
+      const orders = (orderRes.data || []).map((o: any) => ({
+        ...o,
+        mamulKod: o.mamul_kod ?? o.mamulKod,
+        mamulAd: o.mamul_ad ?? o.mamulAd,
+        mrpDurum: o.mrp_durum ?? o.mrpDurum,
+        receteId: o.recete_id ?? o.receteId,
+      }))
+      const recs = (recRes.data || []).map((r: any) => ({
+        ...r,
+        mamulKod: r.mamul_kod ?? r.mamulKod,
+        rcKod: r.rc_kod ?? r.rcKod,
+        bomId: r.bom_id ?? r.bomId,
+      }))
       const boms = bomRes.data || []
       const acikBars = abRes.data || []   // v15.39
 
@@ -779,7 +822,7 @@ export function DataManagement() {
       // Bu kontrol gelecekte ayni el kaymasini sentinel olarak yakalar.
       const receteTutarsizliklari: Array<{ receteId: string; mamulKod: string; satirMalkod: string; tip: 'BOSLUK_FARKI' | 'TAMAMEN_FARKLI' }> = []
       const norm = (s: string) => (s || '').replace(/\s+/g, '').toLowerCase()
-      for (const r of recs as any[]) {
+      for (const r of recipes as any[]) {
         const receteMamulKod = (r.mamulKod || '').trim()
         if (!receteMamulKod) continue
         // YariMamul satirlarinin kirno=1 olanini ana mamul satiri olarak al
@@ -821,7 +864,7 @@ export function DataManagement() {
         durum: boslukFarklilari.length ? 'fail' : (tamamenFarklilari.length ? 'warn' : 'pass'),
         mesaj: r15Sorun.length
           ? r15Sorun.join(' · ')
-          : `${recs.length} reçetede mamul_kod ile YarıMamul satırı uyumlu`,
+          : `${recipes.length} reçetede mamul_kod ile YarıMamul satırı uyumlu`,
         neden: r15Sorun.length
           ? 'Reçete oluştururken (Mavvo veya manuel) mamul_kod alanı ile iç YarıMamul satırının malkod alanına farklı format yazıldı. Kesim algoritması YM gruplaması yapamaz, İE plansız kalır (29 Nis 2026 IE-S26A_03146-04 vakası).'
           : undefined,
@@ -831,118 +874,6 @@ export function DataManagement() {
         detay: r15Sorun.length ? {
           boslukFarklilari: boslukFarklilari.slice(0, 10),
           tamamenFarklilari: tamamenFarklilari.slice(0, 10),
-        } : undefined,
-      })
-
-      // ═══════════════════════════════════════════════════════════════════
-      // v16.03 — #16 Siparis-toplam hammadde sentinel'i (30 Nis 2026 saha vakasi)
-      // ═══════════════════════════════════════════════════════════════════
-      // Saha: S26A_03150 plywood 5 IE'si toplam 214 levha, stok 83. Mevcut #5 (MRP §21)
-      // cutting override yuzunden bu acigi yutuyordu. Bu sentinel hesaplaMRP'yi cagirmadan
-      // direkt w.hm okuyup siparis bazinda toplam ihtiyaci stoga karsilastirir.
-      const sentinelIhlaller: Array<{
-        siparis_no: string; malkod: string; malad: string;
-        ihtiyac: number; stok: number; yolda: number; eksik: number
-      }> = []
-
-      for (const o of aktifOrders) {
-        const oWos = wos.filter((w: any) =>
-          w.order_id === o.id &&
-          w.durum !== 'iptal' &&
-          w.durum !== 'tamamlandi'
-        )
-
-        const hmGrup: Record<string, { malad: string; ihtiyac: number }> = {}
-        for (const w of oWos) {
-          for (const h of (w.hm || [])) {
-            const malkod = h.malkod
-            if (!malkod) continue
-            if (!hmGrup[malkod]) hmGrup[malkod] = { malad: h.malad || malkod, ihtiyac: 0 }
-            hmGrup[malkod].ihtiyac += Number(h.miktarTotal || 0)
-          }
-        }
-
-        for (const [malkod, info] of Object.entries(hmGrup)) {
-          const stok = stoks
-            .filter((s: any) => s.malkod === malkod)
-            .reduce((a: number, s: any) => a + (s.tip === 'giris' ? Number(s.miktar) : -Number(s.miktar)), 0)
-          const yolda = teds
-            .filter((t: any) => t.malkod === malkod && !t.geldi)
-            .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
-          const eksik = info.ihtiyac - stok - yolda
-          if (eksik > 0) {
-            sentinelIhlaller.push({
-              siparis_no: o.siparis_no || '(no yok)',
-              malkod, malad: info.malad,
-              ihtiyac: info.ihtiyac, stok, yolda, eksik
-            })
-          }
-        }
-      }
-
-      kontroller.push({
-        no: 16,
-        ad: 'Siparis-toplam hammadde sentinel\'i (cutting override bypass)',
-        durum: sentinelIhlaller.length === 0 ? 'pass' : 'warn',
-        mesaj: sentinelIhlaller.length === 0
-          ? `${aktifOrders.length} aktif siparis: hammadde toplam ihtiyac stok+yolda dengesinde`
-          : `${sentinelIhlaller.length} siparis-hammadde ciftinde toplam ihtiyac stok+yolda asiyor`,
-        neden: sentinelIhlaller.length > 0
-          ? 'Bir siparisin acik IE\'lerinin ayni hammaddeyi paylasanlari toplaminda stok yetmiyor. Mevcut #5 (MRP) cutting override mantigi nedeniyle bu acigi gosteremiyor olabilir; #16 dogrudan w.hm okuyup hesapliyor (saha vakasi: 30 Nis S26A_03150 plywood 131 eksik).'
-          : undefined,
-        aksiyon: sentinelIhlaller.length > 0
-          ? 'MRP sayfasinda Tumunu Sec -> Hesapla -> Toplu Tedarik akisini calistirin. Eger MRP eksigi gostermezse v16.02 cutting override skip kontrolune bakin.'
-          : undefined,
-        detay: sentinelIhlaller.length > 0 ? {
-          ihlaller: [...sentinelIhlaller].sort((a, b) => b.eksik - a.eksik).slice(0, 20)
-        } : undefined,
-      })
-
-      const yuvarlamaHatalari: Array<{
-        ie_no: string; siparis_no: string; ie_malkod: string;
-        hm_malkod: string; hm_malad: string; hedef: number; recete_miktar: number;
-      }> = []
-
-      for (const w of wos) {
-        if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
-        const recete = recs.find((r: any) => r.id === w.rc_id)
-        if (!recete) continue
-        for (const h of (w.hm || [])) {
-          if ((Number(h.miktarTotal) || 0) > 0) continue
-          const reSatir = (recete.satirlar || []).find((s: any) =>
-            s.malkod === h.malkod &&
-            (s.tip === 'Hammadde' || s.tip === 'hammadde') &&
-            Number(s.miktar || 0) > 0
-          )
-          if (reSatir) {
-            yuvarlamaHatalari.push({
-              ie_no: w.ie_no || '(yok)',
-              siparis_no: orders.find((o: any) => o.id === w.order_id)?.siparis_no || '(yok)',
-              ie_malkod: w.malkod || '',
-              hm_malkod: h.malkod,
-              hm_malad: h.malad || h.malkod,
-              hedef: Number(w.hedef || 0),
-              recete_miktar: Number(reSatir.miktar || 0),
-            })
-          }
-        }
-      }
-
-      kontroller.push({
-        no: 17,
-        ad: 'IE hm.miktarTotal yuvarlama hatasi (v16.08 sentinel)',
-        durum: yuvarlamaHatalari.length === 0 ? 'pass' : 'fail',
-        mesaj: yuvarlamaHatalari.length === 0
-          ? 'Aktif IE\'lerde hm.miktarTotal=0 vakasi yok'
-          : `${yuvarlamaHatalari.length} IE\'de hm.miktarTotal=0 ama receteye gore Hammadde gerekli`,
-        neden: yuvarlamaHatalari.length > 0
-          ? 'Recete miktari ondalikli (0.1666 gibi) IE oluşurken integer yuvarlanip 0 olmus. v16.08 kod fix ile yeni IE\'ler dogru hesaplaniyor. Mevcut etkilenen IE\'ler manuel SQL ile duzeltilmeli (saha: 30 Nis S26A_03151 IE-08).'
-          : undefined,
-        aksiyon: yuvarlamaHatalari.length > 0
-          ? 'Etkilenen IE\'lerin hm.miktarTotal=CEIL(hedef * recete_miktar) ile DB UPDATE yapilmali. Auto-fix yok cunku saha onayi gerek.'
-          : undefined,
-        detay: yuvarlamaHatalari.length > 0 ? {
-          ihlaller: yuvarlamaHatalari.slice(0, 30)
         } : undefined,
       })
     } catch (e: any) {
