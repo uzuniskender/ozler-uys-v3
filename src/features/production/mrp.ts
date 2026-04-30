@@ -362,14 +362,23 @@ export function hesaplaMRP(
       .map(w => (w as any).termin as string)
       .sort()[0] || ''
 
-    // BOM'dan bu malkoda eklenen tüm termin gruplarını temizle
+    // v16.07 — KÖK ÇÖZÜM: BOM toplamı kazanmalıdır eğer plan stoğa kalibre
+    // ise (saha vakası: 30 Nis 4 ihlal, sentinel #16). Eski mantık plan'ı
+    // override ediyordu → BOM eksiği yutuyordu. Yeni: max(BOM, plan).
+    // Plan > BOM ise plan kazanır (havuz/artık optimize eden vakalar).
+    let bomToplam = 0
     Object.keys(brutIhtiyac).forEach(bk => {
-      if (bk.startsWith(malkodLower + '__')) delete brutIhtiyac[bk]
+      if (bk.startsWith(malkodLower + '__')) {
+        bomToplam += brutIhtiyac[bk].brut
+        delete brutIhtiyac[bk]
+      }
     })
+    const finalBrut = Math.max(planAdet, bomToplam)
+    dbg('[MRP DEBUG] v16.07 max(BOM,plan):', hmk, 'BOM:', bomToplam, 'plan:', planAdet, '=>', finalBrut)
 
     // Plan termini ile tek satır olarak ekle
     const grupKey = malkodLower + '__' + planTermin
-    brutIhtiyac[grupKey] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: planAdet, termin: planTermin }
+    brutIhtiyac[grupKey] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: finalBrut, termin: planTermin }
   })
 
   // 5. Stok ve açık tedarik hesabı — v15.63: Buket'in net formülü
