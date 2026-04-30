@@ -17,7 +17,8 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
   const [loading, setLoading] = useState(false)
   const [showOpr, setShowOpr] = useState(false)
   // v15.52a — sicilHash field'ı eklendi (lazy migration: önce hash, yoksa plain)
-  const [oprData, setOprData] = useState<{ id: string; ad: string; kod: string; bolum: string; sifre?: string; sicilHash?: string }[]>([])
+  // v16.22 — authUserId field'ı eklendi (Aşama 2C operatör Auth pilot)
+  const [oprData, setOprData] = useState<{ id: string; ad: string; kod: string; bolum: string; sifre?: string; sicilHash?: string; authUserId?: string }[]>([])
   const [selBolum, setSelBolum] = useState('')
   const [selOprId, setSelOprId] = useState('')
   const [oprSifre, setOprSifre] = useState('')
@@ -30,6 +31,8 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
           sifre: o.sifre || '',
           // v15.52a — sicil_hash kolonu (migration sonrası dolar; lazy migration ile zamanla yayılır)
           sicilHash: o.sicil_hash || '',
+          // v16.22 — Aşama 2C operatör Auth pilot
+          authUserId: o.auth_user_id || '',
         })))
       })
     }
@@ -70,6 +73,28 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
       } catch (e) {
         // Hash yazımı başarısız olsa bile login devam eder; bir sonraki girişte tekrar denenir
         console.warn('[v15.52a] sicil_hash lazy migration failed:', e)
+      }
+    }
+
+    // v16.22 — Aşama 2C operatör Auth pilot
+    // Eğer operatör auth_user_id'ye bağlı ise (yani Supabase Auth user'ı var),
+    // arka planda signInWithPassword çağır ki authenticated session açılsın.
+    // Email format: op_<kod>@uys.local (Aşama 3'te 88 operatör için yayılacak)
+    // Başarısız ise login akışı devam eder (custom auth zaten geçti).
+    if (opr.authUserId) {
+      try {
+        const email = `op_${(opr.kod || '').toLowerCase()}@uys.local`
+        const { error: authErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: oprSifre,
+        })
+        if (authErr) {
+          console.warn('[v16.22] Operatör Auth signIn başarısız (devam ediliyor):', authErr.message)
+        } else {
+          console.info('[v16.22] Operatör Auth signIn OK:', email)
+        }
+      } catch (e: any) {
+        console.warn('[v16.22] Operatör Auth bağlantı hatası (devam ediliyor):', e?.message)
       }
     }
 
@@ -156,7 +181,7 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
           {/* ── 1. KULLANICI GİRİŞİ — en üstte, her zaman açık ── */}
           <form onSubmit={handleSubmit} className="mb-4">
             <div className="space-y-2.5">
-              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Kullanıcı Adı veya E-posta"
+              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Kullanıcı Adı"
                 className="w-full px-4 py-3 bg-bg-2 border border-border rounded-xl text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent transition-colors" autoFocus />
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Şifre"
                 className="w-full px-4 py-3 bg-bg-2 border border-border rounded-xl text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent transition-colors" />
