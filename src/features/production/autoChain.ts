@@ -62,15 +62,7 @@ export async function buildWorkOrders(
     const depth = (s.kirno || '').split('.').length
     const hm = satirlar
       .filter(r => r.tip === 'Hammadde' && r.kirno?.startsWith(s.kirno + '.') && r.kirno.split('.').length === depth + 1)
-      .map(h => {
-        const m = Number(h.miktar || 0)
-        const t = Number(adet || 0)
-        return {
-          malkod: h.malkod,
-          malad: h.malad,
-          miktarTotal: m > 0 ? Math.max(1, Math.ceil(t * m)) : 0,
-        }
-      })
+      .map(h => ({ malkod: h.malkod, malad: h.malad, miktarTotal: Math.round(adet * (h.miktar || 1)) }))
 
     woIdx++
     const isMamulAuto = !s.opId && s.tip === 'Mamul'

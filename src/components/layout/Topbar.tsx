@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
 import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
-import { isOrderMrpPending, isWorkOrderOpen, isProcurementPending, isKesimWO, getPlanliWoIds, getPlanBekleyenWoIds, computeOrderHammaddeEksik } from '@/lib/statusUtils'
+import { isOrderMrpPending, isWorkOrderOpen, isProcurementPending, isKesimWO, getPlanliWoIds, getPlanBekleyenWoIds } from '@/lib/statusUtils'
 import { Hourglass } from 'lucide-react'
 
 interface TopbarProps {
@@ -17,12 +17,6 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs, bildirimler } = useStore()
-
-  // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
-  const orderHmEksikMap = useMemo(
-    () => computeOrderHammaddeEksik(orders, workOrders, stokHareketler, tedarikler),
-    [orders, workOrders, stokHareketler, tedarikler]
-  )
   const { user } = useAuth()
   const [showPassModal, setShowPassModal] = useState(false)
   const [showFlowModal, setShowFlowModal] = useState(false)
@@ -74,7 +68,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
     // v15.79 — Plan Bekleyen: Üretilebilir olmayan açık WO'ların toplamı.
     // Kapsamı KESİM/MRP/TEDARİK'ten daha geniş — operatör panelinde görünmeyen tüm engellileri toplar.
     const planBekleyen = getPlanBekleyenWoIds(
-      workOrders, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any, orderHmEksikMap
+      workOrders, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any,
     ).size
 
     return { kesim, mrp, tedarik, planBekleyen }

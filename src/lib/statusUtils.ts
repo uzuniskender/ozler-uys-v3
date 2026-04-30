@@ -20,54 +20,6 @@
 
 import type { Order, WorkOrder, CuttingPlan, Tedarik, AcikBar } from '@/types'
 
-// ─── v16.05 — #20 Sipariş-bütünü hammadde rekabeti helper ─────────────────────────────────────────
-
-/**
- * Sipariş bazında toplam hammadde ihtiyacını hesaplar ve stok+yolda yetmeyenleri döndürür.
- * Sentinel #16'nın mantığını UI'a yansıtmak için: aynı siparişteki birden çok IE aynı
- * hammaddeyi paylaşırsa toplam ihtiyac stok+yoldayı aşıyor olabilir ama her IE tek başına
- * yeterli görünüyor. Saha vakası: S26A_03150 plywood 5 IE x ortalama 43 levha = 214 toplam,
- * stok 83 → ancak IE-14 tek başına 100 ihtiyaç ile yakalandı, IE-10/11/12/13 "yeterli" sanıldı.
- *
- * @returns Map<orderId, Set<eksik_malkod>>
- */
-export function computeOrderHammaddeEksik(
-  orders: any[],
-  allWos: WorkOrder[],
-  stokHareketler: any[],
-  tedarikler: any[]
-): Map<string, Set<string>> {
-  const result = new Map<string, Set<string>>()
-  for (const o of orders) {
-    const oWos = allWos.filter(w =>
-      w.orderId === o.id &&
-      w.durum !== 'iptal' &&
-      w.durum !== 'tamamlandi'
-    )
-    // Hammadde bazında toplam ihtiyaç
-    const hmGrup: Record<string, number> = {}
-    for (const w of oWos) {
-      for (const h of (w.hm || [])) {
-        if (!h.malkod) continue
-        hmGrup[h.malkod] = (hmGrup[h.malkod] || 0) + Number(h.miktarTotal || 0)
-      }
-    }
-    // Stok + yolda kontrolü
-    const eksikSet = new Set<string>()
-    for (const [malkod, ihtiyac] of Object.entries(hmGrup)) {
-      const stok = stokHareketler
-        .filter(s => s.malkod === malkod)
-        .reduce((a, s) => a + (s.tip === 'giris' ? Number(s.miktar) : -Number(s.miktar)), 0)
-      const yolda = tedarikler
-        .filter(t => t.malkod === malkod && !t.geldi)
-        .reduce((a, t) => a + Number(t.miktar || 0), 0)
-      if (ihtiyac > stok + yolda) eksikSet.add(malkod)
-    }
-    if (eksikSet.size > 0) result.set(o.id, eksikSet)
-  }
-  return result
-}
-
 // ─── ORDERS (siparişler) ─────────────────────────────────────────
 
 /**
@@ -312,7 +264,6 @@ export function getEffectiveStatus(
   tedarikler: Tedarik[],
   stokHareketler: StokHareket[],
   logs?: { woId: string; qty: number }[],
-  orderHmEksikMap?: Map<string, Set<string>>,
 ): StatusReason {
   // 1. DB durumu zorlayıcı
   const d = (w.durum || '').toLowerCase().trim()
@@ -334,22 +285,6 @@ export function getEffectiveStatus(
   if (hm.length === 0) {
     // BOM tanımsız İE — varsayılan Üretilebilir (operatör panel canProduceWO ek koruma)
     return { status: 'Uretilebilir', reason: '', blockedBy: null }
-  }
-
-  // v16.05 — #20: Sipariş-bütünü hammadde rekabeti (sentinel #16 mantığının UI yansıması)
-  if (orderHmEksikMap && w.orderId) {
-    const orderEksik = orderHmEksikMap.get(w.orderId)
-    if (orderEksik && hm.length > 0) {
-      const ilkOrtak = hm.find(h => orderEksik.has(h.malkod))
-      if (ilkOrtak) {
-        // Bu sipariş bütününde bu hammadde eksik → tedarik yok kabul et
-        return {
-          status: 'PlanBekliyor',
-          reason: `${ilkOrtak.malad || ilkOrtak.malkod} sipariş toplamında stok+yolda yetmiyor (sipariş paylaşımlı eksik)`,
-          blockedBy: 'tedarik_yok',
-        }
-      }
-    }
   }
 
   // Üretim ilerlemesi → kalan hammadde ihtiyacı
@@ -412,12 +347,11 @@ export function getPlanBekleyenWoIds(
   tedarikler: Tedarik[],
   stokHareketler: StokHareket[],
   logs?: { woId: string; qty: number }[],
-  orderHmEksikMap?: Map<string, Set<string>>,
 ): Set<string> {
   const set = new Set<string>()
   for (const w of workOrders) {
     if (!isWorkOrderOpen(w)) continue
-    const eff = getEffectiveStatus(w, cuttingPlans, tedarikler, stokHareketler, logs, orderHmEksikMap)
+    const eff = getEffectiveStatus(w, cuttingPlans, tedarikler, stokHareketler, logs)
     if (eff.status === 'PlanBekliyor') set.add(w.id)
   }
   return set

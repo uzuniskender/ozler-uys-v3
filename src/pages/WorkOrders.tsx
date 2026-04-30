@@ -8,7 +8,7 @@ import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
-import { getPlanliWoIds, isKesimWO, getEffectiveStatus, computeOrderHammaddeEksik, type StatusReason } from '@/lib/statusUtils'
+import { getPlanliWoIds, isKesimWO, getEffectiveStatus, type StatusReason } from '@/lib/statusUtils'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { ActiveFlowDecisionModal } from '@/components/ActiveFlowDecisionModal'
@@ -21,12 +21,6 @@ import { startFlow } from '@/lib/pendingFlow'
 
 export function WorkOrders() {
   const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, materials, pendingFlows, loadAll } = useStore()
-
-  // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
-  const orderHmEksikMap = useMemo(
-    () => computeOrderHammaddeEksik(orders, workOrders, stokHareketler, tedarikler),
-    [orders, workOrders, stokHareketler, tedarikler]
-  )
   const { can, isGuest, user } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
@@ -49,10 +43,10 @@ export function WorkOrders() {
   const effectiveStatusMap = useMemo(() => {
     const map: Record<string, StatusReason> = {}
     for (const w of workOrders) {
-      map[w.id] = getEffectiveStatus(w, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any, orderHmEksikMap)
+      map[w.id] = getEffectiveStatus(w, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any)
     }
     return map
-  }, [workOrders, cuttingPlans, tedarikler, stokHareketler, logs, orderHmEksikMap])
+  }, [workOrders, cuttingPlans, tedarikler, stokHareketler, logs])
 
   // Geriye uyum: planBekliyorIds eski ad — hala kod altında kullanılıyor olabilir
   const planBekliyorIds = useMemo(() => {
