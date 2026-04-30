@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 30 Nisan 2026 öğle (v16.15 patch hijyen koruması · 14 sürüm tek günde rekor)
+**Son güncelleme:** 30 Nisan 2026 öğle (v16.16 updated_at trigger 30 tabloya · 14 sürüm + 1 DB migration tek günde rekor)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
@@ -77,6 +77,7 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | **v16.13 (30 Nis öğle)** | Sentinel #15 `recipes`→`recs` (v16.00 fix v16.12 base'imdeki eski snapshot'tan kazara silinmişti) |
 | **v16.14 (30 Nis öğle)** | Sentinel #16 + #17 geri eklendi (v16.12 patch'imde aynı kaza ile silinmişti) |
 | **v16.15 (30 Nis öğle)** | **`scripts/saglik-syntax-check.cjs`** — prebuild hook patch hijyen koruması: `kontroller.push>=17` + `recipes` kod referansı yasağı. Aynı kazaların bir daha olmasını yapısal engeller. |
+| **v16.16 (30 Nis öğle, DB-only)** | **PostgreSQL `updated_at` trigger 30 tabloya yayıldı** — `set_updated_at()` fonksiyonu zaten vardı, sadece uys_hm_tipleri'nde aktifdi. 29 yeni trigger eklendi. Her UPDATE'te `updated_at = NOW()` otomatik. **#23 "bug değil" notu kapandı**, audit/debug gözlemi rahatlar. |
 
 ---
 
@@ -293,12 +294,12 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 
 ## 📌 30 Nis 2026 öğlen — bilinen "bug değil" konular
 
-### #23 — Hesapla mrp_durum DB UPDATE'i
+### #23 — Hesapla mrp_durum DB UPDATE'i ✅ **KAPANDI (v16.16)**
 
-**Bug değil, gözlem yanılgısıydı.** `uys_orders.updated_at` PostgreSQL'de otomatik trigger'la güncellenmiyor. Hesapla butonu `update({ mrp_durum: ... })` yazınca mrp_durum DB'ye **doğru** yansır, ama updated_at sabit kalır → biz "UPDATE atılmadı" sandık.
+**Bug değil, gözlem yanılgısıydı.** `uys_orders.updated_at` PostgreSQL'de otomatik trigger'la güncellenmiyordu. Hesapla butonu `update({ mrp_durum: ... })` yazınca mrp_durum DB'ye **doğru** yansır, ama updated_at sabit kalır → biz "UPDATE atılmadı" sandık.
 
-**Saha açısından zarar yok** (Sağlık #7 mrp_durum gerçek hesapla uyumluluğunu kontrol eder, updated_at'e bakmaz).
+**Saha açısından zarar yoktu** (Sağlık #7 mrp_durum gerçek hesapla uyumluluğunu kontrol eder, updated_at'e bakmaz).
 
-**Gelecek (öncelik düşük):** PostgreSQL `BEFORE UPDATE` trigger eklenebilir → her UPDATE'te `updated_at = NOW()`. v16.0.0 audit-columns altyapısı zaten kolonu bekliyor; trigger ek katman.
+**Çözüm (v16.16):** `set_updated_at()` PL/pgSQL fonksiyonu zaten DB'de tanımlıydı (sadece `uys_hm_tipleri`'ne bağlanmıştı). Migration ile 29 eksik tabloya `BEFORE UPDATE` trigger eklendi. Toplam **30 tablo** artık her UPDATE'te `updated_at = NOW()` otomatik.
 
 **v16.04 sentinel'i hala değerli:** UPDATE error veya `0 rows` durumlarını yakalar (RLS değişirse, sipariş silindiyse vs.). Yanlış teşhis için kullanılmaz.

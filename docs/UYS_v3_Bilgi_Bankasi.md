@@ -2564,10 +2564,35 @@ Ondan sonra str_replace ile sadece değiştirilmesi gereken bölgeye dokun. Geri
 
 **Ders:** UPDATE'in DB'ye yansıyıp yansımadığını teşhis ederken `updated_at`'a güvenme. Direkt değişen field'ı oku (mrp_durum gibi). Veya değişen değeri RETURNING ile geri al (v16.04 sentinel bunu yapıyor).
 
-**Gelecek (öncelik düşük):** PostgreSQL `BEFORE UPDATE` trigger eklenebilir → her UPDATE'te `updated_at = NOW()`. Saha açısından zarar yok ama audit/debug gözlemi kolaylaşır. Backlog'da #23'ün altına eklendi.
+### v16.16 — Çözüm uygulandı (DB migration)
+
+`set_updated_at()` PL/pgSQL fonksiyonu zaten DB'de tanımlıydı (kim oluşturduğu commit history'sinde belirsiz, muhtemelen v15.x bir döneminde). Ama sadece **bir tabloda** (uys_hm_tipleri) trigger'a bağlanmıştı. Diğer 29 tabloda bağlantı yoktu.
+
+`v16_16_updated_at_triggers_29_tablo` migration'ı ile `uys_*` ön ekli 30 tablonun tamamına `BEFORE UPDATE FOR EACH ROW EXECUTE FUNCTION set_updated_at()` trigger'ı eklendi:
+
+```sql
+DO $$
+DECLARE t TEXT;
+DECLARE tablolar TEXT[] := ARRAY['uys_acik_barlar', 'uys_active_work', ..., 'uys_yetki_ayarlari'];
+BEGIN
+  FOREACH t IN ARRAY tablolar LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%I_updated_at ON public.%I', t, t);
+    EXECUTE format(
+      'CREATE TRIGGER trg_%I_updated_at BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()',
+      t, t
+    );
+  END LOOP;
+END $$;
+```
+
+Test (S26A_03150 mrp_durum UPDATE): `updated_at` 0 saniye önce → otomatik güncellendi ✓.
+
+**Bu DB-only migration, kod push gerektirmedi.** Supabase MCP `apply_migration` aracı üzerinden uygulandı.
+
+**Ek ders:** DB'de hazır kayıtlı fonksiyonlar bağlanmamış olabilir. Yeni tablo eklemede §18.2 "Yeni Tablo Konvansiyonu"'na bir madde daha ekle: **trigger bağlantısını da yap** (audit-schema.cjs whitelist + DataManagement.tables + store/TABLE_MAP + **trg_<tablo>_updated_at trigger**).
 
 ---
 
-*Bu §27 oturumu 30 Nis 2026 öğlen ~08:30'da tamamlandı. 14 sürüm + 1 doc commit + 4 DB fix + 5 saha krizi tek günde. v15.99 öncesi DEVAM_NOTU'daki "42 reçete yuvarlama hatası" maddesi v16.08 ile kapandı (kalıcı kod fix + sentinel #17). Yarın yeni Claude oturumunun §27'yi + DEVAM_NOTU'yu okuması yeterli — chat aramaya gerek yok.*
+*Bu §27 oturumu 30 Nis 2026 öğlen ~11:50'de tamamlandı. **14 sürüm + 1 doc commit + 1 DB migration + 4 DB fix + 5 saha krizi** tek günde. v15.99 öncesi DEVAM_NOTU'daki "42 reçete yuvarlama hatası" maddesi v16.08 ile kapandı (kalıcı kod fix + sentinel #17). #23 vakası v16.16 ile kapandı (PostgreSQL trigger). Yarın yeni Claude oturumunun §27'yi + DEVAM_NOTU'yu okuması yeterli — chat aramaya gerek yok.*
 
 ---

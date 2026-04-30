@@ -1,8 +1,8 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
 **Tarih:** 30 Nisan 2026 sabah-öğle (oturum, ~05:00–08:30)
-**Son canlı sürüm:** v16.15
-**Bugün push edilen:** **14 sürüm** (v16.00 → v16.15) + 1 doc commit (e753e71). v15.99 öncesi DEVAM_NOTU kaynaklı saha vakası 5 saatte tek tek çözüldü.
+**Son canlı sürüm:** v16.16 (DB migration, kod push'u yok)
+**Bugün push edilen:** **14 sürüm** (v16.00 → v16.15) + 1 doc commit (e753e71) + **v16.16 DB migration** (updated_at trigger 30 tabloya).
 
 ---
 
@@ -52,7 +52,8 @@ oku.
 | v16.12 | Sağlık raporu camelCase mapping wrapper — `fetchAll` raw DB ile `hesaplaMRP` arasındaki snake/camel uyumsuzluğu | 🔴 +41 vakası kök neden |
 | v16.13 | Sentinel #15 `recipes`→`recs` (v16.00 fix v16.12 base'imdeki eski snapshot'tan kazara silinmişti) | 🔴 kaza fix |
 | v16.14 | Sentinel #16 + #17 geri eklendi (v16.12 patch'imde aynı kaza ile silinmişti) | 🔴 kaza fix |
-| v16.15 | `scripts/saglik-syntax-check.cjs` — prebuild hook (kontroller.push>=17 + recipes referans yasağı) | 🟢 yapısal koruma |
+| v16.15 (30 Nis öğle) | **`scripts/saglik-syntax-check.cjs`** — prebuild hook (kontroller.push>=17 + recipes referans yasağı) | 🟢 yapısal koruma |
+| **v16.16 (30 Nis öğle, DB-only)** | **PostgreSQL `updated_at` trigger 30 tabloya yayıldı** — `set_updated_at()` fonksiyonu zaten vardı (sadece uys_hm_tipleri'nde aktifdi), 29 yeni trigger eklendi. Her UPDATE'te `updated_at = NOW()` otomatik. **#23 "bug değil" notu artık tamamen kapandı**, audit/debug gözlemi rahatlar. | 🟢 temizlik |
 
 Doc commit: `e753e71` (DEVAM_NOTU + Backlog + Bilgi Bankası §27 ilk yazım — sonra §27 da kaybolmuştu, bu sefer v16.15 ile yeniden ve kalıcı yazıldı).
 
