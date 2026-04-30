@@ -259,7 +259,25 @@ export function MRP() {
     for (const oid of ordIds) {
       const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
-      await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid)
+
+      // v16.04 — #23 sentinel: UPDATE DB'ye yansidi mi dogrula. Saha vakasi (30 Nis):
+      // Hesapla basildi, ekranda eksik gorundu, ama DB'de updated_at degismedi.
+      // RLS / network / async yutma olabilir. Sentinel: hata sessiz kalmasin.
+      const o = orders.find((x: any) => x.id === oid)
+      const { error: updErr, data: updData } = await supabase
+        .from('uys_orders')
+        .update({ mrp_durum: yeniDurum })
+        .eq('id', oid)
+        .select('id, mrp_durum, updated_at')
+      if (updErr) {
+        console.error('[v16.04 #23 sentinel] UPDATE error:', updErr, 'oid:', oid)
+        toast.error(`MRP UPDATE hatasi (sip ${o?.siparisNo || oid}): ${updErr.message}`)
+      } else if (!updData || updData.length === 0) {
+        // RLS row-level filtre nedeniyle satira ulasilamadi
+        console.error('[v16.04 #23 sentinel] UPDATE silently rejected (0 rows):', oid)
+        toast.error(`MRP UPDATE atilmadi (sip ${o?.siparisNo || oid}): RLS engelliyor olabilir`)
+      }
+
       // Rezerve kayıtları yaz (eskileri silip yenilerini oluştur)
       await rezerveYaz(oid, tekResult)
     }
