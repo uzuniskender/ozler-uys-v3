@@ -39,6 +39,10 @@ export function useAuth() {
       if (session?.user) {
         const email = session.user.email || ''
         if (ADMIN_EMAILS.includes(email)) {
+          // v16.24 — Admin login'de operator session'i temizle
+          // (eger ayni tarayicidan once operator olarak girildiyse, session yoksa
+          // sessionStorage OPR_KEY okunmaya devam eder ve admin gorunmez)
+          sessionStorage.removeItem(OPR_KEY)
           const authUser: AuthUser = {
             role: 'admin',
             username: session.user.user_metadata?.full_name || email.split('@')[0],
@@ -62,6 +66,9 @@ export function useAuth() {
       if (session?.user) {
         const email = session.user.email || ''
         if (ADMIN_EMAILS.includes(email)) {
+          // v16.24 — Admin Auth session'a gecince operator sessionStorage'i temizle
+          // Aksi halde getStored() once OPR_KEY'i okur, admin gorunmez
+          sessionStorage.removeItem(OPR_KEY)
           const authUser: AuthUser = {
             role: 'admin',
             username: session.user.user_metadata?.full_name || email.split('@')[0],
