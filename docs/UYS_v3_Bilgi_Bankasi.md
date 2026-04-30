@@ -1385,8 +1385,8 @@ NET İHTİYAÇ = İHTİYAÇ - STOK - YOLDA
 ## Karar Mantığı
 
 ```
-E�er İhtiyaç < Stok + Yolda  →  MRP "TAMAM" (yeterli)
-E�er İhtiyaç > Stok + Yolda  →  MRP "EKSİK" (Net İhtiyaç kadar tedarik aç)
+E�er İhtiyaç < Stok + Yolda  →  MRP "TAMAM" (yeterli)
+E�er İhtiyaç > Stok + Yolda  →  MRP "EKSİK" (Net İhtiyaç kadar tedarik aç)
 ```
 
 ## Buket'in Kritik Açıklaması
@@ -2209,3 +2209,48 @@ Bu prensipte:
 ---
 
 *Bu §26.8 ek bölümü 29 Nis 2026 ~17:00'da eklendi. Bugünün toplam push'u 18 sürüme ulaştı (v15.82 → v15.99).*
+
+## §27 — 30 Nisan 2026 — MRP Cutting Override LEVHA Vakası + v16.x Hotfix Serisi
+
+- `DataManagement.tsx` içindeki #15 sentinel kodu `recipes` isimli bir değişkene referans veriyordu.
+- Kod bloğunda lokal scope'ta `recs` olarak tanımlanan değişken vardı; bu nedenle `ReferenceError` oluştu.
+- Sonuç: Sağlık raporu üretilmedi, #15 sentinel raporu patladı.
+- Fix: `recipes` → `recs` düzeltmesi ile rapor üretimi kurtarıldı.
+
+## §27.2 v16.01 MRP filtre dbEksik (band-aid)
+
+- `MRP.tsx` filtreye `dbEksik` koşulu eklendi.
+- Bu değişiklik, `mrp_durum='eksik'` durumunun DB'de görünür olmasını sağladı.
+- Ancak bu yalnızca görünürlük band-aid'iydi; kök sorun `Hesapla` akışının DB persistansında kaldı.
+
+## §27.3 v16.02 cutting override LEVHA skip (kök fix)
+
+- `mrp.ts` içindeki cutting override mantığı, LEVHA yüzey kesimleri için 1D bin-packing varsayımı yapıyordu.
+- `parcaEn` dolu yüzey kesimleri `kesimTip='yuzey'` olarak işaretleniyor, fakat override kodu yine de 1D mantıkla işlemeye çalışıyordu.
+- Sonuç olarak, plywood LEVHA'lar için eksik tespiti yanlış atlandı.
+- Fix: LEVHA override akışı skip edildi ve yüzey kesim 1D mantığı devreden çıkarıldı; eksik tespit doğru çalışmaya başladı.
+
+## §27.4 Saha vakası kronolojisi
+
+- Saha: S26A_03150 (MV GRUP, 5 Mayıs termin) plywood 131 levha eksik.
+- `v16.00` öncesinde #15 sentinel patlıyordu, v16.01 ile eksik DB görünür hale getirildi, ancak gerçek root kapanmadı.
+- `v16.02` sonrası LEVHA skip kök fix ile eksik tespiti doğru oldu.
+- Kullanıcı tedarik etti; plywood stok 214/214 ve BORU 5500 stok 154/154 ile sipariş artık kaynak açısından yeterli.
+
+## §27.5 Sentinel ilkesi devam — yeni #16 + #17 tasarımı
+
+- **#16:** `sipariş-toplam HM` kontrolü.
+  - Her aktif sipariş için, açık (`durum != tamamlandi/iptal`) İE'lerin toplam hammadde ihtiyacını grupla.
+  - `Σ ihtiyaç > stok + açık_tedarik` ise WARN üret.
+  - Bu kontrol, `statusUtils.ts` İE-bazlı bağımsız mantığını sipariş-bağlamlı mantığa tamamlar.
+- **#17:** `Hesapla` butonu `mrp_durum` DB persistansını garantilemeli.
+  - `mrp_durum` değişimi DB'de 5 saniye içinde yansımıyorsa uyarı üretilmeli.
+  - Amaç: UI eylemi ile gerçek DB durumu eşleşsin.
+
+## §27.6 Mimari ders
+
+- `cutting` override LEVHA için zaten 1D mantık yanlıştı.
+- Bu boşluk, `v15.50a Faz B P2 termin gruplama` sürecinde kaçırıldı.
+- Ders: LEVHA/yüzey kesim mantığı `Cutting`/`mrp.ts`/`statusUtils` üçgeninde ayrı ayrı test edilmeli; 2D/LEVHA durumları sentinel olarak tanımlanmalı.
+- `v15.50a` geçişinde 1D varsayım, termin gruplama eklentisi yapılırken yeniden gözden geçirilmeliydi.
+

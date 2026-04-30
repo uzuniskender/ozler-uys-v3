@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 30 Nisan 2026 sabah (v16.00 sağlık raporu hotfix · 3 yeni istek eklendi)
+**Son güncelleme:** 30 Nisan 2026 sabah (v16.02 hotfix serisi · 4 yeni istek eklendi)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
@@ -20,7 +20,7 @@
 
 ---
 
-## 📅 Son Sürümler (25–27 Nisan 2026)
+## 📅 Son Sürümler (25 Nisan – 30 Nisan 2026)
 
 Bu master backlog'a doğrudan etki eden sürümler:
 
@@ -64,6 +64,8 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | | • **v15.96: Madde 15 P4** (bildirim merkezi — Topbar Bell) |
 | **v15.97-99 (29 Nis akşam)** | Doc kalıcı kayıt + bulk import çoklu kalem + Sağlık #15 reçete iç tutarlılık sentinel |
 | **v16.00 (30 Nis sabah)** | **Sağlık raporu hotfix** — `DataManagement.tsx` #15 sentinel'inde `recipes` referansı yerel scope'taki `recs` değişkenine uydurulmamıştı (ReferenceError → tüm rapor patladı). 2 satır tipo. JSON çıktısı: 13 PASS · 2 WARN · 0 FAIL (gerçek tedarik WARN'ları, kod sorunu değil). |
+| **v16.01 (30 Nis sabah)** | MRP filtre `dbEksik` band-aid — `mrp_durum='eksik'` DB görünür hale getirildi. |
+| **v16.02 (30 Nis sabah)** | `mrp.ts` LEVHA cutting override skip kök fix — yüzey kesim 1D mantığı kapatıldı. |
 
 ---
 
@@ -237,6 +239,7 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 | **#20** | **Sipariş-bütünü PlanBekliyor** (`getEffectiveStatus` refactor) | Topbar [PLAN BEKLEYEN N] sahaya gerçeği söylesin | ~30 satır, 1 dosya |
 | **#21** | **2D bin-packing (yüzey kesim)** | Plywood/levha kesimde ~%30-40 hammadde tasarrufu | Hafta seviyesi (yeni algoritma + reçete grup) |
 | **#22** | **Sağlık #16 sentinel — sipariş-toplam hammadde** | Gizli hammadde rekabeti yakalansın | ~50 satır (sentinel pattern) |
+| **#23** | **Hesapla butonu mrp_durum DB UPDATE'ini yazmıyor** | MRP görünürlüğü ve sağlık raporu tutarlılığı | Yarım gün + belirsiz fix |
 
 ### #20 — Sipariş-bütünü PlanBekliyor (mimari boşluk, küçük)
 
@@ -274,4 +277,16 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 
 ---
 
-*Bu Master Backlog v16.00 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). 29 Nisan'da 18 sürümle Madde 15 tam tur kapandı + Sağlık #15 sentinel eklendi. 30 Nisan sabahı v16.00 hotfix + 3 yeni istek (#20-22) eklendi. Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
+### #23 — Hesapla butonu `mrp_durum` DB UPDATE'ini DB'ye yazmıyor (kronik)
+
+**Kök neden:** `MRP.tsx` Hesapla handler'ı güncelleme payload'u ile `supabase` PATCH çağırıyor, ancak `updated_at` değişmiyor. Yani işlem UI tarafında veya store'da tamamlanmış gibi görünse de DB'ye ulaşmıyor.
+
+**Saha kanıtı:** 30 Nis 06:00 — Buket Hesapla bastı, eksik 131 plywood ekranda görüntülendi, fakat `mrp_durum` DB'de hâlâ `tamam` olarak kaldı ve `updated_at` 17 saat önceydi.
+
+**Çözüm önerisi:** Network tab'dan `PATCH /uys_orders` çağrısı atılıyor mu kontrol et. `v16.04` için post-condition sentinel ekle: `updated_at` 5 sn içinde değişmediyse `toast.error` göster.
+
+**Tahmin çaba:** Tanı yarım gün, fix değişken olabilir (RLS / await / cache problemi olabilir).
+
+---
+
+*Bu Master Backlog v16.00 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). 29 Nisan'da 18 sürümle Madde 15 tam tur kapandı + Sağlık #15 sentinel eklendi. 30 Nisan sabahı v16.00-v16.02 hotfix serisi + 4 yeni istek (#20-23) eklendi. Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
