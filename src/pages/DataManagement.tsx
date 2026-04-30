@@ -897,6 +897,54 @@ export function DataManagement() {
           ihlaller: [...sentinelIhlaller].sort((a, b) => b.eksik - a.eksik).slice(0, 20)
         } : undefined,
       })
+
+      const yuvarlamaHatalari: Array<{
+        ie_no: string; siparis_no: string; ie_malkod: string;
+        hm_malkod: string; hm_malad: string; hedef: number; recete_miktar: number;
+      }> = []
+
+      for (const w of wos) {
+        if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
+        const recete = recs.find((r: any) => r.id === w.rc_id)
+        if (!recete) continue
+        for (const h of (w.hm || [])) {
+          if ((Number(h.miktarTotal) || 0) > 0) continue
+          const reSatir = (recete.satirlar || []).find((s: any) =>
+            s.malkod === h.malkod &&
+            (s.tip === 'Hammadde' || s.tip === 'hammadde') &&
+            Number(s.miktar || 0) > 0
+          )
+          if (reSatir) {
+            yuvarlamaHatalari.push({
+              ie_no: w.ie_no || '(yok)',
+              siparis_no: orders.find((o: any) => o.id === w.order_id)?.siparis_no || '(yok)',
+              ie_malkod: w.malkod || '',
+              hm_malkod: h.malkod,
+              hm_malad: h.malad || h.malkod,
+              hedef: Number(w.hedef || 0),
+              recete_miktar: Number(reSatir.miktar || 0),
+            })
+          }
+        }
+      }
+
+      kontroller.push({
+        no: 17,
+        ad: 'IE hm.miktarTotal yuvarlama hatasi (v16.08 sentinel)',
+        durum: yuvarlamaHatalari.length === 0 ? 'pass' : 'fail',
+        mesaj: yuvarlamaHatalari.length === 0
+          ? 'Aktif IE\'lerde hm.miktarTotal=0 vakasi yok'
+          : `${yuvarlamaHatalari.length} IE\'de hm.miktarTotal=0 ama receteye gore Hammadde gerekli`,
+        neden: yuvarlamaHatalari.length > 0
+          ? 'Recete miktari ondalikli (0.1666 gibi) IE oluşurken integer yuvarlanip 0 olmus. v16.08 kod fix ile yeni IE\'ler dogru hesaplaniyor. Mevcut etkilenen IE\'ler manuel SQL ile duzeltilmeli (saha: 30 Nis S26A_03151 IE-08).'
+          : undefined,
+        aksiyon: yuvarlamaHatalari.length > 0
+          ? 'Etkilenen IE\'lerin hm.miktarTotal=CEIL(hedef * recete_miktar) ile DB UPDATE yapilmali. Auto-fix yok cunku saha onayi gerek.'
+          : undefined,
+        detay: yuvarlamaHatalari.length > 0 ? {
+          ihlaller: yuvarlamaHatalari.slice(0, 30)
+        } : undefined,
+      })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
       console.error(e)
