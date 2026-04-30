@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 29 Nisan 2026 akşam (15 sürüm push, **Madde 15 tam tur tamamlandı**)
+**Son güncelleme:** 30 Nisan 2026 sabah (v16.00 sağlık raporu hotfix · 3 yeni istek eklendi)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
@@ -62,6 +62,8 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | | • v15.93-94: Audit schema + senkronizasyon |
 | | • **v15.95: Madde 15 P3** (hammadde FIFO tahsis + MRP rozetleri) |
 | | • **v15.96: Madde 15 P4** (bildirim merkezi — Topbar Bell) |
+| **v15.97-99 (29 Nis akşam)** | Doc kalıcı kayıt + bulk import çoklu kalem + Sağlık #15 reçete iç tutarlılık sentinel |
+| **v16.00 (30 Nis sabah)** | **Sağlık raporu hotfix** — `DataManagement.tsx` #15 sentinel'inde `recipes` referansı yerel scope'taki `recs` değişkenine uydurulmamıştı (ReferenceError → tüm rapor patladı). 2 satır tipo. JSON çıktısı: 13 PASS · 2 WARN · 0 FAIL (gerçek tedarik WARN'ları, kod sorunu değil). |
 
 ---
 
@@ -226,4 +228,50 @@ Bu tahminler diğer bir Claude oturumunun (paralel chat / Claude Code) yapacağ�
 
 ---
 
-*Bu Master Backlog v15.53 Adım 5 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
+## 🌱 YENİ İSTEKLER (30 Nisan 2026 — S26A_03150 plywood saha vakası)
+
+S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boşluk** tespit edildi. Saha aksiyonu (MRP Hesapla → Toplu Tedarik 131 levha) ayrı; aşağıdakiler kod tarafındaki yapısal eksiklikler.
+
+| # | İstek | Etki | Tahmini Çaba |
+|---|-------|------|---|
+| **#20** | **Sipariş-bütünü PlanBekliyor** (`getEffectiveStatus` refactor) | Topbar [PLAN BEKLEYEN N] sahaya gerçeği söylesin | ~30 satır, 1 dosya |
+| **#21** | **2D bin-packing (yüzey kesim)** | Plywood/levha kesimde ~%30-40 hammadde tasarrufu | Hafta seviyesi (yeni algoritma + reçete grup) |
+| **#22** | **Sağlık #16 sentinel — sipariş-toplam hammadde** | Gizli hammadde rekabeti yakalansın | ~50 satır (sentinel pattern) |
+
+### #20 — Sipariş-bütünü PlanBekliyor (mimari boşluk, küçük)
+
+**Kök neden:** `src/lib/statusUtils.ts:getEffectiveStatus` her İE'yi **bağımsız** değerlendiriyor. Aynı sipariştaki birden çok İE aynı hammaddeyi paylaşırken, sistem her birinin tek başına stoğu yetiyor mu diye bakar — toplam ihtiyacı görmez.
+
+**Saha vakası:** S26A_03150'de 5 plywood İE'si (sira 10/11/12/13/14) toplam 214 levha gerektiriyor; stok 83. Sistem sadece tek başına aşan IE-14'ü "PlanBekliyor" gösterdi (1 sayısı). Gerçek: IE-11, IE-12, IE-13 de aynı stoğun aynı havuzdan tüketileceğini bilince eksik.
+
+**Çözüm önerisi:** `getEffectiveStatus` parametre olarak `mrp_durum` alanını da alsın. Sipariş `mrp_durum='eksik'` ise ve İE kesim opsiyonlu ise — kalan stok ihtiyacı karşılamasa bile — `PlanBekliyor + tedarik_yok` döndür. Alternatif: order-level cache hesabı (her sipariş için bir kez aggregated stok tüketimi simüle et, sonra İE'leri etiketle).
+
+**Bağlam:** Bu refactor v15.79 madde 8+9 üzerine inşa olur. Mevcut "İE-bazlı bağımsız" mantık değil, "sipariş-bağlamında" mantık.
+
+---
+
+### #21 — 2D bin-packing (büyük, plywood/levha kesim)
+
+**Kök neden:** `src/features/production/cutting.ts:boykesimOptimum` 1 boyutlu (sadece `parcaBoy`). Plywood gibi yüzey kesim parçaları (`parcaEn` dolu) için `kesimTip='yuzey'` etiketi atılıyor ama optimizasyon hala 1D — `parcaEn` göz ardı ediliyor.
+
+**Saha kanıtı:** PLY15X877X2677 yarı mamulü için reçete `1 levha = 1 parça` (1500/877=1.7 → tek sığar, doğru). Ama aynı levhada **877+577=1454mm** veya **877+427=1304mm** **yan yana** kesilebilir. Mevcut sistem her yarı mamulü ayrı reçete + ayrı İE olarak tutuyor → birleşik kesim imkansız → ~%30-40 fire fazla.
+
+**Çözüm önerisi:** İki yol mümkün, biri Mavvo BOM tarafında reçete birleştirme, biri sistem içi 2D packer. İkincisinde `boykesimOptimum`'un yerine geçecek `yuzeyKesimOptimum(grup, hamBoy, hamEn, ihtiyaclar)`: First-Fit Decreasing Height (FFDH) veya Guillotine cut benzeri klasik 2D packer. Aynı `KesimSatir` veri modeline çıktı vermeli — UI değişmesin.
+
+**Geniş etki:** Yarı mamul reçete sistemi yeniden yorumlanabilir (PLY15X{X}X2677 ailesi tek "kesim grubu" olarak modellenir). Bu Mavvo tarafında reçete üretimi ile koordinasyon ister.
+
+---
+
+### #22 — Sağlık #16 sentinel: sipariş-toplam hammadde
+
+**Kök neden:** Mevcut Sağlık #5 (MRP §21) sadece MRP `hesaplaMRP` çıktısını okuyor. Ama `mrp_durum` bayatsa (#7'nin yakaladığı durum) plywood gibi gerçek eksikler #5'te görünmüyor. Yani #5 + #7 birbirini koşumlu sistemli düzelte rağmen sahanın "toplam ihtiyaç ⇄ stok" gerçeğini kapsamıyor.
+
+**Çözüm önerisi:** Yeni kontrol — her aktif sipariş için, açık (`durum != tamamlandi/iptal`) İE'lerin `hm[].malkod` listesini grupla; her hammadde için `Σ miktarTotal` hesapla; `Σ ihtiyaç > stok + açık_tedarik` ise WARN. Mesaj: "S26A_03150 H0311P010446412 → 214 ihtiyaç · 83 stok · 0 yolda · **131 eksik**".
+
+**Auto-fix yok** — sadece sentinel. Aksiyon: kullanıcı MRP Hesapla + Toplu Tedarik akışını çalıştırsın.
+
+**Pattern:** v15.89'da eklenen #12, #13, #14'ün benzeri; ~50 satır kod, mevcut `kontroller.push({...})` formatına uyar.
+
+---
+
+*Bu Master Backlog v16.00 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). 29 Nisan'da 18 sürümle Madde 15 tam tur kapandı + Sağlık #15 sentinel eklendi. 30 Nisan sabahı v16.00 hotfix + 3 yeni istek (#20-22) eklendi. Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
