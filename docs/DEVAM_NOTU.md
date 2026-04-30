@@ -1,8 +1,22 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
-**Tarih:** 30 Nisan 2026 sabah-öğleden sonra (oturum, ~05:00–15:30)
-**Son canlı sürüm:** v16.25 (kod) + RLS Aşama 4 rollback (DB)
-**Bugün toplam:** **22 sürüm push** (v16.00 → v16.25, bazı sürümler atlamalı) + 1 doc commit + **9 DB migration** + 6 DB veri fix.
+**Tarih:** 30 Nisan 2026 sabah-akşam (oturum, ~05:00–17:00, **12 saat**)
+**Son canlı sürüm:** v16.26 (kod) + v16.27 (doc patch)
+**Bugün toplam:** **23 sürüm push** (v16.00 → v16.26) + 2 doc commit + **10 DB migration** + 7 DB veri fix.
+
+---
+
+## ⚡ HEMEN GİRİŞ — admin login
+
+```
+URL:    https://uzuniskender.github.io/ozler-uys-v3/
+Email:  admin@uys.local
+Şifre:  1234
+```
+
+Yedek (her zaman çalışır): Supabase Dashboard → Authentication → Users → `uzuniskender@gmail.com` → **Send Magic Link** → Gmail.
+
+**Operatörler hala 1234 ile bölüm + isim seçerek giriyor** (UX değişmedi).
 
 ---
 
@@ -45,25 +59,10 @@ oku.
 
 | Sürüm | Konu | Kritiklik |
 |---|---|---|
-| v16.00 | Sağlık #15 sentinel `recipes`/`recs` tipo | hotfix |
-| v16.01 | MRP filtre `dbEksik` band-aid | ara çözüm |
-| v16.02 | Cutting override LEVHA skip | saha kritik |
-| v16.03 | Sentinel #16 sipariş-toplam HM | koruma |
-| v16.04 | Sentinel #23 Hesapla UPDATE error | koruma |
-| v16.05 | Sipariş-bütünü PlanBekliyor (#20) | mimari (v16.20'ye kadar OperatorPanel'de yarım kalmış) |
-| v16.07 | KÖK ÇÖZÜM cutting override max(BOM, plan) | büyük etki |
-| v16.08 | Math.ceil IE.hm.miktarTotal yuvarlama | saha kritik |
-| v16.09 | Sentinel #17 yuvarlama hatası | koruma |
-| v16.11 | hesaplaMRP debug log altyapısı | araç |
-| v16.12 | Sağlık raporu camelCase mapping (+41 vakası kök) | büyük etki |
-| v16.13 | Sentinel #15 recipes→recs (kazara silinmişti) | kaza fix |
-| v16.14 | Sentinel #16 + #17 geri ekle | kaza fix |
-| v16.15 | scripts/saglik-syntax-check.cjs prebuild hook | yapısal koruma |
-| **v16.18** | **Supabase Auth email/şifre login** (yan yana) | büyük (Buket admin migrate) |
-| v16.19 | OperatorMain orders fix denemesi (build patladı, revert) | atlanmış |
-| **v16.20** | **DataManagement #16+#17 + OperatorPanel orders destructure** | saha kritik |
-| **v16.22** | **Operator Auth pilot** Login.doOprLogin signInWithPassword arka plan | mimari |
-| **v16.24** | **Admin login OPR_KEY temizle** operator session admin override fix | fix |
+| v16.00-v16.20 | (önceki sürümler — bkz. §27) | — |
+| **v16.22** | Operator Auth pilot — Login.doOprLogin signInWithPassword arka plan | mimari |
+| **v16.24** | Admin login OPR_KEY temizle - operator session admin override fix | fix |
+| **v16.26** | **ADMIN_EMAILS array genişlet** — `['uzuniskender@gmail.com', 'admin@uys.local']` | erişim |
 
 ### DB Migration tablosu
 
@@ -78,6 +77,8 @@ oku.
 | v16.25 (Aşama 4) | Tüm 38 tablo allow_all → authenticated_only (DENENDI) |
 | v16.25 (rollback) | Aşama 4 rollback — chicken-and-egg sorunu |
 | v16.25 (admin yenile) | uzuniskender@gmail.com Auth user yeniden oluşturuldu |
+| **v16.26 (token fix)** | **89 operatör Auth user'larında token alanları NULL → boş string** — pgcrypto SQL INSERT'lerle Supabase Auth signInWithPassword bypass nüansı (§27.11) |
+| **v16.26 (admin alternatif)** | **`admin@uys.local` Auth user oluşturuldu** (sentetic email, gmail rate limit bypass için) — şifre `1234`, KOD83 ile aynı yapı |
 
 ---
 

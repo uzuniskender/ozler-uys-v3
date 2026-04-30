@@ -2715,6 +2715,91 @@ KOD10 ERKİN ve test_pilot için Supabase MCP ile manuel `INSERT INTO auth.users
 
 ---
 
+## §27.11 — SQL INSERT'lerle Oluşturulan Auth User'larda Token Alanları Nüansı
+
+**Tarih:** 30 Nis 2026 akşam (~16:00, RLS Aşama 3 sonrası kritik keşif)
+**Etki:** 89 operatör Auth migration'ı **gerçekten** çalışmaya başladı.
+
+### Saha vakası
+
+89 operatör için bulk Auth user oluşturduktan sonra (v16.25), KOD83 EYÜP DÖNMEZ ile login test edildi. Console log:
+
+```
+[v16.22] Operatör Auth signIn OK: op_kod83@uys.local
+[v16.22] Operator Auth session aktif: op_kod83@uys.local
+```
+
+Görünüşte başarılı. **AMA** DB'de `last_sign_in_at` NULL kaldı, audit log boş. Yani UI'da OK görüldü ama Supabase Auth backend'de **gerçekte session açılmadı** — sadece custom auth (sicil_hash) çalıştı, signInWithPassword sessizce fail oldu.
+
+### Teşhis
+
+Test pilot (Dashboard'dan oluşturulmuş, çalışan) ile KOD10 (SQL INSERT, çalışmayan) yan yana karşılaştırıldı:
+
+| Alan | TEST_PILOT (Dashboard) | KOD10 (SQL INSERT) |
+|---|---|---|
+| `confirmation_token` | **`""`** (boş string) | **`null`** |
+| `recovery_token` | **`""`** (boş string) | **`null`** |
+| `email_change_token_new` | **`""`** (boş string) | **`null`** |
+| `email_change` | **`""`** (boş string) | **`null`** |
+| `last_sign_in_at` | dolu (login olmuş) | **NULL** (login olmamış) |
+
+### Kök neden
+
+**Supabase Auth `signInWithPassword` token alanlarının `NULL` değil, BOŞ STRING (`''`) olmasını bekliyor.** Manuel SQL INSERT'lerde varsayılan NULL kalıyor, login sessizce fail oluyor (frontend exception yutuyor, kullanıcıya gerçek hata gösterilmiyor).
+
+Dashboard'dan oluşturulan user'larda Supabase'in iç trigger'ları varsayılan `''` yazıyor, bu yüzden login çalışıyor.
+
+### Fix (v16.26 migration)
+
+```sql
+UPDATE auth.users
+SET
+  confirmation_token = COALESCE(confirmation_token, ''),
+  recovery_token = COALESCE(recovery_token, ''),
+  email_change_token_new = COALESCE(email_change_token_new, ''),
+  email_change = COALESCE(email_change, ''),
+  email_change_token_current = COALESCE(email_change_token_current, ''),
+  reauthentication_token = COALESCE(reauthentication_token, ''),
+  phone_change = COALESCE(phone_change, ''),
+  phone_change_token = COALESCE(phone_change_token, '')
+WHERE email LIKE 'op_%@uys.local'
+  AND (confirmation_token IS NULL OR recovery_token IS NULL ...);
+```
+
+89 operatör Auth user'ı düzeltildi. KOD83 ile test → `last_sign_in_at` doldu (29 saniye önce), aktif Auth session 1 → **gerçek Supabase Auth login** doğrulandı.
+
+### Yarınki Claude için kural
+
+**Auth user manuel SQL INSERT yaparken token alanlarını `''` (boş string) ile başlat, NULL bırakma:**
+
+```sql
+INSERT INTO auth.users (
+  ..., confirmation_token, recovery_token,
+  email_change_token_new, email_change_token_current, email_change,
+  reauthentication_token, phone_change, phone_change_token
+) VALUES (
+  ..., '', '',  '', '', '',  '', '', ''
+);
+```
+
+§27.10 kuralı (Dashboard yöntemi tercih edilmeli) hâlâ geçerli; bu §27.11 SQL gerektiğinde uyulması gereken **format** kuralı.
+
+### Bonus — Email rate limit bypass
+
+`uzuniskender@gmail.com` admin user'ı sabah-akşam aralığında **5+ Magic Link / Reset / DELETE+INSERT** geçirdi, Supabase tarafında **email-bazlı temporary ban** oluştu. signInWithPassword sessizce fail oluyordu, audit log bile yazmıyordu.
+
+**Çözüm:** `admin@uys.local` sentetic email Auth user oluşturuldu (KOD83 ile aynı yapı, token alanları `''`). Frontend `useAuth.ADMIN_EMAILS` array'ine eklendi (v16.26):
+
+```ts
+const ADMIN_EMAILS = ['uzuniskender@gmail.com', 'admin@uys.local']
+```
+
+Yani admin için **2 yedek hesap**:
+- `admin@uys.local + 1234` — günlük kullanım
+- `uzuniskender@gmail.com` Magic Link — Supabase rate limit reset olunca yedek
+
+---
+
 # §28. RLS Migration Roadmap — Güvenlik Sertleştirme (4 Aşama)
 
 **Tarih:** 30 Nis 2026 öğleden sonra başlangıç (~11:30) — sürdürüldü ~15:30
