@@ -302,6 +302,18 @@ export function hesaplaMRP(
     const hmM = materials.find(m => m.kod === hmk)
     // YarıMamul ise atla — tedarik edilmez
     if (hmM?.tip === 'YarıMamul') return
+    // v16.02 — LEVHA (yüzey kesim) için override yapma. boykesimOptimum 1D bin-packing
+    // yapıyor (sadece parcaBoy), levha gibi 2D malzemelerde plan adedi gerçek ihtiyacın
+    // çok altında çıkıyor (örn: 877×2677 plywood için 100 lazımken plan ~34 yazıyor →
+    // BOM'un 100'ü silinip 34 yazılıyor → MRP "yeterli" diyor → tedarik açılmıyor).
+    // Çözüm: levha tipi için BOM ihtiyacını koru, plan adedi güvenilmez. Profil/boru
+    // (1D) için override aktif kalır. Backlog #21'de gerçek 2D bin-packing yazılınca
+    // bu kontrol kaldırılabilir. Saha vakası: 30 Nis 2026 S26A_03150 plywood 131 eksik
+    // sistem tarafından "yok" sayılıyordu (Bilgi Bankası §27).
+    if ((hmM as any)?.hammaddeTipi === 'LEVHA') {
+      dbg('[MRP DEBUG] Cutting override skip (LEVHA - yüzey kesim, 1D plan güvenilmez):', hmk)
+      return
+    }
 
     let planAdet: number
 
