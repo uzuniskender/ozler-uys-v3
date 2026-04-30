@@ -62,25 +62,12 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
     const stored = opr.sicilHash || opr.sifre || ''
     if (!verifySicil(oprSifre, stored)) { toast.error('Şifre hatalı'); return }
 
-    // Hash henüz yoksa, doğru girilen plain text'i hash'le ve DB'ye yaz
-    if (!isHashed(stored)) {
-      try {
-        const newHash = hashSicil(oprSifre)
-        await supabase.from('uys_operators').update({
-          sicil_hash: newHash,
-          sifre: null,  // plain'i temizle (lazy migration tamamlanır)
-        }).eq('id', opr.id)
-      } catch (e) {
-        // Hash yazımı başarısız olsa bile login devam eder; bir sonraki girişte tekrar denenir
-        console.warn('[v15.52a] sicil_hash lazy migration failed:', e)
-      }
-    }
-
-    // v16.22 — Aşama 2C operatör Auth pilot
-    // Eğer operatör auth_user_id'ye bağlı ise (yani Supabase Auth user'ı var),
-    // arka planda signInWithPassword çağır ki authenticated session açılsın.
-    // Email format: op_<kod>@uys.local (Aşama 3'te 88 operatör için yayılacak)
-    // Başarısız ise login akışı devam eder (custom auth zaten geçti).
+    // v16.28 (Asama 4 v2 OP2) — Auth signInWithPassword onceden, sonra hash UPDATE.
+    // Once: uys_operators icin anon SELECT acik (Login listesi gelir), anon UPDATE/INSERT/DELETE
+    // kapalı. Bu yuzden lazy hash migration UPDATE'i artik authenticated session'da olmak zorunda.
+    // Operator Auth user'a bagli ise (89/89 v16.25) signInWithPassword sonrasi authenticated rolu
+    // aktif → UPDATE gecer. Auth basarisiz ise hash migration ertelenir, custom auth ile login devam.
+    let authBasarili = false
     if (opr.authUserId) {
       try {
         const email = `op_${(opr.kod || '').toLowerCase()}@uys.local`
@@ -92,9 +79,25 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
           console.warn('[v16.22] Operatör Auth signIn başarısız (devam ediliyor):', authErr.message)
         } else {
           console.info('[v16.22] Operatör Auth signIn OK:', email)
+          authBasarili = true
         }
       } catch (e: any) {
         console.warn('[v16.22] Operatör Auth bağlantı hatası (devam ediliyor):', e?.message)
+      }
+    }
+
+    // Hash henüz yoksa, doğru girilen plain text'i hash'le ve DB'ye yaz.
+    // v16.28: yalniz authBasarili=true ise dene (RLS authenticated_only icin gerekli).
+    if (authBasarili && !isHashed(stored)) {
+      try {
+        const newHash = hashSicil(oprSifre)
+        await supabase.from('uys_operators').update({
+          sicil_hash: newHash,
+          sifre: null,  // plain'i temizle (lazy migration tamamlanır)
+        }).eq('id', opr.id)
+      } catch (e) {
+        // Hash yazımı başarısız olsa bile login devam eder; bir sonraki girişte tekrar denenir
+        console.warn('[v15.52a] sicil_hash lazy migration failed:', e)
       }
     }
 
