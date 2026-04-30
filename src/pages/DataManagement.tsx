@@ -833,6 +833,70 @@ export function DataManagement() {
           tamamenFarklilari: tamamenFarklilari.slice(0, 10),
         } : undefined,
       })
+
+      // ═══════════════════════════════════════════════════════════════════
+      // v16.03 — #16 Siparis-toplam hammadde sentinel'i (30 Nis 2026 saha vakasi)
+      // ═══════════════════════════════════════════════════════════════════
+      // Saha: S26A_03150 plywood 5 IE'si toplam 214 levha, stok 83. Mevcut #5 (MRP §21)
+      // cutting override yuzunden bu acigi yutuyordu. Bu sentinel hesaplaMRP'yi cagirmadan
+      // direkt w.hm okuyup siparis bazinda toplam ihtiyaci stoga karsilastirir.
+      const sentinelIhlaller: Array<{
+        siparis_no: string; malkod: string; malad: string;
+        ihtiyac: number; stok: number; yolda: number; eksik: number
+      }> = []
+
+      for (const o of aktifOrders) {
+        const oWos = wos.filter((w: any) =>
+          w.order_id === o.id &&
+          w.durum !== 'iptal' &&
+          w.durum !== 'tamamlandi'
+        )
+
+        const hmGrup: Record<string, { malad: string; ihtiyac: number }> = {}
+        for (const w of oWos) {
+          for (const h of (w.hm || [])) {
+            const malkod = h.malkod
+            if (!malkod) continue
+            if (!hmGrup[malkod]) hmGrup[malkod] = { malad: h.malad || malkod, ihtiyac: 0 }
+            hmGrup[malkod].ihtiyac += Number(h.miktarTotal || 0)
+          }
+        }
+
+        for (const [malkod, info] of Object.entries(hmGrup)) {
+          const stok = stoks
+            .filter((s: any) => s.malkod === malkod)
+            .reduce((a: number, s: any) => a + (s.tip === 'giris' ? Number(s.miktar) : -Number(s.miktar)), 0)
+          const yolda = teds
+            .filter((t: any) => t.malkod === malkod && !t.geldi)
+            .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
+          const eksik = info.ihtiyac - stok - yolda
+          if (eksik > 0) {
+            sentinelIhlaller.push({
+              siparis_no: o.siparis_no || '(no yok)',
+              malkod, malad: info.malad,
+              ihtiyac: info.ihtiyac, stok, yolda, eksik
+            })
+          }
+        }
+      }
+
+      kontroller.push({
+        no: 16,
+        ad: 'Siparis-toplam hammadde sentinel\'i (cutting override bypass)',
+        durum: sentinelIhlaller.length === 0 ? 'pass' : 'warn',
+        mesaj: sentinelIhlaller.length === 0
+          ? `${aktifOrders.length} aktif siparis: hammadde toplam ihtiyac stok+yolda dengesinde`
+          : `${sentinelIhlaller.length} siparis-hammadde ciftinde toplam ihtiyac stok+yolda asiyor`,
+        neden: sentinelIhlaller.length > 0
+          ? 'Bir siparisin acik IE\'lerinin ayni hammaddeyi paylasanlari toplaminda stok yetmiyor. Mevcut #5 (MRP) cutting override mantigi nedeniyle bu acigi gosteremiyor olabilir; #16 dogrudan w.hm okuyup hesapliyor (saha vakasi: 30 Nis S26A_03150 plywood 131 eksik).'
+          : undefined,
+        aksiyon: sentinelIhlaller.length > 0
+          ? 'MRP sayfasinda Tumunu Sec -> Hesapla -> Toplu Tedarik akisini calistirin. Eger MRP eksigi gostermezse v16.02 cutting override skip kontrolune bakin.'
+          : undefined,
+        detay: sentinelIhlaller.length > 0 ? {
+          ihlaller: [...sentinelIhlaller].sort((a, b) => b.eksik - a.eksik).slice(0, 20)
+        } : undefined,
+      })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
       console.error(e)
