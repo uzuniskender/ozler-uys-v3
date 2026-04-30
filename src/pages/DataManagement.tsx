@@ -876,6 +876,126 @@ export function DataManagement() {
           tamamenFarklilari: tamamenFarklilari.slice(0, 10),
         } : undefined,
       })
+
+      // ═══════════════════════════════════════════════════════════════════
+      // v16.03 — #16 Siparis-toplam hammadde sentinel'i (30 Nis 2026 saha vakasi)
+      // v16.14 — Yeniden eklendi (v16.12 base hatasi nedeniyle silinmisti)
+      // ═══════════════════════════════════════════════════════════════════
+      // Saha: S26A_03150 plywood 5 IE'si toplam 214 levha, stok 83. Mevcut #5
+      // (MRP §21) cutting override yuzunden bu acigi yutuyordu. Bu sentinel
+      // hesaplaMRP'yi cagirmadan direkt w.hm okuyup siparis bazinda toplam
+      // ihtiyaci stoga karsilastirir.
+      const sentinelIhlaller: Array<{
+        siparis_no: string; malkod: string; malad: string;
+        ihtiyac: number; stok: number; yolda: number; eksik: number
+      }> = []
+
+      for (const o of aktifOrders) {
+        const oWos = wos.filter((w: any) =>
+          (w.orderId === o.id || w.order_id === o.id) &&
+          w.durum !== 'iptal' && w.durum !== 'tamamlandi'
+        )
+        const hmGrup: Record<string, { malad: string; ihtiyac: number }> = {}
+        for (const w of oWos) {
+          for (const h of (w.hm || [])) {
+            const malkod = h.malkod
+            if (!malkod) continue
+            if (!hmGrup[malkod]) hmGrup[malkod] = { malad: h.malad || malkod, ihtiyac: 0 }
+            hmGrup[malkod].ihtiyac += Number(h.miktarTotal || 0)
+          }
+        }
+        for (const [malkod, info] of Object.entries(hmGrup)) {
+          const stok = stoks
+            .filter((s: any) => s.malkod === malkod)
+            .reduce((a: number, s: any) => a + (s.tip === 'giris' ? Number(s.miktar) : -Number(s.miktar)), 0)
+          const yolda = teds
+            .filter((t: any) => t.malkod === malkod && !t.geldi)
+            .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
+          const eksik = info.ihtiyac - stok - yolda
+          if (eksik > 0) {
+            sentinelIhlaller.push({
+              siparis_no: o.siparis_no || '(no yok)',
+              malkod, malad: info.malad,
+              ihtiyac: info.ihtiyac, stok, yolda, eksik
+            })
+          }
+        }
+      }
+
+      kontroller.push({
+        no: 16,
+        ad: 'Siparis-toplam hammadde sentinel\'i (cutting override bypass)',
+        durum: sentinelIhlaller.length === 0 ? 'pass' : 'warn',
+        mesaj: sentinelIhlaller.length === 0
+          ? `${aktifOrders.length} aktif siparis: hammadde toplam ihtiyac stok+yolda dengesinde`
+          : `${sentinelIhlaller.length} siparis-hammadde ciftinde toplam ihtiyac stok+yolda asiyor`,
+        neden: sentinelIhlaller.length > 0
+          ? 'Bir siparisin acik IE\'lerinin ayni hammaddeyi paylasanlari toplaminda stok yetmiyor. Mevcut #5 (MRP) cutting override mantigi nedeniyle bu acigi gosteremiyor olabilir; #16 dogrudan w.hm okuyup hesapliyor (saha vakasi: 30 Nis S26A_03150 plywood 131 eksik).'
+          : undefined,
+        aksiyon: sentinelIhlaller.length > 0
+          ? 'MRP sayfasinda Tumunu Sec -> Hesapla -> Toplu Tedarik akisini calistirin. Eger MRP eksigi gostermezse v16.02 cutting override skip kontrolune bakin.'
+          : undefined,
+        detay: sentinelIhlaller.length > 0 ? {
+          ihlaller: [...sentinelIhlaller].sort((a, b) => b.eksik - a.eksik).slice(0, 20)
+        } : undefined,
+      })
+
+      // ═══════════════════════════════════════════════════════════════════
+      // v16.09 — #17 IE hm.miktarTotal yuvarlama hatasi sentinel'i
+      // v16.14 — Yeniden eklendi (v16.12 base hatasi nedeniyle silinmisti)
+      // ═══════════════════════════════════════════════════════════════════
+      // Saha: 30 Nis 2026 IE-S26A_03151-08 PLYWOOD 477x1477. Recete miktar
+      // 1/6 = 0.16666 ondalikli. buildWorkOrders 2 * 0.16666 = 0.333'u integer'a
+      // yuvarladi = 0. IE.hm.miktarTotal=0 -> kesim algoritmasi atlamis.
+      // v16.08 Math.ceil ile yeni IE'ler dogru hesaplaniyor; bu sentinel
+      // mevcut hatali kayitlari yakalar.
+      const yuvarlamaHatalari: Array<{
+        ie_no: string; siparis_no: string; ie_malkod: string;
+        hm_malkod: string; hm_malad: string; hedef: number; recete_miktar: number
+      }> = []
+
+      for (const w of wos) {
+        if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
+        const recete = recs.find((r: any) => r.id === w.rc_id)
+        if (!recete) continue
+        for (const h of (w.hm || [])) {
+          if ((Number(h.miktarTotal) || 0) > 0) continue
+          const reSatir = (recete.satirlar || []).find((s: any) =>
+            s.malkod === h.malkod &&
+            (s.tip === 'Hammadde' || s.tip === 'hammadde') &&
+            Number(s.miktar || 0) > 0
+          )
+          if (reSatir) {
+            yuvarlamaHatalari.push({
+              ie_no: w.ie_no || '(yok)',
+              siparis_no: orders.find((o: any) => o.id === w.order_id || o.id === w.orderId)?.siparis_no || '(yok)',
+              ie_malkod: w.malkod || '',
+              hm_malkod: h.malkod,
+              hm_malad: h.malad || h.malkod,
+              hedef: Number(w.hedef || 0),
+              recete_miktar: Number(reSatir.miktar || 0)
+            })
+          }
+        }
+      }
+
+      kontroller.push({
+        no: 17,
+        ad: 'IE hm.miktarTotal yuvarlama hatasi (v16.08 sentinel)',
+        durum: yuvarlamaHatalari.length === 0 ? 'pass' : 'fail',
+        mesaj: yuvarlamaHatalari.length === 0
+          ? 'Aktif IE\'lerde hm.miktarTotal=0 vakasi yok'
+          : `${yuvarlamaHatalari.length} IE\'de hm.miktarTotal=0 ama receteye gore Hammadde gerekli`,
+        neden: yuvarlamaHatalari.length > 0
+          ? 'Recete miktari ondalikli (0.1666 gibi) IE olusurken integer yuvarlanip 0 olmus. v16.08 kod fix ile yeni IE\'ler dogru hesaplaniyor. Mevcut etkilenen IE\'ler manuel SQL ile duzeltilmeli (saha: 30 Nis S26A_03151 IE-08).'
+          : undefined,
+        aksiyon: yuvarlamaHatalari.length > 0
+          ? 'Etkilenen IE\'lerin hm.miktarTotal=CEIL(hedef * recete_miktar) ile DB UPDATE yapilmali. Auto-fix yok cunku saha onayi gerek.'
+          : undefined,
+        detay: yuvarlamaHatalari.length > 0 ? {
+          ihlaller: yuvarlamaHatalari.slice(0, 30)
+        } : undefined,
+      })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
       console.error(e)
