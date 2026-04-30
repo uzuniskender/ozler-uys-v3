@@ -779,7 +779,7 @@ export function DataManagement() {
       // Bu kontrol gelecekte ayni el kaymasini sentinel olarak yakalar.
       const receteTutarsizliklari: Array<{ receteId: string; mamulKod: string; satirMalkod: string; tip: 'BOSLUK_FARKI' | 'TAMAMEN_FARKLI' }> = []
       const norm = (s: string) => (s || '').replace(/\s+/g, '').toLowerCase()
-      for (const r of recipes as any[]) {
+      for (const r of recs as any[]) {
         const receteMamulKod = (r.mamulKod || '').trim()
         if (!receteMamulKod) continue
         // YariMamul satirlarinin kirno=1 olanini ana mamul satiri olarak al
@@ -821,7 +821,7 @@ export function DataManagement() {
         durum: boslukFarklilari.length ? 'fail' : (tamamenFarklilari.length ? 'warn' : 'pass'),
         mesaj: r15Sorun.length
           ? r15Sorun.join(' · ')
-          : `${recipes.length} reçetede mamul_kod ile YarıMamul satırı uyumlu`,
+          : `${recs.length} reçetede mamul_kod ile YarıMamul satırı uyumlu`,
         neden: r15Sorun.length
           ? 'Reçete oluştururken (Mavvo veya manuel) mamul_kod alanı ile iç YarıMamul satırının malkod alanına farklı format yazıldı. Kesim algoritması YM gruplaması yapamaz, İE plansız kalır (29 Nis 2026 IE-S26A_03146-04 vakası).'
           : undefined,
