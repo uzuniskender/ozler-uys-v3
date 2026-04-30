@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'\nimport { useNavigate } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
