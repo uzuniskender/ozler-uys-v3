@@ -2666,14 +2666,63 @@ Plus DataManagement.tsx working copy bir noktada v16.13 hali ile eski snapshot'a
 
 ---
 
+## §27.10 — Auth User Manuel Manipülasyon Yasağı
+
+**Tarih:** 30 Nis 2026 öğleden sonra (~14:00–15:00 admin Auth user yenileme krizi)
+**Etki:** ~2 saat kayıp, saha etkilenmedi.
+
+### Saha vakası — Buket'in admin şifresini kaybetmesi
+
+Buket sabah Dashboard'dan `uzuniskender@gmail.com` Auth user oluşturdu, güçlü şifre koydu (UUID `b452596c-1fa1-4848-8849-df42fca98ad1`). Sonradan şifreyi unuttu. Sırasıyla yapılan yanlış adımlar:
+
+1. **Reset email tetiklendi** → link `localhost:3000`'e yönlendirdi (Site URL ayarı yanlıştı)
+2. Site URL düzeltildi (`https://uzuniskender.github.io/ozler-uys-v3`), reset link tekrar geldi
+3. Yeni reset link "yeni şifre belirle" sayfasını **atlayıp** doğrudan login yaptı (Supabase recovery flow nüansı)
+4. Şifre belirsiz kaldı
+5. **Claude SQL ile encrypted_password'u 2 kez güncelledi** (`123456a!` ve `1234`) — pgcrypto `crypt('1234', gen_salt('bf', 10))` formatı KOD10 ve test pilotta çalıştı **ama uzuniskender Auth user'ında bir şekilde çalışmadı**
+6. **Claude `auth.users` DELETE + INSERT manuel yöntemi** yaptı — Supabase iç tabloları (auth.flow_state, auth.mfa_factors, vs.) eksik kaldı, "Database error finding user" hatası
+7. **Email rate limit doldu** (5+ reset email)
+8. Sonunda Buket Dashboard'dan **yeniden oluşturdu** (UUID `ff76792a-4b3f-4ce5-afaf-25664b382ba1`), Claude `uys_kullanicilar.admin-temp.auth_user_id` ile bağladı
+
+### Kritik kural
+
+**`auth.users` tablosuna doğrudan DELETE + INSERT yapılmamalı.** Supabase Auth'un iç bütünlük kontrolü:
+- Sadece `auth.users` ve `auth.identities` değil, **birden çok yardımcı tablo** etkilenir (auth.flow_state, auth.mfa_factors, auth.one_time_tokens, vs.)
+- Manuel SQL ile yapmak iç tabloları **eksik bırakır**, "Database error finding user" tarzı hatalar verir
+- Bu hatalar Supabase Auth backend fonksiyonlarından gelir, frontend'de net mesaj görünmez
+
+**Kabul edilen yöntemler:**
+1. **Supabase Dashboard** → Authentication → Users → Add user / Update / Delete (her şey tetiklenir, iç tablolar tutarlı)
+2. **Supabase Admin API** (service_role key ile) — Edge function veya server-side script
+3. **`pgcrypto.crypt()` ile sadece şifre güncelleme** — auth.users.encrypted_password UPDATE'i tek başına (yeni user'da güvenli, mevcut user'da risk)
+
+**Kabul edilmeyen yöntem:**
+- `DELETE FROM auth.users` + `INSERT INTO auth.users` (yapılmamalı)
+- Auth user ID değişimi (UUID değiştirme — referanslar kopar)
+
+### Pilot operatör user'larının çalışması (kontrast)
+
+KOD10 ERKİN ve test_pilot için Supabase MCP ile manuel `INSERT INTO auth.users` yapıldı, **çalıştı**. Çünkü bu user'lar SIFIRDAN oluşturuldu, recovery email/şifre değişimi geçirmedi. Aşama 3'te 89 operatör için aynı bulk yöntemi başarıyla uygulandı.
+
+**Yani manuel INSERT yeni user için çalışıyor** ama **mevcut user'ı silip yeniden INSERT etmek bozar**.
+
+### Bilgi Bankası §18.2 ek madde — Yeni Kullanıcı Yönetimi Konvansiyonu
+
+- Auth user oluşturma → Dashboard veya admin API
+- Auth user silme → Dashboard
+- Şifre güncelleme → kullanıcı kendisi (Magic Link veya Reset Email) veya admin API
+- Manuel SQL sadece **encrypted_password UPDATE** için, **mevcut user'lar dahil** ancak risk düşük tutulmalı
+
+---
+
 # §28. RLS Migration Roadmap — Güvenlik Sertleştirme (4 Aşama)
 
-**Tarih:** 30 Nis 2026 öğleden sonra başlangıç (~11:30)
-**Süreç:** Aşama 1 ✓, Aşama 2A ✓, Aşama 2B+2C+3+4 → planlı
+**Tarih:** 30 Nis 2026 öğleden sonra başlangıç (~11:30) — sürdürüldü ~15:30
+**Süreç:** Aşama 1 ✓, Aşama 2A ✓, Aşama 2C ✓, Aşama 3 ✓, Aşama 4 DENENDI-ROLLBACK ⚠️, Aşama 4 v2 + Aşama 5 hafta sonu için planlı
 
 UYS v3 başlangıçta `allow_all` policy ile tüm tablolar herkese açıktı (Bilgi Bankası §20: "iç ağ kabul"). Anon key + public GitHub Pages = **dünya açık**. Supabase advisor 5 ERROR + ~45 WARN.
 
-Bu §28 dört aşamalı migration roadmap'i belge eder. Aşama 1 + 2A 30 Nisan'da yapıldı (sahaya sıfır risk). Aşama 2B + 2C + 3 + 4 hafta sonu / pazartesi sabah erken için planlı.
+Bu §28 dört aşamalı migration roadmap'i belge eder. **Aşama 1 + 2A + 2C + 3** 30 Nisan'da yapıldı (90 Auth user canlı). **Aşama 4 v2** + Aşama 2B + Aşama 5 hafta sonu / pazartesi sabah erken için planlı.
 
 ## §28.1 — Aşama 1: Temel Güvenlik (✓ TAMAMLANDI v16.17)
 
@@ -2710,62 +2759,150 @@ Bu §28 dört aşamalı migration roadmap'i belge eder. Aşama 1 + 2A 30 Nisan'd
 
 **Karar:** Operatör Auth migration (Aşama 3) öncesi dokunmamak. Anon listing kapatılırsa ve admin/planlama Auth oturumlu değilse chat dosyaları listelenemez. Aşama 3 sonrası tüm chat erişen kullanıcılar `authenticated` rolde olacak — o zaman güvenle daraltılır.
 
-## §28.4 — Aşama 2C: Operatör Auth Pilot (ÖNERİLEN, hafta sonu)
+## §28.4 — Aşama 2C: Operatör Auth Pilot (✓ TAMAMLANDI v16.22-23)
 
 **Hedef:** 1 operatöre Supabase Auth user oluşturup hibrit login akışını test etmek.
 
-**Adımlar:**
-1. Supabase Dashboard → Auth → Add user
-   - Email: `op_test@ozler.local` (gerçek email gerek değil)
-   - Password: güçlü, sicil_hash'siz (örn. bcrypt benzeri 16 karakter)
-   - Auto Confirm User ✓
-2. `uys_operators` tablosunda 1 test operatöre `auth_user_id` kolonu ekle (DDL: ALTER TABLE)
-3. Bu kolonu yeni Auth user UUID'siyle güncelle
-4. Login.tsx'te operatör login akışına email path eklenmemeli (operatörler email yazmaz). Yerine: operatörün `kod` alanı + Supabase Auth ile signInWithPassword (Auth user email'inde `op_test@ozler.local` formatında olmalı, kod=op_test).
+**Yapılan:**
+1. **`uys_operators` tablosuna `auth_user_id uuid` kolonu eklendi** (v16.22 DDL) + index `idx_uys_operators_auth_user_id WHERE auth_user_id IS NOT NULL`
+2. **TEST_PILOT operatör oluşturuldu** (id=`test-auth-pilot`, kod=`TEST`, bölüm=`TEST`, şifre=`pilot1234`) — sahaya etki sıfır, gerçek operatör değil
+3. **Supabase Dashboard'dan `op_test@uys.local` Auth user** oluşturuldu (UUID `40f492e7-1b86-4f6b-856b-c13be84086d5`)
+4. **`uys_operators.test-auth-pilot.auth_user_id` bağlandı**
+5. **Frontend patch (v16.22)**:
+   - `Login.tsx`: oprData type'a `authUserId` field, `doOprLogin` içinde sicil_hash başarılı olunca arka planda `supabase.auth.signInWithPassword({ email: 'op_<kod>@uys.local', password: oprSifre })`
+   - `useAuth.ts onAuthStateChange`: `email.endsWith('@uys.local')` için Auth session koruyor (signOut çağırmıyor) — operatör Auth'lu kalır
+6. **Pilot başarılı:** Buket TEST PILOT olarak login → console `[v16.22] Operator Auth signIn OK: op_test@uys.local` + DB'de aktif Supabase session
+7. **v16.23: KOD10 ERKİN gerçek operatör Auth user'ı** oluşturuldu (`op_kod10@uys.local`). Buket admin olarak operatör paneline KOD10 ile login yaptı, çalıştı → 89 operatör için strateji netleşti
+8. **v16.24: Admin login OPR_KEY temizleme fix** — operator session'ı `getStored()` önce sessionStorage okuduğu için admin override edilemiyordu. `useAuth` ADMIN_EMAILS branch'lerine `sessionStorage.removeItem(OPR_KEY)` eklendi.
 
-**Karmaşıklık:** Operatör login UX'i sicil_hash bazlı (bölüm seç → operatör seç → sifre gir). Email yazma gereksiz. Yani Supabase Auth user oluşturulur ama signInWithPassword arka planda otomatik (operatörün gözünden değişmeden).
+**Sonuç:** Yan yana Auth mekanizması çalışıyor — operatör UX değişmedi (hala bölüm + isim + 1234), arka planda Auth session da otomatik açılıyor.
 
-**Tahmini süre:** 1 operatör için 30 dk pilot. Çalışırsa 88 operatör için strateji belirgin (hafta sonu için 2-3 saat).
+## §28.5 — Aşama 3: Operatör Auth Migration (✓ TAMAMLANDI v16.25)
 
-## §28.5 — Aşama 3: Operatör Auth Migration (BÜYÜK İŞ — hafta sonu / pazartesi sabah)
+**Hedef:** Tüm aktif 88 operatörü Supabase Auth'a migrate et.
 
-**Hedef:** Tüm 88 operatörü Supabase Auth'a migrate et. `anon` role tüm sahaya bağlı tablolarda yetkisiz olur.
+**Yapılan (v16.25 bulk migration):**
 
-**Riskler:**
-- Operatör login akışı tamamen değişir
-- Eğer migration ortasında hata olursa saha durdu
-- Mutlaka **saha kapalıyken** yapılmalı (cumartesi gece veya pazartesi 06:00)
+```sql
+DO $$
+DECLARE
+  op RECORD;
+  yeni_uuid uuid;
+  email_str text;
+  toplam int := 0;
+BEGIN
+  FOR op IN
+    SELECT id, kod, ad FROM uys_operators
+    WHERE COALESCE(aktif, true) = true
+      AND auth_user_id IS NULL
+      AND kod IS NOT NULL AND kod != ''
+    ORDER BY kod
+  LOOP
+    yeni_uuid := gen_random_uuid();
+    email_str := 'op_' || LOWER(op.kod) || '@uys.local';
+    -- INSERT INTO auth.users (..., crypt('1234', gen_salt('bf', 10)), ...)
+    -- INSERT INTO auth.identities (...)
+    -- UPDATE uys_operators SET auth_user_id = yeni_uuid WHERE id = op.id
+    toplam := toplam + 1;
+  END LOOP;
+END $$;
+```
 
-**Ön hazırlık:**
-- Backup tüm uys_operators tablosu
-- Yedek login mekanizması hazır (custom sicil_hash) — fail-safe
-- Test ortamı (cowgxwmhlogmswatbltz) önce dene
+**Sonuç:**
+- **89/89 operatör** Auth bağlandı (test_pilot dahil — KOD10 zaten v16.23'te yapılmıştı)
+- **90 toplam Supabase Auth user** (1 admin + 89 operatör)
+- Saha akışı **DEĞİŞMEDİ** — operatörler hala bölüm + isim + 1234 yazıyor, arka planda Auth session
 
-**Adımlar (özet):**
-1. uys_operators'a `auth_user_id` kolonu ekle (Aşama 2C ile aynı)
-2. 88 operatör için Supabase Auth admin API ile user oluştur (Edge Function veya bulk insert)
-3. Frontend Login.tsx — operatör login akışında signInWithPassword yap (operatör görmez, otomatik)
-4. Test ortamında doğrula
-5. Production migration (saha kapalıyken)
+**Kritik bulgu (Buket):** Tüm operatörlerin default şifresi `1234`, ufak istisnalar dışında. Bu sayede toplu Auth user oluşturma kolaylaştı (ortak password). Migration tek SQL transaction'da tamamlandı, hiç hata yok.
 
-**Tahmini süre:** 4-6 saat (script + test + production).
+## §28.6 — Aşama 4: Anon Role Temizliği (DENENDI → ROLLBACK)
 
-## §28.6 — Aşama 4: Anon Role Temizliği (Aşama 3 sonrası)
+**Hedef:** Tüm 38 tabloda `allow_all` → `authenticated_only`, anon erişimi kapatma.
 
-**Hedef:** Tüm 38 tabloda `allow_all` (anon ALL) → `authenticated_only` veya cmd-bazlı policy.
+**v16.25 (Aşama 4) DENEDIK:**
 
-**Önkoşul:** Aşama 3 tamamlandı. Tüm aktif kullanıcılar (admin + 88 operatör) Supabase Auth'lu, authenticated role.
+```sql
+DO $$
+DECLARE t TEXT;
+DECLARE tablolar TEXT[] := ARRAY['pt_problemler', 'uys_acik_barlar', ..., 'uys_yedekler'];
+BEGIN
+  FOREACH t IN ARRAY tablolar LOOP
+    EXECUTE format('DROP POLICY IF EXISTS allow_all ON public.%I', t);
+    EXECUTE format(
+      'CREATE POLICY authenticated_only ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true)',
+      t
+    );
+  END LOOP;
+END $$;
+```
 
-**Adımlar:**
-1. Tüm 38 tablo için `allow_all` → DROP
-2. Yerine: `authenticated_full` (FOR ALL TO authenticated USING (true) WITH CHECK (true))
-3. İhtiyaç olan tablolarda anon read yine açık tutulabilir (örn. malzeme listesi public ise) — manuel inceleme
+**Saha kırıldı! Hata:** Login akışı **anon role** ile başlıyor:
+- `Login.tsx` useEffect: `supabase.from('uys_operators').select('*')` — Auth oturumu açılmadan önce anon ile istek
+- `authenticated_only` policy bunu engelledi → operatör seçim ekranı boş
+- Plus Buket admin login formu kullanıyorsa, Login UI **uys_operators** tablosunu gösterirken authenticated olmadığı için patladı
 
-**Sonuç:** WARN 41 → 0 (advisor temiz). Anon key dışarıya kaçsa bile DB'ye erişim yok.
+**Acil rollback yapıldı:**
 
-**Plus Aşama 4.1:** chat-attachments bucket SELECT policy daraltma (Aşama 2B ötelenen iş).
+```sql
+-- 41 tabloda authenticated_only DROP, allow_all geri
+DO $$ DECLARE t TEXT; tablolar TEXT[] := ARRAY[...]; BEGIN
+  FOREACH t IN ARRAY tablolar LOOP
+    EXECUTE format('DROP POLICY IF EXISTS authenticated_only ON public.%I', t);
+    EXECUTE format('CREATE POLICY allow_all ON public.%I FOR ALL USING (true) WITH CHECK (true)', t);
+  END LOOP;
+END $$;
+```
 
-## §28.7 — Aşama 5: Network Restrictions + Anon Key Rotation (manuel, en son)
+`uys_kullanicilar` ve `uys_yetki_ayarlari` (Aşama 2A'da yapılmış) authenticated_only kaldı, sahaya etki yok (Buket Auth'lu erişir, operatörler bu tablolardan zaten okumuyor).
+
+### KÖK SORUN — chicken-and-egg
+
+Operatör login flow'u:
+1. **Anonim** (Auth yok) → Login.tsx açılır
+2. Operatör Girişi butonuna basılır → **anon ile** `uys_operators` SELECT (bölüm + operatör listesi)
+3. Operatör seçilir, şifre girilir → custom auth doğrulanır
+4. ARDA PLAN'DA Supabase Auth signInWithPassword → **şimdi authenticated** olur
+5. Sonra OperatorPanel açılır
+
+Adım 2'de **anon SELECT** yapılması zorunlu. Eğer authenticated_only ise — chicken-and-egg, login bile başlayamaz.
+
+### Aşama 4 v2 (cmd-bazlı policy, hafta sonu için planlı)
+
+**Doğru çözüm**:
+
+```sql
+-- Ornek: uys_operators icin login akisi gerekli SELECT acik tutulur,
+-- ama write islemleri sadece authenticated kullanicilar icin
+CREATE POLICY anon_select ON public.uys_operators
+  FOR SELECT TO anon USING (true);
+CREATE POLICY authenticated_all ON public.uys_operators
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+```
+
+Diğer tablolar için:
+- **Sadece login için gerekli** tablolar (uys_operators) → anon SELECT açık
+- **Diğer tüm tablolar** → authenticated_only (anon SELECT bile yok)
+
+Bu detaylı role-bazlı policy yazımı **saatlerce iş**, hafta sonu / pazartesi sabah erken (saha kapalıyken) yapılmalı.
+
+## §28.7 — Admin Auth User Yenileme Krizi (v16.25 sonu, ~14:00–15:00)
+
+**Tarih:** 30 Nis 2026 öğleden sonra (~14:00–15:00)
+**Süre:** ~2 saat kayıp
+**Saha etkisi:** Sıfır (Buket admin/admin123 fallback ile geçici giriş yaptı)
+
+Detay için **§27.10 — Auth User Manuel Manipülasyon Yasağı**'na bakınız.
+
+Özet:
+- Buket sabah Dashboard'dan oluşturduğu admin Auth user şifresini unuttu
+- Reset email zinciri + multiple SQL UPDATE state'i bozdu
+- Claude `auth.users` DELETE + INSERT manuel yöntem yaptı → Supabase iç tablolarını eksik bıraktı → "Database error finding user"
+- Email rate limit doldu
+- Sonunda Buket Dashboard'dan **yeniden oluşturdu** (UUID `ff76792a-4b3f-4ce5-afaf-25664b382ba1`)
+
+**Kritik kural (§27.10):** `auth.users` tablosuna doğrudan DELETE + INSERT yapılmamalı. Dashboard veya admin API kullanılmalı.
+
+## §28.8 — Aşama 5: Network Restrictions + Anon Key Rotation (manuel, en son)
 
 **Supabase Dashboard'dan manuel:**
 - Network Restrictions → şirket IP whitelist (Özler OSB Dilovası IP)
@@ -2776,6 +2913,6 @@ Bu §28 dört aşamalı migration roadmap'i belge eder. Aşama 1 + 2A 30 Nisan'd
 
 ---
 
-*§28 (RLS Migration Roadmap) 30 Nis 2026 öğleden sonra ~14:30'da tamamlandı. Aşama 1 + 2A canlı, Aşama 2B+2C+3+4 hafta sonu / pazartesi sabah erken için planlı. **17 sürüm + 5 DB migration + 4 DB fix + 5 saha krizi + RLS Aşama 1 + 2A + Auth migration başlangıç + OperatorPanel kazası fix** — tek günde rekor. Yarın yeni Claude oturumu için açılış kapısı: §27 + §28 + DEVAM_NOTU.*
+*§28 (RLS Migration Roadmap) 30 Nis 2026 öğleden sonra ~15:30'da güncellendi. **Aşama 1 + 2A + 2C + 3 ✓ TAMAMLANDI** (90 Auth user canlı). **Aşama 4 DENENDI → ROLLBACK** (chicken-and-egg). **Aşama 4 v2 (cmd-bazlı policy)** + Aşama 2B (chat-attachments) + Aşama 5 (network/key rotation) hafta sonu / pazartesi sabah erken için planlı. **22 sürüm + 9 DB migration + 6 DB fix + 5 saha krizi + RLS Aşama 1+2A+3 + 89/89 operatör Auth + OperatorPanel kazası fix + admin Auth yenileme** — tek günde rekor. Yarın yeni Claude oturumu için açılış kapısı: §27 (10 alt bölüm) + §28 (8 alt bölüm) + DEVAM_NOTU.*
 
 ---

@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 30 Nisan 2026 öğleden sonra (v16.21 RLS Aşama 2A · 17 sürüm + 5 DB migration tek günde rekor)
+**Son güncelleme:** 30 Nisan 2026 öğleden sonra (v16.25 RLS Aşama 3 + admin Auth user yenileme · 22 sürüm + 9 DB migration tek günde rekor)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
@@ -83,6 +83,10 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | v16.19 (30 Nis öğleden sonra) | OperatorMain orders fix denemesi → DataManagement.tsx working copy 1986 satıra düşmüş, syntax-check (kontroller.push 16<17) build patladı → revert |
 | **v16.20 (30 Nis öğleden sonra)** | **OperatorPanel siyah ekran fix + DataManagement #16+#17 geri ekle** — Bundle analizinden çıkan teşhis: `OperatorMain` useMemo'da `computeOrderHammaddeEksik(orders, ...)` çağrılıyor ama `useStore()` destructure'da `orders` YOK. v16.05 baştan kırıkmış (sipariş-bütünü PlanBekliyor mantığı) ama operatör paneline admin olarak hiç girilmediği için fark edilmemişti. Plus DataManagement.tsx 17 sentinel'li hali (v16.14) geri eklendi. |
 | **v16.21 (30 Nis öğleden sonra, DB-only)** | **RLS Aşama 2A**: `uys_kullanicilar` + `uys_yetki_ayarlari` tabloları `allow_all` → `authenticated_only`. Anon key sahibi artık kullanıcı listesini ve şifre alanlarını okuyamaz. Saha etki sıfır (Buket Auth'lu erişir, operatörler bu tablolardan zaten okumuyordu). |
+| **v16.22 (30 Nis öğleden sonra)** | **Operatör Auth pilot — yan yana yaklaşım** — `Login.doOprLogin` içinde sicil_hash başarılı olunca arka planda `signInWithPassword`. `useAuth` `@uys.local` email'leri için Auth session koruyor (signOut çağırmıyor). Plus DB: `uys_operators.auth_user_id uuid` kolonu + index. TEST PILOT (test-auth-pilot, kod TEST, bölüm TEST, şifre 1234) ile pilot doğrulandı. |
+| **v16.23 (30 Nis öğleden sonra, DB-only)** | **KOD10 ERKİN için Supabase Auth user** (pilot, gerçek operatör) — `op_kod10@uys.local` + 1234 şifre. Buket admin olarak operatör paneline KOD10 ile login yaptı, console'da `[v16.22] Operator Auth signIn OK` doğrulandı. |
+| **v16.24 (30 Nis öğleden sonra)** | **Admin login OPR_KEY temizle fix** — `useAuth` getSession + onAuthStateChange ADMIN_EMAILS branch'lerine `sessionStorage.removeItem(OPR_KEY)`. Operator session admin override engelliyordu; getStored() önce sessionStorage okuyordu. |
+| **v16.25 (30 Nis öğleden sonra, DB-only)** | **RLS Aşama 3 — 89 operatör bulk Supabase Auth migration**. Tek migration ile aktif 89 operatöre `op_<kod_lower>@uys.local` Auth user oluşturuldu, `auth.identities` kayıtları, `uys_operators.auth_user_id` bağlandı. 90 toplam Auth user (1 admin + 89 operatör). Saha akışı değişmedi. **Aşama 4 (tüm tablolarda authenticated_only)** denendi — login akışı anon role ile yapıldığı için kırıldı, **rollback yapıldı** allow_all geri (chicken-and-egg sorunu, Aşama 4 v2 cmd-bazlı policy yarın için planlı). Plus admin Auth user yenileme: Buket sabah koyduğu şifreyi unuttu, multiple SQL UPDATE state'i bozdu, `auth.users` DELETE+INSERT manuel yöntem Supabase iç tablolarını eksik bıraktı ("Database error finding user"), Buket Dashboard'dan **yeniden oluşturdu** (UUID `ff76792a-4b3f-4ce5-afaf-25664b382ba1`). **Kritik ders §27.10:** auth.users tablosuna doğrudan DELETE+INSERT yapılmaz. |
 
 ---
 
@@ -293,7 +297,7 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 
 ---
 
-*Bu Master Backlog v16.21 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı. 29 Nisan'da 18 sürümle Madde 15 tam tur. **30 Nisan tam gün: 17 sürüm + 1 doc commit + 5 DB migration + 4 DB fix + 5 saha krizi + RLS Aşama 1 + RLS Aşama 2A + Supabase Auth migration başlangıç + OperatorPanel siyah ekran fix** — tarihte ilk 17 PASS · 0 WARN · 0 FAIL ve advisor 5 ERROR → 0. §28 RLS Migration Roadmap eklendi (Aşama 3 operatör Auth migration hafta sonu için planlı). Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
+*Bu Master Backlog v16.25 itibariyle günceldir. **30 Nisan tam gün rekoru: 22 sürüm + 1 doc commit + 9 DB migration + 6 DB veri fix + 5 saha krizi + RLS Aşama 1+2A+3 + 89/89 operatör Supabase Auth migration + OperatorPanel siyah ekran fix + Buket admin Auth user yenileme** — tarihte ilk 17 PASS · 0 WARN · 0 FAIL ve advisor 5 ERROR → 0. §28 RLS Migration Roadmap (Aşama 4 v2 hafta sonu / pazartesi sabah erken için planlı). Yarın için kritik: Aşama 4 v2 (cmd-bazlı policy, anon SELECT açık tutarak) + #5 Sevkiyat Formu + v16.26 admin123 fallback silme.*
 
 ---
 
