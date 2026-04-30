@@ -123,17 +123,8 @@ export function useAuth() {
         setUser(authUser)
         return { error: null }
       }
-    } catch { /* tablo yoksa veya hata → admin şifreyi dene */ }
+    } catch { /* tablo yoksa veya hata */ }
 
-    // 2) Eski admin şifre kontrolü (geriye uyumluluk)
-    const ADMIN_PASS = 'admin123'
-    const customPass = localStorage.getItem('uys_admin_pass')
-    if (password === ADMIN_PASS || (customPass && password === customPass)) {
-      const authUser: AuthUser = { role: 'admin', username: username || 'admin', loginTime: new Date().toISOString() }
-      localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
-      setUser(authUser)
-      return { error: null }
-    }
     return { error: 'Hatalı şifre' }
   }
 

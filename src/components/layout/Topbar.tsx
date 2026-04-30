@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'\nimport { useNavigate } from 'react-router-dom'
 import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,6 +16,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
+  const navigate = useNavigate()
   const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs, bildirimler } = useStore()
 
   // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
@@ -143,8 +144,8 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
             Açık ama Üretilebilir olmayan tüm WO'ları sayar (kesim plan eksik + tedarik açılmamış + yolda).
             KESİM/MRP/TEDARİK rozetleri sebep ayrımı, bu rozet TOPLAM görünüm. */}
         <button
-          onClick={() => navTo('/workorders')}
-          className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 ${badgeColor(zincirCounts.planBekleyen)}`}
+          onClick={() => navigate('/work-orders?statusFilter=PlanBekliyor')}
+          className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-[10px] font-mono transition-colors hover:opacity-80 cursor-pointer ${badgeColor(zincirCounts.planBekleyen)}`}
           title={`${zincirCounts.planBekleyen} iş emri Üretilebilir değil (Plan Bekliyor)`}
         >
           <Hourglass size={10} />

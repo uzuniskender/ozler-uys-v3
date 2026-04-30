@@ -81,6 +81,19 @@ export function WorkOrders() {
     navigate('/orders?yeni=1')
   }
 
+  // v16.27 — URL'den ?statusFilter=PlanBekliyor → başlangıç filtresi olarak ayarla
+  useEffect(() => {
+    const statusParam = searchParams.get('statusFilter')
+    if (statusParam === 'PlanBekliyor') {
+      setStatusFilter(new Set(['Uretilemiyor']))
+      // URL'i temizle
+      const sp = new URLSearchParams(searchParams)
+      sp.delete('statusFilter')
+      setSearchParams(sp, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // URL'den ?ie=X&log=Y → detail modal aç + log highlight
   useEffect(() => {
     const ieParam = searchParams.get('ie')
