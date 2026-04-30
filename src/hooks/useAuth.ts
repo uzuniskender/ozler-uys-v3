@@ -102,7 +102,19 @@ export function useAuth() {
   }
 
   async function signIn(username: string, password: string) {
-    // 1) Önce uys_kullanicilar tablosundan kontrol
+    // 0) Email iceriyorsa Supabase Auth path
+    // v16.18'de eklenmis, bir noktada kazara silinmis (DataManagement.tsx kazalari gibi
+    // patch hijyen ihlali §27.7). v16.27a'da geri eklendi — admin@uys.local + uzuniskender@gmail.com
+    // Auth user'lari icin signInWithPassword. useEffect onAuthStateChange ADMIN_EMAILS branch'i
+    // state'i set edecek (sessionStorage OPR_KEY temizleme dahil — v16.24).
+    if (username.includes('@')) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: username, password })
+      if (error) return { error: error.message }
+      if (data?.session) return { error: null }
+      return { error: 'Auth basarisiz (session yok)' }
+    }
+
+    // 1) Custom auth — uys_kullanicilar (kullanici_ad + sifre)
     try {
       const { data } = await supabase.from('uys_kullanicilar')
         .select('*')
@@ -110,7 +122,7 @@ export function useAuth() {
         .eq('sifre', password)
         .eq('aktif', true)
         .limit(1)
-     if (data && data.length > 0) {
+      if (data && data.length > 0) {
         const k = data[0]
         const rol = (k.rol || 'planlama') as UserRole
         const authUser: AuthUser = {
@@ -123,7 +135,11 @@ export function useAuth() {
         setUser(authUser)
         return { error: null }
       }
-    } catch { /* tablo yoksa veya hata */ }
+    } catch { /* tablo yoksa veya hata → reddet */ }
+
+    // v16.27a — admin123 hardcoded fallback silindi (guvenlik acigi). Magic Link + admin@uys.local
+    // Auth user'i mevcut, geriye uyumluluk gerekmiyor. Eski 'uys_admin_pass' localStorage anahtari
+    // da artik kullanilmiyor.
 
     return { error: 'Hatalı şifre' }
   }
