@@ -2596,3 +2596,186 @@ Test (S26A_03150 mrp_durum UPDATE): `updated_at` 0 saniye önce → otomatik gü
 *Bu §27 oturumu 30 Nis 2026 öğlen ~11:50'de tamamlandı. **14 sürüm + 1 doc commit + 1 DB migration + 4 DB fix + 5 saha krizi** tek günde. v15.99 öncesi DEVAM_NOTU'daki "42 reçete yuvarlama hatası" maddesi v16.08 ile kapandı (kalıcı kod fix + sentinel #17). #23 vakası v16.16 ile kapandı (PostgreSQL trigger). Yarın yeni Claude oturumunun §27'yi + DEVAM_NOTU'yu okuması yeterli — chat aramaya gerek yok.*
 
 ---
+
+## §27.9 — OperatorPanel "orders is not defined" — v16.05 Baştan Kırıkmış
+
+**Tarih:** 30 Nis 2026 öğleden sonra (~13:00 keşif, v16.20 fix)
+**Etkilenen sürümler:** v16.05 (kaynak hata) → v16.20 (fix)
+
+### Saha vakası
+
+Buket "Operatör Paneli" sidebar linkine tıkladı (admin olarak), siyah ekran. Console:
+
+```
+Uncaught ReferenceError: orders is not defined
+    at Cu (index-CFx5p9v_.js:64:163397)
+    at ko (vendor-react-5zO3uBoY.js:8:47537)
+    ...
+```
+
+`Cu` minified function = `OperatorMain` (OperatorPanel.tsx içinde alt component, satır 168).
+
+### Teşhis (bundle analizi)
+
+Bundle dosyasında 163397. byte civarına bakıldığında:
+
+```js
+function Cu({oprId:e,opr:t,...}){
+  let{workOrders:s,logs:c,...,stokHareketler:v}=G()  // ← orders YOK
+  y=(0,H.useMemo)(()=>gc(orders,s,v,_),[orders,s,v,_])  // ← orders kullanım, undefined
+```
+
+`gc` fonksiyon adı = `computeOrderHammaddeEksik` (statusUtils.ts'te tanımlı, v16.05 ile eklendi). Mantığı eşleşti.
+
+`OperatorMain` useStore destructure'ında `orders` yoktu, ama useMemo `orders`'i bekliyordu.
+
+### Kök neden
+
+**v16.05 commit'i (sipariş-bütünü PlanBekliyor mantığı, #20) baştan kırıkmış**:
+- `computeOrderHammaddeEksik` fonksiyonu eklendi (statusUtils.ts) ✓
+- `OperatorMain`'e useMemo + gc çağrısı eklendi ✓
+- ❌ **Ama `useStore()` destructure'a `orders` eklenmedi** (eksik)
+
+Bu hata 9 ay boyunca fark edilmedi çünkü Buket admin olarak Operatör Paneli'ne **hiç girmemişti**. Sadece operatörler giriyordu, ve onlar zaten farklı bir auth path'inden girip OperatorRoutes (App.tsx 89) ile sadece `<OperatorPanel />` görüyordu — `OperatorMain` alt component aktif olunca patlıyordu.
+
+### v16.20 Fix
+
+OperatorPanel.tsx satır 172, tek satır değişikliği:
+
+```ts
+// Eski
+const { workOrders, logs, ..., stokHareketler } = useStore()
+
+// Yeni
+const { orders, workOrders, logs, ..., stokHareketler } = useStore()
+```
+
+Plus DataManagement.tsx working copy bir noktada v16.13 hali ile eski snapshot'a düşmüş (kontroller.push 16). v16.14'in 17 sentinel'li hali geri eklendi (saglik-syntax-check geçsin).
+
+### Ders
+
+**Pilot test kapsamı**: Yeni eklenen mantık (örn. `computeOrderHammaddeEksik`) **kullanılmadığı sayfalarda fark edilmez**. v16.05 deploy edildiğinde:
+- Topbar PlanBekleyen rozeti (orderHmEksikMap kullanımı) → çalıştı ✓
+- WorkOrders rozetleri → çalıştı ✓
+- Orders sayfası → çalıştı ✓
+- **OperatorPanel/OperatorMain → KIRIK (kimse girmediği için fark edilmedi)** ❌
+
+**Kural (v16.05 sonrası):** Yeni mimari değişiklik (refactor, helper fonksiyon, parametre eklemesi) deploy edilmeden önce **etkilenen tüm sayfalar admin tarafından gezilmeli**. Kontrol checklist'i hazırlanmalı.
+
+**v16.15 saglik-syntax-check** bunu kısmen koruyor — kontroller.push sayısı eksiltilemiyor. Ama runtime hataları için (destructure eksik gibi) yapısal koruma yok. **Bilgi Bankası §27.10 (önerilen):** Pilot test gezme listesi. Yeni patch öncesinde 5-7 ana sayfaya admin olarak girip ekran resmiyle doğrulama.
+
+---
+
+# §28. RLS Migration Roadmap — Güvenlik Sertleştirme (4 Aşama)
+
+**Tarih:** 30 Nis 2026 öğleden sonra başlangıç (~11:30)
+**Süreç:** Aşama 1 ✓, Aşama 2A ✓, Aşama 2B+2C+3+4 → planlı
+
+UYS v3 başlangıçta `allow_all` policy ile tüm tablolar herkese açıktı (Bilgi Bankası §20: "iç ağ kabul"). Anon key + public GitHub Pages = **dünya açık**. Supabase advisor 5 ERROR + ~45 WARN.
+
+Bu §28 dört aşamalı migration roadmap'i belge eder. Aşama 1 + 2A 30 Nisan'da yapıldı (sahaya sıfır risk). Aşama 2B + 2C + 3 + 4 hafta sonu / pazartesi sabah erken için planlı.
+
+## §28.1 — Aşama 1: Temel Güvenlik (✓ TAMAMLANDI v16.17)
+
+**Hedef:** Advisor ERROR'larını kapatmak, sahaya zarar vermeden.
+
+**Yapılan:**
+1. **6 tabloya RLS açıldı + allow_all** (uys_acik_barlar, uys_mrp_calculations, uys_mrp_rezerve, uys_pending_flows, uys_test_runs, uys_v15_31_silinen_hareketler) — ERROR 5 → 0
+2. **`set_updated_at` fonksiyonu güvenliklendi** (`SET search_path = public, pg_temp`) — search_path injection korumasi
+3. **`current_user_role` SECURITY DEFINER → SECURITY INVOKER** (anon execute REVOKE)
+
+**Saha etki:** SIFIR. Davranış değişmedi.
+
+**Sonuç:** ERROR 5 → 0 ✅, WARN 45 → 41 (kalanı Aşama 3-4 hedefi).
+
+## §28.2 — Aşama 2A: Hassas Tablolar (✓ TAMAMLANDI v16.21)
+
+**Hedef:** Saha akışında okunmayan hassas tabloları anon erişimden kapatmak.
+
+**Yapılan:**
+- `uys_kullanicilar` (2 satır, 1 Buket Auth bağlı) → `allow_all` silindi → `authenticated_only`
+- `uys_yetki_ayarlari` (0 satır, RBAC kuralı) → aynı
+
+**Saha etki:** SIFIR. Buket Auth'lu erişir, operatörler `uys_operators` kullanıyor (uys_kullanicilar'dan değil). Custom auth fallback artık çalışmaz ama zaten plain text şifreler v16.18'de NULL'landı.
+
+**Sonuç:** Anon key sahibi artık admin kullanıcı listesi göremez.
+
+## §28.3 — Aşama 2B: chat-attachments Bucket (ÖTELENDİ → Aşama 3 sonrası)
+
+**Hedef:** Storage bucket SELECT (listing) policy'sini daraltmak.
+
+**Mevcut durum:** `chat-attachments` bucket public, listing policy `chat_attachments_read` SELECT TRUE. Advisor "Public Bucket Allows Listing" WARN.
+
+**Risk analizi:** Operatörler chat'e erişemiyor (App.tsx OperatorRoutes sadece `<OperatorPanel />`). Ama admin/planlama (DENEME silinene kadar) chat kullanıyor olabilir. Plus chat-attachments tablosu 2 kayıt = aktif kullanılmış.
+
+**Karar:** Operatör Auth migration (Aşama 3) öncesi dokunmamak. Anon listing kapatılırsa ve admin/planlama Auth oturumlu değilse chat dosyaları listelenemez. Aşama 3 sonrası tüm chat erişen kullanıcılar `authenticated` rolde olacak — o zaman güvenle daraltılır.
+
+## §28.4 — Aşama 2C: Operatör Auth Pilot (ÖNERİLEN, hafta sonu)
+
+**Hedef:** 1 operatöre Supabase Auth user oluşturup hibrit login akışını test etmek.
+
+**Adımlar:**
+1. Supabase Dashboard → Auth → Add user
+   - Email: `op_test@ozler.local` (gerçek email gerek değil)
+   - Password: güçlü, sicil_hash'siz (örn. bcrypt benzeri 16 karakter)
+   - Auto Confirm User ✓
+2. `uys_operators` tablosunda 1 test operatöre `auth_user_id` kolonu ekle (DDL: ALTER TABLE)
+3. Bu kolonu yeni Auth user UUID'siyle güncelle
+4. Login.tsx'te operatör login akışına email path eklenmemeli (operatörler email yazmaz). Yerine: operatörün `kod` alanı + Supabase Auth ile signInWithPassword (Auth user email'inde `op_test@ozler.local` formatında olmalı, kod=op_test).
+
+**Karmaşıklık:** Operatör login UX'i sicil_hash bazlı (bölüm seç → operatör seç → sifre gir). Email yazma gereksiz. Yani Supabase Auth user oluşturulur ama signInWithPassword arka planda otomatik (operatörün gözünden değişmeden).
+
+**Tahmini süre:** 1 operatör için 30 dk pilot. Çalışırsa 88 operatör için strateji belirgin (hafta sonu için 2-3 saat).
+
+## §28.5 — Aşama 3: Operatör Auth Migration (BÜYÜK İŞ — hafta sonu / pazartesi sabah)
+
+**Hedef:** Tüm 88 operatörü Supabase Auth'a migrate et. `anon` role tüm sahaya bağlı tablolarda yetkisiz olur.
+
+**Riskler:**
+- Operatör login akışı tamamen değişir
+- Eğer migration ortasında hata olursa saha durdu
+- Mutlaka **saha kapalıyken** yapılmalı (cumartesi gece veya pazartesi 06:00)
+
+**Ön hazırlık:**
+- Backup tüm uys_operators tablosu
+- Yedek login mekanizması hazır (custom sicil_hash) — fail-safe
+- Test ortamı (cowgxwmhlogmswatbltz) önce dene
+
+**Adımlar (özet):**
+1. uys_operators'a `auth_user_id` kolonu ekle (Aşama 2C ile aynı)
+2. 88 operatör için Supabase Auth admin API ile user oluştur (Edge Function veya bulk insert)
+3. Frontend Login.tsx — operatör login akışında signInWithPassword yap (operatör görmez, otomatik)
+4. Test ortamında doğrula
+5. Production migration (saha kapalıyken)
+
+**Tahmini süre:** 4-6 saat (script + test + production).
+
+## §28.6 — Aşama 4: Anon Role Temizliği (Aşama 3 sonrası)
+
+**Hedef:** Tüm 38 tabloda `allow_all` (anon ALL) → `authenticated_only` veya cmd-bazlı policy.
+
+**Önkoşul:** Aşama 3 tamamlandı. Tüm aktif kullanıcılar (admin + 88 operatör) Supabase Auth'lu, authenticated role.
+
+**Adımlar:**
+1. Tüm 38 tablo için `allow_all` → DROP
+2. Yerine: `authenticated_full` (FOR ALL TO authenticated USING (true) WITH CHECK (true))
+3. İhtiyaç olan tablolarda anon read yine açık tutulabilir (örn. malzeme listesi public ise) — manuel inceleme
+
+**Sonuç:** WARN 41 → 0 (advisor temiz). Anon key dışarıya kaçsa bile DB'ye erişim yok.
+
+**Plus Aşama 4.1:** chat-attachments bucket SELECT policy daraltma (Aşama 2B ötelenen iş).
+
+## §28.7 — Aşama 5: Network Restrictions + Anon Key Rotation (manuel, en son)
+
+**Supabase Dashboard'dan manuel:**
+- Network Restrictions → şirket IP whitelist (Özler OSB Dilovası IP)
+- Yeni anon key oluştur, eskiyi devre dışı bırak (key rotation)
+- Frontend `.env` ve build'lerde yeni key
+
+**Süre:** 1 gün (test + canlı geçiş).
+
+---
+
+*§28 (RLS Migration Roadmap) 30 Nis 2026 öğleden sonra ~14:30'da tamamlandı. Aşama 1 + 2A canlı, Aşama 2B+2C+3+4 hafta sonu / pazartesi sabah erken için planlı. **17 sürüm + 5 DB migration + 4 DB fix + 5 saha krizi + RLS Aşama 1 + 2A + Auth migration başlangıç + OperatorPanel kazası fix** — tek günde rekor. Yarın yeni Claude oturumu için açılış kapısı: §27 + §28 + DEVAM_NOTU.*
+
+---

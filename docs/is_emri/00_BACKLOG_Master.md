@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 30 Nisan 2026 öğle (v16.16 updated_at trigger 30 tabloya · 14 sürüm + 1 DB migration tek günde rekor)
+**Son güncelleme:** 30 Nisan 2026 öğleden sonra (v16.21 RLS Aşama 2A · 17 sürüm + 5 DB migration tek günde rekor)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
@@ -78,6 +78,11 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | **v16.14 (30 Nis öğle)** | Sentinel #16 + #17 geri eklendi (v16.12 patch'imde aynı kaza ile silinmişti) |
 | **v16.15 (30 Nis öğle)** | **`scripts/saglik-syntax-check.cjs`** — prebuild hook patch hijyen koruması: `kontroller.push>=17` + `recipes` kod referansı yasağı. Aynı kazaların bir daha olmasını yapısal engeller. |
 | **v16.16 (30 Nis öğle, DB-only)** | **PostgreSQL `updated_at` trigger 30 tabloya yayıldı** — `set_updated_at()` fonksiyonu zaten vardı, sadece uys_hm_tipleri'nde aktifdi. 29 yeni trigger eklendi. Her UPDATE'te `updated_at = NOW()` otomatik. **#23 "bug değil" notu kapandı**, audit/debug gözlemi rahatlar. |
+| **v16.17 (30 Nis öğle, DB-only)** | **RLS Aşama 1**: 5 RLS olmayan tabloya RLS açıldı + allow_all (advisor 5 ERROR → 0). Plus `set_updated_at` search_path sabitlendi (search_path injection korumasi), `current_user_role` SECURITY DEFINER → INVOKER (anon execute revoke). 38 tabloya role-bazlı yayılım denendi → operatör paneli siyah ekran (kod hatası, RLS değil) → rollback. |
+| **v16.18 (30 Nis öğle)** | **Supabase Auth migration başlangıç (Buket admin için)** — `useAuth.signIn` email path eklendi, `uzuniskender@gmail.com` Supabase Auth user'ı oluşturuldu, `uys_kullanicilar.admin-temp.auth_user_id` bağlandı, plain text "test123" ve DENEME "1234" şifreleri NULL'landı. Yan yana yaklaşım — eski custom auth korundu (geriye uyumluluk). |
+| v16.19 (30 Nis öğleden sonra) | OperatorMain orders fix denemesi → DataManagement.tsx working copy 1986 satıra düşmüş, syntax-check (kontroller.push 16<17) build patladı → revert |
+| **v16.20 (30 Nis öğleden sonra)** | **OperatorPanel siyah ekran fix + DataManagement #16+#17 geri ekle** — Bundle analizinden çıkan teşhis: `OperatorMain` useMemo'da `computeOrderHammaddeEksik(orders, ...)` çağrılıyor ama `useStore()` destructure'da `orders` YOK. v16.05 baştan kırıkmış (sipariş-bütünü PlanBekliyor mantığı) ama operatör paneline admin olarak hiç girilmediği için fark edilmemişti. Plus DataManagement.tsx 17 sentinel'li hali (v16.14) geri eklendi. |
+| **v16.21 (30 Nis öğleden sonra, DB-only)** | **RLS Aşama 2A**: `uys_kullanicilar` + `uys_yetki_ayarlari` tabloları `allow_all` → `authenticated_only`. Anon key sahibi artık kullanıcı listesini ve şifre alanlarını okuyamaz. Saha etki sıfır (Buket Auth'lu erişir, operatörler bu tablolardan zaten okumuyordu). |
 
 ---
 
@@ -288,7 +293,7 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 
 ---
 
-*Bu Master Backlog v16.15 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). 29 Nisan'da 18 sürümle Madde 15 tam tur kapandı + Sağlık #15 sentinel eklendi. **30 Nisan sabah-öğle 14 sürüm + 1 doc commit + 4 DB fix** ile MRP cutting override kök çözümü, IE yuvarlama hatası, camelCase mapping bug'ı, sentinel #16 + #17, patch hijyen koruması — tarihte ilk 17 PASS · 0 WARN · 0 FAIL. Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
+*Bu Master Backlog v16.21 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı. 29 Nisan'da 18 sürümle Madde 15 tam tur. **30 Nisan tam gün: 17 sürüm + 1 doc commit + 5 DB migration + 4 DB fix + 5 saha krizi + RLS Aşama 1 + RLS Aşama 2A + Supabase Auth migration başlangıç + OperatorPanel siyah ekran fix** — tarihte ilk 17 PASS · 0 WARN · 0 FAIL ve advisor 5 ERROR → 0. §28 RLS Migration Roadmap eklendi (Aşama 3 operatör Auth migration hafta sonu için planlı). Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
 
 ---
 
