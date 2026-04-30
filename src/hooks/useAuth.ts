@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { supabase, setGuestMode } from '@/lib/supabase'
 import { can as canCheck, type UserRole } from '@/lib/permissions'
 
@@ -13,7 +13,7 @@ interface AuthUser {
 
 const AUTH_KEY = 'uys_v3_auth'
 const OPR_KEY = 'uys_v3_opr' // sessionStorage — tab kapanınca silinir
-const ADMIN_EMAILS = ['uzuniskender@gmail.com']
+const ADMIN_EMAILS = ['uzuniskender@gmail.com', 'admin@uys.local']
 
 function getStored(): AuthUser | null {
   try {
