@@ -9,10 +9,10 @@ import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-r
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { canProduceWO, canDurus } from '@/features/production/validations'
-import { getEffectiveStatus, computeOrderHammaddeEksik } from '@/lib/statusUtils'
+import { getEffectiveStatus } from '@/lib/statusUtils'
 
 export function OperatorPanel() {
-  const { operators, operations, loadAll, loading, orders } = useStore()
+  const { operators, operations, loadAll, loading } = useStore()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, signOut } = useAuth()
@@ -169,13 +169,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
-  const { workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler } = useStore()
-
-  // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
-  const orderHmEksikMap = useMemo(
-    () => computeOrderHammaddeEksik(orders, workOrders, stokHareketler, tedarikler),
-    [orders, workOrders, stokHareketler, tedarikler]
-  )
+  const { orders, workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler } = useStore()
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
 
   // Bu operatöre yönetimden gelen okunmamış mesaj sayısı
@@ -194,7 +188,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
       if (w.hedef <= 0) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
       if (prod >= w.hedef) return false
-      const eff = getEffectiveStatus(w, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any, orderHmEksikMap)
+      const eff = getEffectiveStatus(w, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any)
       return eff.status === 'Uretilebilir' || eff.status === 'uretimde'
     }
 
