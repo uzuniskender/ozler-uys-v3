@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy } from 'lucide-react'
+import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { getPlanliWoIds, isKesimWO, getEffectiveStatus, computeOrderHammaddeEksik, type StatusReason } from '@/lib/statusUtils'
 import { SearchSelect } from '@/components/ui/SearchSelect'
@@ -292,6 +292,20 @@ export function WorkOrders() {
     })
   }
 
+  // v16.29 — İş Emri PDF (lazy import: jsPDF + DejaVu font sadece tıklayınca yüklenir)
+  async function indirIsEmriPDF(w: typeof workOrders[number]) {
+    try {
+      const ord = orders.find(o => o.id === w.orderId)
+      const woLogs = logs.filter(l => l.woId === w.id)
+      const { generateIsEmriPDF } = await import('@/lib/is-emri-pdf')
+      await generateIsEmriPDF({ workOrder: w, order: ord, logs: woLogs })
+      toast.success(w.ieNo + ' PDF indirildi')
+    } catch (e: any) {
+      toast.error('PDF olusturulamadi: ' + (e?.message || 'bilinmeyen hata'))
+      console.error('[v16.29] PDF generation failed:', e)
+    }
+  }
+
   const detailW = detailWO ? workOrders.find(w => w.id === detailWO) : null
 
   function grpStats(wos: typeof workOrders) {
@@ -449,7 +463,10 @@ export function WorkOrders() {
                           })()}
                           </div>
                         </td>
-                        <td className="px-3 py-1.5 text-right"><button onClick={() => setDetailWO(w.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={13} /></button></td>
+                        <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                          <button onClick={() => indirIsEmriPDF(w)} className="p-1 text-zinc-500 hover:text-accent" title="İş Emri PDF indir"><FileText size={13} /></button>
+                          <button onClick={() => setDetailWO(w.id)} className="p-1 text-zinc-500 hover:text-accent" title="Detayı aç"><Eye size={13} /></button>
+                        </td>
                       </tr>
                     )
                   })}
