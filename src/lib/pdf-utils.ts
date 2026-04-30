@@ -132,13 +132,15 @@ export function ozlerHeader(doc: jsPDF, opts: HeaderOptions): number {
 }
 
 export interface FooterOptions {
-  imzaIki?: boolean // true = Gönderen + Alıcı imzası, false = sadece Düzenleyen imzası
+  imzaIki?: boolean // legacy: true = Gönderen + Alıcı, false = Düzenleyen
+  imzaLabels?: string[] // v16.30 — özel imza labels (1, 2 veya 3 imza için). imzaIki üzerinde önceliklidir.
   notlar?: string // İsteğe bağlı altta yer alacak ek not
+  disclaimer?: string // v16.30 — yasal-değil disclaimer ("e-İrsaliye DİA üzerinden basılır" gibi). Ortalı, italik benzeri kasıtlı küçük.
 }
 
 /**
- * Standart Özler footer — sayfanın alt kısmında imza alanları + sayfa numarası çizer.
- * Imza alanlarının yatay konumu sayfa genişliğine göre dağıtılır.
+ * Standart Özler footer — sayfanın alt kısmında imza alanları + sayfa numarası + opsiyonel disclaimer çizer.
+ * İmza alanları sayısına göre yatay olarak eşit dağıtılır (1, 2 veya 3 alan).
  */
 export function ozlerFooter(doc: jsPDF, opts: FooterOptions = {}) {
   const margin = 15
@@ -148,32 +150,54 @@ export function ozlerFooter(doc: jsPDF, opts: FooterOptions = {}) {
 
   doc.setFont('DejaVuSans', 'normal')
 
+  // Notlar bloğu (varsa) — imza üstüne
   if (opts.notlar) {
     doc.setFontSize(8)
     doc.text(opts.notlar, margin, footerY - 8, { maxWidth: pageWidth - 2 * margin })
   }
 
+  // İmza labels'ı belirle (imzaLabels öncelikli, sonra legacy imzaIki, sonra default tek)
+  let labels: string[]
+  if (opts.imzaLabels && opts.imzaLabels.length > 0) {
+    labels = opts.imzaLabels
+  } else if (opts.imzaIki) {
+    labels = ['Gönderen (Kaşe + İmza)', 'Alıcı (Kaşe + İmza)']
+  } else {
+    labels = ['Düzenleyen (İmza)']
+  }
+
   doc.setFontSize(9)
 
-  if (opts.imzaIki) {
-    // İki imza alanı: gönderen sol, alıcı sağ
-    const cellW = (pageWidth - 2 * margin - 20) / 2
-    // Sol: Gönderen
-    doc.line(margin, footerY + 10, margin + cellW, footerY + 10)
-    doc.text('Gönderen (Kaşe + İmza)', margin + cellW / 2, footerY + 14, { align: 'center' })
-    // Sağ: Alıcı
-    doc.line(pageWidth - margin - cellW, footerY + 10, pageWidth - margin, footerY + 10)
-    doc.text('Alıcı (Kaşe + İmza)', pageWidth - margin - cellW / 2, footerY + 14, { align: 'center' })
-  } else {
-    // Tek imza alanı: ortalı
+  const n = labels.length
+  if (n === 1) {
+    // Tek imza ortalı
     const cellW = 80
     const startX = (pageWidth - cellW) / 2
     doc.line(startX, footerY + 10, startX + cellW, footerY + 10)
-    doc.text('Düzenleyen (İmza)', pageWidth / 2, footerY + 14, { align: 'center' })
+    doc.text(labels[0], pageWidth / 2, footerY + 14, { align: 'center' })
+  } else {
+    // 2 veya 3 imza: yatay eşit dağıt
+    const totalGap = (n - 1) * 10 // imza alanları arası boşluk
+    const cellW = (pageWidth - 2 * margin - totalGap) / n
+    for (let i = 0; i < n; i++) {
+      const x1 = margin + i * (cellW + 10)
+      const x2 = x1 + cellW
+      doc.line(x1, footerY + 10, x2, footerY + 10)
+      doc.text(labels[i], (x1 + x2) / 2, footerY + 14, { align: 'center' })
+    }
   }
 
-  // Sayfa numarası
+  // Disclaimer (varsa) — sayfa numarasının üstünde, ortalı, küçük
+  if (opts.disclaimer) {
+    doc.setFontSize(7)
+    doc.setTextColor(110, 110, 110)
+    doc.text(opts.disclaimer, pageWidth / 2, pageHeight - 14, { align: 'center', maxWidth: pageWidth - 2 * margin })
+    doc.setTextColor(0, 0, 0)
+  }
+
+  // Sayfa numarası + sistem ibaresi (en alt)
   doc.setFontSize(7)
+  doc.setTextColor(0, 0, 0)
   const pageNo = doc.getNumberOfPages()
   doc.text(`Sayfa ${pageNo}`, pageWidth - margin, pageHeight - 8, { align: 'right' })
   doc.text('UYS v3 — Üretim Yönetim Sistemi', margin, pageHeight - 8)

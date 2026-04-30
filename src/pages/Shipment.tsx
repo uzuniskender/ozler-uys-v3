@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Plus, Truck, Download, Eye, Search } from 'lucide-react'
+import { Plus, Truck, Download, Eye, Search, FileText } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Shipment() {
@@ -50,6 +50,21 @@ export function Shipment() {
     })
   }
 
+  // v16.30 — Sevk Belgesi PDF (yasal degil, ic audit + sofor + saha kullanim)
+  // E-Irsaliye DIA uzerinden basilir. Bu belge "Sevk Belgesi" basligi + disclaimer ile ic kullanim icin.
+  async function indirSevkBelgePDF(s: typeof sevkler[number]) {
+    try {
+      const ord = orders.find(o => o.id === s.orderId)
+      const { generateSevkBelgePDF } = await import('@/lib/sevk-belge-pdf')
+      await generateSevkBelgePDF({ sevk: s, order: ord })
+      const sevkNo = (s as any).sevkNo || (s as any).sevk_no || s.id
+      toast.success(sevkNo + ' Sevk Belgesi indirildi')
+    } catch (e: any) {
+      toast.error('Sevk Belgesi PDF olusturulamadi: ' + (e?.message || 'bilinmeyen hata'))
+      console.error('[v16.30] Sevk Belgesi PDF generation failed:', e)
+    }
+  }
+
   const detail = detailId ? sevkler.find(s => s.id === detailId) : null
 
   return (
@@ -77,7 +92,8 @@ export function Shipment() {
                   <td className="px-4 py-2 text-right font-mono text-green">{topMiktar}</td>
                   <td className="px-4 py-2 text-zinc-500 max-w-[200px] truncate">{s.not || '—'}</td>
                   <td className="px-4 py-2 text-right flex gap-1 justify-end">
-                    <button onClick={() => setDetailId(s.id)} className="p-1 text-zinc-500 hover:text-accent"><Eye size={12} /></button>
+                    <button onClick={() => indirSevkBelgePDF(s)} className="p-1 text-zinc-500 hover:text-accent" title="Sevk Belgesi PDF indir"><FileText size={12} /></button>
+                    <button onClick={() => setDetailId(s.id)} className="p-1 text-zinc-500 hover:text-accent" title="Detayı aç"><Eye size={12} /></button>
                     {can('sevk_delete') && <button onClick={() => deleteSevk(s.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
                   </td>
                 </tr>)
