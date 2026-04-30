@@ -2210,47 +2210,364 @@ Bu prensipte:
 
 *Bu §26.8 ek bölümü 29 Nis 2026 ~17:00'da eklendi. Bugünün toplam push'u 18 sürüme ulaştı (v15.82 → v15.99).*
 
-## §27 — 30 Nisan 2026 — MRP Cutting Override LEVHA Vakası + v16.x Hotfix Serisi
+---
 
-- `DataManagement.tsx` içindeki #15 sentinel kodu `recipes` isimli bir değişkene referans veriyordu.
-- Kod bloğunda lokal scope'ta `recs` olarak tanımlanan değişken vardı; bu nedenle `ReferenceError` oluştu.
-- Sonuç: Sağlık raporu üretilmedi, #15 sentinel raporu patladı.
-- Fix: `recipes` → `recs` düzeltmesi ile rapor üretimi kurtarıldı.
+# §27. 30 Nisan 2026 — MRP Cutting Override Kök Çözümü + Patch Hijyen Krizi
 
-## §27.2 v16.01 MRP filtre dbEksik (band-aid)
+**Tarih:** 30 Nisan 2026 sabah 05:00 → öğle 08:30 (5.5 saat)
+**Sürüm aralığı:** v16.00 → v16.15 (14 sürüm + 1 doc commit `e753e71`)
+**Saha vakası:** S26A_03150 + S26A_03146 + S26A_03151 — 5 Mayıs termin
+**Sağlık raporu:** 13 PASS · 2 WARN → **17 PASS · 0 WARN · 0 FAIL** ⭐
+**DB direkt fix:** 7 IE yuvarlama düzeltmesi + 4 saha tedariği (Supabase MCP üzerinden)
 
-- `MRP.tsx` filtreye `dbEksik` koşulu eklendi.
-- Bu değişiklik, `mrp_durum='eksik'` durumunun DB'de görünür olmasını sağladı.
-- Ancak bu yalnızca görünürlük band-aid'iydi; kök sorun `Hesapla` akışının DB persistansında kaldı.
+Bugün **Anthropic Claude'un Supabase MCP server'ı** ilk defa kullanıldı. Canlı DB sorgusu + UPDATE/INSERT yetki eklendi. Saha analizinde devrim seviyesinde hızlanma — önceden Buket'in SQL yapıştırma uğraşı yerine Claude doğrudan koşturuyor. Plus Claude Code VS Code uzantısı yarım gün kullanıldı (rate limit nedeniyle PowerShell zip-apply'a geri dönüldü).
 
-## §27.3 v16.02 cutting override LEVHA skip (kök fix)
+## §27.1 — v16.00 Sağlık #15 Sentinel `recipes`/`recs` Tipo (Hotfix)
 
-- `mrp.ts` içindeki cutting override mantığı, LEVHA yüzey kesimleri için 1D bin-packing varsayımı yapıyordu.
-- `parcaEn` dolu yüzey kesimleri `kesimTip='yuzey'` olarak işaretleniyor, fakat override kodu yine de 1D mantıkla işlemeye çalışıyordu.
-- Sonuç olarak, plywood LEVHA'lar için eksik tespiti yanlış atlandı.
-- Fix: LEVHA override akışı skip edildi ve yüzey kesim 1D mantığı devreden çıkarıldı; eksik tespit doğru çalışmaya başladı.
+**Saha vakası:** Sabah 04:35'te Buket "Sağlık Raporu çalışmıyor" dedi. Console:
 
-## §27.4 Saha vakası kronolojisi
+```
+ReferenceError: recipes is not defined
+    at l (index-DQMZo_zK.js:88:142169)
+```
 
-- Saha: S26A_03150 (MV GRUP, 5 Mayıs termin) plywood 131 levha eksik.
-- `v16.00` öncesinde #15 sentinel patlıyordu, v16.01 ile eksik DB görünür hale getirildi, ancak gerçek root kapanmadı.
-- `v16.02` sonrası LEVHA skip kök fix ile eksik tespiti doğru oldu.
-- Kullanıcı tedarik etti; plywood stok 214/214 ve BORU 5500 stok 154/154 ile sipariş artık kaynak açısından yeterli.
+**Tanı:** v15.99 ile eklenen Sağlık #15 (Reçete iç tutarlılık) sentinel kodunda. Try bloğu başında destructure:
 
-## §27.5 Sentinel ilkesi devam — yeni #16 + #17 tasarımı
+```ts
+const recs = recRes.data || []  // satır 71
+```
 
-- **#16:** `sipariş-toplam HM` kontrolü.
-  - Her aktif sipariş için, açık (`durum != tamamlandi/iptal`) İE'lerin toplam hammadde ihtiyacını grupla.
-  - `Σ ihtiyaç > stok + açık_tedarik` ise WARN üret.
-  - Bu kontrol, `statusUtils.ts` İE-bazlı bağımsız mantığını sipariş-bağlamlı mantığa tamamlar.
-- **#17:** `Hesapla` butonu `mrp_durum` DB persistansını garantilemeli.
-  - `mrp_durum` değişimi DB'de 5 saniye içinde yansımıyorsa uyarı üretilmeli.
-  - Amaç: UI eylemi ile gerçek DB durumu eşleşsin.
+Ama #15 kontrol bloğunda 2 yerde `recipes` (camelCase) kullanılmış:
 
-## §27.6 Mimari ders
+```ts
+for (const r of recipes as any[]) { ... }     // satır 782 — undefined
+${recipes.length} reçetede ...                 // satır 824 — undefined
+```
 
-- `cutting` override LEVHA için zaten 1D mantık yanlıştı.
-- Bu boşluk, `v15.50a Faz B P2 termin gruplama` sürecinde kaçırıldı.
-- Ders: LEVHA/yüzey kesim mantığı `Cutting`/`mrp.ts`/`statusUtils` üçgeninde ayrı ayrı test edilmeli; 2D/LEVHA durumları sentinel olarak tanımlanmalı.
-- `v15.50a` geçişinde 1D varsayım, termin gruplama eklentisi yapılırken yeniden gözden geçirilmeliydi.
+Bilgi Bankası §26.8'deki dokümandaki `recipes` ismi sentinel kodunu yazarken oradan kopyalanmış, lokal değişken adına uydurulmamış.
 
+**Fix:** 2 satırda `recipes` → `recs`. CRLF korundu, başka recipes kod referansı kalmadı (string literal `'recipes'` ve yorumlar dokunulmadı).
+
+**Sentinel ilkesi:** Bu spesifik vaka için yeni sentinel eklenmedi (v16.15'te `scripts/saglik-syntax-check.cjs` ile **yapısal koruma** yapıldı, daha kapsamlı).
+
+---
+
+## §27.2 — v16.01 MRP Filtre `dbEksik` (Band-aid)
+
+**Bağlam:** Buket "Hesapla yaptım, ama mrp_durum DB'de hala 'tamam' kaldı" dedi. DB'den canlı kontrol: `mrp_durum='eksik'` olarak işaretli 2 sipariş var ama **MRP listesinde gözükmüyorlar**.
+
+**Sebep:** MRP.tsx satır 65-78 filter mantığı:
+
+```ts
+const eksikVar = orderHasEksik[o.id] ?? false   // hesaplaMRP canli sonucu
+const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
+const aktifMi = eksikVar || henuzHesaplanmadi    // ikisi de false → GİZLE
+```
+
+`mrpDurum='eksik'` durumu DB'de kayıtlıysa ama `eksikVar` (canlı `hesaplaMRP`) cutting override yüzünden 0 dönüyorsa → liste boş, kullanıcı tedarik açma akışına ulaşamıyor.
+
+**Fix (band-aid):** Yeni `dbEksik` koşulu — DB'de `mrp_durum='eksik'` ise zorla aktif say.
+
+```ts
+const dbEksik = (o.mrpDurum || '') === 'eksik'
+const aktifMi = eksikVar || henuzHesaplanmadi || dbEksik
+```
+
+**Neden band-aid:** Kök neden cutting override mantığında. v16.02 (LEVHA skip) ve v16.07 (max(BOM,plan)) ile gerçek çözüm.
+
+---
+
+## §27.3 — v16.02 + v16.07 Cutting Override KÖK ÇÖZÜM
+
+### Eski (v15.50a Faz B P2'den beri)
+
+`mrp.ts` step 4 "Cutting plan override":
+- BOM patlatması ile elde edilen brüt ihtiyaç → `brutIhtiyac[malkod__termin]`
+- Cutting plan satırlarındaki `hamAdet` toplamı → `planAdet`
+- BOM **silinir**, plan adedi yazılır
+
+**Mantık (eski yorum):** "Plan optimize edilmiş gerçek ihtiyaçtır, BOM teorik."
+
+### Saha gerçeği — yanılma
+
+**S26A_03150 plywood:** 5 IE × levha = BOM 214. `boykesimOptimum` 1D (sadece `parcaBoy`). Plywood 877×2677 için: 1500/877=1.71 → 1 sığar gerçekte. Algoritma 3000/877=3 dedi. Plan 83 hamAdet hesaplandı (=mevcut stok). Override 214'ü silip 83 yazdı → MRP "yeterli" sandı.
+
+**Gerçekte:** 131 levha eksik. Sahada üretim çakılır.
+
+### v16.02 — Hızlı çözüm (LEVHA skip)
+
+Yüzey kesim için 1D mantık yanıltıcı, override **hiç yapma**:
+
+```ts
+if ((hmM as any)?.hammaddeTipi === 'LEVHA') {
+  dbg('[MRP DEBUG] Cutting override skip (LEVHA - yüzey kesim, 1D plan güvenilmez):', hmk)
+  return
+}
+```
+
+Plywood için BOM 214 korundu → eksik 131 görünür.
+
+### v16.07 — KÖK ÇÖZÜM (max(BOM, plan))
+
+LEVHA özel halinin tüm tiplere genelleştirilmesi:
+
+```ts
+let bomToplam = 0
+Object.keys(brutIhtiyac).forEach(bk => {
+  if (bk.startsWith(malkodLower + '__')) {
+    bomToplam += brutIhtiyac[bk].brut
+    delete brutIhtiyac[bk]
+  }
+})
+const finalBrut = Math.max(planAdet, bomToplam)
+```
+
+**Mantık:** Plan optimize ettiyse (havuz/artık tasarrufu) onu kullan, BOM aşan vakalarda BOM'a güven (saha gerçeğine kalibre).
+
+**Sonuç:** Profil/boru için de gizli eksikler açığa çıktı:
+- PROFIL 75x50x2: BOM 126 vs plan 119 (stok seviyesinde) → +7 gerçek eksik
+- BORU 6060: BOM 25 vs plan 22 → +3 gerçek
+- PLYWOOD 21mm: BOM 5 vs plan 3 → +2 gerçek
+
+---
+
+## §27.4 — v16.08 IE Yuvarlama Hatası KÖK FIX
+
+**Saha vakası:** S26A_03151 IE-08 PLYWOOD 477×1477 hedef 2 adet. Reçete miktar `0.16666` (=1/6, levha başına 6 yarı mamul çıkar).
+
+`buildWorkOrders` (autoChain.ts) miktarTotal hesabı:
+
+```ts
+miktarTotal: Math.round(t * m)  // ESKİ
+// 2 × 0.16666 = 0.333 → round = 0 ⛔
+```
+
+IE.hm.miktarTotal=0 → kesim algoritması "hammadde gerekmez" sandı, **plan oluşturulmadı** → IE-08 plansız kaldı, "Plan Bekliyor" rozeti.
+
+DEVAM_NOTU §26.5'te belirtilen **42 reçete yuvarlama hatası** (1/6, 1/7, 1/9, 1/11, 1/12, 1/13) bu kategoride. Sahada bu sefer gerçekleşti.
+
+### Fix
+
+```ts
+miktarTotal: m > 0 ? Math.max(1, Math.ceil(t * m)) : 0
+// 2 × 0.16666 = 0.333 → ceil = 1, max(1, 1) = 1 ✓
+```
+
+Ondalıklı reçeteler için artık her zaman en az 1 birim hammadde gerektirir. Sıfır reçete miktarı (sarf opsiyonel) için 0 korunur.
+
+### DB fix (mevcut etkilenen IE'ler)
+
+Tek SQL UPDATE ile 7 aktif IE düzeltildi (Supabase MCP üzerinden):
+
+```sql
+UPDATE uys_work_orders w
+SET hm = (
+  SELECT jsonb_agg(
+    CASE
+      WHEN (h.elem->>'miktarTotal')::numeric = 0 AND ...
+      THEN jsonb_set(h.elem, '{miktarTotal}', to_jsonb(GREATEST(1, CEIL(...))::int))
+      ELSE h.elem
+    END
+  )
+  FROM jsonb_array_elements(w.hm) h(elem)
+)
+WHERE w.durum NOT IN ('iptal', 'tamamlandi')
+  AND EXISTS (...)
+```
+
+7 IE: IE-S26A_03151-08 (PLYWOOD 477x1477), IE-S26A_03146-06 (BORU Ø57x3 50MM), IE-S26A_03146-10 (100x100x5 200MM), IE-S26A_03146-11 (TR Ø30 300MM), IE-S26A_03146-12 (TR Ø17 25MM), IE-S26A_03151-01 (PROFIL 50x100x3 379MM), IE-S26A_03151-02 (PROFIL 50x100x4 379MM).
+
+### Sentinel #17 (v16.09)
+
+```ts
+// IE.hm.miktarTotal=0 ama receteye gore Hammadde miktar>0 ise FAIL
+for (const w of wos) {
+  const recete = recs.find((r: any) => r.id === w.rc_id)
+  if (!recete) continue
+  for (const h of (w.hm || [])) {
+    if ((Number(h.miktarTotal) || 0) > 0) continue
+    const reSatir = (recete.satirlar || []).find((s: any) =>
+      s.malkod === h.malkod && s.tip === 'Hammadde' && Number(s.miktar) > 0
+    )
+    if (reSatir) yuvarlamaHatalari.push({ ... })
+  }
+}
+durum: yuvarlamaHatalari.length === 0 ? 'pass' : 'fail',  // FAIL — kritik
+```
+
+Yeni IE'lerde aynı vaka olursa Sağlık raporunda **anında FAIL**.
+
+---
+
+## §27.5 — v16.05 Sipariş-Bütünü PlanBekliyor (#20)
+
+**Eski mantık:** `statusUtils.ts:getEffectiveStatus` her IE'yi **bağımsız** değerlendiriyor. Aynı siparişteki birden çok IE aynı hammaddeyi paylaşırken, sistem her birini tek tek stoğa karşılaştırıyor. Toplam ihtiyacı görmüyor.
+
+**Saha vakası:** S26A_03150 plywood 5 IE × ortalama 43 levha = 214 toplam, stok 83. Sistem sadece tek başına 100 ihtiyaç eden IE-14'ü "PlanBekliyor" gösterdi (Topbar=1). Diğer 4 IE "Üretilebilir" sanılıyordu.
+
+**Çözüm:** `computeOrderHammaddeEksik` helper (statusUtils.ts):
+
+```ts
+export function computeOrderHammaddeEksik(
+  orders, allWos, stokHareketler, tedarikler
+): Map<string, Set<string>> {
+  // Her sipariş için: aynı hammaddeyi paylaşan açık IE'lerin Σ ihtiyacı
+  // > stok + yolda ise o hammadde "eksik" işaretlenir
+}
+```
+
+`getEffectiveStatus`'a opsiyonel `orderHmEksikMap` parametresi eklendi. Hammadde stoğu kontrolü öncesi:
+
+```ts
+if (orderHmEksikMap && w.orderId) {
+  const orderEksik = orderHmEksikMap.get(w.orderId)
+  if (orderEksik && hm.length > 0) {
+    const ilkOrtak = hm.find(h => orderEksik.has(h.malkod))
+    if (ilkOrtak) return { status: 'PlanBekliyor', ..., blockedBy: 'tedarik_yok' }
+  }
+}
+```
+
+5 dosya etkilendi (statusUtils.ts + Topbar.tsx + WorkOrders.tsx + OperatorPanel.tsx + Orders.tsx). Topbar PlanBekleyen sayısı 1'den 39'a sıçradı (3 sipariş × ortalama 13 IE) — sahaya gerçek durum görünür.
+
+**Bu mimari değişiklik #16 sentinel ile tutarlı:** ikisi de "sipariş-bütünü hammadde rekabeti" mantığını paylaşır. #16 Sağlık raporunda WARN/PASS, v16.05 ise UI'da PlanBekliyor rozeti.
+
+---
+
+## §27.6 — v16.12 CamelCase Mapping (Sağlık Raporunun Gerçek Bug'ı)
+
+### Belirti
+
+Sağlık #5 "PROFIL 75x50x4 net 41 ihtiyaç" dedi. DB'den canlı:
+- BOM doğrudan kullanım: 150 (sadece S26A_03150)
+- Stok: 155
+- Açık tedarik: 0
+- **Gerçek eksik: 0** (155 ≥ 150)
+
+41 nereden çıkıyor? localStorage debug flag (v16.11) açıldı, console log akışı:
+
+```
+[MRP DEBUG] 50X75X4 MM - 437 MM için RECETE BULUNAMADI, üst reçetelerden HM toplanıyor! rc= undefined
+[MRP DEBUG] Sipariş ... kalem 50X75X4 MM - 437 MM x130 → BOM: 1
+```
+
+**Tüm reçeteler "bulunamadı"!** Ama gerçekten reçeteler DB'de var.
+
+### Kök neden
+
+DataManagement.tsx satır 62-74:
+
+```ts
+const recs = recRes.data || []  // RAW DB sonucu, snake_case (mamul_kod)
+```
+
+`hesaplaMRP` (mrp.ts) içinde:
+
+```ts
+const rc = recipes.find(r => r.mamulKod === mamulKod)  // camelCase
+```
+
+`r.mamulKod` her zaman undefined (raw DB'de `mamul_kod` snake_case). Find başarısız → reçete bulunamadı → **fallback recursive yola düşüyor** (bomPatlaNet satır 50-90):
+
+```ts
+// Kendi reçetesi yok — üst reçetelerden alt kirno'ları bul
+for (const r of recipes) {
+  const ymSatir = satirlar.find(s => s.malkod === mamulKod)
+  if (!ymSatir) continue
+  // Hammadde/Sarf satırlarını topla
+  ...
+}
+```
+
+Bu fallback **çift sayım üretiyor**: aynı yarı mamul birden çok büyük reçetede geçtiği için her birinden HM tekrar tekrar ekleniyor. PROFIL 75x50x4 için: doğrudan 150 + fallback çift sayım 46 = **196**. Stok 155 → eksik 41.
+
+### Fix (v16.12)
+
+Mapping wrapper:
+
+```ts
+const recs = (recRes.data || []).map((r: any) => ({
+  ...r,
+  mamulKod: r.mamul_kod ?? r.mamulKod,
+  rcKod: r.rc_kod ?? r.rcKod,
+  bomId: r.bom_id ?? r.bomId,
+}))
+```
+
+5 wrapper: wos, recs, orders, plans, mats (+ stoks, logs için kritik field'lar). `...spread` ile snake_case korunur (geriye uyumluluk), camelCase aliasleri eklenir. **Sentinel #16 ve #17 kontrol blokları her iki naming'i de kullanıyor — spread sayesinde bozulmaz.**
+
+**Sonuç:** PROFIL 75x50x4 BOM 150 (gerçek), eksik 0. Sağlık #5 PASS.
+
+---
+
+## §27.7 — Patch Hijyen Krizi (KAZA ZİNCİRİ)
+
+Bugünün en pahalı dersi: **patch tabanı dikkat**.
+
+### Kaza zinciri
+
+`recipes` tipo bug'ı **3 kere** ortaya çıktı:
+
+| Zaman | Olay |
+|---|---|
+| 04:35 | v16.00 — ben düzelttim (str_replace, 2 satır) |
+| 06:00 | v16.03 — Claude Code Sentinel #16 yazarken `Replacing 5 lines with 69 lines` yaptı. Bu replace blok `recipes` referansını da içermiş olabilir. v16.00 fix kayboldu. |
+| 07:55 | v16.13 — ben v16.12 patch'imi `/home/claude/saglik/DataManagement.tsx`'i base alarak hazırladım (v15.99 zamanı snapshot). v16.00 fix yine kayboldu. Plus #16 + #17 sentinel'leri de bu base'de yoktu, **kazara silindi**. v16.14 ile geri eklendi. |
+
+### Kök neden
+
+**Full-file replace patch'leri eski snapshot'tan başlanırsa, aradaki commit'ler kaybolur.** Bunu Claude Code (LLM) farkına varmadan yapar — kendi belleğinde olan dosya state'ini kullanır, repo'daki canlı dosyayı görmez.
+
+Aynısı insan için de geçerli — ben /home/claude'daki cache'i base alıp v16.12 ürettim, o cache eski.
+
+### v16.15 Yapısal Koruma
+
+`scripts/saglik-syntax-check.cjs` prebuild hook'una eklendi:
+
+```js
+// 1. kontroller.push sayısı
+const kontrolCount = (src.match(/kontroller\.push\(\{/g) || []).length
+if (kontrolCount < MIN_KONTROL) process.exit(1)
+
+// 2. recipes kod referansı (yorum + string sabiti hariç)
+// Yorumları ve string literallerini temizle, kalanda \brecipes\b ara
+if (kotuRecipes.length > 0) process.exit(1)
+```
+
+`package.json` prebuild:
+
+```json
+"prebuild": "node scripts/audit-schema.cjs && node scripts/audit-columns.cjs && node scripts/saglik-syntax-check.cjs"
+```
+
+Build geçmez → push edilse bile GitHub Actions kırılır → canlıya gitmez. **Aynı kaza imkansız.**
+
+### Patch hijyen kuralı (yeni)
+
+Yeni patch yazımında — özellikle Claude Code veya full-file replace — **base dosyayı her zaman canlı repo'dan çek**. Eski snapshot'tan başlama. Kullanıcıya zip iste:
+
+```powershell
+Compress-Archive -Path 'src\pages\X.tsx' -DestinationPath 'Downloads\dump.zip'
+```
+
+Ondan sonra str_replace ile sadece değiştirilmesi gereken bölgeye dokun. Geri kalan kod aynen kalsın.
+
+---
+
+## §27.8 — "updated_at Sabit ≠ UPDATE Atılmadı" Yanılgısı
+
+**Sahnedeki yanlış teşhis:** Buket "Hesapla yaptım, mrp_durum DB'de hala 'tamam'" dedi. DB'den canlı kontrol: mrp_durum gerçekten 'tamam', updated_at 17 saat önce. Ben "UPDATE atılmamış" sandım. v16.04 sentinel'i (UPDATE error/count=0 yakalama) yazdım. RLS allow_all kontrol ettim (engel yok).
+
+**Gerçek:** PostgreSQL `uys_orders` tablosunda **otomatik `updated_at` trigger yok**. Supabase `update({ mrp_durum: 'tamam' })` çağrısı sadece `mrp_durum`'u günceller, `updated_at`'a dokunmaz. Hesapla butonu **DOĞRU çalışıyordu**, biz sabit `updated_at`'i yanlış yorumluyorduk.
+
+**Saha açısından zarar yok** — Sağlık #7 mrp_durum gerçek hesapla uyumluluğu kontrol eder, updated_at'e bakmaz. Sentinel #7 zaten bu durumu doğru raporluyordu.
+
+**Ders:** UPDATE'in DB'ye yansıyıp yansımadığını teşhis ederken `updated_at`'a güvenme. Direkt değişen field'ı oku (mrp_durum gibi). Veya değişen değeri RETURNING ile geri al (v16.04 sentinel bunu yapıyor).
+
+**Gelecek (öncelik düşük):** PostgreSQL `BEFORE UPDATE` trigger eklenebilir → her UPDATE'te `updated_at = NOW()`. Saha açısından zarar yok ama audit/debug gözlemi kolaylaşır. Backlog'da #23'ün altına eklendi.
+
+---
+
+*Bu §27 oturumu 30 Nis 2026 öğlen ~08:30'da tamamlandı. 14 sürüm + 1 doc commit + 4 DB fix + 5 saha krizi tek günde. v15.99 öncesi DEVAM_NOTU'daki "42 reçete yuvarlama hatası" maddesi v16.08 ile kapandı (kalıcı kod fix + sentinel #17). Yarın yeni Claude oturumunun §27'yi + DEVAM_NOTU'yu okuması yeterli — chat aramaya gerek yok.*
+
+---

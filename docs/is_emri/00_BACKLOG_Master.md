@@ -1,6 +1,6 @@
 # UYS v3 — Master Backlog (İş Emri Listesi)
 
-**Son güncelleme:** 30 Nisan 2026 sabah (v16.02 hotfix serisi · 4 yeni istek eklendi)
+**Son güncelleme:** 30 Nisan 2026 öğle (v16.15 patch hijyen koruması · 14 sürüm tek günde rekor)
 **Kaynak oturum:** "Günaydın" chat — eski monolit UYS (`ozleruretim` repo) ile karşılaştırma
 
 📖 **YENİ:** `docs/saha_model_28nis2026.md` — 13 senaryo, Madde 15 onay sistemi mimarisi (TAM TUR ✅ 29 Nis)
@@ -20,7 +20,7 @@
 
 ---
 
-## 📅 Son Sürümler (25 Nisan – 30 Nisan 2026)
+## 📅 Son Sürümler (25–27 Nisan 2026)
 
 Bu master backlog'a doğrudan etki eden sürümler:
 
@@ -64,8 +64,19 @@ Bu master backlog'a doğrudan etki eden sürümler:
 | | • **v15.96: Madde 15 P4** (bildirim merkezi — Topbar Bell) |
 | **v15.97-99 (29 Nis akşam)** | Doc kalıcı kayıt + bulk import çoklu kalem + Sağlık #15 reçete iç tutarlılık sentinel |
 | **v16.00 (30 Nis sabah)** | **Sağlık raporu hotfix** — `DataManagement.tsx` #15 sentinel'inde `recipes` referansı yerel scope'taki `recs` değişkenine uydurulmamıştı (ReferenceError → tüm rapor patladı). 2 satır tipo. JSON çıktısı: 13 PASS · 2 WARN · 0 FAIL (gerçek tedarik WARN'ları, kod sorunu değil). |
-| **v16.01 (30 Nis sabah)** | MRP filtre `dbEksik` band-aid — `mrp_durum='eksik'` DB görünür hale getirildi. |
-| **v16.02 (30 Nis sabah)** | `mrp.ts` LEVHA cutting override skip kök fix — yüzey kesim 1D mantığı kapatıldı. |
+| **v16.01 (30 Nis sabah)** | MRP filtre `dbEksik` band-aid (`mrp_durum='eksik'` DB sayıları listede görünsün) |
+| **v16.02 (30 Nis sabah)** | **Cutting override LEVHA skip** — yüzey kesim 1D plan adedi güvenilmez, BOM korunsun. Plywood 131 levha gizli eksiği açığa çıktı (S26A_03150 saha vakası) |
+| **v16.03 (30 Nis sabah)** | Sentinel #16 sipariş-toplam HM (cutting override bypass) — sentinel doğrudan w.hm okuyup hesaplar |
+| **v16.04 (30 Nis sabah)** | Sentinel #23 — Hesapla UPDATE error/count=0 görünür olsun (toast.error) |
+| **v16.05 (30 Nis sabah)** | **#20 Sipariş-bütünü PlanBekliyor** — `getEffectiveStatus` hammadde rekabet farkındalığı (statusUtils.ts + 4 sayfa) |
+| **v16.07 (30 Nis sabah)** | **KÖK ÇÖZÜM**: cutting override `max(BOM, plan)` — v16.02 LEVHA özel halinin tüm tipler için genelleştirilmesi. Profil/boru için de gizli eksikleri açığa çıkardı |
+| **v16.08 (30 Nis sabah)** | **buildWorkOrders Math.ceil** — IE.hm.miktarTotal yuvarlama hatası kalıcı fix (1/6, 1/7 gibi ondalıklı reçetelerde tamsayıya yuvarlanan vakalar) |
+| **v16.09 (30 Nis sabah)** | Sentinel #17 — IE.hm.miktarTotal=0 + reçetede Hammadde varsa FAIL |
+| **v16.11 (30 Nis sabah)** | hesaplaMRP debug log altyapısı (localStorage flag + URL param `?debug=mrp`) |
+| **v16.12 (30 Nis öğle)** | **Sağlık raporu camelCase mapping** — `fetchAll` raw DB ile `hesaplaMRP` arasındaki snake/camel uyumsuzluğu kök neden. PROFIL 75x50x4 +41 hayalet eksik bu yüzden çıkıyordu (recursive fallback çift sayım) |
+| **v16.13 (30 Nis öğle)** | Sentinel #15 `recipes`→`recs` (v16.00 fix v16.12 base'imdeki eski snapshot'tan kazara silinmişti) |
+| **v16.14 (30 Nis öğle)** | Sentinel #16 + #17 geri eklendi (v16.12 patch'imde aynı kaza ile silinmişti) |
+| **v16.15 (30 Nis öğle)** | **`scripts/saglik-syntax-check.cjs`** — prebuild hook patch hijyen koruması: `kontroller.push>=17` + `recipes` kod referansı yasağı. Aynı kazaların bir daha olmasını yapısal engeller. |
 
 ---
 
@@ -239,7 +250,6 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 | **#20** | **Sipariş-bütünü PlanBekliyor** (`getEffectiveStatus` refactor) | Topbar [PLAN BEKLEYEN N] sahaya gerçeği söylesin | ~30 satır, 1 dosya |
 | **#21** | **2D bin-packing (yüzey kesim)** | Plywood/levha kesimde ~%30-40 hammadde tasarrufu | Hafta seviyesi (yeni algoritma + reçete grup) |
 | **#22** | **Sağlık #16 sentinel — sipariş-toplam hammadde** | Gizli hammadde rekabeti yakalansın | ~50 satır (sentinel pattern) |
-| **#23** | **Hesapla butonu mrp_durum DB UPDATE'ini yazmıyor** | MRP görünürlüğü ve sağlık raporu tutarlılığı | Yarım gün + belirsiz fix |
 
 ### #20 — Sipariş-bütünü PlanBekliyor (mimari boşluk, küçük)
 
@@ -277,16 +287,18 @@ S26A_03150 (MV GRUP, 5 Mayıs termin) plywood İE'lerini analiz ederken **3 boş
 
 ---
 
-### #23 — Hesapla butonu `mrp_durum` DB UPDATE'ini DB'ye yazmıyor (kronik)
-
-**Kök neden:** `MRP.tsx` Hesapla handler'ı güncelleme payload'u ile `supabase` PATCH çağırıyor, ancak `updated_at` değişmiyor. Yani işlem UI tarafında veya store'da tamamlanmış gibi görünse de DB'ye ulaşmıyor.
-
-**Saha kanıtı:** 30 Nis 06:00 — Buket Hesapla bastı, eksik 131 plywood ekranda görüntülendi, fakat `mrp_durum` DB'de hâlâ `tamam` olarak kaldı ve `updated_at` 17 saat önceydi.
-
-**Çözüm önerisi:** Network tab'dan `PATCH /uys_orders` çağrısı atılıyor mu kontrol et. `v16.04` için post-condition sentinel ekle: `updated_at` 5 sn içinde değişmediyse `toast.error` göster.
-
-**Tahmin çaba:** Tanı yarım gün, fix değişken olabilir (RLS / await / cache problemi olabilir).
+*Bu Master Backlog v16.15 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). 29 Nisan'da 18 sürümle Madde 15 tam tur kapandı + Sağlık #15 sentinel eklendi. **30 Nisan sabah-öğle 14 sürüm + 1 doc commit + 4 DB fix** ile MRP cutting override kök çözümü, IE yuvarlama hatası, camelCase mapping bug'ı, sentinel #16 + #17, patch hijyen koruması — tarihte ilk 17 PASS · 0 WARN · 0 FAIL. Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
 
 ---
 
-*Bu Master Backlog v16.00 itibariyle günceldir. 27 Nisan gecesi 17 commit ile 3 İş Emri tek günde kapandı (#1, #2, #3). 29 Nisan'da 18 sürümle Madde 15 tam tur kapandı + Sağlık #15 sentinel eklendi. 30 Nisan sabahı v16.00-v16.02 hotfix serisi + 4 yeni istek (#20-23) eklendi. Her iş emri tamamlandıkça yukarıdaki "Durum" kolonu güncellenmelidir.*
+## 📌 30 Nis 2026 öğlen — bilinen "bug değil" konular
+
+### #23 — Hesapla mrp_durum DB UPDATE'i
+
+**Bug değil, gözlem yanılgısıydı.** `uys_orders.updated_at` PostgreSQL'de otomatik trigger'la güncellenmiyor. Hesapla butonu `update({ mrp_durum: ... })` yazınca mrp_durum DB'ye **doğru** yansır, ama updated_at sabit kalır → biz "UPDATE atılmadı" sandık.
+
+**Saha açısından zarar yok** (Sağlık #7 mrp_durum gerçek hesapla uyumluluğunu kontrol eder, updated_at'e bakmaz).
+
+**Gelecek (öncelik düşük):** PostgreSQL `BEFORE UPDATE` trigger eklenebilir → her UPDATE'te `updated_at = NOW()`. v16.0.0 audit-columns altyapısı zaten kolonu bekliyor; trigger ek katman.
+
+**v16.04 sentinel'i hala değerli:** UPDATE error veya `0 rows` durumlarını yakalar (RLS değişirse, sipariş silindiyse vs.). Yanlış teşhis için kullanılmaz.
