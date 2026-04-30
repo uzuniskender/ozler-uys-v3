@@ -89,6 +89,26 @@ export function useAuth() {
   }
 
   async function signIn(username: string, password: string) {
+    // v16.18 — Supabase Auth path: email format ise (icinde @ varsa)
+    // Bu path Buket'in Aşama 2 migration'i icin (uzuniskender@gmail.com).
+    // onAuthStateChange listener (yukarida) ADMIN_EMAILS uyumlu olduğunda
+    // role='admin' set eder, AUTH_KEY localStorage'a yazilir, setUser tetiklenir.
+    // Bu fonksiyon sadece Supabase Auth'a istek atar, gerisi listener halleder.
+    if (username.includes('@')) {
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: username,
+          password,
+        })
+        if (error) return { error: error.message || 'Email veya şifre hatalı' }
+        // Basari durumunda onAuthStateChange tetiklenir — manuel setUser gerek yok
+        return { error: null }
+      } catch (e: any) {
+        return { error: e?.message || 'Supabase Auth bağlantı hatası' }
+      }
+    }
+
+    // Geriye uyumluluk: mevcut custom auth (kullanici_ad bazli)
     // 1) Önce uys_kullanicilar tablosundan kontrol
     try {
       const { data } = await supabase.from('uys_kullanicilar')
