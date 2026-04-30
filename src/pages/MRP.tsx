@@ -74,7 +74,13 @@ export function MRP() {
       // siparis acilip MRP hesaplanmamissa "0 aktif siparis" goruntusu cikiyordu.
       const eksikVar = orderHasEksik[o.id] ?? false
       const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
-      const aktifMi = eksikVar || henuzHesaplanmadi
+      // v16.01 — DB'de mrp_durum='eksik' ise zorla aktif say. Sebep: hesaplaMRP cutting plan
+      // override mantığı bazı durumlarda (yüzey kesim, 1D bin-packing) gerçek ihtiyacın
+      // altında plan adedi yazıyor → eksikVar=false dönüyor ama mrp_durum='eksik' kalıyor.
+      // Topbar (mrp_durum sayar) ile liste (eksikVar bakar) çelişiyordu. v16.02'de kök fix
+      // (cutting.ts kesimTip='yuzey' override koruması) gelene kadar saha-açıcı band-aid.
+      const dbEksik = (o.mrpDurum || '') === 'eksik'
+      const aktifMi = eksikVar || henuzHesaplanmadi || dbEksik
       return showTamamlanan ? !aktifMi : aktifMi
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
