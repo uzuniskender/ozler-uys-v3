@@ -156,7 +156,7 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
           {/* ── 1. KULLANICI GİRİŞİ — en üstte, her zaman açık ── */}
           <form onSubmit={handleSubmit} className="mb-4">
             <div className="space-y-2.5">
-              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Kullanıcı Adı"
+              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Kullanıcı Adı veya E-posta"
                 className="w-full px-4 py-3 bg-bg-2 border border-border rounded-xl text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent transition-colors" autoFocus />
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Şifre"
                 className="w-full px-4 py-3 bg-bg-2 border border-border rounded-xl text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent transition-colors" />

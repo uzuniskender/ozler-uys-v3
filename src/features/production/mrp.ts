@@ -3,8 +3,12 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 
 // ═══ DEBUG ═══
-// Normal kullanımda false — sorun varsa true yapıp canlı konsoldan izle
-const DEBUG_MRP = false
+// localStorage.setItem('UYS_DEBUG_MRP', 'true') ile canlı aç, ?debug=mrp URL param'ı ile de aç
+// Normal kullanımda false — sorun varsa localStorage flag aç, consolda izle
+const DEBUG_MRP = typeof window !== 'undefined' && (
+  (typeof localStorage !== 'undefined' && localStorage.getItem('UYS_DEBUG_MRP') === 'true') ||
+  (typeof location !== 'undefined' && new URLSearchParams(location.search).get('debug') === 'mrp')
+)
 const dbg = (...args: any[]) => { if (DEBUG_MRP) console.log(...args) }
 
 export interface MRPRow {
@@ -362,14 +366,24 @@ export function hesaplaMRP(
       .map(w => (w as any).termin as string)
       .sort()[0] || ''
 
-    // BOM'dan bu malkoda eklenen tüm termin gruplarını temizle
+    // v16.07 — KÖK ÇÖZÜM: BOM toplamı kazanmalıdır eğer plan stoğa kalibre
+    // ise (saha vakası: 30 Nis 4 ihlal, sentinel #16). Eski mantık plan'ı
+    // override ediyordu → BOM eksiği yutuyordu. Yeni: max(BOM, plan).
+    // Plan > BOM ise plan kazanır (havuz/artık optimize eden vakalar).
+    let bomToplam = 0
     Object.keys(brutIhtiyac).forEach(bk => {
-      if (bk.startsWith(malkodLower + '__')) delete brutIhtiyac[bk]
+      if (bk.startsWith(malkodLower + '__')) {
+        bomToplam += brutIhtiyac[bk].brut
+        delete brutIhtiyac[bk]
+      }
     })
+    const finalBrut = Math.max(planAdet, bomToplam)
+    dbg('[MRP DEBUG] v16.07 max(BOM,plan):', hmk, 'BOM:', bomToplam, 'plan:', planAdet, '=>', finalBrut)
+    dbg('[MRP v16.11] Cutting override karari:', { malkod: hmk, planAdet, bomToplam, finalBrut, stok: getStok(hmk, stokHareketler) })
 
     // Plan termini ile tek satır olarak ekle
     const grupKey = malkodLower + '__' + planTermin
-    brutIhtiyac[grupKey] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: planAdet, termin: planTermin }
+    brutIhtiyac[grupKey] = { malkod: hmk, malad: hmM?.ad || p.hamMalad || hmk, tip: hmM?.tip || 'Hammadde', birim: hmM?.birim || 'Adet', brut: finalBrut, termin: planTermin }
   })
 
   // 5. Stok ve açık tedarik hesabı — v15.63: Buket'in net formülü
@@ -404,6 +418,14 @@ export function hesaplaMRP(
   for (const bi of sirali) {
     // YarıMamul filtreleme — üretilir, tedarik edilmez
     if (bi.tip === 'YarıMamul') continue
+    const _kLowerDbg = (bi.malkod || '').trim().toLowerCase()
+    dbg('[MRP v16.11] Step 5 satir:', {
+      malkod: bi.malkod,
+      brut: bi.brut,
+      stok_havuzu: stokPool[_kLowerDbg] || 0,
+      acik_tedarik: acikTedPool[_kLowerDbg] || 0,
+      termin: bi.termin
+    })
 
     const kLower = (bi.malkod || '').trim().toLowerCase()
     const stokDus = Math.min(stokPool[kLower] || 0, bi.brut)
@@ -422,6 +444,7 @@ export function hesaplaMRP(
   }
 
   dbg('[MRP DEBUG] FINAL brütIhtiyac keys:', Object.keys(brutIhtiyac).length, '| sonuç satır:', sonuc.length, '| mallar:', Object.values(brutIhtiyac).map(b => b.malkod))
+  dbg('[MRP v16.11] EKSIKLER (net>0):', sonuc.filter(r => r.net > 0).map(r => ({ malkod: r.malkod, brut: r.brut, stok: r.stok, acikTedarik: r.acikTedarik, net: r.net })))
 
   return sonuc.sort((a, b) => {
     const s: Record<string, number> = { yok: 0, eksik: 1, yeterli: 2 }
