@@ -299,12 +299,20 @@ export interface Sevk {
   tarih: string
   kalemler: SevkKalem[]
   not: string
+  // v16.30a — DB'de var olan ek alanlar (mapper'a + PDF'e)
+  sevkNo?: string
+  tip?: string // 'siparis' | 'iade' | 'numune' vb (DB'de tip kolonu)
+  musteriKod?: string
+  tasiyici?: string
+  plaka?: string
+  olusturan?: string
 }
 
 export interface SevkKalem {
   malkod: string
   malad: string
   miktar: number
+  birim?: string // v16.30a — PDF Birim sütunu için
 }
 
 export interface OperatorNote {

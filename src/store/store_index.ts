@@ -123,6 +123,12 @@ const M = {
     id: r.id as string, orderId: (r.order_id || '') as string, siparisNo: (r.siparis_no || '') as string,
     musteri: (r.musteri || '') as string, tarih: (r.tarih || '') as string,
     kalemler: (r.kalemler || []) as Sevk['kalemler'], not: (r.not_ || '') as string,
+    sevkNo: (r.sevk_no || '') as string,
+    tip: (r.tip || '') as string,
+    musteriKod: (r.musteri_kod || '') as string,
+    tasiyici: (r.tasiyici || '') as string,
+    plaka: (r.plaka || '') as string,
+    olusturan: (r.olusturan || '') as string,
   }),
   operatorNote: (r: Record<string, unknown>): OperatorNote => ({
     id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
