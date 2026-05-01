@@ -129,7 +129,10 @@ export function Orders() {
   }
 
   function orderPct(orderId: string): number {
-    const wos = workOrders.filter(w => w.orderId === orderId)
+    // BUG-v16.34-001 fix: İptal edilen İE'ler ilerleme hesabına dahil edilmez.
+    // Önce iptal İE'leri saymadan ölçüyoruz (gerçek ilerleme = aktif İE'lerin ortalaması).
+    // Saha vakası: S26A_03051 — 4 İE'den 2 tamam + 2 iptal → %100 olmalı (önceden %50 görünüyordu).
+    const wos = workOrders.filter(w => w.orderId === orderId && w.durum !== 'iptal')
     if (!wos.length) return 0
     const total = wos.reduce((s, w) => {
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
@@ -1074,14 +1077,22 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                     const woLogs = logs.filter(l => l.woId === w.id)
                     const prod = woLogs.reduce((a, l) => a + l.qty, 0)
                     const pct = w.hedef > 0 ? Math.min(100, Math.round(prod / w.hedef * 100)) : 0
+                    // BUG-v16.34-001 fix: İptal İE'ler net görünmeli (önceden "%0 KESME LAZER" diye yanıltıcıydı).
+                    const isCancelled = w.durum === 'iptal'
                     return (
-                      <tr key={w.id} className="border-b border-border/50">
-                        <td className="px-3 py-1.5 font-mono text-accent">{w.ieNo}</td>
-                        <td className="px-3 py-1.5 text-zinc-300">{w.malad}</td>
+                      <tr key={w.id} className={`border-b border-border/50 ${isCancelled ? 'opacity-60' : ''}`}>
+                        <td className={`px-3 py-1.5 font-mono ${isCancelled ? 'text-zinc-500 line-through' : 'text-accent'}`}>{w.ieNo}</td>
+                        <td className={`px-3 py-1.5 ${isCancelled ? 'text-zinc-500 line-through' : 'text-zinc-300'}`}>{w.malad}</td>
                         <td className="px-3 py-1.5 text-zinc-500">{w.opAd}</td>
                         <td className="px-3 py-1.5 text-right font-mono">{w.hedef}</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-green">{prod}</td>
-                        <td className={`px-3 py-1.5 text-right font-mono font-semibold ${pctColor(pct)}`}>{pct}%</td>
+                        <td className={`px-3 py-1.5 text-right font-mono ${isCancelled ? 'text-zinc-600' : 'text-green'}`}>{isCancelled ? '—' : prod}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          {isCancelled ? (
+                            <span className="px-2 py-0.5 bg-red/20 text-red rounded text-[10px] font-bold tracking-wide">İPTAL</span>
+                          ) : (
+                            <span className={`font-mono font-semibold ${pctColor(pct)}`}>{pct}%</span>
+                          )}
+                        </td>
                       </tr>
                     )
                   })}
