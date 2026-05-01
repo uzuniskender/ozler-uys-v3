@@ -1,8 +1,8 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
 **Tarih:** 1 Mayıs 2026 akşam (İşçi Bayramı — saha kapalı, ideal pencere fırsatı kullanıldı)
-**Son canlı sürüm:** v16.34 (kod) + DB Aşama 4 v2 + mrp_state + Smart Invalidation + Faz B kod-only altyapı
-**Bugün toplam:** **13 kod sürümü** (v16.27 → v16.34) + **5 DB migration** (Faz A) + **Faz B kod-only altyapı** (DB değişikliği yok)
+**Son canlı sürüm:** v16.35 (kod) + DB Aşama 4 v2 + mrp_state + Smart Invalidation + Faz B kod-only altyapı
+**Bugün toplam:** **14 kod sürümü** (v16.27 → v16.35) + **5 DB migration** (Faz A) + **Faz B kod-only altyapı** (DB değişikliği yok) + **BUG-v16.34-001 ÇÖZÜLDÜ** (v16.35)
 
 > **30 Nisan tam günü** ayrıntıları için → Bilgi Bankası §27 (10 alt bölüm) + §28 (8 alt bölüm).
 > 1 May'ın yeni öğrenmeleri **§27.12, §28.6.1, §28.6.2, §29 (1-6), §32 (1-7), §33** olarak Bilgi Bankası'nda.
@@ -74,6 +74,7 @@ docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §26 (29 Nis),
 | v16.32 docs (acfa0b6) | docs: Faz A özeti §32 + 1 May sprint §33 + DEVAM_NOTU yenileme | — |
 | **v16.33** | **IE #14 Faz B Slice 2: state field + stateMachine.ts altyapı** | ✅ |
 | **v16.34** | **IE #14 Faz B Slice 3: UI rozet refactor (state sütunu + detail + sidebar)** | ✅ (saha gözlem 1 May akşam) |
+| **v16.35** | **BUG-v16.34-001 fix: orderPct iptal İE filtreler + detail modal İPTAL rozeti** | ✅ (S26A_03051 sahada doğrulandı: %50 → %100, modal'da iptal İE'ler net) |
 
 ### DB Migration tablosu
 
@@ -152,16 +153,16 @@ yeni → recete_yok → plan_bekliyor → tedarik_bekliyor → uretilebilir → 
 - mrp_state cache + smart invalidation canlıda doğru çalışıyor
 - DB sorgu doğrulaması (Supabase MCP): state machine kararları DB tarafında doğru yazılıyor
 
-### BUG-v16.34-001 (P2 — kozmetik, kuyruğa alındı)
+### BUG-v16.34-001 (✅ v16.35 ile ÇÖZÜLDÜ — 1 May akşam)
 
 - **Etki:** 27 siparişten 1'i (S26A_03051, iptal İE içeren tek kayıt)
 - **Belirti 1:** İlerleme çubuğu iptal İE'leri paydadan düşmüyor → yanıltıcı %50 (gerçek: 2 tamamlandı / 2 aktif = %100)
 - **Belirti 2:** Sipariş detay modal'ında iptal İE'ler "%0" gösteriliyor; "İPTAL" rozeti yok
 - **State machine etkilenmemiş** — "Tamamlandı" kararı doğru
-- **Düzeltme yeri:** frontend
-  - İlerleme % hesabı: `count(durum=tamamlandi) / count(durum != iptal)` veya adet bazlı eşdeğeri
-  - Orders detail modal: iptal İE'lerde kırmızı "İPTAL" rozeti
-- **Aciliyet:** P2 — saha operasyonunu engellemiyor, kapanan siparişlerde görünür
+- **Düzeltme (v16.35, src/pages/Orders.tsx):**
+  - `orderPct()` (satır 131): `&& w.durum !== 'iptal'` filter eklendi → iptal İE'ler ortalamadan düşürüldü
+  - İE detay tablosu (satır 1073): iptal İE'ler `opacity-60` + line-through + üretilen "—" + kırmızı "İPTAL" rozeti
+- **Test:** Sandbox 5/5 PASS (S26A_03051, hiç iptal yok regression, hepsi iptal edge case, hiç İE yok, 1 tamam + 1 iptal). Saha doğrulama: S26A_03051 satır %100 + modal İPTAL rozeti görünür.
 
 ---
 
@@ -175,7 +176,6 @@ yeni → recete_yok → plan_bekliyor → tedarik_bekliyor → uretilebilir → 
 
 ### 🟡 Orta
 
-- **BUG-v16.34-001** (P2, ilerleme % + iptal İE rozeti, ~30 dk düzeltme)
 - **#21 2D bin-packing tasarım dokümanı** (Brief B.3, plywood %30-40 fire kaynağı, kod yok 2 saatlik tasarım)
 - **Faz C — Realtime subscription:** İptal değerlendirmesinde. mrp_state cache + smart invalidation saha ihtiyacını karşılıyor, Faz C marjinal getiri sağlıyor. **Karar gerekçesi DEVAM_NOTU'ya yazılmalı** (gelecekte "neden yapılmadı" sorusu çıkar).
 - **Saglik-syntax-check genişletme** — `\n` literal taraması tüm `.tsx` (§27.12 TODO)

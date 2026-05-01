@@ -3595,15 +3595,16 @@ Production migration uygulandı, bayat 3 cache satırı temizlendi (yeniden ıs�
 - mrp_state cache + smart invalidation canlıda doğru çalışıyor
 - DB sorgu doğrulaması (Supabase MCP, S26A_03051): state machine kararı DB tarafında doğru yazılıyor (`state='tamamlandi'` — 4 İE'den 2'si tamamlandı + 2'si iptal, "iptal olmayan tümü tamam" kuralı doğru)
 
-**Tespit edilen kozmetik bug — BUG-v16.34-001 (P2, kuyruğa alındı):**
+**Tespit edilen kozmetik bug — BUG-v16.34-001 (✅ v16.35 ile ÇÖZÜLDÜ, 1 May akşam):**
 - Etki: 27 siparişten 1'i (S26A_03051, iptal İE içeren tek kayıt)
 - Belirti 1: İlerleme çubuğu iptal İE'leri paydadan düşmüyor → yanıltıcı %50 (gerçek: 2 tamamlandı / 2 aktif = %100)
 - Belirti 2: Sipariş detay modal'ında iptal İE'ler "%0" gösteriliyor; "İPTAL" rozeti yok
 - State machine etkilenmemiş — "Tamamlandı" kararı doğru
-- Düzeltme yeri: frontend
-  - İlerleme % hesabı: `count(durum=tamamlandi) / count(durum != iptal)` veya adet bazlı eşdeğeri
-  - Orders detail modal: iptal İE'lerde kırmızı "İPTAL" rozeti
-- Aciliyet: P2 — saha operasyonunu engellemiyor, kapanan siparişlerde görünür
+- **Düzeltme (v16.35, src/pages/Orders.tsx, ~30 satır):**
+  - `orderPct()` fonksiyonu: `&& w.durum !== 'iptal'` filter eklendi (satır 131-139), iptal İE'ler ortalamadan düşürüldü
+  - İE detay tablosu (satır 1073-1095): iptal İE satırları `opacity-60` + ürün adı line-through + üretilen "—" + kırmızı "İPTAL" rozeti
+- **Test:** Sandbox 5/5 PASS (S26A_03051, hiç iptal yok regression, hepsi iptal edge case, hiç İE yok, 1 tamam + 1 iptal)
+- **Saha doğrulama (1 May akşam):** S26A_03051 ilerleme çubuğu %100 dolu yeşil, modal'da 2 iptal İE üzeri çizili + İPTAL rozeti, 2 tamam İE %100. Diğer 26 sipariş etkilenmedi (regression yok).
 
 **Karar:** Faz A+B production stabil, **TAMAMLANDI** olarak işaretlendi. Faz C (Realtime subscription) iptal değerlendirmesinde — mrp_state cache + smart invalidation saha ihtiyacını karşılıyor, Faz C marjinal getiri sağlıyor. İptal kararı gerekçesi gelecek oturumda DEVAM_NOTU'ya yazılacak.
 
