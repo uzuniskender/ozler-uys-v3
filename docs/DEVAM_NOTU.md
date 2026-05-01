@@ -1,11 +1,12 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
-**Tarih:** 1 Mayıs 2026 (İşçi Bayramı — saha kapalı, RLS + cache pencere fırsatı)
-**Son canlı sürüm:** v16.32 (kod) + DB Aşama 4 v2 + mrp_state + Smart Invalidation
-**Bugün toplam:** **11 kod sürümü** (v16.27 → v16.32) + **5 DB migration** (RLS OP3, OP2, mrp_state tablolar, mrp_state trigger'lar, smart invalidation)
+**Tarih:** 1 Mayıs 2026 akşam (İşçi Bayramı — saha kapalı, ideal pencere fırsatı kullanıldı)
+**Son canlı sürüm:** v16.34 (kod) + DB Aşama 4 v2 + mrp_state + Smart Invalidation + Faz B kod-only altyapı
+**Bugün toplam:** **13 kod sürümü** (v16.27 → v16.34) + **5 DB migration** (Faz A) + **Faz B kod-only altyapı** (DB değişikliği yok)
 
 > **30 Nisan tam günü** ayrıntıları için → Bilgi Bankası §27 (10 alt bölüm) + §28 (8 alt bölüm).
 > 1 May'ın yeni öğrenmeleri **§27.12, §28.6.1, §28.6.2, §29 (1-6), §32 (1-7), §33** olarak Bilgi Bankası'nda.
+> 1 May akşam Faz B + saha doğrulama notları aşağıda (yeni bölüm).
 
 ---
 
@@ -32,17 +33,19 @@ docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §26 (29 Nis),
   §28 (RLS Migration Roadmap, 8 alt bölüm + §28.6.1 + §28.6.2),
   §29 (PDF altyapı, 6 alt bölüm),
   §32 (İş Emri #14 Faz A, 7 alt bölüm — mrp_state cache + smart invalidation bug fix),
-  §33 (1 May sprint tablosu))
+  §33 (1 May sprint tablosu),
+  §32.8 (Faz A+B saha doğrulaması ve kapanışı))
 + docs/DEVAM_NOTU.md (bu dosya)
 + docs/is_emri/00_BACKLOG_Master.md
-+ docs/is_emri/14_MimariRefactor.md (Faz A ✓ TAMAMLANDI, Faz B sırada)
++ docs/is_emri/14_MimariRefactor.md (Faz A ✓ + Faz B ✓ TAMAMLANDI, Faz C iptal kararı bekleniyor)
++ docs/14B_SLICE2_NOTU.md ve docs/14B_SLICE3_NOTU.md (Faz B detayı)
 ```
 
 ---
 
-## 1 MAY ÖZETİ — 11 SÜRÜM + 5 DB MIGRATION
+## 1 MAY ÖZETİ — 13 SÜRÜM + 5 DB MIGRATION + FAZ B KOD-ONLY
 
-### Bugünün DÖRT büyük başarısı
+### Bugünün BEŞ büyük başarısı
 
 1. **RLS Aşama 4 v2 (✓ TAM TAMAMLANDI):** 43/43 tablo güvenli (sonra 45/45 oldu, mrp_state ile). 30 Nis Aşama 4 toptan rollback'inden sonra cmd-bazlı + role-bazlı ikili strateji ile chicken-and-egg çözüldü.
 
@@ -50,7 +53,9 @@ docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §26 (29 Nis),
 
 3. **Sevk Belgesi Mimari Kararı:** UYS v3'te "İç Sevk Belgesi" (yasal değil), DİA + MAVVO'da yasal e-İrsaliye. Profesyonel ayrım.
 
-4. **İş Emri #14 Faz A (✓ TAMAMLANDI):** mrp_state cache altyapısı (2 tablo, 7 trigger), 7 caller cache wrap, smart invalidation bug fix. Faz B (state machine) sıraya alındı.
+4. **İş Emri #14 Faz A (✓ TAMAMLANDI):** mrp_state cache altyapısı (2 tablo, 7 trigger), 7 caller cache wrap, smart invalidation bug fix.
+
+5. **İş Emri #14 Faz B (✓ TAMAMLANDI):** order state machine kod-only altyapı — 10-state enum, stateMachine.ts (123 satır transition kuralları), state field types/store'a eklendi, UI rozet refactor (Orders state sütunu + detail + Sidebar). DB migration yok, frontend hesaplama. Saha gözlem 1 Mayıs akşam yapıldı: state rozeti DOĞRU çalışıyor (27 sipariş üzerinden doğrulama).
 
 ### Kod sürüm tablosu
 
@@ -64,8 +69,11 @@ docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §26 (29 Nis),
 | v16.29a + 29b | package-lock.json regen | ✅ |
 | v16.30 | Sevk Belgesi PDF + jenerik imza | ✅ |
 | v16.30a | Sevk mapper genişletme (4 alan) | ✅ |
-| **v16.31** | **IE #14 Faz A Slice 1+2: mrp_state cache altyapısı** | ✅ |
-| **v16.32** | **IE #14 Faz A Slice 3: 7 caller cache wrap** | ✅ (smart invalidation bug fix sonrası) |
+| v16.31 | IE #14 Faz A Slice 1+2: mrp_state cache altyapısı | ✅ |
+| v16.32 | IE #14 Faz A Slice 3: 7 caller cache wrap | ✅ (smart invalidation bug fix sonrası) |
+| v16.32 docs (acfa0b6) | docs: Faz A özeti §32 + 1 May sprint §33 + DEVAM_NOTU yenileme | — |
+| **v16.33** | **IE #14 Faz B Slice 2: state field + stateMachine.ts altyapı** | ✅ |
+| **v16.34** | **IE #14 Faz B Slice 3: UI rozet refactor (state sütunu + detail + sidebar)** | ✅ (saha gözlem 1 May akşam) |
 
 ### DB Migration tablosu
 
@@ -76,6 +84,8 @@ docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §26 (29 Nis),
 | 3 | TEST-SEV-26-001 (test sevkiyat) | §29 |
 | 4 | mrp_state tabloları + 7 trigger (Slice 1) | §32.2 |
 | 5 | Smart invalidation (Migration v3 bug fix) | §32.6 |
+
+> Faz B (v16.33 + v16.34) **DB migration eklemedi** — state hesabı frontend'de stateMachine.ts içinde yapılıyor, DB'ye yazılan `state` kolonu mevcut. Faz B saf kod refactor + UI rozet.
 
 ---
 
@@ -111,26 +121,66 @@ DB: 2 invalidation function + 7 trigger    — smart invalidation v3
 
 ---
 
+## ORDER STATE MACHINE — SON DURUM (1 May 2026, Faz B)
+
+```
+src/features/order/stateMachine.ts  — 123 satır, 10-state enum + transition kuralları
+src/types/index.ts                  — OrderState tip tanımı (+20 satır)
+src/store/index.ts                  — state field zustand store entegrasyonu (+2 satır)
+src/pages/Orders.tsx                — state sütunu rozet render (+6 satır)
+src/components/layout/Sidebar.tsx   — state'e göre navigasyon (+4 satır)
+DB: uys_orders.state                — USER-DEFINED enum (mevcut, yeni eklenmedi)
+```
+
+**State enum (10):**
+yeni → recete_yok → plan_bekliyor → tedarik_bekliyor → uretilebilir → uretiliyor → tamamlandi → kapanma_bekliyor → kapali / iptal (terminal)
+
+**"Tamamlandı" kuralı:** iptal olmayan tüm iş emirleri tamamlandığında geçiş. State machine "iptal" iş emirlerini paydadan düşer (saha doğrulamasında onaylandı).
+
+**İptal:** her non-terminal state'ten erişilebilir, stok hareketleri korunur, açık İE'ler iptal status'a geçer.
+
+**Detay:** docs/14B_SLICE2_NOTU.md, docs/14B_SLICE3_NOTU.md, Bilgi Bankası §32.8.
+
+---
+
+## 1 MAY AKŞAM — SAHA DOĞRULAMA SONUCU
+
+### Faz A+B canlı gözlem (v16.34, 27 sipariş)
+
+- State rozeti dağılımı tutarlı: Üretiliyor / Üretilebilir / Tamamlandı
+- Üst bar sayaçları temiz: KESİM 0 / MRP 0 / TEDARİK 0 / PLAN BEKLEYEN 0
+- mrp_state cache + smart invalidation canlıda doğru çalışıyor
+- DB sorgu doğrulaması (Supabase MCP): state machine kararları DB tarafında doğru yazılıyor
+
+### BUG-v16.34-001 (P2 — kozmetik, kuyruğa alındı)
+
+- **Etki:** 27 siparişten 1'i (S26A_03051, iptal İE içeren tek kayıt)
+- **Belirti 1:** İlerleme çubuğu iptal İE'leri paydadan düşmüyor → yanıltıcı %50 (gerçek: 2 tamamlandı / 2 aktif = %100)
+- **Belirti 2:** Sipariş detay modal'ında iptal İE'ler "%0" gösteriliyor; "İPTAL" rozeti yok
+- **State machine etkilenmemiş** — "Tamamlandı" kararı doğru
+- **Düzeltme yeri:** frontend
+  - İlerleme % hesabı: `count(durum=tamamlandi) / count(durum != iptal)` veya adet bazlı eşdeğeri
+  - Orders detail modal: iptal İE'lerde kırmızı "İPTAL" rozeti
+- **Aciliyet:** P2 — saha operasyonunu engellemiyor, kapanan siparişlerde görünür
+
+---
+
 ## SONRAKİ OTURUM İÇİN ÖNCELİKLER
 
 ### 🔴 Kritik (sırada)
 
-**İş Emri #14 Faz B — State Machine** (5-7 gün, dosya: `docs/is_emri/14_MimariRefactor.md` Adım 3):
+**MRP modal birleştirme (Faz 3 single-window):** Memory'de "v15.50a sonrası en yüksek öncelik" notu. Kullanıcı UX'i doğrudan etkiliyor. Mevcut çoklu pencere akışı tek pencerede toplanacak.
 
-1. `order_state` enum (10 state — yeni, recete_yok, plan_bekliyor, tedarik_bekliyor, uretilebilir, uretiliyor, tamamlandi, kapanma_bekliyor, kapali, iptal)
-2. Transition kuralları (`src/features/order/stateMachine.ts`)
-3. PostgreSQL trigger ile otomatik state hesabı (mrp_state + work_orders durumlarına göre)
-4. UI'da state'e göre rozet gösterimi
-5. Sevkiyat ekseni ayrı kalır (`sevk_durum` mevcut kolon korunur)
-
-**Karar yetkisi:** Buket — Faz B başlatılsın mı, yoksa bekleyen başka iş mi öncelik?
+**Karar yetkisi:** Buket — MRP Faz 3 başlatılsın mı, yoksa BUG-v16.34-001 önce mi düzeltilsin?
 
 ### 🟡 Orta
 
+- **BUG-v16.34-001** (P2, ilerleme % + iptal İE rozeti, ~30 dk düzeltme)
 - **#21 2D bin-packing tasarım dokümanı** (Brief B.3, plywood %30-40 fire kaynağı, kod yok 2 saatlik tasarım)
-- **MRP modal birleştirme** (Faz 3 single-window, backlog en üst)
+- **Faz C — Realtime subscription:** İptal değerlendirmesinde. mrp_state cache + smart invalidation saha ihtiyacını karşılıyor, Faz C marjinal getiri sağlıyor. **Karar gerekçesi DEVAM_NOTU'ya yazılmalı** (gelecekte "neden yapılmadı" sorusu çıkar).
 - **Saglik-syntax-check genişletme** — `\n` literal taraması tüm `.tsx` (§27.12 TODO)
 - **Şirket Profili sayfası** — DataManagement'a tab, hardcoded placeholder yerine DB'den
+- **#5 Sevkiyat Formu kapanışı**
 - **`admin@uys.local + 1234` saha doğrulama** — incognito test
 
 ### 🟢 Düşük
@@ -140,6 +190,8 @@ DB: 2 invalidation function + 7 trigger    — smart invalidation v3
 - Toplu sipariş girişi (Excel)
 - İstek #18 (fire→sipariş dışı İE)
 - İstek #19 (MRP stoktan ver)
+- Kesim planı consolidation
+- Multi-device single-session enforcement
 
 ---
 
@@ -166,6 +218,9 @@ TS/JS build/typecheck Buket'in makinesinde DEĞİL, claude.ai sandbox'ta. Her pa
 ### 7. Supabase MCP doğrudan kullanımı (Memory #16)
 DDL + query'ler Supabase MCP tools (apply_migration, execute_sql) ile claude.ai'den uygulanır. Buket'e PowerShell SQL talimatı verilmez. Önce test projesi (`cowgxwmhlogmswatbltz`), prod (`lmhcobrgrnvtprvmcito`) onay sonrası.
 
+### 8. Saha doğrulama önce, dokümantasyon kapanışı sonra (1 May akşam)
+Faz tamamlandı işaretlenmeden önce canlıda gözlem yap. Edge case bug'lar (iptal İE) state machine'in doğru çalışıyor olduğunu **doğrulamayı engellemez** — kozmetik bug ayrı kuyruğa alınır, mimari kapanış yapılır. Eski yöntem: build PASS + sandbox test sonra "TAMAMLANDI" deniyordu, gerçek saha verisinde edge case yakalanamıyordu.
+
 ---
 
 ## ÖNEMLİ KURALLAR (Memory + Bilgi Bankası §30 IE-UYS-001)
@@ -178,4 +233,4 @@ DDL + query'ler Supabase MCP tools (apply_migration, execute_sql) ile claude.ai'
 
 ## SİL UYARISI
 
-Bu dosya sadece **son sprint odaklı**. 30 Nis bağlamı için → Bilgi Bankası §27 ve §28. Faz A detayları için → §32. Sprint tablosu için → §33.
+Bu dosya sadece **son sprint odaklı**. 30 Nis bağlamı için → Bilgi Bankası §27 ve §28. Faz A detayları için → §32. Faz B detayları için → §32.8 + docs/14B_SLICE*_NOTU.md. Sprint tablosu için → §33.
