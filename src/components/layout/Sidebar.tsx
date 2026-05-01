@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { useChatNotifStore } from '@/hooks/useChatNotifications'
+import { isActive as isOrderActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
@@ -65,7 +66,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   function getBadge(key?: string): string {
     if (!key) return ''
     if (key === 'orders') {
-      const open = store.orders.filter(o => o.durum !== 'kapalı').length
+      // v16.34 IE #14 Faz B Slice 3: state-bazli (kapali ve iptal disindaki tum aktif siparisler)
+      const open = store.orders.filter(o => isOrderActive(o.state)).length
       return open > 0 ? String(open) : ''
     }
     if (key === 'workOrders') {

@@ -15,6 +15,7 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
 import { startFlow, advanceFlow } from '@/lib/pendingFlow'
 import { getKesimEksikWoIds, isKesimWO } from '@/lib/statusUtils'
+import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
 
 // Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar.
 // Sipariş ekleme/revize/silme/kapatma, toplu MRP, tedarik değişimi sonrası çağrılmalı.
@@ -325,7 +326,7 @@ export function Orders() {
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
-          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="px-2 py-2.5 w-6"><input type="checkbox" onChange={e => e.target.checked ? setSelIds(new Set(filtered.map(o => o.id))) : setSelIds(new Set())} className="accent-accent" /></th><th className="text-left px-4 py-2.5">Sipariş No</th><th className="text-left px-4 py-2.5">Müşteri</th><th className="text-left px-4 py-2.5">Ürün</th><th className="text-right px-4 py-2.5">Adet</th><th className="text-left px-4 py-2.5">Termin</th><th className="text-right px-4 py-2.5">İlerleme</th><th className="text-right px-4 py-2.5">İE</th><th className="text-center px-2 py-2.5" title="Kesim planı durumu">Kesim</th><th className="text-center px-2 py-2.5">MRP</th><th className="text-center px-2 py-2.5">Sevk</th><th className="px-4 py-2.5"></th></tr></thead>
+          <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="px-2 py-2.5 w-6"><input type="checkbox" onChange={e => e.target.checked ? setSelIds(new Set(filtered.map(o => o.id))) : setSelIds(new Set())} className="accent-accent" /></th><th className="text-left px-4 py-2.5">Sipariş No</th><th className="text-left px-4 py-2.5">Müşteri</th><th className="text-left px-4 py-2.5">Ürün</th><th className="text-right px-4 py-2.5">Adet</th><th className="text-left px-4 py-2.5">Termin</th><th className="text-right px-4 py-2.5">İlerleme</th><th className="text-right px-4 py-2.5">İE</th><th className="text-center px-2 py-2.5" title="Kesim planı durumu">Kesim</th><th className="text-center px-2 py-2.5">MRP</th><th className="text-center px-2 py-2.5">Sevk</th><th className="text-center px-2 py-2.5" title="Sipariş durumu (otomatik)">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {filtered.map(o => {
               const pct = orderPct(o.id); const woCount = workOrders.filter(w => w.orderId === o.id).length
@@ -363,6 +364,7 @@ export function Orders() {
                   })()}</td>
                   <td className="px-2 py-2.5 text-center">{woCount > 0 && <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${mrpBadge.bg} ${mrpBadge.color}`}>{mrpBadge.label}</span>}</td>
                   <td className="px-2 py-2.5 text-center"><span title={sevkBadge.title} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${sevkBadge.bg} ${sevkBadge.color}`}>{sevkBadge.label}</span></td>
+                  <td className="px-2 py-2.5 text-center"><span title={`State: ${o.state}`} className={stateBadgeClass(o.state)}>{stateLabel(o.state)}</span></td>
                   <td className="px-4 py-2.5 text-right"><div className="flex gap-1 justify-end">
                     <button onClick={() => setSelectedOrder(o)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={13} /></button>
                     {can('orders_edit') && <button onClick={() => oncelikDegistir(o.id, 1)} className="p-1 text-zinc-500 hover:text-amber" title="Öncelik artır"><ArrowUp size={11} /></button>}
@@ -993,7 +995,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
-          <div><h2 className="text-lg font-semibold">{order.siparisNo}</h2><p className="text-xs text-zinc-500">{order.musteri} · {order.tarih}</p></div>
+          <div className="flex items-center gap-3"><h2 className="text-lg font-semibold">{order.siparisNo}</h2><span className={stateBadgeClass(order.state)} title={`State: ${order.state}`}>{stateLabel(order.state)}</span><p className="text-xs text-zinc-500">{order.musteri} · {order.tarih}</p></div>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg">✕</button>
         </div>
 
