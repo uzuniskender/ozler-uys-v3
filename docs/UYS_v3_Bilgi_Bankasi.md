@@ -3565,6 +3565,55 @@ Production migration uygulandı, bayat 3 cache satırı temizlendi (yeniden ıs�
 
 ---
 
+### §32.8 — Faz A+B Saha Doğrulaması ve Kapanış (1 May 2026 akşam)
+
+**Deploy hattı:** v16.27 → v16.34 (1 May, 13 sürüm + 5 DB migration, RLS 45/45 güvenli)
+
+**Faz A — Order State Cache Altyapısı (Slice 1+2+3, v16.31 + v16.32):**
+- `uys_mrp_state_global` (singleton) + `uys_mrp_state_order` (PK = order_id, FK CASCADE)
+- 7 trigger ile otomatik invalidation, smart invalidation v3 ile MRP-kritik kolon kontrolü
+- `hesaplaMRPCached(scope, computeFn, opts)` callback wrapper — 12-param fonksiyona minimal değişiklik
+- 7 caller cache wrap (autoChain, Orders ×2, DataManagement ×2, MRP ×2)
+- 5 dk TTL koruyucu (DB trigger fail durumu için emniyet supabı)
+- `scope === null` cache bypass; `test_run_id` doluysa cache tamamen kapalı
+- Cache yazım hatası asıl akışı bozmuyor (sadece console.warn)
+
+**Faz B — Order State Machine (Slice 2+3, v16.33 + v16.34):**
+- 10-state enum: yeni → recete_yok → plan_bekliyor → tedarik_bekliyor → uretilebilir → uretiliyor → tamamlandi → kapanma_bekliyor → kapali / iptal (terminal)
+- `src/features/order/stateMachine.ts` (123 satır) — transition kuralları + state hesabı
+- `src/types/index.ts` OrderState tip tanımı (+20 satır)
+- `src/store/index.ts` zustand entegrasyonu (+2 satır)
+- UI rozet refactor: Orders state sütunu + detail modal + Sidebar (+10 satır toplam)
+- **DB migration eklemedi** — `uys_orders.state` kolonu mevcut enum, hesap frontend'de
+- "Tamamlandı" kuralı: iptal olmayan tüm iş emirleri tamamlandığında geçiş
+- İptal her non-terminal state'ten erişilebilir; stok hareketleri korunur, açık İE'ler iptal status'a geçer
+
+**Saha doğrulama (1 May akşam, v16.34 canlıda):**
+- 27 canlı sipariş üzerinden gözlem
+- State rozeti dağılımı tutarlı: Üretiliyor / Üretilebilir / Tamamlandı
+- Üst bar sayaçları temiz: KESİM 0 / MRP 0 / TEDARİK 0 / PLAN BEKLEYEN 0
+- mrp_state cache + smart invalidation canlıda doğru çalışıyor
+- DB sorgu doğrulaması (Supabase MCP, S26A_03051): state machine kararı DB tarafında doğru yazılıyor (`state='tamamlandi'` — 4 İE'den 2'si tamamlandı + 2'si iptal, "iptal olmayan tümü tamam" kuralı doğru)
+
+**Tespit edilen kozmetik bug — BUG-v16.34-001 (P2, kuyruğa alındı):**
+- Etki: 27 siparişten 1'i (S26A_03051, iptal İE içeren tek kayıt)
+- Belirti 1: İlerleme çubuğu iptal İE'leri paydadan düşmüyor → yanıltıcı %50 (gerçek: 2 tamamlandı / 2 aktif = %100)
+- Belirti 2: Sipariş detay modal'ında iptal İE'ler "%0" gösteriliyor; "İPTAL" rozeti yok
+- State machine etkilenmemiş — "Tamamlandı" kararı doğru
+- Düzeltme yeri: frontend
+  - İlerleme % hesabı: `count(durum=tamamlandi) / count(durum != iptal)` veya adet bazlı eşdeğeri
+  - Orders detail modal: iptal İE'lerde kırmızı "İPTAL" rozeti
+- Aciliyet: P2 — saha operasyonunu engellemiyor, kapanan siparişlerde görünür
+
+**Karar:** Faz A+B production stabil, **TAMAMLANDI** olarak işaretlendi. Faz C (Realtime subscription) iptal değerlendirmesinde — mrp_state cache + smart invalidation saha ihtiyacını karşılıyor, Faz C marjinal getiri sağlıyor. İptal kararı gerekçesi gelecek oturumda DEVAM_NOTU'ya yazılacak.
+
+**Öğrenme — Saha doğrulama önce, dokümantasyon kapanışı sonra:**
+Faz tamamlandı işaretlenmeden önce canlıda gözlem yap. Edge case bug'lar (iptal İE) state machine'in doğru çalıştığı doğrulamasını engellemez — kozmetik bug ayrı kuyruğa alınır, mimari kapanış yapılır. Eski yöntem: build PASS + sandbox test sonra "TAMAMLANDI" deniyordu, gerçek saha verisinde edge case yakalanamıyordu.
+
+**Referans dosyalar:** docs/14B_SLICE2_NOTU.md, docs/14B_SLICE3_NOTU.md, src/features/order/stateMachine.ts.
+
+---
+
 ## §33 — 1 May 2026 Sprint Tablosu (Final)
 
 | Sürüm | İş | Saha Test | Bölüm |
