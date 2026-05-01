@@ -1,6 +1,13 @@
 import type { Recipe, StokHareket, Tedarik, WorkOrder, Material, MrpRezerve } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+// v16.31 (IE #14 Faz A Slice 2) — cache-aware wrapper bagimliliklari
+import {
+  getMrpCacheGlobal,
+  setMrpCacheGlobal,
+  getMrpCacheOrder,
+  setMrpCacheOrder,
+} from './mrpCache'
 
 // ═══ DEBUG ═══
 // localStorage.setItem('UYS_DEBUG_MRP', 'true') ile canlı aç, ?debug=mrp URL param'ı ile de aç
@@ -1100,4 +1107,100 @@ export async function siparisRevizeUygula(
   }
 
   return { ozetler }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IE #14 Faz A Slice 2 (v16.31) — CACHE-AWARE WRAPPER
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Amaç: Aynı parametre seti (global veya order-tek) için tekrar tekrar
+// hesaplaMRP çağrısı yapmadan DB-cache'ten oku, fresh ise dön.
+//
+// API:
+//   await hesaplaMRPCached(scope, computeFn, opts?)
+//
+//   scope:
+//     'global'              -> uys_mrp_state_global cache
+//     { orderId: '...' }    -> uys_mrp_state_order cache (tek sipariş)
+//     null                  -> cache by-pass (custom kullanım, çoklu sipariş, secilenYMIds vs.)
+//
+//   computeFn: () => MRPRow[]   — cache miss veya forced refresh anında çağrılır
+//
+//   opts.forceRefresh: true    — cache'i atla, mutlaka recompute + cache yaz
+//
+// Test modu:
+//   localStorage.uys_active_test_run_id varsa cache TAM by-pass — test koşusu
+//   üretim cache'ini kirletmesin.
+//
+// Trigger'lar (Slice 1 migration):
+//   uys_orders, uys_work_orders, uys_kesim_planlari, uys_stok_hareketler,
+//   uys_tedarikler, uys_recipes, uys_bom_trees -> invalidate.
+//
+// Caller pattern (Slice 3'te aşamalı geçiş):
+//   const rows = await hesaplaMRPCached(
+//     ordIds === null ? 'global'
+//       : (ordIds && ordIds.length === 1) ? { orderId: ordIds[0] } : null,
+//     () => hesaplaMRP(ordIds, orders, workOrders, recipes, ...)
+//   )
+//
+// ESKİ hesaplaMRP API'si DEĞİŞMEDİ — backward compatible. Mevcut çağrılar etkilenmez.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type MrpCacheScope = 'global' | { orderId: string } | null
+
+export interface HesaplaMRPCachedOpts {
+  forceRefresh?: boolean
+}
+
+/**
+ * Cache-aware MRP hesabı.
+ *
+ * 1) scope === null  -> cache yok, computeFn() doğrudan döndürülür
+ * 2) Test modu       -> cache yok, computeFn() doğrudan döndürülür
+ * 3) forceRefresh    -> compute + cache yaz, dön
+ * 4) Cache HIT       -> cache.rows döndürülür
+ * 5) Cache MISS/STALE -> compute + cache yaz, dön
+ *
+ * computeFn senkron — eski hesaplaMRP'yi closure ile sarın.
+ */
+export async function hesaplaMRPCached(
+  scope: MrpCacheScope,
+  computeFn: () => MRPRow[],
+  opts?: HesaplaMRPCachedOpts
+): Promise<MRPRow[]> {
+  // (1) Cache by-pass: custom kullanım
+  if (scope === null) return computeFn()
+
+  // (2) Force refresh: hesapla + cache yaz, dön
+  if (opts?.forceRefresh) {
+    const rows = computeFn()
+    if (scope === 'global') {
+      await setMrpCacheGlobal(rows)
+    } else {
+      await setMrpCacheOrder(scope.orderId, rows)
+    }
+    return rows
+  }
+
+  // (3) Cache okuma denemesi
+  const cached = scope === 'global'
+    ? await getMrpCacheGlobal()
+    : await getMrpCacheOrder(scope.orderId)
+
+  if (cached) {
+    // HIT — invalidated=false ve TTL içinde
+    return cached.rows
+  }
+
+  // (4) MISS/STALE — compute + cache yaz
+  const rows = computeFn()
+
+  // Cache yazımı await edilir ama hata atlatılır (mrpCache içinde catch'li).
+  if (scope === 'global') {
+    await setMrpCacheGlobal(rows)
+  } else {
+    await setMrpCacheOrder(scope.orderId, rows)
+  }
+
+  return rows
 }

@@ -39,6 +39,8 @@ const STORE_WHITELIST = new Set([
   'uys_sevk_satirlari',   // v15.54 GEÇİCİ — Faz 1'de tablo eklendi, Faz 2'de store mapper'a taşınınca BU SATIRI SİL
   'uys_activity_log',     // v15.75 — Tip C, log tablosu (binlerce kayıt). Frontend store'a yüklenmez; Logs.tsx getDbActivityLog ile filtreli sorgular.
   'uys_manuel_mudahale_log', // v15.90 — Madde 15 P1 audit log. Tip C (büyük log). Frontend state'e yüklenmez; tikalannca filtreli sorgu (UI Faz 2'de gelecek).
+  'uys_mrp_state_global',    // v16.31 IE #14 Faz A — MRP cache (global). mrpCache.ts dogrudan supabase ile okur, store'a girmez.
+  'uys_mrp_state_order',     // v16.31 IE #14 Faz A — MRP cache (order bazli). mrpCache.ts dogrudan supabase ile okur, store'a girmez.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -51,6 +53,8 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_sevk_satirlari',            // v15.54 GEÇİCİ — Faz 2'de DataManagement'a + backup.ts BACKUP_TABLES'a eklenecek; o zaman BU SATIRI SİL
   'uys_activity_log',              // v15.75 — Tip C, log tablosu. Backup'a girmez (kalıcı/bağımsız). Restore log temizlemesi yanlış olur.
   'uys_manuel_mudahale_log',       // v15.90 — Madde 15 P1 audit log. Backup'a girmez (audit kayıtları silinemez/restore edilemez prensibi).
+  'uys_mrp_state_global',          // v16.31 IE #14 Faz A — MRP cache, yeniden hesaplanabilir, backup gereksiz.
+  'uys_mrp_state_order',           // v16.31 IE #14 Faz A — MRP cache, yeniden hesaplanabilir, backup gereksiz.
 ])
 
 // ═══════════════════════════════════════════════════════════════

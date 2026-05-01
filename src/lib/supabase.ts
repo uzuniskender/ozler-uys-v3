@@ -26,7 +26,8 @@ const TEST_RUN_TABLES = new Set([
   'uys_fire_logs', 'uys_acik_barlar', 'uys_active_work',
 ])
 
-function getActiveTestRunId(): string | null {
+// v16.31 (IE #14 Faz A Slice 2) — export edildi (mrpCache test mode bypass icin)
+export function getActiveTestRunId(): string | null {
   try { return localStorage.getItem('uys_active_test_run_id') } catch { return null }
 }
 

@@ -3001,3 +3001,410 @@ Detay için **§27.10 — Auth User Manuel Manipülasyon Yasağı**'na bakınız
 *§28 (RLS Migration Roadmap) 30 Nis 2026 öğleden sonra ~15:30'da güncellendi. **Aşama 1 + 2A + 2C + 3 ✓ TAMAMLANDI** (90 Auth user canlı). **Aşama 4 DENENDI → ROLLBACK** (chicken-and-egg). **Aşama 4 v2 (cmd-bazlı policy)** + Aşama 2B (chat-attachments) + Aşama 5 (network/key rotation) hafta sonu / pazartesi sabah erken için planlı. **22 sürüm + 9 DB migration + 6 DB fix + 5 saha krizi + RLS Aşama 1+2A+3 + 89/89 operatör Auth + OperatorPanel kazası fix + admin Auth yenileme** — tek günde rekor. Yarın yeni Claude oturumu için açılış kapısı: §27 (10 alt bölüm) + §28 (8 alt bölüm) + DEVAM_NOTU.*
 
 ---
+
+
+
+# Bilgi Bankası — 1 Mayıs 2026 Eklemeleri
+
+> Bu blokları `docs/UYS_v3_Bilgi_Bankasi.md` dosyasının **sonuna** ekle. Mevcut §28.8 ile §29.x arasına da konabilir; sıralı kalsın.
+
+---
+
+## §27.12 — Topbar.tsx `\n` Escape Kazası (v16.27 → v16.27c Hotfix)
+
+**Tarih:** 30 Nis 2026 akşam → 1 May sabahı
+
+### Olay
+
+v16.27 (3-in-1: admin123 sil + version str + Topbar tıklama filter) push edildi. GitHub Actions build patladı:
+
+```
+[builtin:vite-transform] Error: Invalid Unicode escape sequence
+  ╭─[ src/components/layout/Topbar.tsx:1:43 ]
+1 │ import { useState, useMemo } from 'react'\nimport { useNavigate } from ...
+```
+
+Topbar.tsx **satır 1'in sonu** patlamıştı: önceki `\n` newline yerine **literal `\n` string** olarak yazılmıştı. Yani iki import yapışıktı:
+
+```
+import { useState, useMemo } from 'react'\nimport { useNavigate } from 'react-router-dom'
+```
+
+Vite bunu geçersiz Unicode escape sequence olarak görüp build'i kırdı.
+
+### Kök Sebep
+
+Whole-file replace eden bir tool (Claude Code veya manuel PowerShell `-replace`) `useNavigate` import'unu eklerken **`\n` newline ile literal `\n` string'i karıştırdı**. PowerShell'in `-replace` operatörü ham metni "string olarak" alıp metnin içine `\n` literal karakter dizisi yazdı, gerçek newline değil.
+
+### Tespit Yöntemi
+
+```bash
+grep -nP '\\n' src/components/layout/Topbar.tsx
+# Sadece bir satır dönüyorsa (satır 1) → kaza tespit edildi
+# String literal içinde `\n` legitimate'tir, ama JSX/TS dışında "kod akışı" bağlamında değildir
+```
+
+### Hotfix v16.27c
+
+Tek satır str_replace: literal `\n` → gerçek newline. Diff sadece 2 satır.
+
+```ts
+// ÖNCESI (1 satır, patlıyor):
+import { useState, useMemo } from 'react'\nimport { useNavigate } from 'react-router-dom'
+
+// SONRASI (2 satır, çalışıyor):
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+```
+
+### Ders
+
+Bu, DataManagement.tsx'in **kontroller.push 16<17** ve **recipes→recs** kazalarına benzer ama **farklı vektör**. Whole-file replace eden tool'lar `\n` newline ile literal `\n` string'i karıştırınca **silent build kırılması**. Saglik-syntax-check bunu yakalamadı çünkü kontrolü Topbar.tsx'i değil sadece DataManagement.tsx'i tarıyordu.
+
+### TODO — Saglik-syntax-check Genişletme
+
+`scripts/saglik-syntax-check.cjs`'a şu kontrolü eklemek lazım:
+
+```js
+// Tüm .tsx ve .ts dosyalarda literal \n imza
+const files = glob.sync('src/**/*.{ts,tsx}')
+for (const f of files) {
+  const content = fs.readFileSync(f, 'utf8')
+  const lines = content.split('\n')
+  // Sadece **import/export ve function tanım satırlarında** kontrol et
+  // (string literal içindeki '\n' legitimate)
+  for (const [i, line] of lines.entries()) {
+    if ((/^(import|export|function|const|let|var)/).test(line) && /\\n/.test(line)) {
+      throw new Error(`${f}:${i+1} literal \\n in code line — likely escape kazasi`)
+    }
+  }
+}
+```
+
+### Hijyen Kuralı (§27.7'ye Ek)
+
+**Kural #6:** Whole-file replace uygulayan tool'a TTL büyük dosya verirken, çıkarımı **diff modunda** kontrol et:
+- `git diff --stat` ≤ N satır
+- `git diff` çıktısı: ekleme/silme satır sayıları beklentine uygun mu
+- Beklenen: 1-2 satır değişiklik. Gerçek: tüm dosya değişti → tool dosyayı tek satıra düşürdü, abort.
+
+### Bağlam
+
+v16.27 Acid Test: ardışık 3 küçük patch (admin123 + version + Topbar) **tek commit**'te birleştirildiği için kaza tespiti gecikti. Eğer **tek-konu commit** olsaydı (her biri ayrı), Topbar commit'i lokalde npm run build ile patlardı, push olmadan yakalanırdı.
+
+**Yeni kural:** 3-in-1 birleşik patch'leri sadece **tüm parçalar build-test-edilmiş ve commit-tested** ise tek push'ta gönder. Aksi halde sıralı: A push → build yeşil → B push.
+
+---
+
+## §28.6.1 — RLS Aşama 4 v2 OP3: 40 Tablo authenticated_only (✓ TAMAMLANDI 1 May 2026)
+
+**Tarih:** 1 May 2026 sabahı (İşçi Bayramı, saha kapalı — minimum risk penceresi)
+
+### Yapılan
+
+§28.6'da denenen **toptan 41 tablo authenticated_only** stratejisi (rollback'li) **cmd-bazlı policy ile değil**, **role-bazlı policy ile** uygulandı. Tek SQL — DO bloğu, 3 tablo hariç:
+
+```sql
+DO $$
+DECLARE
+  t text;
+  excluded text[] := ARRAY['uys_operators', 'uys_kullanicilar', 'uys_yetki_ayarlari'];
+  cnt int := 0;
+BEGIN
+  FOR t IN
+    SELECT tablename FROM pg_policies
+    WHERE schemaname = 'public'
+      AND policyname = 'allow_all'
+      AND roles::text = '{public}'
+      AND tablename != ALL(excluded)
+    ORDER BY tablename
+  LOOP
+    EXECUTE format('ALTER POLICY allow_all ON public.%I TO authenticated', t);
+    cnt := cnt + 1;
+  END LOOP;
+END $$;
+```
+
+`uys_kullanicilar` + `uys_yetki_ayarlari` zaten Aşama 2A'da authenticated_only ✓.
+`uys_operators` chicken-and-egg için ayrı, OP2'de ele alındı (§28.6.2).
+
+### Smoke Test (anon role gerçek kapatma kanıtı)
+
+```sql
+SET LOCAL ROLE anon;
+SELECT
+  (SELECT COUNT(*) FROM public.uys_orders) AS anon_orders,           -- 0 (kapali)
+  (SELECT COUNT(*) FROM public.uys_work_orders) AS anon_work_orders, -- 0
+  (SELECT COUNT(*) FROM public.uys_recipes) AS anon_recipes,         -- 0
+  (SELECT COUNT(*) FROM public.uys_chat_messages) AS anon_chat,      -- 0
+  (SELECT COUNT(*) FROM public.uys_kullanicilar) AS anon_kullanici,  -- 0 (Asama 2A)
+  (SELECT COUNT(*) FROM public.uys_operators) AS anon_operators;     -- 89 (chicken-and-egg)
+```
+
+Sonuç: 40 tablo anon role'e tamamen kapalı, sadece uys_operators 89 satır (login için zorunlu).
+
+### Saha Doğrulama (Buket)
+
+Magic Link oturumuyla:
+- Siparişler: ✓ liste dolu
+- İş Emirleri: ✓ liste dolu
+- Operatör Paneli: ✓ liste görünüyor
+- Stok kontrol, tedarik: ✓ çalışıyor
+
+### Kazanım
+
+| Önce | Sonra |
+|---|---|
+| 41 tablo public-allow_all | 40 tablo authenticated_only + 1 tablo anon SELECT only |
+| Anon key sahibi tüm üretim verisini API'den çekebiliyor | Anon key sadece operatör listesi (login için) görebiliyor |
+| Advisor: 5 ERROR | 0 ERROR (zaten Aşama 1'de hallolmuştu, kapsam tamamlandı) |
+
+### Acil Rollback Hazırlığı (kullanılmadı)
+
+```sql
+-- Eğer saha kırılırsa tek SQL ile geri al (5 sn):
+DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_policies
+           WHERE schemaname='public' AND policyname='allow_all' AND roles::text='{authenticated}'
+  LOOP EXECUTE format('ALTER POLICY allow_all ON public.%I TO public', t);
+  END LOOP;
+END $$;
+```
+
+---
+
+## §28.6.2 — Aşama 4 v2 OP2: uys_operators Lockdown (✓ TAMAMLANDI 1 May 2026)
+
+**Tarih:** 1 May 2026 sabahı, OP3'ten ~30 dk sonra
+
+### Sorun (OP3'ten Sonra Tespit)
+
+OP3 sonrası tek public tablo kaldı: `uys_operators`. Login akışı için **anon SELECT** açık olması zorunlu (chicken-and-egg). Ancak `Login.tsx` aynı tabloya **anon UPDATE** de atıyordu (lazy hash migration, satır 69):
+
+```ts
+// Login.tsx — eski
+if (!isHashed(stored)) {
+  await supabase.from('uys_operators').update({
+    sicil_hash: hashSicil(oprSifre),
+    sifre: null,
+  }).eq('id', opr.id)
+}
+
+// signInWithPassword bunun ALTINDA — yani UPDATE anon role'de atılıyordu
+```
+
+DB tarama: 79/89 operatör hâlâ plain text (sicil_hash boş) → her ilk login'de bu UPDATE tetikleniyor → anon UPDATE açık olmak zorunda.
+
+### Çözüm — İki Adımlı
+
+#### Adım 1 — Login.tsx Refactor (v16.28)
+
+signInWithPassword'ı hash UPDATE'in **ÖNÜNE** taşı + UPDATE'i `authBasarili` guard'ına al:
+
+```ts
+// 1. Auth ÖNCE
+let authBasarili = false
+if (opr.authUserId) {
+  const { error: authErr } = await supabase.auth.signInWithPassword({ email, password })
+  if (!authErr) authBasarili = true
+}
+
+// 2. Hash UPDATE SONRA, guard ile
+if (authBasarili && !isHashed(stored)) {
+  await supabase.from('uys_operators').update({...}).eq('id', opr.id)
+}
+```
+
+#### Adım 2 — Policy Sıkılaştırma (DB)
+
+```sql
+DROP POLICY IF EXISTS allow_all ON public.uys_operators;
+
+CREATE POLICY anon_select ON public.uys_operators
+  FOR SELECT TO anon USING (true);
+
+CREATE POLICY authenticated_full ON public.uys_operators
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+```
+
+### Smoke Test (Saldırı Engeli Kanıtı)
+
+```sql
+SET LOCAL ROLE anon;
+WITH test AS (
+  UPDATE public.uys_operators
+  SET sicil_hash = 'ATTACK_TEST'
+  WHERE id = (SELECT id FROM public.uys_operators LIMIT 1)
+  RETURNING id
+)
+SELECT COUNT(*) FROM test; -- 0 (UPDATE engellendi)
+```
+
+### Final Durum (Aşama 4 v2 Tam Tamamlandı)
+
+| Kategori | Tablo | Kapsam |
+|---|---|---|
+| **authenticated_only (Asama 2A)** | 2 | uys_kullanicilar, uys_yetki_ayarlari |
+| **authenticated_only (Asama 4 v2 OP3)** | 40 | Tüm üretim verileri |
+| **uys_operators (Asama 4 v2 OP2)** | 1 | anon SELECT only, authenticated full |
+| **TOPLAM güvenli** | **43/43** | %100 |
+
+### Yan Etki Notu
+
+Sıra önemliydi: **önce kod (v16.28), sonra policy**. Tersi olsaydı (önce policy), eski kod hâlâ anon UPDATE atmaya çalışır → 79 plain operatör'ün login'inde silent fail (catch'e düşer, hash migration ertelenir). Yeni kod önce gelirse anon UPDATE zaten atılmaz, policy değişimi sorunsuz.
+
+---
+
+## §29 — PDF Altyapı Kararları (1 May 2026)
+
+**Bağlam:** Brief #8 (PDF Çıktı — İş Emri + Sevk İrsaliyesi). ISO audit zorunluluğu + saha şoför yardımcı belge ihtiyacı.
+
+### §29.1 — Kütüphane Seçimi: jsPDF + jspdf-autotable
+
+**Aday değerlendirmesi:**
+
+| Kütüphane | Avantaj | Dezavantaj | Karar |
+|---|---|---|---|
+| **jsPDF + jspdf-autotable** | Yaygın, küçük (~80KB gz), tablo plug-in olgun, font yükleme kolay | API biraz "manuel" | ✅ Seçildi |
+| pdfmake | Daha modern declarative | ~200KB gz, deprecation warns | ❌ |
+| @react-pdf/renderer | React component pattern | Bundle 500KB+, font yönetimi karmaşık | ❌ |
+| Browser print API | 0 kütüphane | Saha kontrol yok, format dağınık | ❌ |
+
+### §29.2 — Türkçe Karakter Çözümü: DejaVu Sans TTF (Lazy Fetch)
+
+**Sorun:** jsPDF'in default Helvetica fontu Türkçe karakterleri kutucuk gösterir.
+
+**Çözüm:**
+1. `public/fonts/DejaVuSans.ttf` (760KB) statik dosya
+2. İlk PDF üretiminde fetch + base64 cache (modul scope)
+3. Sonraki PDF'ler hızlı (cache hit)
+4. Bundle etkilenmez (TTF static, fetch ile yüklenir, dynamic import lazy chunk)
+
+```ts
+// pdf-utils.ts — özet
+let fontCache: { regular: string | null } = { regular: null }
+
+async function loadFontBase64(): Promise<string> {
+  if (fontCache.regular) return fontCache.regular
+  const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const resp = await fetch(`${baseUrl}/fonts/DejaVuSans.ttf`)
+  const buf = await resp.arrayBuffer()
+  // ArrayBuffer → base64 (chunked)
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+  fontCache.regular = b64
+  return b64
+}
+```
+
+### §29.3 — Tek-Konu Mimarisi: Modül Yapısı
+
+```
+src/lib/sirket-bilgileri.ts   — Özler resmi bilgileri sabitleri
+src/lib/pdf-utils.ts          — newPdf(), ozlerHeader(), ozlerFooter() — ortak
+src/lib/is-emri-pdf.ts        — generateIsEmriPDF(workOrder, order, logs)
+src/lib/sevk-belge-pdf.ts     — generateSevkBelgePDF(sevk, order)
+```
+
+PDF butonları her zaman `await import()` ile **lazy import** — bundle etkilenmez, TTF tıklayana kadar yüklenmez.
+
+### §29.4 — Sevk Belgesi: Yasal Değil, "İç Belge" Kararı
+
+**Kritik mimari karar.** Brief'te "e-İrsaliye uyumlu / yasal evrak formatı" dendi ama saha gerçeği farklıydı:
+
+**Mevcut durum:** Özler **DİA + MAVVO** kullanıyor — yasal e-İrsaliye GİB'e DİA'dan gönderiliyor. UYS v3 üretim sistemi bu yetkilendirilmemiş.
+
+**Karar:** UYS v3'te **"SEVK BELGESİ"** (yasal değil), DİA'da **"E-İRSALİYE"** (yasal). Separation of concerns:
+
+| Sistem | Sorumluluk |
+|---|---|
+| **DİA + MAVVO** | Ticari yasal evraklar (e-Fatura, e-İrsaliye, e-Arşiv). GİB entegrasyonu. |
+| **UYS v3** | Üretim/saha yönetimi (iş emri, kesim, MRP, **iç sevk takip**). Audit kanıt + şoför yardımcı belge. |
+
+**PDF içerik kuralı:**
+- Başlık: "SEVK BELGESİ" (irsaliye **değil**)
+- Disclaimer footer: "Resmi sevk irsaliyesi e-İrsaliye sisteminden basılır. Bu belge iç takip ve saha kullanımı içindir."
+- "İrsaliye yerine geçer" ibaresi **YOK** (yasal sahteciliği önler)
+- 3 imza alanı: Gönderen / Şoför / Teslim Eden (Alıcı YOK — yasal değil çünkü)
+
+**Neden bu önemli:** Üretim sistemi yasal evrak basmaya kalkışırsa "iki sistemin tek soruyu ayrı ayrı yanıtlama riski" doğar (DİA bir şey, UYS başka bir şey gösterir → audit'te uyuşmazlık + yasal sorumluluk gri alan).
+
+### §29.5 — Sürüm İlerlemesi
+
+| Sürüm | İçerik | Durum |
+|---|---|---|
+| v16.29 | jsPDF + DejaVu + İş Emri PDF (FileText butonu) | ✅ canlı, saha onaylı |
+| v16.29a | package-lock.json regen (Actions npm ci) | ✅ |
+| v16.29b | package-lock.json sandbox restore (silinmişti) | ✅ |
+| v16.30 | Sevk Belgesi PDF + imzaLabels jenerikleme + disclaimer | ✅ canlı |
+| v16.30a | Sevk mapper genişletme (tasiyici/plaka/musteriKod 4 alan görünür oldu) | ✅ canlı, PDF saha onaylı |
+
+### §29.6 — Backlog (Şirket Profili Sayfası)
+
+`sirket-bilgileri.ts` şu anda hardcoded placeholder'lar:
+```
+[VKN 10 HANELI PLACEHOLDER]
+[VERGI DAIRESI PLACEHOLDER]
+[+90 ... PLACEHOLDER]
+...
+```
+
+Sonraki sprint: DataManagement'a "Şirket Profili" tab'ı (1 satırlık config tablosu, edit form). Buket ana ofiste değerleri verince hızlı patch (v16.31).
+
+---
+
+## §30 — IE-UYS-001: Claude Code Token Optimizasyonu Oturum Kuralları
+
+**Hazırlayan:** Buket Kıbrıs, 30 Nis 2026
+
+### Kural Özeti
+
+| # | Kural |
+|---|---|
+| 1 | Tek dosya / satır edit → Manual veya Auto. Çoklu dosya / refactor → Agent. Repo geneli tarama → **Task tool → subagent**. |
+| 2 | **Tam dosya read yasak.** view_range zorunlu. 500+ satır için önce 1-50 keşif, sonra hedef. |
+| 3 | Aynı dosyayı oturumda 2. kez okutma. |
+| 4 | Major commit sonrası `/compact`, yeni faz öncesi `/clear`, oturum başı `/context`. |
+| 5 | Saglik raporu, repo grep, build verify, E2E analiz → subagent'a delege. |
+| 6 | Bir oturum = bir Faz (MRP Faz 3 modal, kesim plan ayrı oturum vb). |
+| 7 | %50 doluluk → commit + push, `/compact`. %75 → kapat. %90 → sadece push. |
+| 8 | Peak hours (16:00–22:00 TR) → ağır tarama yasak. |
+| 9 | Bypass Approvals **kapalı** (write/edit/bash). Sadece read/grep/glob auto-OK. |
+| 10 | Build/test çıktıları **özetle**: "yalnızca FAIL satırları" / count. Hata yoksa tek satır onay. |
+
+### Claude.ai Sohbeti İçin Eşdeğerleri
+
+- view_range zorunlu (tam dosya read yasak)
+- Aynı dosyayı 2. kez okutma
+- Çıktı özeti talep et (FAIL/count)
+- DEVAM_NOTU.md oku + güncelle her oturum
+- Buket "bitti" demeden "sprint sonu" / "günü kapatma" deme. Kalan saat tahmini yapma — Buket gerçek zamanı bilir.
+
+### Bu Sohbette Uygulananlar (1 May 2026)
+
+- ✅ DEVAM_NOTU + CLAUDE_CODE_BRIEF + BACKLOG sadece view_range ile okundu
+- ✅ Build log'ları tail -60 ile özetlendi (ham log yapıştırılmadı)
+- ✅ Topbar.tsx, Login.tsx, WorkOrders.tsx, Shipment.tsx tek seferde okundu, point str_replace ile editlendi
+- ✅ Sandbox build doğrulaması her patch öncesi yapıldı (Actions runner ile aynı build)
+
+---
+
+## Bu Tarihlerin Sprint Tablosu — 1 May 2026
+
+| Sürüm | İş | Saha Test | Notlar |
+|---|---|---|---|
+| v16.27 | admin123 sil + version str + Topbar tıklama | ✅ | 3-in-1, escape kazasıyla geçti (§27.12) |
+| v16.27a | useAuth email path geri ekle (v16.18 kayıp) | ✅ | admin@uys.local + 1234 path |
+| v16.27c | Topbar.tsx satır 1 escape hotfix | ✅ | Tek satır str_replace |
+| **DB Asama 4 v2 OP3** | 40 tablo authenticated_only | ✅ | §28.6.1 |
+| v16.28 | Login.tsx hash UPDATE refactor | ✅ | §28.6.2 ön hazırlık |
+| **DB Asama 4 v2 OP2** | uys_operators policy ayrımı | ✅ | §28.6.2 |
+| v16.29 | jsPDF + DejaVu + İş Emri PDF | ✅ | §29.1-29.3 |
+| v16.29a + 29b | package-lock.json regen | ✅ | Actions npm ci |
+| v16.30 | Sevk Belgesi PDF + jenerik imza | ✅ | §29.4 separation of concerns |
+| v16.30a | Sevk mapper genişletme | ✅ | 4 alan PDF'te görünür oldu |
+
+**RLS Aşama 4 v2 final:** 43/43 tablo güvenli, anon kapsam minimum.
+**PDF altyapı:** İş Emri + Sevk Belgesi sahada kullanımda.
+**Bekleyen:** Şirket bilgileri gerçek değerleri (v16.31 placeholder).
