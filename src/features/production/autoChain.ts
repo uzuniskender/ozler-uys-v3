@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
-import { hesaplaMRP, mrpTedarikOlustur, rezerveYaz, type MRPRow } from './mrp'
+import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, rezerveYaz, type MRPRow } from './mrp'
 // v15.85 — test_run_id propagation: autoZincir snapshot kayitlarinin
 // canli veriye karismasini onler. Etiketsiz kayit cleanup'a takilmazdi.
 import { withTestRunId } from '@/lib/testRun'
@@ -249,7 +249,11 @@ export async function autoZincir(
   let mrpSonuc: MRPRow[] = []
   let calcId: string | null = null
   try {
-    mrpSonuc = hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, tedarikler, allCP, materials, null, [], orderId, logs)
+    // v16.32 IE #14 Faz A Slice 3 — cache wrap. Cache HIT/MISS otomatik.
+    mrpSonuc = await hesaplaMRPCached(
+      { orderId },
+      () => hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, tedarikler, allCP, materials, null, [], orderId, logs)
+    )
     const eksikSay = mrpSonuc.filter(x => x.durum === 'eksik').length
     adimlar.push(`✅ MRP: ${mrpSonuc.length} kalem${eksikSay ? ' · ' + eksikSay + ' eksik' : ''}`)
 

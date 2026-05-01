@@ -8,7 +8,7 @@ import { Download, Upload, RefreshCw, AlertTriangle, Info } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
-import { cuttingPlanTemizle, rezerveleriSenkronla, hesaplaMRP } from '@/features/production/mrp'
+import { cuttingPlanTemizle, rezerveleriSenkronla, hesaplaMRP, hesaplaMRPCached } from '@/features/production/mrp'
 import { tedarikStokId } from '@/lib/tedarikHelpers'
 
 // ═══ SAĞLIK RAPORU TİPLERİ ═══
@@ -212,9 +212,13 @@ export function DataManagement() {
         gerekliAdet: p.gerekli_adet || 0, satirlar: p.satirlar || [],
       }))
       // Tüm aktif siparişler + manuel İE'ler — ymSet boş çünkü "tüm açık WO'lar dahil olsun"
-      const allSonuc = (() => {
+      // v16.32 IE #14 Faz A Slice 3 — global cache wrap. saglikRaporuCalistir async, await mümkün.
+      const allSonuc: any[] = await (async () => {
         try {
-          return hesaplaMRP(null, orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], undefined, logsMapped)
+          return await hesaplaMRPCached(
+            'global',
+            () => hesaplaMRP(null, orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], undefined, logsMapped)
+          )
         } catch { return [] }
       })()
       const eksiklerEvrim = allSonuc.filter((r: any) => r.net > 0)
@@ -265,7 +269,11 @@ export function DataManagement() {
       for (const o of aktifOrders) {
         if (o.mrp_durum !== 'tamam' && o.mrp_durum !== 'tamamlandi') continue
         try {
-          const sonuc = hesaplaMRP([o.id], orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id, logsMapped)
+          // v16.32 IE #14 Faz A Slice 3 — tek-order cache wrap
+          const sonuc = await hesaplaMRPCached(
+            { orderId: o.id },
+            () => hesaplaMRP([o.id], orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], o.id, logsMapped)
+          )
           const eksikSayisi = sonuc.filter((r: any) => r.net > 0).length
           if (eksikSayisi > 0) {
             tutmazSiparisler.push({ id: o.id, no: o.siparis_no || '(no yok)', eksikSayisi })

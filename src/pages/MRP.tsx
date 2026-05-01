@@ -7,7 +7,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
-import { hesaplaMRP, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, type MRPRow } from '@/features/production/mrp'
+import { hesaplaMRP, hesaplaMRPCached, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, type MRPRow } from '@/features/production/mrp'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
 import { isOrderArchived } from '@/lib/statusUtils'
@@ -257,7 +257,11 @@ export function MRP() {
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz (manuel İE'lerde mrp_durum kolonu yok, atla)
     for (const oid of ordIds) {
-      const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+      // v16.32 IE #14 Faz A Slice 3 — tek-order cache wrap
+      const tekResult = await hesaplaMRPCached(
+        { orderId: oid },
+        () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+      )
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
 
       // v16.04 — #23 sentinel: UPDATE DB'ye yansidi mi dogrula. Saha vakasi (30 Nis):
@@ -297,7 +301,11 @@ export function MRP() {
     if (eksikSayi > 0) {
       try {
         for (const oid of ordIds) {
-          const tekResult = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+          // v16.32 IE #14 Faz A Slice 3 — tek-order cache wrap
+          const tekResult = await hesaplaMRPCached(
+            { orderId: oid },
+            () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+          )
           const eksikler = tekResult.filter(r => r.net > 0)
           if (eksikler.length === 0) continue
           const ord = orders.find(o => o.id === oid)
