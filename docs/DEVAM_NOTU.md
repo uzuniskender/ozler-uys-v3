@@ -1,8 +1,11 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
-**Tarih:** 30 Nisan 2026 sabah-akşam (oturum, ~05:00–17:00, **12 saat**)
-**Son canlı sürüm:** v16.26 (kod) + v16.27 (doc patch)
-**Bugün toplam:** **23 sürüm push** (v16.00 → v16.26) + 2 doc commit + **10 DB migration** + 7 DB veri fix.
+**Tarih:** 1 Mayıs 2026 (İşçi Bayramı — saha kapalı, RLS + cache pencere fırsatı)
+**Son canlı sürüm:** v16.32 (kod) + DB Aşama 4 v2 + mrp_state + Smart Invalidation
+**Bugün toplam:** **11 kod sürümü** (v16.27 → v16.32) + **5 DB migration** (RLS OP3, OP2, mrp_state tablolar, mrp_state trigger'lar, smart invalidation)
+
+> **30 Nisan tam günü** ayrıntıları için → Bilgi Bankası §27 (10 alt bölüm) + §28 (8 alt bölüm).
+> 1 May'ın yeni öğrenmeleri **§27.12, §28.6.1, §28.6.2, §29 (1-6), §32 (1-7), §33** olarak Bilgi Bankası'nda.
 
 ---
 
@@ -25,222 +28,154 @@ Yedek (her zaman çalışır): Supabase Dashboard → Authentication → Users �
 ```
 UYS v3 devamı. Bilgi Bankası açılış kuralı (§0):
 docs/UYS_v3_Bilgi_Bankasi.md (özellikle §0, §18 ailesi, §26 (29 Nis),
-  §27 (30 Nis sabah, 10 alt bölüm) +
-  §28 (30 Nis öğleden sonra) — RLS Migration Roadmap, 8 alt bölüm,
-       Aşama 1+2A+2C+3 ✓, Aşama 4 DENENDI-ROLLBACK) +
-docs/saha_model_28nis2026.md (13 senaryo) +
-docs/DEVAM_NOTU.md (bu dosya, 30 Nis 15:30 yenilendi) +
-docs/is_emri/00_BACKLOG_Master.md (Son Sürümler v16.01-v16.25 dahil)
-oku.
-
-Önceki chat kapandı/kapanacak — tüm bilgi docs/'ta.
+  §27 (30 Nis sabah, 12 alt bölüm),
+  §28 (RLS Migration Roadmap, 8 alt bölüm + §28.6.1 + §28.6.2),
+  §29 (PDF altyapı, 6 alt bölüm),
+  §32 (İş Emri #14 Faz A, 7 alt bölüm — mrp_state cache + smart invalidation bug fix),
+  §33 (1 May sprint tablosu))
++ docs/DEVAM_NOTU.md (bu dosya)
++ docs/is_emri/00_BACKLOG_Master.md
++ docs/is_emri/14_MimariRefactor.md (Faz A ✓ TAMAMLANDI, Faz B sırada)
 ```
-
-**Yeni ortam değişiklikleri (30 Nis):**
-- **Supabase MCP server bağlandı** (Claude canlı DB'den SELECT/UPDATE/INSERT/apply_migration/get_advisors)
-- **Supabase Auth aktif** Buket admin (uzuniskender@gmail.com, UUID `ff76792a-4b3f-4ce5-afaf-25664b382ba1`) + **89 operatör** (op_<kod>@uys.local sentetik email, şifre 1234)
-- Custom auth fallback hala kodda (admin123 hardcoded güvenlik açığı v16.26'da silinecek)
-- Claude Code rate limit oldu, gün ortasında PowerShell zip-apply'a geri dönüldü
-- localStorage debug flag (`UYS_DEBUG_MRP=true`)
 
 ---
 
-## 30 NİSAN ÖZETİ — 22 SÜRÜM + 1 DOC + 9 DB MIGRATION
+## 1 MAY ÖZETİ — 11 SÜRÜM + 5 DB MIGRATION
 
-### Bugünün BEŞ büyük başarısı
+### Bugünün DÖRT büyük başarısı
 
-1. **Sağlık raporu 13 PASS · 2 WARN → 17 PASS · 0 WARN · 0 FAIL** (tarihte ilk)
-2. **Saha krizi: 3 sipariş × 5 Mayıs termin** kurtarıldı
-3. **MRP cutting override mantığı kök çözümü** (LEVHA skip + max(BOM,plan) + camelCase mapping)
-4. **RLS Aşama 1 + 2A + 3 (operatör Auth)** — Supabase advisor 5 ERROR → 0, 89/89 operatör + admin Supabase Auth'lu
-5. **OperatorPanel siyah ekran fix** — v16.05 9 ay önceki kazası bulundu
+1. **RLS Aşama 4 v2 (✓ TAM TAMAMLANDI):** 43/43 tablo güvenli (sonra 45/45 oldu, mrp_state ile). 30 Nis Aşama 4 toptan rollback'inden sonra cmd-bazlı + role-bazlı ikili strateji ile chicken-and-egg çözüldü.
 
-### Sürüm tablosu (kod push'lar)
+2. **PDF Altyapı (✓ İş Emri + Sevk Belgesi):** jsPDF + jspdf-autotable + DejaVu Sans (Türkçe) ile sıfırdan kuruldu. 2 belge tipi sahada kullanımda.
 
-| Sürüm | Konu | Kritiklik |
+3. **Sevk Belgesi Mimari Kararı:** UYS v3'te "İç Sevk Belgesi" (yasal değil), DİA + MAVVO'da yasal e-İrsaliye. Profesyonel ayrım.
+
+4. **İş Emri #14 Faz A (✓ TAMAMLANDI):** mrp_state cache altyapısı (2 tablo, 7 trigger), 7 caller cache wrap, smart invalidation bug fix. Faz B (state machine) sıraya alındı.
+
+### Kod sürüm tablosu
+
+| Sürüm | İş | Saha Test |
 |---|---|---|
-| v16.00-v16.20 | (önceki sürümler — bkz. §27) | — |
-| **v16.22** | Operator Auth pilot — Login.doOprLogin signInWithPassword arka plan | mimari |
-| **v16.24** | Admin login OPR_KEY temizle - operator session admin override fix | fix |
-| **v16.26** | **ADMIN_EMAILS array genişlet** — `['uzuniskender@gmail.com', 'admin@uys.local']` | erişim |
+| v16.27 | admin123 sil + version str + Topbar 3-in-1 | ✅ |
+| v16.27a | useAuth email path geri ekle | ✅ |
+| v16.27c | Topbar.tsx satır 1 escape hotfix | ✅ |
+| v16.28 | Login.tsx hash UPDATE refactor (OP2 ön hazırlık) | ✅ |
+| v16.29 | jsPDF + DejaVu + İş Emri PDF | ✅ |
+| v16.29a + 29b | package-lock.json regen | ✅ |
+| v16.30 | Sevk Belgesi PDF + jenerik imza | ✅ |
+| v16.30a | Sevk mapper genişletme (4 alan) | ✅ |
+| **v16.31** | **IE #14 Faz A Slice 1+2: mrp_state cache altyapısı** | ✅ |
+| **v16.32** | **IE #14 Faz A Slice 3: 7 caller cache wrap** | ✅ (smart invalidation bug fix sonrası) |
 
 ### DB Migration tablosu
 
-| Sürüm | Konu |
-|---|---|
-| v16.16 | `updated_at` trigger 30 tabloya yayıldı (#23 kapandı) |
-| v16.17 | RLS Aşama 1 — 5 ERROR → 0 (RLS açılım + fonksiyon güvenlik) |
-| v16.21 | RLS Aşama 2A — uys_kullanicilar + uys_yetki_ayarlari authenticated_only |
-| v16.22 | uys_operators tablosuna `auth_user_id uuid` kolonu + index |
-| v16.23 | KOD10 ERKİN için Supabase Auth user (pilot) |
-| v16.25 | **89 operatör için bulk Supabase Auth migration** (Aşama 3 ana) |
-| v16.25 (Aşama 4) | Tüm 38 tablo allow_all → authenticated_only (DENENDI) |
-| v16.25 (rollback) | Aşama 4 rollback — chicken-and-egg sorunu |
-| v16.25 (admin yenile) | uzuniskender@gmail.com Auth user yeniden oluşturuldu |
-| **v16.26 (token fix)** | **89 operatör Auth user'larında token alanları NULL → boş string** — pgcrypto SQL INSERT'lerle Supabase Auth signInWithPassword bypass nüansı (§27.11) |
-| **v16.26 (admin alternatif)** | **`admin@uys.local` Auth user oluşturuldu** (sentetic email, gmail rate limit bypass için) — şifre `1234`, KOD83 ile aynı yapı |
+| # | İçerik | Bölüm |
+|---|---|---|
+| 1 | RLS Aşama 4 v2 OP3 (40 tablo authenticated_only) | §28.6.1 |
+| 2 | RLS Aşama 4 v2 OP2 (uys_operators policy ayrımı) | §28.6.2 |
+| 3 | TEST-SEV-26-001 (test sevkiyat) | §29 |
+| 4 | mrp_state tabloları + 7 trigger (Slice 1) | §32.2 |
+| 5 | Smart invalidation (Migration v3 bug fix) | §32.6 |
 
 ---
 
-## ANA ÇIKTILAR — Öğle Sonrası (yeni eklenenler)
+## RLS POLICY SON DURUM (1 May 2026)
 
-### v16.16 — `updated_at` Trigger 30 Tabloya Yayılım (#23 kapandı)
+| Kategori | Tablo | Policy |
+|---|---|---|
+| **authenticated_only (Asama 2A)** | 2 | uys_kullanicilar, uys_yetki_ayarlari |
+| **authenticated_only (Asama 4 v2 OP3)** | 40 | Tüm üretim verileri |
+| **authenticated_only (Faz A — mrp_state)** | 2 | uys_mrp_state_global, uys_mrp_state_order |
+| **uys_operators (Asama 4 v2 OP2)** | 1 | anon SELECT only, authenticated full |
+| **TOPLAM güvenli** | **45/45** | %100 |
 
-`set_updated_at()` PL/pgSQL fonksiyonu zaten DB'de tanımlıydı (sadece uys_hm_tipleri'nde aktifdi). Migration ile kalan 29 tabloya `BEFORE UPDATE FOR EACH ROW` trigger eklendi.
+---
 
-**#23 "bug değil" yanılgısı:** Hesapla butonu UPDATE atınca mrp_durum doğru yansır, ama updated_at sabit kalır → biz "UPDATE atılmadı" sandık. Trigger eklendi → her UPDATE otomatik zaman damgalı.
+## MRP STATE CACHE — SON DURUM (1 May 2026)
 
-### v16.17 — RLS Aşama 1: Yapı + Sertleştirme
-
-Supabase advisor 5 ERROR + 45 WARN raporladı. Aşama 1 ile:
-- 5 RLS olmayan tabloya RLS aç + allow_all (uys_acik_barlar, mrp_calculations, mrp_rezerve, pending_flows, test_runs, v15_31_silinen)
-- `set_updated_at` search_path = public, pg_temp
-- `current_user_role` SECURITY DEFINER → INVOKER (anon execute REVOKE)
-
-Pilot uys_notes ile doğrulandı, sonra 37 tabloya yayım denendi → siyah ekran (kod hatası, RLS değil) → rollback.
-
-**Sonuç:** ERROR 5 → 0, WARN 45 → ~41.
-
-### v16.18 — Supabase Auth Migration (Buket admin)
-
-Buket sabah Dashboard'dan `uzuniskender@gmail.com` Auth user oluşturdu. UYS frontend `useAuth.signIn` email path eklendi:
-
-```ts
-if (username.includes('@')) {
-  return await supabase.auth.signInWithPassword({ email: username, password })
-}
+```
+src/features/production/mrpCache.ts        — 5 fonksiyon (get/set Global/Order, clearAll)
+src/features/production/mrp.ts             — hesaplaMRPCached() callback wrapper
+DB: uys_mrp_state_global (singleton)       — global cache
+DB: uys_mrp_state_order (PK = order_id)    — per-order cache, FK CASCADE
+DB: 2 invalidation function + 7 trigger    — smart invalidation v3
 ```
 
-`uys_kullanicilar.admin-temp.auth_user_id` bağlandı. Plain text test123 ve DENEME 1234 NULL'landı.
+**Cache wrap noktaları (7):** autoChain.ts:252, Orders.tsx:248+857, DataManagement.tsx:217+268, MRP.tsx:260+300.
 
-### v16.20 — OperatorPanel Siyah Ekran (v16.05 baştan kırıkmış)
+**Cache'lenmeyen 6 nokta:** MRP.tsx:58/136 (useMemo, Slice 4 iptal), MRP.tsx:254 (ymSet), Orders.tsx:243 (toplu), testRunner.ts (test mode bypass), hammaddeTahsis.ts:80 (özel mod).
 
-Buket admin olarak Operatör Paneli'ne tıkladığında `Uncaught ReferenceError: orders is not defined`. Bundle analiziyle: `OperatorMain` (alt component) `useMemo`'da `computeOrderHammaddeEksik(orders, ...)` çağırıyor ama `useStore()` destructure'da `orders` YOK. v16.05 yarım kalmış, kimse 9 ay fark etmemiş çünkü Operatör Paneli'ne admin olarak hiç girilmemiş.
+**Smart invalidation:** UPDATE'lerde sadece MRP-kritik kolonlar invalidate eder. `mrp_durum`, `sevk_durum`, `oncelik`, `not_` cache'i bayatlatmaz.
 
-Plus DataManagement.tsx working copy v16.13 hali (kontroller.push 16) → syntax-check (v16.15) build patlattı → DataManagement.tsx 17 sentinel'li hali geri eklendi.
-
-### v16.21 — RLS Aşama 2A: Hassas Tablolar
-
-`uys_kullanicilar` (2 satır, 1 Buket Auth bağlı) + `uys_yetki_ayarlari` (0 satır) tabloları `authenticated_only`. Anon key sahibi artık kullanıcı listesi göremez. Saha etki SIFIR (Buket Auth'lu erişir, operatörler `uys_operators` kullanıyor).
-
-### v16.22-23 + v16.24 + v16.25 — Operatör Auth Migration (Aşama 2C + 3)
-
-**Aşama 2C Pilot:**
-- `uys_operators.auth_user_id uuid` kolonu eklendi
-- TEST PILOT operatör (test-auth-pilot) — sıfırdan, sahaya etki yok
-- KOD10 ERKİN için Supabase Auth user (`op_kod10@uys.local`)
-- Frontend: `Login.doOprLogin` içinde sicil_hash başarılı olunca arka planda `signInWithPassword`
-- `useAuth` `@uys.local` email'leri için Auth session koruyor (signOut çağırmıyor)
-- v16.24: Admin login OPR_KEY temizle (operator session admin override engelliyordu)
-
-**Aşama 3 Bulk (v16.25):**
-
-Tek migration ile 89 aktif operatöre Supabase Auth user oluşturuldu:
-- Email: `op_<kod_lower>@uys.local`
-- Şifre: `1234` (Buket'in saha standardı)
-- `auth.identities` kayıtları
-- `uys_operators.auth_user_id` bağlantı
-
-Sonuç: 89/89 operatör + admin = **90 toplam Auth user**, hepsi authenticated. Saha akışı değişmedi (operatör hala bölüm + isim + 1234 yazıyor, arka planda Auth session).
-
-### Aşama 4 DENENDI → ROLLBACK
-
-Tüm 38 tabloda `allow_all` → `authenticated_only` denendi. **Saha kırıldı**:
-- Login akışı **anon role** ile başlıyor (Buket veya operatör henüz Auth'lu değilken)
-- `Login.tsx` `supabase.from('uys_operators').select('*')` anon istek
-- `authenticated_only` policy bunu engelledi → operatör seçim ekranı boş
-
-**Acil rollback:** allow_all geri yazıldı (41 tablo). 2 hassas tablo (uys_kullanicilar, uys_yetki_ayarlari) authenticated_only kaldı.
-
-**Doğru çözüm Aşama 4 v2 (yarın hafta sonu):**
-- `uys_operators` için `anon SELECT` açık tut (login akışı)
-- Diğer tablolarda cmd-bazlı policy
-- Detaylı role-bazlı policy yazımı
-
-### Admin Auth User Yenileme (Buket'in şifre kazası)
-
-Buket sabah koyduğu admin Auth user şifresini unuttu. Reset email aldı, ben SQL ile birden çok kez şifre güncelledim, sonunda **Auth user state'i bozdu** (DELETE + INSERT manuel yöntemi Supabase'in iç tablolarını eksik bıraktı, "Database error finding user").
-
-**Çözüm:** auth.users + auth.identities + auth.sessions + auth.refresh_tokens'tan tamamen sildim, Buket Dashboard'dan **yeniden oluşturdu** (UUID `ff76792a-4b3f-4ce5-afaf-25664b382ba1`), `uys_kullanicilar.admin-temp.auth_user_id` bağlandı.
-
-**Kritik ders (§27.10):** `auth.users` tablosuna **doğrudan DELETE + INSERT yapılmamalı**. Supabase iç bütünlük kontrolü Dashboard veya admin API üzerinden yapılır. Manuel SQL ile yapmak iç tabloları (flow_state, mfa_factors, vs.) eksik bırakır.
+**Detay:** Bilgi Bankası §32.
 
 ---
 
-## SENTINEL TOPLAM: 17 (saglik-syntax-check ile yapısal korumalı)
+## SONRAKİ OTURUM İÇİN ÖNCELİKLER
 
-(önceki sürümlerden, değişmedi)
+### 🔴 Kritik (sırada)
 
----
+**İş Emri #14 Faz B — State Machine** (5-7 gün, dosya: `docs/is_emri/14_MimariRefactor.md` Adım 3):
 
-## RLS POLICY SON DURUM (30 Nis 15:30)
+1. `order_state` enum (10 state — yeni, recete_yok, plan_bekliyor, tedarik_bekliyor, uretilebilir, uretiliyor, tamamlandi, kapanma_bekliyor, kapali, iptal)
+2. Transition kuralları (`src/features/order/stateMachine.ts`)
+3. PostgreSQL trigger ile otomatik state hesabı (mrp_state + work_orders durumlarına göre)
+4. UI'da state'e göre rozet gösterimi
+5. Sevkiyat ekseni ayrı kalır (`sevk_durum` mevcut kolon korunur)
 
-- **41 tablo:** `allow_all` (anon + authenticated tam yetki) — Aşama 4 v2'de cmd-bazlı policy
-- **2 tablo:** `authenticated_only` (uys_kullanicilar, uys_yetki_ayarlari) ✓ Aşama 2A
-- **30 tablo:** `updated_at` trigger ✓
-- Plus: `current_user_role` INVOKER, `set_updated_at` search_path sabitlendi
+**Karar yetkisi:** Buket — Faz B başlatılsın mı, yoksa bekleyen başka iş mi öncelik?
 
-**Auth durumu:** 90 Supabase Auth user (1 admin + 89 operatör)
+### 🟡 Orta
 
-**Advisor:** 5 ERROR → 0 ✅ | 45 WARN → ~41 (kalanı Aşama 4 v2 + 5)
+- **#21 2D bin-packing tasarım dokümanı** (Brief B.3, plywood %30-40 fire kaynağı, kod yok 2 saatlik tasarım)
+- **MRP modal birleştirme** (Faz 3 single-window, backlog en üst)
+- **Saglik-syntax-check genişletme** — `\n` literal taraması tüm `.tsx` (§27.12 TODO)
+- **Şirket Profili sayfası** — DataManagement'a tab, hardcoded placeholder yerine DB'den
+- **`admin@uys.local + 1234` saha doğrulama** — incognito test
 
----
+### 🟢 Düşük
 
-## YARIN İÇİN ÖNCELİKLER
-
-### Kritik
-- **§28 Aşama 4 v2 (cmd-bazlı policy)** — Hafta sonu / pazartesi sabah erken (saha kapalıyken)
-- **#5 Sevkiyat Oluşturma Formu** — production-blocker
-- **#21 2D bin-packing** — yüzey kesim plywood %30-40 fire azaltma
-- **v16.26 — admin123 fallback sil** (useAuth.ts hardcoded güvenlik açığı)
-
-### Orta
-- **§28.8 chat-attachments bucket SELECT daraltma**
-- **#7 Toplu Sipariş Excel İmport** polish
-- **#8 PDF Çıktı (İş Emri + Sevk İrsaliyesi)**
-
-### Düşük
-- **MRP Topbar tıklama filter** (v16.06 backlog)
-- **Sağlık raporu version string** — DataManagement.tsx hala 'v15.99' (kozmetik)
-- **§28.9 Network Restrictions + Anon Key Rotation** — manuel, en son
+- Stok anomali raporu
+- Operatör mesajları paneli
+- Toplu sipariş girişi (Excel)
+- İstek #18 (fire→sipariş dışı İE)
+- İstek #19 (MRP stoktan ver)
 
 ---
 
-## BUGÜNÜN BİLİNEN GERÇEK WARN'LARI
+## YENİ ÖĞRENMELER (1 May)
 
-Hiçbiri kalmadı — saha temiz.
+### 1. Literal `\n` escape kazası (§27.12)
+3-in-1 birleşik patch'lerde tek-konu commit + her parça için ayrı build doğrulaması zorunlu.
 
-Topbar (öğleden sonra):
-- KESİM 0 · MRP 0 · TEDARİK 0 · PLAN BEKLEYEN 0
-- Sağlık: 17/17 PASS
+### 2. Patch hijyen — package-lock.json (v16.29a)
+`Remove-Item + npm install` pattern'i silme commit'e girme riski. Sandbox'ta lock file `npm install` ile yarat → patch olarak ver.
+
+### 3. Mapper-Tipsiz alan kaybı (v16.30a)
+DB kolon ekleme = (1) tip güncelle (2) mapper güncelle (3) UI/PDF kullan, üçü tek patch'te.
+
+### 4. Sevk Belgesi mimari kararı (§29.4)
+DİA = yasal, UYS = iç. Audit/yasal sahteciliği önleyen profesyonel separation.
+
+### 5. Smart invalidation gerekliliği (§32.6, 1 May 12:23 keşif)
+Saf "her UPDATE invalidate" trigger'ı **caller pattern'lerinde cache'i öldürür**. UPDATE'lerde MRP-kritik kolon kontrolü zorunlu (fonksiyon içinde erken-return — WHEN clause INSERT/UPDATE/DELETE'i tek seferde kapsayamaz).
+
+### 6. Sandbox build kuralı (Memory #25)
+TS/JS build/typecheck Buket'in makinesinde DEĞİL, claude.ai sandbox'ta. Her patch öncesi npm ci + npm run build doğrulaması yapılır, hata varsa Slice/patch düzeltilir. Sahaya inmeden build PASS şart.
+
+### 7. Supabase MCP doğrudan kullanımı (Memory #16)
+DDL + query'ler Supabase MCP tools (apply_migration, execute_sql) ile claude.ai'den uygulanır. Buket'e PowerShell SQL talimatı verilmez. Önce test projesi (`cowgxwmhlogmswatbltz`), prod (`lmhcobrgrnvtprvmcito`) onay sonrası.
 
 ---
 
-## ÖNEMLİ KURALLAR
+## ÖNEMLİ KURALLAR (Memory + Bilgi Bankası §30 IE-UYS-001)
 
-- §18 Downloads hijyen
-- §18.2 Yeni tablo konvansiyonu (+ updated_at trigger v16.16 + auth_user_id v16.22)
-- §18.3 Durum string normalize
-- §18.4 Artık yönetimi havuz tek standart
-- §18.5 SQL `public.` prefix
-- §20 RLS allow_all → §28'de Aşama 1+2A+3 yapıldı, Aşama 4 v2 yarın
-- §21 MRP formülü: Net = İhtiyaç − Stok − Yolda
-- **§27 (30 Nis sabah, 10 alt bölüm)**: MRP kök çözümü, patch hijyen, OperatorPanel siyah ekran (§27.9), **§27.10 Auth user manuel manipülasyon yasağı (yeni)**
-- **§28 (30 Nis öğleden sonra, 8 alt bölüm)**: RLS Migration Roadmap
+- **IE-UYS-001 (Buket Kıbrıs):** view_range zorunlu, tam dosya read yasak, /compact major commit sonrası, /clear yeni faz, subagent'a delege, %50→commit+compact, %75→kapat, peak 16-22 TR ağır tarama yapma, Bypass Approvals kapalı.
+- **Bitti deme kuralı:** Buket "bitti" demeden Claude.ai sohbeti "sprint sonu / günü kapatma" demez. Kalan saat tahmini yapmaz.
+- **PowerShell:** ASCII-only, PS5 compatible. Multi-machine: önce `git pull`. Repo zip iste → sandbox build → patch zip teslim → Buket commit/tag/push.
 
 ---
 
 ## SİL UYARISI
 
-⚠️ **Bu chat 30 Nis 2026 öğleden sonra kapanacak.** Bilgilerin tamamı:
-- `docs/UYS_v3_Bilgi_Bankasi.md` §22-§26 + **§27 (10 alt bölüm) + §28 (8 alt bölüm)**
-- `docs/saha_model_28nis2026.md`
-- `docs/DEVAM_NOTU.md` (bu dosya — yenilendi)
-- `docs/is_emri/00_BACKLOG_Master.md` (v16.01-v16.25 dahil)
-- `scripts/saglik-syntax-check.cjs`
-
-Yarın yeni Claude oturumunda chat aramaya **gerek yok**.
-
----
-
-İyi günler Buket. — **22 sürüm + 9 DB migration + 6 DB fix + 5 saha krizi + RLS Aşama 1+2A+3 + 89/89 operatör Auth + OperatorPanel kazası fix** tek günde rekor. Yarın için açık plan: Aşama 4 v2 (saha kapalıyken).
+Bu dosya sadece **son sprint odaklı**. 30 Nis bağlamı için → Bilgi Bankası §27 ve §28. Faz A detayları için → §32. Sprint tablosu için → §33.

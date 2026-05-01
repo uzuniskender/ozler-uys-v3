@@ -3408,3 +3408,180 @@ Sonraki sprint: DataManagement'a "Şirket Profili" tab'ı (1 satırlık config t
 **RLS Aşama 4 v2 final:** 43/43 tablo güvenli, anon kapsam minimum.
 **PDF altyapı:** İş Emri + Sevk Belgesi sahada kullanımda.
 **Bekleyen:** Şirket bilgileri gerçek değerleri (v16.31 placeholder).
+
+---
+
+## §32 — İş Emri #14 Faz A: MRP State Cache Altyapısı (✓ TAMAMLANDI 1 May 2026)
+
+**Kapsam:** İş Emri #14 (Mimari Refactor, 8-12 gün) — Faz A bölümü.
+**Süre:** 1 May 2026 öğle-akşam (~3 saat, sandbox + prod + bug fix dahil).
+**Sonuç:** v16.31 (Slice 1+2) + v16.32 (Slice 3) + smart invalidation bug fix.
+**Bağlam:** 30 Nis akşam Buket'in mimari sorusu ("yapı basit değil mi, hatasız nasıl olur") → 4 adımlı çözüm planı (mrp_state, state machine, trigger'lar, realtime). Faz A bunlardan ilk ikisini kapsadı (mrp_state + trigger'lar).
+
+### §32.1 — Karar Süreci (4 oturum öncesi)
+
+Her karar Buket'e ayrı tartışıldı; sonuçlar:
+
+| Karar | Sonuç | Gerekçe |
+|---|---|---|
+| State enum kapsamı | 10 state + ayrı `sevk_durum` | Kısmi sevk işliyor, iki eksen profesyonel ayrım |
+| `kapanma_bekliyor` | Korundu | İleride evrak/fatura için, acelesi yok |
+| İptal kuralı | Her non-terminal'den serbest | Stok hareketleri dokunulmaz, sadece açık WO'lar 'iptal' |
+| mrp_state şeması | **B (iki tablo)** | CASCADE FK + tip güvenliği + trigger'larda scope filter unutma riski yok |
+| Stok hareketi invalidation | Toptan global | Hedefli trigger'da JOIN tablo taraması pahalı; cache asıl değeri tutarlılık |
+| TTL koruyucu | 5 dk | Trigger fail durumunda emniyet supabı |
+| Test modu cache | Tam by-pass | Test koşusu üretim cache'ini kirletmesin |
+
+### §32.2 — Slice 1: DB Migration (v16.31 öncesi)
+
+İki yeni tablo + 7 trigger.
+
+```sql
+-- mrp_state_global (singleton, id=1)
+CREATE TABLE uys_mrp_state_global (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  brut_ihtiyac jsonb, net_eksik jsonb, detay jsonb,
+  invalidated boolean DEFAULT true,
+  hesaplandi timestamptz, ...
+);
+
+-- mrp_state_order (per-order, FK CASCADE)
+CREATE TABLE uys_mrp_state_order (
+  order_id text PRIMARY KEY REFERENCES uys_orders(id) ON DELETE CASCADE,
+  ... aynı kolonlar
+);
+```
+
+**RLS:** Aşama 4 v2 OP3 standardı (`allow_all FOR ALL TO authenticated`). 43/43 → **45/45** tablo güvenli.
+
+**Trigger karması:**
+- **Row-level (hedefli + global):** `uys_orders`, `uys_work_orders`
+- **Statement-level (sadece global):** `uys_kesim_planlari`, `uys_stok_hareketler`, `uys_tedarikler`, `uys_recipes`, `uys_bom_trees`
+
+**Sandbox keşifleri (test projesi `cowgxwmhlogmswatbltz`):**
+1. `uys_orders.id` text (uuid değil) → FK tipi düzeltildi
+2. `uys_receteler` yok, gerçek ad **`uys_recipes`** → trigger adı düzeltildi
+3. `uys_kesim_planlari`'da `order_id` yok (malzeme bazlı entity) → row-level → **statement-level**
+4. `uys_bom_trees` (recursive BOM traversal MRP'ye girer) → **7. trigger eklendi**
+
+Sandbox 6/6 PASS, 1 SKIP (test verisi yok). Production'a (`lmhcobrgrnvtprvmcito`) Supabase MCP ile uygulandı, smoke test 5/5 PASS.
+
+### §32.3 — Slice 2: TS Cache Altyapı (v16.31)
+
+**Yeni dosya:** `src/features/production/mrpCache.ts` (167 satır, 5 fonksiyon)
+- `getMrpCacheGlobal()`, `setMrpCacheGlobal(rows)`
+- `getMrpCacheOrder(orderId)`, `setMrpCacheOrder(orderId, rows)`
+- `clearMrpCacheAll()` (debug)
+
+**Yeni API:** `mrp.ts → hesaplaMRPCached(scope, computeFn, opts?)` callback pattern.
+- `scope: 'global' | { orderId: string } | null`
+- `computeFn: () => MRPRow[]` — cache miss'te çağrılır (12 parametreli `hesaplaMRP`'yi closure'da sarın)
+- Test modu (`getActiveTestRunId() != null`) → cache TAM by-pass
+- 5dk TTL koruyucu (trigger fail emniyet supabı)
+- Hata yumuşaklığı: `console.warn`, asıl akış etkilenmez
+
+**Backward compatible:** Eski `hesaplaMRP` API'si değişmedi. 6 mevcut caller etkilenmedi.
+
+**Audit script güncellemesi:** `scripts/audit-schema.cjs`'de STORE_WHITELIST + DATA_MGMT_WHITELIST'e mrp_state tabloları eklendi (cache tabloları frontend store'a girmez).
+
+### §32.4 — Slice 3: 7 Caller Cache Wrap (v16.32)
+
+| Dosya | Satır | Scope | Açıklama |
+|---|---|---|---|
+| `autoChain.ts` | 252 | `{orderId}` | Sipariş zincir akışı (tek-order) |
+| `Orders.tsx` | 248 | `{orderId}` | Toplu MRP döngüsünde tek-order |
+| `Orders.tsx` | 857 | `{orderId}` | Detail panel runMRP |
+| `DataManagement.tsx` | 217 | `'global'` | Sağlık raporu #5 (global ihtiyaç) |
+| `DataManagement.tsx` | 268 | `{orderId}` | Sağlık raporu #7 (her aktif sipariş) |
+| `MRP.tsx` | 260 | `{orderId}` | hesapla() döngüsü |
+| `MRP.tsx` | 300 | `{orderId}` | Bildirim döngüsü |
+
+**Cache'lenmeyen 6 nokta gerekçeleri:**
+
+| Konum | Sebep |
+|---|---|
+| `MRP.tsx:58, 136` (useMemo) | Sync hook, async wrapper kullanılamaz. Loading state UI'ı saha gerilemesi olur. **Slice 4 iptal.** |
+| `MRP.tsx:254` | `ymSet` özel parametre, cache key'in parçası değil. |
+| `Orders.tsx:243` (topluMRP) | Çoklu sipariş array. Tek-tek döngü zaten cache'leniyor. |
+| `testRunner.ts` (8 yer) | Test modu cache zaten by-pass. |
+| `hammaddeTahsis.ts:80` | "Brüt ihtiyaç" özel modu, MRP imzası destekleniyor değil. |
+
+### §32.5 — Slice 4 İptal Kararı (1 May 2026)
+
+`MRP.tsx:58` ve `:136` cache'lenmedi. Üç yol değerlendirildi:
+
+| Yol | Sonuç |
+|---|---|
+| **A: useEffect + useState (loading)** | İlk render boş + spinner (200-500 ms). Saha **gerilemesi**, 89 operatör şikayet eder. |
+| **B: Cache'leme** | Sıfır UI değişikliği. Slice 3 ile %80 değer zaten alındı. |
+| **C: In-memory Map** | Trigger'lar Map'e ulaşamaz, invalidation yok. Reddedildi. |
+
+**Karar: Yol B.** useMemo hesapları zaten anlık (50-200 ms), optimize edilmesi gereken hesaplar değil. Faz A kapatıldı, Faz B (state machine) sıraya alındı.
+
+### §32.6 — Smart Invalidation Bug Fix (1 May, ~12:23 saha keşfi)
+
+**Bulgu:** v16.32 deploy sonrası saha testi → cache satırı oluşuyor ama anında bayatlıyor. `uys_mrp_state_order` 12:23:43'te yazıldı (`invalidated=false`), 12:23:51'de tekrar `invalidated=true`.
+
+**Teşhis:** Caller pattern: `hesapla → cache yaz → orders.update({mrp_durum: 'tamam'})` → trigger her UPDATE'de invalidate ediyor. `mrp_durum` aslında **MRP'nin sonucu**, MRP'yi etkilemez. Trigger'ın bunu invalidate etmesi yanlıştı.
+
+**Çözüm:** Migration v3 — `invalidate_mrp_order` fonksiyonu içinde **erken-return**:
+- INSERT/DELETE: her zaman invalidate (eski davranış)
+- UPDATE: sadece **MRP-kritik kolonlar** değiştiyse invalidate
+
+```
+uys_orders MRP-kritik:    termin, urunler, mamul_kod, adet, recete_id, durum
+uys_orders irrelevant:    mrp_durum, sevk_durum, oncelik, not_, siparis_no, musteri, updated_at
+
+uys_work_orders kritik:   order_id, malkod, hedef, hm, durum, bagimsiz, siparis_disi, mamul_kod, termin
+uys_work_orders irrelevant: ie_no, op_*, ist_*, mpm, sure, operator_id, kirno, mamul_ad, not_
+```
+
+**Alternatif denenip reddedildi:** WHEN clause yöntemi.
+- `TG_OP` referansı WHEN'de çalışmıyor (PG kuralı)
+- INSERT'te WHEN sadece NEW okur, DELETE'te sadece OLD → tek WHEN ile 3 olay kapsanmıyor
+- Erken-return fonksiyon içinde tek noktada → tercih edildi
+
+**Test:** Sandbox 4/4 PASS:
+- `mrp_durum` UPDATE → fresh kalır ✓
+- `oncelik` UPDATE → fresh kalır ✓
+- `termin` UPDATE → invalidate ✓
+- `durum` UPDATE → invalidate ✓
+
+Production migration uygulandı, bayat 3 cache satırı temizlendi (yeniden ısınması bekleniyor).
+
+### §32.7 — Mimari Sonuç (Faz A)
+
+**Ne çözüldü:**
+- Hesap tutarsızlığı: aynı sipariş için 100 sayfa açılırsa 100 farklı sonuç riski → cache aynı kaynak, tutarlı sonuç.
+- DB seviyesinde **otomatik invalidation** — caller'lar "Hesapla" butonuna basmayı unutsa bile cache bayatlar, bir sonraki okumada yeni hesap gelir.
+- 17 sentinel'in bir kısmı gereksizleşecek (Slice 3 caller'ları bu mimariyi kullanıyor).
+
+**Ne çözmedi (Faz B'ye kaldı):**
+- Sipariş state machine — `orders.durum` hâlâ serbest text, tutarsız geçişler hâlâ mümkün
+- `getEffectiveStatus` her sayfada IE bazlı tekrar hesaplanıyor (cache yok)
+- Realtime subscription kullanımı (polling hâlâ var)
+
+**Faz B önceliği:** State machine + transition trigger'ı (5-7 gün). Buket'in onayı sonrası başlanacak.
+
+---
+
+## §33 — 1 May 2026 Sprint Tablosu (Final)
+
+| Sürüm | İş | Saha Test | Bölüm |
+|---|---|---|---|
+| v16.27 | admin123 sil + version str + Topbar 3-in-1 | ✅ | §27.12 |
+| v16.27a | useAuth email path geri ekle | ✅ | §27.12 |
+| v16.27c | Topbar.tsx satır 1 escape hotfix | ✅ | §27.12 |
+| v16.28 | Login.tsx hash UPDATE refactor | ✅ | §28.6.2 ön hazırlık |
+| v16.29 | jsPDF + DejaVu + İş Emri PDF | ✅ | §29.1-3 |
+| v16.29a/b | package-lock.json regen | ✅ | §29 (Actions hijyen) |
+| v16.30 | Sevk Belgesi PDF | ✅ | §29.4 |
+| v16.30a | Sevk mapper genişletme | ✅ | §29.5 |
+| **DB** | RLS Aşama 4 v2 OP3 (40 tablo) | ✅ | §28.6.1 |
+| **DB** | RLS Aşama 4 v2 OP2 (uys_operators) | ✅ | §28.6.2 |
+| **DB** | mrp_state tabloları + 7 trigger | ✅ | §30.2 |
+| v16.31 | mrp_state cache altyapı (Slice 1+2) | ✅ | §30.2-3 |
+| v16.32 | 7 caller cache wrap (Slice 3) | ✅ | §30.4 |
+| **DB** | Smart invalidation bug fix (Migration v3) | ✅ | §30.6 |
+
+**Toplam:** 11 kod sürümü + 5 DB migration. **RLS 45/45 güvenli. PDF altyapı sahada. mrp_state cache aktif.**
