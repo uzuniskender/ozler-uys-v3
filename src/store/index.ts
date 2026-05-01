@@ -19,6 +19,8 @@ const M = {
     receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
     durum: (r.durum || '') as string, sevkDurum: (r.sevk_durum || 'sevk_yok') as string,
     oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
+    // IE #14 Faz B (v16.33): DB'de state ENUM kolonu; default 'yeni'
+    state: ((r.state as string) || 'yeni') as Order['state'],
   }),
   wo: (r: Record<string, unknown>): WorkOrder => {
     const malkod = (r.malkod || '') as string

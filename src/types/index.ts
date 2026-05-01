@@ -1,5 +1,21 @@
 // ═══ CORE TYPES ═══
 
+// IE #14 Faz B (v16.33): otomatik hesaplanan siparis state.
+// DB'de order_state ENUM, compute_order_state() fonksiyonu ile guncellenir.
+// 10 state — terminal'ler: kapali, iptal.
+// Manuel UPDATE yapmayin; trigger zincirinden geliyor.
+export type OrderState =
+  | 'yeni'
+  | 'recete_yok'
+  | 'plan_bekliyor'
+  | 'tedarik_bekliyor'
+  | 'uretilebilir'
+  | 'uretiliyor'
+  | 'tamamlandi'
+  | 'kapanma_bekliyor'
+  | 'kapali'
+  | 'iptal'
+
 export interface Order {
   id: string
   siparisNo: string
@@ -17,6 +33,10 @@ export interface Order {
   sevkDurum: string
   oncelik: number
   olusturma: string
+  // IE #14 Faz B (v16.33): DB-trigger ile otomatik hesaplanir.
+  // Gecis donemi: durum/sevkDurum/mrpDurum kolonlari hala UI'de kullanilabilir;
+  // state Slice 3'te rozet kaynagi olarak gelir.
+  state: OrderState
 }
 
 export interface OrderItem {
