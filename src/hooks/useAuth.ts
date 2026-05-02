@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { supabase, setGuestMode } from '@/lib/supabase'
 import { can as canCheck, type UserRole } from '@/lib/permissions'
-import { claimSession, releaseSession, subscribeSessionChanges, generateSessionId, getDeviceLabel, type UserType } from '@/lib/sessionGuard'
 
 interface AuthUser {
   role: UserRole
@@ -10,7 +9,6 @@ interface AuthUser {
   loginTime: string
   oprId?: string
   dbId?: string           // uys_kullanicilar.id
-  sessionId?: string      // v16.37 — Multi-device single-session: bu cihazın claim ettiği UUID (sync üretilir)
 }
 
 const AUTH_KEY = 'uys_v3_auth'
@@ -19,19 +17,13 @@ const ADMIN_EMAILS = ['uzuniskender@gmail.com', 'admin@uys.local']
 
 function getStored(): AuthUser | null {
   try {
+    // Önce sessionStorage'dan operatör kontrolü
     const oprS = sessionStorage.getItem(OPR_KEY)
     if (oprS) return JSON.parse(oprS)
+    // Sonra localStorage'dan admin/guest
     const s = localStorage.getItem(AUTH_KEY)
     return s ? JSON.parse(s) : null
   } catch { return null }
-}
-
-function persistUser(u: AuthUser) {
-  if (u.role === 'operator') {
-    sessionStorage.setItem(OPR_KEY, JSON.stringify(u))
-  } else {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(u))
-  }
 }
 
 export function useAuth() {
@@ -42,149 +34,63 @@ export function useAuth() {
   })
   const [loading, setLoading] = useState(true)
 
-  // v16.37 — Multi-device single-session: başka cihazdan giriş yapılınca state dolar.
-  // App.tsx 5 sn countdown modal + auto-logout tetikler.
-  const [sessionInvalidated, setSessionInvalidated] = useState<{ deviceLabel: string } | null>(null)
-
-  const unsubRef = useRef<(() => void) | null>(null)
-
-  // v16.37 — admin için arka planda dbId lookup. Login akışını ASLA bloklamaz.
-  // claimSession+subscribe ayrı useEffect'te, dbId set olduktan sonra çalışır.
-  const enrichAdminDbIdInBackground = useCallback((authUserId: string, base: AuthUser) => {
-    // Fire-and-forget: hata olsa, network down olsa, RLS reject etse — auth state etkilenmez
-    supabase.from('uys_kullanicilar')
-      .select('id').eq('auth_user_id', authUserId).limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          // dbId bulundu — state'i güncelle (sub useEffect'i yeniden tetiklenir)
-          setUser(curr => {
-            if (!curr) return curr
-            // Sadece bizim user hala aktifse güncelle (race önleme)
-            if (curr.loginTime !== base.loginTime) return curr
-            const updated = { ...curr, dbId: data[0].id }
-            persistUser(updated)
-            return updated
-          })
-        }
-      })
-      .catch((e: any) => console.warn('[v16.37] admin dbId lookup failed:', e?.message))
-  }, [])
-
   useEffect(() => {
-    // v16.37 — getSession SYNC path: hızlı setLoading(false), DB ihtiyaç yok
     supabase.auth.getSession().then(({ data: { session } }) => {
-      try {
-        if (session?.user) {
-          const email = session.user.email || ''
-          if (ADMIN_EMAILS.includes(email)) {
-            sessionStorage.removeItem(OPR_KEY)
-            const sessionId = generateSessionId()
-            const authUser: AuthUser = {
-              role: 'admin',
-              username: session.user.user_metadata?.full_name || email.split('@')[0],
-              email, loginTime: new Date().toISOString(),
-              sessionId,
-            }
-            persistUser(authUser)
-            setUser(authUser)
-            // dbId arka planda gelir
-            enrichAdminDbIdInBackground(session.user.id, authUser)
+      if (session?.user) {
+        const email = session.user.email || ''
+        if (ADMIN_EMAILS.includes(email)) {
+          // v16.24 — Admin login'de operator session'i temizle
+          // (eger ayni tarayicidan once operator olarak girildiyse, session yoksa
+          // sessionStorage OPR_KEY okunmaya devam eder ve admin gorunmez)
+          sessionStorage.removeItem(OPR_KEY)
+          const authUser: AuthUser = {
+            role: 'admin',
+            username: session.user.user_metadata?.full_name || email.split('@')[0],
+            email, loginTime: new Date().toISOString(),
           }
+          localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
+          setUser(authUser)
         }
-      } catch (e: any) {
-        console.warn('[v16.37] getSession handler exception:', e?.message)
-      } finally {
-        setLoading(false)
       }
-    }).catch((e: any) => {
-      // getSession promise reject olursa loading'de takılmamak için
-      console.warn('[v16.37] getSession failed:', e?.message)
       setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      try {
-        if (event === 'SIGNED_OUT') {
-          localStorage.removeItem(AUTH_KEY)
-          sessionStorage.removeItem(OPR_KEY)
-          setUser(null)
-          setLoading(false)
-          return
-        }
-        if (session?.user) {
-          const email = session.user.email || ''
-          if (ADMIN_EMAILS.includes(email)) {
-            sessionStorage.removeItem(OPR_KEY)
-            const sessionId = generateSessionId()
-            const authUser: AuthUser = {
-              role: 'admin',
-              username: session.user.user_metadata?.full_name || email.split('@')[0],
-              email, loginTime: new Date().toISOString(),
-              sessionId,
-            }
-            persistUser(authUser)
-            setUser(authUser)
-            enrichAdminDbIdInBackground(session.user.id, authUser)
-          } else if (email.endsWith('@uys.local')) {
-            console.info('[v16.22] Operator Auth session aktif:', email)
-          } else {
-            supabase.auth.signOut()
-          }
-        }
-      } catch (e: any) {
-        console.warn('[v16.37] onAuthStateChange exception:', e?.message)
-      } finally {
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(AUTH_KEY)
+        sessionStorage.removeItem(OPR_KEY)
+        setUser(null)
         setLoading(false)
+        return
       }
+      if (session?.user) {
+        const email = session.user.email || ''
+        if (ADMIN_EMAILS.includes(email)) {
+          // v16.24 — Admin Auth session'a gecince operator sessionStorage'i temizle
+          // Aksi halde getStored() once OPR_KEY'i okur, admin gorunmez
+          sessionStorage.removeItem(OPR_KEY)
+          const authUser: AuthUser = {
+            role: 'admin',
+            username: session.user.user_metadata?.full_name || email.split('@')[0],
+            email, loginTime: new Date().toISOString(),
+          }
+          localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
+          setUser(authUser)
+        } else if (email.endsWith('@uys.local')) {
+          // v16.22 — Operator Auth session (Asama 2C pilot, Asama 3 yayilim)
+          // sessionStorage'da role=operator zaten yazili (operatorLogin tarafindan)
+          // Auth session'i koruyoruz ki RLS auth.uid() doluluk olsun
+          console.info('[v16.22] Operator Auth session aktif:', email)
+        } else {
+          // Bilinmeyen email — guvenlik, signOut
+          supabase.auth.signOut()
+        }
+      }
+      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
-  }, [enrichAdminDbIdInBackground])
-
-  // v16.37 — DB session claim + Realtime subscription. Tamamen fire-and-forget.
-  // user.sessionId varsa, dbId/oprId varsa: arka planda DB'ye yaz + subscribe başlat.
-  // Hata olursa tek-oturum koruması yok ama auth çalışmaya devam eder.
-  useEffect(() => {
-    if (unsubRef.current) {
-      unsubRef.current()
-      unsubRef.current = null
-    }
-    if (!user || !user.sessionId) return
-
-    let userType: UserType | null = null
-    let userId: string | null = null
-    if (user.role === 'operator' && user.oprId) {
-      userType = 'operator'
-      userId = user.oprId
-    } else if (user.dbId) {
-      userType = 'kullanici'
-      userId = user.dbId
-    }
-    if (!userType || !userId) return  // henüz dbId yok (admin için arka plan lookup bekleniyor)
-
-    // 1) Fire-and-forget claim
-    claimSession({
-      userType, userId,
-      sessionId: user.sessionId,
-      deviceLabel: getDeviceLabel(),
-    }).catch((e: any) => console.warn('[v16.37] claim failed (auth devam):', e?.message))
-
-    // 2) Subscription başlat
-    const cleanup = subscribeSessionChanges({
-      userType, userId,
-      currentSessionId: user.sessionId,
-      onMismatch: (deviceLabel) => {
-        setSessionInvalidated({ deviceLabel })
-      },
-    })
-    unsubRef.current = cleanup
-    return () => {
-      if (unsubRef.current) {
-        unsubRef.current()
-        unsubRef.current = null
-      }
-    }
-  }, [user?.sessionId, user?.role, user?.oprId, user?.dbId])
+  }, [])
 
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -196,7 +102,11 @@ export function useAuth() {
   }
 
   async function signIn(username: string, password: string) {
-    // 0) Email iceriyorsa Supabase Auth path (state'i onAuthStateChange handler'ı set eder)
+    // 0) Email iceriyorsa Supabase Auth path
+    // v16.18'de eklenmis, bir noktada kazara silinmis (DataManagement.tsx kazalari gibi
+    // patch hijyen ihlali §27.7). v16.27a'da geri eklendi — admin@uys.local + uzuniskender@gmail.com
+    // Auth user'lari icin signInWithPassword. useEffect onAuthStateChange ADMIN_EMAILS branch'i
+    // state'i set edecek (sessionStorage OPR_KEY temizleme dahil — v16.24).
     if (username.includes('@')) {
       const { data, error } = await supabase.auth.signInWithPassword({ email: username, password })
       if (error) return { error: error.message }
@@ -215,44 +125,30 @@ export function useAuth() {
       if (data && data.length > 0) {
         const k = data[0]
         const rol = (k.rol || 'planlama') as UserRole
-        // v16.37 — sessionId sync üretilir, DB yazımı arka plan useEffect'inde
         const authUser: AuthUser = {
           role: rol,
           username: k.ad || username,
           loginTime: new Date().toISOString(),
           dbId: k.id,
-          sessionId: generateSessionId(),
         }
-        persistUser(authUser)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(authUser))
         setUser(authUser)
         return { error: null }
       }
     } catch { /* tablo yoksa veya hata → reddet */ }
 
+    // v16.27a — admin123 hardcoded fallback silindi (guvenlik acigi). Magic Link + admin@uys.local
+    // Auth user'i mevcut, geriye uyumluluk gerekmiyor. Eski 'uys_admin_pass' localStorage anahtari
+    // da artik kullanilmiyor.
+
     return { error: 'Hatalı şifre' }
   }
 
   async function signOut() {
-    // v16.37 — release session (fire-and-forget, logout'u bloklamaz)
-    if (user?.sessionId) {
-      let userType: UserType | null = null
-      let userId: string | null = null
-      if (user.role === 'operator' && user.oprId) {
-        userType = 'operator'; userId = user.oprId
-      } else if (user.dbId) {
-        userType = 'kullanici'; userId = user.dbId
-      }
-      if (userType && userId) {
-        // Await etmiyoruz — logout her durumda devam eder
-        releaseSession({ userType, userId, sessionId: user.sessionId })
-          .catch((e: any) => console.warn('[v16.37] release exception:', e?.message))
-      }
-    }
     try { await supabase.auth.signOut() } catch {}
     localStorage.removeItem(AUTH_KEY)
     sessionStorage.removeItem(OPR_KEY)
     setUser(null)
-    setSessionInvalidated(null)
     setGuestMode(false)
     window.location.reload()
   }
@@ -265,14 +161,8 @@ export function useAuth() {
   }
 
   function operatorLogin(oprId: string, oprAd: string) {
-    // v16.37 — sessionId sync üretilir, DB yazımı arka plan useEffect'inde
-    const authUser: AuthUser = {
-      role: 'operator',
-      username: oprAd,
-      loginTime: new Date().toISOString(),
-      oprId,
-      sessionId: generateSessionId(),
-    }
+    const authUser: AuthUser = { role: 'operator', username: oprAd, loginTime: new Date().toISOString(), oprId }
+    // sessionStorage: tab kapanınca silinir — operatör her açılışta şifre girer
     sessionStorage.setItem(OPR_KEY, JSON.stringify(authUser))
     setUser(authUser)
   }
@@ -286,6 +176,5 @@ export function useAuth() {
     isAuthenticated: !!user, isGuest: user?.role === 'guest', isAdmin: user?.role === 'admin',
     isAdminLevel, isOperator: user?.role === 'operator',
     role, can,
-    sessionInvalidated,
   }
 }
