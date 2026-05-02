@@ -1,7 +1,7 @@
 // src/lib/sessionGuard.ts
 //
-// Tek-oturum (single-session) altyapısı — Multi-device single-session enforcement.
-// v16.38: Realtime + 10 sn polling fallback. Realtime kurulamazsa bile polling fark eder.
+// Tek-oturum (single-session) altyapısı.
+// v16.39: Channel name çakışması fix + tüm subscribe try-catch içinde + polling tek başına garantili.
 
 import { supabase } from '@/lib/supabase'
 
@@ -12,10 +12,7 @@ const TABLE_BY_TYPE: Record<UserType, string> = {
   operator: 'uys_operators',
 }
 
-const POLL_INTERVAL_MS = 10000  // 10 sn polling fallback
-
-// ───────────────────────────────────────────────────────────────────
-// Yardımcılar
+const POLL_INTERVAL_MS = 10000
 
 export function generateSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -50,9 +47,6 @@ export function getDeviceLabel(): string {
 
   return `${os} — ${browser}`
 }
-
-// ───────────────────────────────────────────────────────────────────
-// DB işlemleri
 
 interface ClaimArgs {
   userType: UserType
@@ -90,11 +84,7 @@ export async function releaseSession(args: { userType: UserType; userId: string;
   try {
     await supabase
       .from(table)
-      .update({
-        aktif_oturum_id: null,
-        aktif_oturum_cihaz: null,
-        aktif_oturum_son: null,
-      })
+      .update({ aktif_oturum_id: null, aktif_oturum_cihaz: null, aktif_oturum_son: null })
       .eq('id', userId)
       .eq('aktif_oturum_id', sessionId)
   } catch (e: any) {
@@ -102,7 +92,6 @@ export async function releaseSession(args: { userType: UserType; userId: string;
   }
 }
 
-/** Polling: DB'den kendi satırını oku, sessionId match'i kontrol et. */
 async function pollOnce(userType: UserType, userId: string): Promise<{ aktif_oturum_id: string | null; aktif_oturum_cihaz: string | null }> {
   const table = TABLE_BY_TYPE[userType]
   try {
@@ -113,7 +102,7 @@ async function pollOnce(userType: UserType, userId: string): Promise<{ aktif_otu
       .limit(1)
       .single()
     if (error) {
-      console.warn('[sessionGuard] poll error:', error.message)
+      // Sessizce yut — single() row yoksa hata fırlatır, normal durum
       return { aktif_oturum_id: null, aktif_oturum_cihaz: null }
     }
     return {
@@ -121,13 +110,9 @@ async function pollOnce(userType: UserType, userId: string): Promise<{ aktif_otu
       aktif_oturum_cihaz: data?.aktif_oturum_cihaz || null,
     }
   } catch (e: any) {
-    console.warn('[sessionGuard] poll exception:', e?.message)
     return { aktif_oturum_id: null, aktif_oturum_cihaz: null }
   }
 }
-
-// ───────────────────────────────────────────────────────────────────
-// Subscription + polling fallback
 
 interface SubscribeArgs {
   userType: UserType
@@ -137,14 +122,15 @@ interface SubscribeArgs {
 }
 
 /**
- * Realtime subscription + 10 sn polling fallback.
- * İkisinden biri (hangisi önce) mismatch detect ederse onMismatch çağrılır.
- * onMismatch sadece BİR KEZ tetiklenir (sonradan polling de aynı şeyi görse spam etmez).
+ * v16.39 — Realtime + polling fallback. Tüm sub işlemi try-catch içinde, hata olursa polling tek başına çalışır.
+ * Channel name'e unique suffix → eski channel temizlenmeden yeni kurulsa bile çakışma yok.
  */
 export function subscribeSessionChanges({ userType, userId, currentSessionId, onMismatch }: SubscribeArgs): () => void {
   const table = TABLE_BY_TYPE[userType]
-  const channelName = `session_guard_${userType}_${userId}`
-  let triggered = false  // tek seferlik guard
+  // v16.39 — Unique suffix: timestamp + random; useEffect cleanup async olduğu için aynı isimle çakışma riski yok
+  const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const channelName = `session_guard_${userType}_${userId}_${uniqueSuffix}`
+  let triggered = false
 
   function trigger(deviceLabel: string) {
     if (triggered) return
@@ -153,41 +139,47 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
     onMismatch(deviceLabel || 'Başka bir cihaz')
   }
 
-  // 1) Realtime subscription
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table,
-        filter: `id=eq.${userId}`,
-      },
-      (payload: any) => {
-        try {
-          const newRow = payload?.new
-          if (!newRow) return
-          const newSessionId: string | null = newRow.aktif_oturum_id ?? null
-          if (newSessionId && newSessionId !== currentSessionId) {
-            const deviceLabel: string = newRow.aktif_oturum_cihaz || 'Başka bir cihaz'
-            trigger(deviceLabel)
+  // 1) Realtime subscription — tüm kurulum try-catch içinde, hata olursa polling devam eder
+  let channel: any = null
+  try {
+    channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table,
+          filter: `id=eq.${userId}`,
+        },
+        (payload: any) => {
+          try {
+            const newRow = payload?.new
+            if (!newRow) return
+            const newSessionId: string | null = newRow.aktif_oturum_id ?? null
+            if (newSessionId && newSessionId !== currentSessionId) {
+              const deviceLabel: string = newRow.aktif_oturum_cihaz || 'Başka bir cihaz'
+              trigger(deviceLabel)
+            }
+          } catch (e: any) {
+            console.warn('[sessionGuard] payload parse:', e?.message)
           }
-        } catch (e: any) {
-          console.warn('[sessionGuard] subscribe payload parse:', e?.message)
         }
-      }
-    )
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.info('[sessionGuard] subscribed:', channelName)
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        console.warn('[sessionGuard] subscription status:', status)
-      }
-    })
+      )
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          console.info('[sessionGuard] subscribed:', channelName)
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[sessionGuard] subscription status:', status, '(polling devam)')
+        }
+      })
+  } catch (e: any) {
+    console.warn('[sessionGuard] subscribe setup failed (polling devam):', e?.message)
+    channel = null
+  }
 
-  // 2) Polling fallback — her 10 sn'de bir DB'den kontrol
-  console.info('[sessionGuard] polling started (10 sn):', channelName)
+  // 2) Polling fallback — Realtime başarısız olsa bile çalışır
+  console.info('[sessionGuard] polling started (10 sn)')
   const pollTimer = setInterval(async () => {
     if (triggered) return
     const result = await pollOnce(userType, userId)
@@ -196,8 +188,8 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
     }
   }, POLL_INTERVAL_MS)
 
-  // İlk yüklemede de bir kez poll et (tarayıcı arka plandaysa Realtime atlanmış olabilir)
-  setTimeout(async () => {
+  // İlk yüklemede 1.5 sn sonra bir kez hızlı poll
+  const initialTimer = setTimeout(async () => {
     if (triggered) return
     const result = await pollOnce(userType, userId)
     if (result.aktif_oturum_id && result.aktif_oturum_id !== currentSessionId) {
@@ -206,11 +198,14 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
   }, 1500)
 
   return () => {
-    try {
-      supabase.removeChannel(channel)
-    } catch (e: any) {
-      console.warn('[sessionGuard] unsubscribe exception:', e?.message)
-    }
     clearInterval(pollTimer)
+    clearTimeout(initialTimer)
+    if (channel) {
+      try {
+        supabase.removeChannel(channel)
+      } catch (e: any) {
+        console.warn('[sessionGuard] unsubscribe exception (yutuldu):', e?.message)
+      }
+    }
   }
 }
