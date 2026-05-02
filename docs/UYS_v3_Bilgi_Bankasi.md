@@ -3615,6 +3615,59 @@ Faz tamamlandı işaretlenmeden önce canlıda gözlem yap. Edge case bug'lar (i
 
 ---
 
+### §32.9 — Multi-Device Single-Session Denemesi: Başarısız (2 May 2026, v16.36-v16.39)
+
+**Sonuç:** Özellik 4 sürüm (v16.36, v16.37, v16.38, v16.39) boyunca sahaya inip her seferinde geri alındı (revert). 2 May akşamı son revert ile v16.35 baseline'a dönüldü. **Saha çalışıyor, özellik bekliyor.**
+
+**Hedef neydi:**
+Aynı kullanıcı (operatör veya admin) iki cihazdan giriş yapınca eski cihaz otomatik kapanmalı. Kullanım senaryosu: operatör tablette login → tableti kapatmadan telefondan login → tablet 5 sn içinde çıkış. (Buket: "ben ikinci oturumu açarken ilk oturum kapatılsın.")
+
+**Yapılan teknik tasarım:**
+
+1. **DB:** `uys_kullanicilar` + `uys_operators` tablolarına `aktif_oturum_id` (uuid) + `aktif_oturum_cihaz` (text) + `aktif_oturum_son` (timestamptz) eklendi. Realtime publication zaten ekliydi. Migration sandbox'ta uygulandı, RLS 45/45 korundu.
+
+2. **Frontend:** `src/lib/sessionGuard.ts` (yeni dosya), `src/hooks/useAuth.ts` (refactor), `src/App.tsx` (5 sn countdown modal). Login → sessionId üret → DB'ye yaz → Realtime ile dinle → mismatch'te modal.
+
+**Neden başarısız:**
+
+| Sürüm | Hata | Sebep |
+|---|---|---|
+| **v16.36** | "Yükleniyor..." takılma | useAuth içinde `await claimAndAttachSession` zinciri DB sorgu/RLS yetkisinde hung; `setLoading(false)` çağrılmadı |
+| **v16.37** | Modal hiç açılmadı | Login `uzuniskender@gmail.com` ile yapıldı ama bu email için `uys_kullanicilar` kaydı yoktu → `dbId` undefined → claim/subscribe useEffect'i `if (!userId) return` ile çıktı |
+| **v16.38** | DB'ye `iskender-uzun` kaydı eklendi, claim çalıştı ama Realtime sub kurulamadı | useEffect cleanup async, aynı channel name ile yeniden subscribe denemesi `cannot add postgres_changes after subscribe()` hatası fırlattı, React render çöktü → siyah ekran |
+| **v16.39** | Channel name'e unique suffix + try-catch eklendi, sandbox build PASS, sahada hâlâ siyah ekran | Sandbox'ta tespit edilemeyen başka runtime sorun (kesin tanı yapılmadı, son revert ile durduruldu) |
+
+**Ana hatalar / dersler:**
+
+1. **Auth refactor sandbox-only doğrulamayla sahaya inmemeli.** `npm run build` PASS olması TypeScript ve syntax açısından temiz olduğunu gösterir; **Realtime + multi-device + race condition + RLS davranışı** runtime'da çıkar. Bu tip işler için Playwright multi-browser-context testleri **sahaya inmeden ÖNCE** yazılmalı. Bu bir Memory kuralı olmalı: "Auth/session değişikliği = Playwright multi-context green light şartı".
+
+2. **DB-frontend kullanıcı eşlemesi varsayımı tehlikeli.** `auth.users` ↔ `uys_kullanicilar` bağlantısı her admin için var sandık, gerçekte uzuniskender@gmail.com'un kaydı yoktu. Auth refactor öncesi tüm aktif login'lerin DB'de eşlenmesi (audit) yapılmalı.
+
+3. **Çoklu revert pahalı.** 2 May günü 3 deploy + 3 revert + 1 hotfix patch yapıldı. Bu döngü Buket'in canını sıktı, sahayı kararsız kıldı. **Bir refactor 2 deploy'da çözülmediyse durup tasarımı sıfırdan gözden geçirmek gerek**, daha küçük slice'lara bölünmeli.
+
+4. **`window.location.reload()` signOut'ta tehlikeli olabilir.** State temizleme amacıyla kullanılıyor ama React render sırasında çağrılırsa kısa siyah pencere açar. v16.40+'ta önce `setUser(null)` ile yumuşak logout, reload sadece gerekirse.
+
+5. **Realtime channel reuse karmaşık.** Supabase aynı isimle channel cache'liyor; cleanup async ama useEffect re-run sync — yarış. Çözüm: channel name'e unique suffix (timestamp + random) eklemek **her durumda** uygulanmalı, "iyi olur" değil "şart".
+
+6. **Tek satır komut bile yapıştırma kazasına açık.** Bu oturumda tarayıcı/araç dosya yollarını markdown link'e dönüştürdü (`[file.zip](http://file.zip)`); ZIP transfer akışı bozuldu, 3 ayrı dosya yollamak gerekli oldu. Patch teslimi sırasında kullanıcıya **dosya adı içermeyen wildcard komutlar** (`Get-ChildItem $Downloads\v16.39*`) tercih edilmeli.
+
+**DB durumu (revert sonrası):**
+- 6 yeni kolon (`aktif_oturum_id`, `aktif_oturum_cihaz`, `aktif_oturum_son` × 2 tablo) DB'de duruyor — NULL kalır, kimse okumaz, zarar yok
+- 2 partial index (sadece NOT NULL) — ufak overhead
+- `uys_kullanicilar` tablosuna `iskender-uzun` test kaydı eklendi (`auth_user_id` = `3bbb6804-9ea1-453e-af28-0cf6f1030cd8`) — gelecek deneme için faydalı
+
+**v16.40 (gelecek deneme) için doğru yol:**
+
+1. **Önce Playwright multi-context testleri yaz** — iki ayrı `browser.newContext()` ile aynı kullanıcıyla login senaryosu, modal beklemesi, auto-logout doğrulaması. **Sahaya inmeden ÖNCE** test green olmalı.
+2. **Auth user ↔ DB eşlemesi audit script** çalıştır, eksik kayıtları otomatik ekle.
+3. **Slice teslimini KÜÇÜLT:** sadece `claim + polling` (Realtime YOK) ile başla. Polling 100% güvenilir, debug edilebilir, race condition yok. Realtime sonra opsiyonel optimizasyon olarak gelir.
+4. **Modal'ı App seviyesinde değil, ayrı `SessionInvalidatedModal` component'inde** render et, `<ErrorBoundary>` ile sar — modal hatası tüm app'i çökermesin.
+5. **Saha test öncesi sandbox'ta `npm run preview` ile** tam build'i lokal koş, login akışını **gerçek tarayıcıda** test et — bu bile build PASS'ten daha çok şey yakalar.
+
+**Karar:** Faz C (Realtime subscription) iptali zaten DEVAM_NOTU'da değerlendirmedeydi; bu deneyim sonrası **iptal kararı kesinleştirilebilir**. Multi-device session de aynı şekilde — saha şu an "iki cihazdan giriş yapılabiliyor" durumuyla yaşıyor, gerçek bir kayıp yok (operatörler genelde tek cihaz kullanıyor). Acil değil, kuyrukta beklesin.
+
+---
+
 ## §33 — 1 May 2026 Sprint Tablosu (Final)
 
 | Sürüm | İş | Saha Test | Bölüm |
