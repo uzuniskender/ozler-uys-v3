@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
@@ -114,7 +114,7 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 }
 
 export default function App() {
-  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role, can } = useAuth()
+  const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role, can, sessionInvalidated } = useAuth()
 
   // v15.53 Adım 4 — Admin login olunca otomatik günlük yedek (fire-and-forget)
   // Idempotent: günde defalarca tetiklenebilir, ensureDailyAutoBackup içeride
@@ -130,6 +130,28 @@ export default function App() {
       else if (r.error) console.warn('[v15.53] Otomatik yedek alınamadı:', r.error)
     })
   }, [session?.dbId, session?.email, session?.username])
+
+  // v16.37 — Multi-device single-session: başka cihazdan giriş yapıldıysa
+  // 5 saniyelik geri sayım modalı göster, sonra otomatik logout.
+  const [sessionCountdown, setSessionCountdown] = useState(5)
+  useEffect(() => {
+    if (!sessionInvalidated) {
+      setSessionCountdown(5)
+      return
+    }
+    setSessionCountdown(5)
+    const tick = setInterval(() => {
+      setSessionCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(tick)
+          setTimeout(() => signOut(), 0)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [sessionInvalidated, signOut])
 
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg-0"><div className="text-zinc-500 text-sm">Yükleniyor...</div></div>
@@ -148,6 +170,26 @@ export default function App() {
     return (
       <>
         <Toaster theme="dark" position="bottom-right" richColors closeButton />
+        {sessionInvalidated && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="bg-bg-1 border-2 border-red rounded-2xl p-6 max-w-md mx-4 shadow-2xl">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-red/20 rounded-full flex items-center justify-center text-2xl">⚠️</div>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-red mb-1">Başka cihazdan giriş yapıldı</h3>
+                  <p className="text-sm text-zinc-300 leading-relaxed">
+                    Hesabınız <span className="font-semibold text-zinc-100">{sessionInvalidated.deviceLabel}</span> üzerinden açıldı.
+                    Bu cihaz <span className="font-bold text-red">{sessionCountdown}</span> saniye içinde otomatik çıkış yapacak.
+                  </p>
+                  <p className="text-xs text-amber mt-2">Yarım kalan üretim girişi varsa hızlıca kaydedin.</p>
+                </div>
+              </div>
+              <button onClick={signOut} className="w-full py-2.5 bg-red/20 hover:bg-red/30 border border-red/40 text-red rounded-lg text-sm font-semibold transition-colors">
+                Hemen Çıkış Yap
+              </button>
+            </div>
+          </div>
+        )}
         <div className="fixed top-0 left-0 right-0 z-50 bg-green/90 text-black text-center text-xs py-1 font-semibold">
           🏭 OPERATÖR MODU — {session.username} · <button onClick={signOut} className="underline">Çıkış</button>
         </div>
@@ -166,6 +208,26 @@ export default function App() {
   return (
     <>
       <Toaster theme="dark" position="bottom-right" richColors closeButton />
+      {sessionInvalidated && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-bg-1 border-2 border-red rounded-2xl p-6 max-w-md mx-4 shadow-2xl">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red/20 rounded-full flex items-center justify-center text-2xl">⚠️</div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-red mb-1">Başka cihazdan giriş yapıldı</h3>
+                <p className="text-sm text-zinc-300 leading-relaxed">
+                  Hesabınız <span className="font-semibold text-zinc-100">{sessionInvalidated.deviceLabel}</span> üzerinden açıldı.
+                  Bu cihaz <span className="font-bold text-red">{sessionCountdown}</span> saniye içinde otomatik çıkış yapacak.
+                </p>
+                <p className="text-xs text-amber mt-2">Kaydedilmemiş bilgileriniz varsa hızlıca kaydedin.</p>
+              </div>
+            </div>
+            <button onClick={signOut} className="w-full py-2.5 bg-red/20 hover:bg-red/30 border border-red/40 text-red rounded-lg text-sm font-semibold transition-colors">
+              Hemen Çıkış Yap
+            </button>
+          </div>
+        </div>
+      )}
       {isGuest && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-amber/90 text-black text-center text-xs py-1 font-semibold">
           👁 MİSAFİR MODU — Salt okunur · <button onClick={signOut} className="underline">Çıkış</button>
