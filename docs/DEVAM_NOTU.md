@@ -1,12 +1,14 @@
 # UYS v3 — Yeni Oturum Devam Notu
 
-**Tarih:** 1 Mayıs 2026 akşam (İşçi Bayramı — saha kapalı, ideal pencere fırsatı kullanıldı)
-**Son canlı sürüm:** v16.35 (kod) + DB Aşama 4 v2 + mrp_state + Smart Invalidation + Faz B kod-only altyapı
-**Bugün toplam:** **14 kod sürümü** (v16.27 → v16.35) + **5 DB migration** (Faz A) + **Faz B kod-only altyapı** (DB değişikliği yok) + **BUG-v16.34-001 ÇÖZÜLDÜ** (v16.35)
+**Tarih:** 2 Mayıs 2026 (1 May iş çıktıları + 2 May multi-device denemesi başarısız → revert)
+**Son canlı sürüm:** v16.35 (kod, 1 May akşamından beri stabil) + DB Aşama 4 v2 + mrp_state + Smart Invalidation + Faz B kod-only altyapı
+**1 May toplam:** **14 kod sürümü** (v16.27 → v16.35) + **5 DB migration** (Faz A) + **Faz B kod-only altyapı** + **BUG-v16.34-001 ÇÖZÜLDÜ** (v16.35)
+**2 May:** Multi-device single-session denendi (v16.36-v16.39), her sürüm sahada hata verdi, **revert ile v16.35'e dönüldü**. Detay: Bilgi Bankası §32.9.
 
 > **30 Nisan tam günü** ayrıntıları için → Bilgi Bankası §27 (10 alt bölüm) + §28 (8 alt bölüm).
 > 1 May'ın yeni öğrenmeleri **§27.12, §28.6.1, §28.6.2, §29 (1-6), §32 (1-7), §33** olarak Bilgi Bankası'nda.
 > 1 May akşam Faz B + saha doğrulama notları aşağıda (yeni bölüm).
+> **2 May multi-device single-session başarısız deneme dersleri → §32.9** (auth refactor için Playwright multi-context şartı).
 
 ---
 
@@ -166,18 +168,48 @@ yeni → recete_yok → plan_bekliyor → tedarik_bekliyor → uretilebilir → 
 
 ---
 
+## 2 MAY 2026 — MULTI-DEVICE SESSION BAŞARISIZ DENEMESİ
+
+### Özet
+4 sürüm denendi (v16.36-v16.39), her seferinde sahada hata verdi, **3 revert ile v16.35 baseline'a dönüldü**. Saha şu an stabil. Detaylı dersler: Bilgi Bankası §32.9.
+
+### Hata zinciri (kısa)
+- **v16.36:** "Yükleniyor..." takılma — DB await zinciri hung, setLoading(false) çağrılmadı → revert
+- **v16.37:** Modal hiç açılmadı — uzuniskender@gmail.com için uys_kullanicilar kaydı yoktu → dbId undefined → claim/sub atlandı
+- **v16.38:** DB'ye iskender-uzun kaydı eklendi, claim çalıştı ama subscribe Realtime channel reuse hatası → siyah ekran
+- **v16.39:** Channel name unique suffix + try-catch eklendi, sandbox build PASS, sahada hâlâ siyah ekran (kesin tanı yapılmadı, son revert ile durduruldu)
+
+### DB durumu (revert sonrası)
+- 6 yeni kolon (`aktif_oturum_id`, `aktif_oturum_cihaz`, `aktif_oturum_son` × uys_kullanicilar + uys_operators) **DB'de duruyor**, NULL kalıyor — kimse okumadığı için zarar yok, gelecek deneme için faydalı (migration tekrar gerekmez)
+- 2 partial index (sadece NOT NULL) — ufak overhead, sorun değil
+- `uys_kullanicilar`'a `iskender-uzun` test kaydı eklendi (auth_user_id=`3bbb6804-9ea1-453e-af28-0cf6f1030cd8`) — uzuniskender@gmail.com için DB bağlantısı, gelecek deneme için hazır
+
+### Ana ders (kuvvetle altı çizilmeli)
+**Auth/session refactor sandbox `npm run build` PASS yetmez.** TypeScript ve syntax temiz olabilir, runtime'da Realtime + multi-device + race condition + RLS davranışı çıkar. **Gerekli:** Playwright multi-browser-context testleri (iki ayrı `browser.newContext()` ile aynı kullanıcı login senaryosu) **sahaya inmeden ÖNCE** yazılıp green olmalı. Bu yeni bir Memory kuralı olarak kaydedilebilir.
+
+### v16.40 (gelecek deneme) için doğru yol — §32.9'da detay
+1. Önce Playwright multi-context test green
+2. Auth user ↔ DB eşleme audit script
+3. Slice'ı küçült: önce sadece `claim + polling` (Realtime YOK), Realtime sonra opsiyonel optimizasyon
+4. Modal ayrı `<SessionInvalidatedModal>` component'i + `<ErrorBoundary>` ile sar
+5. Saha test öncesi sandbox'ta `npm run preview` ile gerçek tarayıcıda lokal test
+
+---
+
 ## SONRAKİ OTURUM İÇİN ÖNCELİKLER
 
 ### 🔴 Kritik (sırada)
 
-**MRP modal birleştirme (Faz 3 single-window):** Memory'de "v15.50a sonrası en yüksek öncelik" notu. Kullanıcı UX'i doğrudan etkiliyor. Mevcut çoklu pencere akışı tek pencerede toplanacak.
+**MRP modal Faz 3 — hata örneği bekliyor (1 May akşam yeniden değerlendirme):**
+Faz A+B sonrası MRP sayfası "0 aktif sipariş" gösteriyor — Memory #18'deki şikayetlerin (mrp_durum filter, state senkron bug, kesim planı yokluğu) çoğu state machine + mrp_state cache + smart invalidation ile zaten çözülmüş gibi görünüyor. Ama Buket: "sürekli hata çıkıyor — MRP ihtiyaç var ama göstermiyor, ihtiyaç hesabı yanlış gibi durumlar oluyor — şu an örnek yok". **Karar:** Faz 3'ü beklet, saha hata örneği yakalandığında dön. Bug fix mi yoksa Faz 3 refactor mi gerektiği örnek üzerinden netleşecek. Tetikleyici: Buket reproduce edebilir bir saha vakası bulunca.
 
-**Karar yetkisi:** Buket — MRP Faz 3 başlatılsın mı, yoksa BUG-v16.34-001 önce mi düzeltilsin?
+**MRP modal birleştirme (Faz 3 single-window):** Memory'de "v15.50a sonrası en yüksek öncelik" notu. Yukarıdaki yeniden değerlendirme sonrası: hata örneği gelmeden başlama.
 
 ### 🟡 Orta
 
+- **Multi-device single-session (v16.40 — ertelendi):** 2 May'da 4 sürüm boyunca denenip her seferinde başarısız oldu. **Önkoşul:** Playwright multi-browser-context testleri sahaya inmeden ÖNCE green olmalı. DB altyapısı zaten yerinde (kolonlar + iskender-uzun kaydı). Saha şu an "iki cihazdan giriş mümkün" durumuyla yaşıyor, gerçek operasyonel kayıp yok (operatörler tek cihaz kullanıyor genelde). Detaylı plan: §32.9.
 - **#21 2D bin-packing tasarım dokümanı** (Brief B.3, plywood %30-40 fire kaynağı, kod yok 2 saatlik tasarım)
-- **Faz C — Realtime subscription:** İptal değerlendirmesinde. mrp_state cache + smart invalidation saha ihtiyacını karşılıyor, Faz C marjinal getiri sağlıyor. **Karar gerekçesi DEVAM_NOTU'ya yazılmalı** (gelecekte "neden yapılmadı" sorusu çıkar).
+- **Faz C — Realtime subscription:** İptal değerlendirmesinde — 2 May deneyimi sonrası iptal kararı pekişti. mrp_state cache + smart invalidation saha ihtiyacını karşılıyor, Faz C marjinal getiri sağlıyor. **Karar gerekçesi DEVAM_NOTU'ya yazılmalı** (gelecekte "neden yapılmadı" sorusu çıkar).
 - **Saglik-syntax-check genişletme** — `\n` literal taraması tüm `.tsx` (§27.12 TODO)
 - **Şirket Profili sayfası** — DataManagement'a tab, hardcoded placeholder yerine DB'den
 - **#5 Sevkiyat Formu kapanışı**
@@ -191,7 +223,6 @@ yeni → recete_yok → plan_bekliyor → tedarik_bekliyor → uretilebilir → 
 - İstek #18 (fire→sipariş dışı İE)
 - İstek #19 (MRP stoktan ver)
 - Kesim planı consolidation
-- Multi-device single-session enforcement
 
 ---
 
@@ -220,6 +251,9 @@ DDL + query'ler Supabase MCP tools (apply_migration, execute_sql) ile claude.ai'
 
 ### 8. Saha doğrulama önce, dokümantasyon kapanışı sonra (1 May akşam)
 Faz tamamlandı işaretlenmeden önce canlıda gözlem yap. Edge case bug'lar (iptal İE) state machine'in doğru çalışıyor olduğunu **doğrulamayı engellemez** — kozmetik bug ayrı kuyruğa alınır, mimari kapanış yapılır. Eski yöntem: build PASS + sandbox test sonra "TAMAMLANDI" deniyordu, gerçek saha verisinde edge case yakalanamıyordu.
+
+### 9. Auth/session refactor için sandbox build PASS yetmez (2 May, §32.9)
+TypeScript/syntax temiz olabilir ama runtime'da Realtime + multi-device + race condition + RLS davranışı çıkar. **Yeni kural:** Auth/session değişikliği = Playwright multi-browser-context testleri ÖNCE green olmalı. v16.36-v16.39 dört sürüm boyunca sahada başarısız oldu, son revert ile v16.35'e dönüldü. DB altyapısı duruyor (NULL kolonlar, zarar yok), gelecek deneme için faydalı. v16.40 doğru yol §32.9'da: önce Playwright, sonra slice'lar (claim+polling, Realtime sonra), `<ErrorBoundary>` ile sarmalanmış modal, lokal `npm run preview` ile gerçek tarayıcı testi.
 
 ---
 
