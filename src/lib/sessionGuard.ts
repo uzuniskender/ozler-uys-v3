@@ -1,0 +1,216 @@
+// src/lib/sessionGuard.ts
+//
+// Tek-oturum (single-session) altyapısı — Multi-device single-session enforcement.
+// v16.38: Realtime + 10 sn polling fallback. Realtime kurulamazsa bile polling fark eder.
+
+import { supabase } from '@/lib/supabase'
+
+export type UserType = 'kullanici' | 'operator'
+
+const TABLE_BY_TYPE: Record<UserType, string> = {
+  kullanici: 'uys_kullanicilar',
+  operator: 'uys_operators',
+}
+
+const POLL_INTERVAL_MS = 10000  // 10 sn polling fallback
+
+// ───────────────────────────────────────────────────────────────────
+// Yardımcılar
+
+export function generateSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+export function getDeviceLabel(): string {
+  if (typeof navigator === 'undefined') return 'Bilinmeyen cihaz'
+  const ua = navigator.userAgent || ''
+  const platform = (navigator as any).platform || ''
+
+  let os = 'Bilinmeyen'
+  if (/iPad/.test(ua)) os = 'iPad'
+  else if (/iPhone/.test(ua)) os = 'iPhone'
+  else if (/Android/.test(ua)) os = 'Android'
+  else if (/Mac/.test(platform) || /Macintosh/.test(ua)) os = 'Mac'
+  else if (/Win/.test(platform) || /Windows/.test(ua)) os = 'Windows'
+  else if (/Linux/.test(platform)) os = 'Linux'
+
+  let browser = ''
+  if (/Edg\//.test(ua)) browser = 'Edge'
+  else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome'
+  else if (/Firefox\//.test(ua)) browser = 'Firefox'
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari'
+  else browser = 'Tarayıcı'
+
+  return `${os} — ${browser}`
+}
+
+// ───────────────────────────────────────────────────────────────────
+// DB işlemleri
+
+interface ClaimArgs {
+  userType: UserType
+  userId: string
+  sessionId: string
+  deviceLabel: string
+}
+
+export async function claimSession({ userType, userId, sessionId, deviceLabel }: ClaimArgs): Promise<{ ok: boolean; error?: string }> {
+  const table = TABLE_BY_TYPE[userType]
+  try {
+    const { error } = await supabase
+      .from(table)
+      .update({
+        aktif_oturum_id: sessionId,
+        aktif_oturum_cihaz: deviceLabel,
+        aktif_oturum_son: new Date().toISOString(),
+      })
+      .eq('id', userId)
+    if (error) {
+      console.warn('[sessionGuard] claim failed:', error.message)
+      return { ok: false, error: error.message }
+    }
+    console.info('[sessionGuard] claim OK:', userType, userId, sessionId.slice(0, 8))
+    return { ok: true }
+  } catch (e: any) {
+    console.warn('[sessionGuard] claim exception:', e?.message)
+    return { ok: false, error: e?.message }
+  }
+}
+
+export async function releaseSession(args: { userType: UserType; userId: string; sessionId: string }): Promise<void> {
+  const { userType, userId, sessionId } = args
+  const table = TABLE_BY_TYPE[userType]
+  try {
+    await supabase
+      .from(table)
+      .update({
+        aktif_oturum_id: null,
+        aktif_oturum_cihaz: null,
+        aktif_oturum_son: null,
+      })
+      .eq('id', userId)
+      .eq('aktif_oturum_id', sessionId)
+  } catch (e: any) {
+    console.warn('[sessionGuard] release exception:', e?.message)
+  }
+}
+
+/** Polling: DB'den kendi satırını oku, sessionId match'i kontrol et. */
+async function pollOnce(userType: UserType, userId: string): Promise<{ aktif_oturum_id: string | null; aktif_oturum_cihaz: string | null }> {
+  const table = TABLE_BY_TYPE[userType]
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select('aktif_oturum_id, aktif_oturum_cihaz')
+      .eq('id', userId)
+      .limit(1)
+      .single()
+    if (error) {
+      console.warn('[sessionGuard] poll error:', error.message)
+      return { aktif_oturum_id: null, aktif_oturum_cihaz: null }
+    }
+    return {
+      aktif_oturum_id: data?.aktif_oturum_id || null,
+      aktif_oturum_cihaz: data?.aktif_oturum_cihaz || null,
+    }
+  } catch (e: any) {
+    console.warn('[sessionGuard] poll exception:', e?.message)
+    return { aktif_oturum_id: null, aktif_oturum_cihaz: null }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Subscription + polling fallback
+
+interface SubscribeArgs {
+  userType: UserType
+  userId: string
+  currentSessionId: string
+  onMismatch: (newDeviceLabel: string) => void
+}
+
+/**
+ * Realtime subscription + 10 sn polling fallback.
+ * İkisinden biri (hangisi önce) mismatch detect ederse onMismatch çağrılır.
+ * onMismatch sadece BİR KEZ tetiklenir (sonradan polling de aynı şeyi görse spam etmez).
+ */
+export function subscribeSessionChanges({ userType, userId, currentSessionId, onMismatch }: SubscribeArgs): () => void {
+  const table = TABLE_BY_TYPE[userType]
+  const channelName = `session_guard_${userType}_${userId}`
+  let triggered = false  // tek seferlik guard
+
+  function trigger(deviceLabel: string) {
+    if (triggered) return
+    triggered = true
+    console.warn('[sessionGuard] MISMATCH detected:', deviceLabel)
+    onMismatch(deviceLabel || 'Başka bir cihaz')
+  }
+
+  // 1) Realtime subscription
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table,
+        filter: `id=eq.${userId}`,
+      },
+      (payload: any) => {
+        try {
+          const newRow = payload?.new
+          if (!newRow) return
+          const newSessionId: string | null = newRow.aktif_oturum_id ?? null
+          if (newSessionId && newSessionId !== currentSessionId) {
+            const deviceLabel: string = newRow.aktif_oturum_cihaz || 'Başka bir cihaz'
+            trigger(deviceLabel)
+          }
+        } catch (e: any) {
+          console.warn('[sessionGuard] subscribe payload parse:', e?.message)
+        }
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.info('[sessionGuard] subscribed:', channelName)
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn('[sessionGuard] subscription status:', status)
+      }
+    })
+
+  // 2) Polling fallback — her 10 sn'de bir DB'den kontrol
+  console.info('[sessionGuard] polling started (10 sn):', channelName)
+  const pollTimer = setInterval(async () => {
+    if (triggered) return
+    const result = await pollOnce(userType, userId)
+    if (result.aktif_oturum_id && result.aktif_oturum_id !== currentSessionId) {
+      trigger(result.aktif_oturum_cihaz || 'Başka bir cihaz')
+    }
+  }, POLL_INTERVAL_MS)
+
+  // İlk yüklemede de bir kez poll et (tarayıcı arka plandaysa Realtime atlanmış olabilir)
+  setTimeout(async () => {
+    if (triggered) return
+    const result = await pollOnce(userType, userId)
+    if (result.aktif_oturum_id && result.aktif_oturum_id !== currentSessionId) {
+      trigger(result.aktif_oturum_cihaz || 'Başka bir cihaz')
+    }
+  }, 1500)
+
+  return () => {
+    try {
+      supabase.removeChannel(channel)
+    } catch (e: any) {
+      console.warn('[sessionGuard] unsubscribe exception:', e?.message)
+    }
+    clearInterval(pollTimer)
+  }
+}
