@@ -490,16 +490,27 @@ export async function mrpTedarikOlustur(
 
   // v15.56 F-21 — Mevcut bekleyen tedarikleri tek seferde çek (performans için)
   // Lookup: malkod + termin → toplam mevcut bekleyen miktar
+  //
+  // v16.41 fix — Saha vakası S26A_03078 (5 May 2026 05:41–05:43):
+  // Tedarik açıldı (geldi=false), 1–2 dk içinde geldi=true yapıldı (depo girişi),
+  // 2. autoChain hesabı .eq('geldi', false) filtresiyle "açık tedarik 0" buldu →
+  // aynı malkod için 2. kez tedarik açtı (84+158 birim, oysa ihtiyaç 42+79).
+  //
+  // Çözüm: geldi filtresi kaldırıldı, yerine BUGÜN açılmış (tarih=today) tüm tedarikler sayılır.
+  // - Bugün açılmış geldi=false → mevcutMap'e dahil ✓ (eski davranış)
+  // - Bugün açılmış geldi=true (1 dk içinde depo girişi) → mevcutMap'e dahil ✓ (yeni)
+  // - Eski tarihli geldi=true → dahil DEĞİL (zaten stoğa geçmiş, hesaplaMRP brut-stok hesabında düşmüş)
+  // - Eski tarihli geldi=false → dahil DEĞİL (1 günden eski açık tedarik = duplicate riski yok)
   let mevcutMap: Record<string, number> = {}
   if (orderId) {
     const { data: mevcutTedarikler, error: tErr } = await supabase
       .from('uys_tedarikler')
-      .select('malkod, miktar, teslim_tarihi')
+      .select('malkod, miktar, teslim_tarihi, geldi, tarih')
       .eq('order_id', orderId)
-      .eq('geldi', false)
+      .gte('tarih', today())
     if (tErr) {
       // Sorgu fail olursa eski davranışa düş — bug duruma sebep olur ama akış bozulmaz.
-      console.warn('[v15.56 mrpTedarikOlustur] Mevcut tedarik kontrolü fail, eski davranışa düşüyor:', tErr.message)
+      console.warn('[v16.41 mrpTedarikOlustur] Mevcut tedarik kontrolü fail, eski davranışa düşüyor:', tErr.message)
       mevcutMap = {}
     } else {
       for (const t of (mevcutTedarikler || [])) {
