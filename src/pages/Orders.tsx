@@ -427,7 +427,11 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   })
 
   // Kalem listesi — initial'dan veya boş bir kalemle başla
-  const [kalemler, setKalemler] = useState<OrderItem[]>(() => {
+  // v16.43 — UX iyileştirmesi: yeni kalemde adet '' (boş) başlasın, kullanıcı
+  // varsayılan 1'i silmek zorunda kalmasın. OrderItem tipi number bekliyor;
+  // local state'te number | '' tutuyoruz, save() sırasında Number cast + validate.
+  type LocalKalem = Omit<OrderItem, 'adet'> & { adet: number | '' }
+  const [kalemler, setKalemler] = useState<LocalKalem[]>(() => {
     if (initial?.urunler && initial.urunler.length > 0) {
       // Eski kayıtlarda kalem-termin/not olmayabilir — sipariş seviyesinden doldur
       return initial.urunler.map(u => ({
@@ -447,23 +451,81 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
         not: '',
       }]
     }
-    return [{ rcId: '', mamulKod: '', mamulAd: '', adet: 1, termin: today(), not: '' }]
+    return [{ rcId: '', mamulKod: '', mamulAd: '', adet: '', termin: today(), not: '' }]
   })
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [searchKalemIdx, setSearchKalemIdx] = useState<number | null>(null)
 
-  const toplamAdet = useMemo(() => kalemler.reduce((s, k) => s + (k.adet || 0), 0), [kalemler])
+  // v16.43 — Draggable modal: kullanıcı arka plandaki Siparişler tablosunu görmek için
+  // modal'ı header'dan tutup sürükleyebilsin. Pointer Events kullanıldı (mouse + touch tek kod).
+  // Pos null = merkez (varsayılan); pos dolu = absolute konumda (sürükleme sonrası).
+  const modalRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number; pointerId: number } | null>(null)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
 
-  function updateKalem(idx: number, patch: Partial<OrderItem>) {
+  function clamp(v: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, v))
+  }
+
+  function onHeaderPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!modalRef.current) return
+    // Sadece sol tuş (mouse için); touch ve pen always OK
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    const rect = modalRef.current.getBoundingClientRect()
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: rect.left,
+      baseY: rect.top,
+      pointerId: e.pointerId,
+    }
+    // İlk sürükleme: merkez positioning'den absolute'a geç
+    setPos({ x: rect.left, y: rect.top })
+    // Pointer'ı yakala — element dışına çıksa bile event'leri al
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function onHeaderPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = dragRef.current
+    if (!d || d.pointerId !== e.pointerId) return
+    if (!modalRef.current) return
+    const dx = e.clientX - d.startX
+    const dy = e.clientY - d.startY
+    const w = modalRef.current.offsetWidth
+    const headerH = 48 // ~ header height — viewport içinde tutmak için
+    const nx = clamp(d.baseX + dx, -(w - 80), window.innerWidth - 80)
+    const ny = clamp(d.baseY + dy, 0, window.innerHeight - headerH)
+    setPos({ x: nx, y: ny })
+  }
+
+  function onHeaderPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId === e.pointerId) {
+      try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+      dragRef.current = null
+    }
+  }
+
+  const toplamAdet = useMemo(() => kalemler.reduce((s, k) => s + (typeof k.adet === 'number' ? k.adet : 0), 0), [kalemler])
+  // v16.43 — UX: Oluştur butonu sadece tüm kalemler geçerli ise enable
+  // (rcId seçili + adet >= 1 + termin var). Buton görsel feedback verir, save() içinde de validate var.
+  const canSubmit = useMemo(
+    () => kalemler.length > 0 && kalemler.every(k =>
+      !!k.rcId && typeof k.adet === 'number' && k.adet >= 1 && !!k.termin
+    ),
+    [kalemler]
+  )
+
+  function updateKalem(idx: number, patch: Partial<LocalKalem>) {
     setKalemler(prev => prev.map((k, i) => i === idx ? { ...k, ...patch } : k))
   }
 
   function addKalem() {
     // Yeni kalemin varsayılan termini = son eklenenin termini
     const sonTermin = kalemler[kalemler.length - 1]?.termin || today()
-    setKalemler(prev => [...prev, { rcId: '', mamulKod: '', mamulAd: '', adet: 1, termin: sonTermin, not: '' }])
+    // v16.43 — adet boş başlasın (UX iyileştirmesi)
+    setKalemler(prev => [...prev, { rcId: '', mamulKod: '', mamulAd: '', adet: '', termin: sonTermin, not: '' }])
   }
 
   function removeKalem(idx: number) {
@@ -517,7 +579,11 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       // Saha modeli (28 Nis 2026, saha_model_28nis2026.md Senaryo 12.3):
       //   "Manuel iş emrine de termin girerek çelişki biter."
       if (!k.termin) { setError(`${i + 1}. kalem termini boş (FIFO sıralaması için zorunlu)`); return }
-      if (!k.adet || k.adet < 1) { setError(`${i + 1}. kalem adedi 1'den küçük`); return }
+      // v16.43 — adet boş ('') veya geçersiz ise açıkça uyar
+      if (k.adet === '' || k.adet === null || k.adet === undefined) {
+        setError(`${i + 1}. kalem adedi boş — bir adet yazın`); return
+      }
+      if (typeof k.adet !== 'number' || k.adet < 1) { setError(`${i + 1}. kalem adedi 1'den küçük`); return }
       // v15.36 — Sıkı reçete kontrolü: reçete gerçekten var ve satırlı mı?
       const rc = recipes.find(r => r.id === k.rcId)
       if (!rc) { setError(`${i + 1}. kalem: "${k.mamulAd || k.mamulKod}" için reçete bulunamadı — silinmiş olabilir`); return }
@@ -684,11 +750,31 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-          <h2 className="text-lg font-semibold">{initial ? 'Sipariş Düzenle' : 'Yeni İş Emri'}</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={18} /></button>
+    <div className="fixed inset-0 z-50 bg-black/60">
+      <div
+        ref={modalRef}
+        data-testid="ie-modal"
+        className="fixed bg-bg-1 border border-border rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col"
+        style={pos
+          ? { left: pos.x, top: pos.y }
+          : { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }
+        }
+        onClick={e => e.stopPropagation()}
+      >
+        <div
+          data-testid="ie-modal-header"
+          className="flex items-center justify-between px-5 py-3 border-b border-border cursor-grab active:cursor-grabbing select-none touch-none"
+          onPointerDown={onHeaderPointerDown}
+          onPointerMove={onHeaderPointerMove}
+          onPointerUp={onHeaderPointerUp}
+          onPointerCancel={onHeaderPointerUp}
+        >
+          <h2 className="text-lg font-semibold pointer-events-none">{initial ? 'Sipariş Düzenle' : 'Yeni İş Emri'}</h2>
+          <button
+            onClick={onClose}
+            onPointerDown={e => e.stopPropagation()}
+            className="text-zinc-500 hover:text-white"
+          ><X size={18} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -789,8 +875,12 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
                   <div className="grid grid-cols-[90px_140px_1fr] gap-2">
                     <div>
                       <label className="text-[10px] text-zinc-500 block mb-0.5">Adet</label>
-                      <input type="number" min={1} value={k.adet}
-                        onChange={e => updateKalem(idx, { adet: parseInt(e.target.value) || 1 })}
+                      <input type="number" min={1} value={k.adet === '' ? '' : k.adet}
+                        placeholder="örn. 100"
+                        onChange={e => {
+                          const v = e.target.value
+                          updateKalem(idx, { adet: v === '' ? '' : (parseInt(v) || '') })
+                        }}
                         className="w-full px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-right text-zinc-200 focus:outline-none focus:border-accent" />
                     </div>
                     <div>
@@ -827,7 +917,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border bg-bg-2/30">
           <button onClick={onClose} disabled={saving} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs disabled:opacity-40">İptal</button>
-          <button onClick={save} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
+          <button onClick={save} disabled={saving || !canSubmit} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">
             {saving ? 'Kaydediliyor...' : initial ? 'Güncelle' : 'Oluştur'}
           </button>
         </div>
