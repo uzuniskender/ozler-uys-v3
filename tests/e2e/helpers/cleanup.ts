@@ -1,4 +1,4 @@
-import { supabaseTest } from './supabase'
+import { supabaseAdmin } from './supabase'
 
 /**
  * TEST-E2E-* prefix ile oluşturulan tüm kayıtları temizler.
@@ -25,6 +25,7 @@ const CLEANUP_ORDER: Array<{ table: string; col: string }> = [
   { table: 'uys_malzemeler', col: 'kod' },
   { table: 'uys_customers', col: 'ad' },
   { table: 'uys_operators', col: 'ad' },
+  { table: 'uys_kullanicilar', col: 'ad' },
   { table: 'uys_tedarikciler', col: 'ad' },
   { table: 'pt_problemler', col: 'tanim' },
 ]
@@ -34,14 +35,14 @@ const CLEANUP_ORDER: Array<{ table: string; col: string }> = [
  */
 async function cleanupTable(table: string, col: string): Promise<number> {
   try {
-    const { data: before, error: selErr } = await supabaseTest
+    const { data: before, error: selErr } = await supabaseAdmin
       .from(table)
       .select('id', { count: 'exact' })
       .ilike(col, `${E2E_PREFIX}%`)
     if (selErr) return 0
     if (!before || before.length === 0) return 0
 
-    const { error: delErr } = await supabaseTest
+    const { error: delErr } = await supabaseAdmin
       .from(table)
       .delete()
       .ilike(col, `${E2E_PREFIX}%`)

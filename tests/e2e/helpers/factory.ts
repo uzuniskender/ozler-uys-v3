@@ -1,4 +1,4 @@
-import { supabaseTest } from './supabase'
+import { supabaseAdmin } from './supabase'
 import { E2E_PREFIX } from './cleanup'
 
 export function uniqueId(suffix = ''): string {
@@ -33,7 +33,7 @@ export async function createIndependentHammaddeWO(params: {
     ie_no: kod, // İş Emirleri tablosunda görünür kolon — testler kod ile arayabilsin
     olusturma: new Date().toISOString(),
   }
-  const { error } = await supabaseTest.from('uys_work_orders').insert(row)
+  const { error } = await supabaseAdmin.from('uys_work_orders').insert(row)
   if (error) throw new Error(`İE oluşturulamadı: ${error.message}`)
   return { kod, row }
 }
@@ -50,7 +50,7 @@ export async function createTestMaterial(params: {
     ad: `${E2E_PREFIX}${params.ad}`,
     tip: params.tip ?? 'Hammadde',
   }
-  const { error } = await supabaseTest.from('uys_malzemeler').insert(row)
+  const { error } = await supabaseAdmin.from('uys_malzemeler').insert(row)
   if (error) throw new Error(`Malzeme oluşturulamadı: ${error.message}`)
   return { kod, ad: row.ad }
 }
@@ -64,9 +64,31 @@ export async function createTestOperator(params: { ad: string; bolum?: string })
     bolum: params.bolum ?? 'Test',
     sifre: '1234',
   }
-  const { error } = await supabaseTest.from('uys_operators').insert(row)
+  const { error } = await supabaseAdmin.from('uys_operators').insert(row)
   if (error) throw new Error(`Operatör oluşturulamadı: ${error.message}`)
   return { id: kod, ad: row.ad }
+}
+
+/**
+ * v16.40 — Multi-device testleri için kullanıcı (admin/planlama/depocu) seed.
+ * Operatörle aynı pattern: ad'a TEST-E2E- prefix konur, cleanup otomatik siler.
+ */
+export async function createTestKullanici(params: {
+  ad: string
+  rol?: 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
+}) {
+  const id = uniqueId('KUL')
+  const row = {
+    id,
+    ad: `${E2E_PREFIX}${params.ad}`,
+    kullanici_ad: id.toLowerCase(),
+    rol: params.rol ?? 'admin',
+    aktif: true,
+    sifre: '1234',
+  }
+  const { error } = await supabaseAdmin.from('uys_kullanicilar').insert(row)
+  if (error) throw new Error(`Kullanıcı oluşturulamadı: ${error.message}`)
+  return { id, ad: row.ad, rol: row.rol }
 }
 
 export async function createOperatorMessage(params: {
@@ -89,7 +111,7 @@ export async function createOperatorMessage(params: {
     kategori: params.kategori ?? null,
     oncelik: params.oncelik ?? 'Normal',
   }
-  const { error } = await supabaseTest.from('uys_operator_notes').insert(row)
+  const { error } = await supabaseAdmin.from('uys_operator_notes').insert(row)
   if (error) throw new Error(`Mesaj oluşturulamadı: ${error.message}`)
   return row
 }
