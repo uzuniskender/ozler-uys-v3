@@ -23,8 +23,10 @@ test.describe('01 — Auth ve RBAC', () => {
   test('planlama → sipariş ekleyebilir', async ({ page }) => {
     await loginAs(page, 'planlama')
     await page.goto('/#/orders')
-    // Planlama sipariş ekleyebilir
-    await expect(page.getByRole('button', { name: /yeni sipari[şs]/i }).first()).toBeVisible({ timeout: 10_000 })
+    await page.waitForLoadState('networkidle', { timeout: 15_000 })
+    // Planlama sipariş ekleyebilir — buton metni v15.57+'da "Yeni İş Emri"
+    // Regex ile Türkçe 'İ' (U+0130) match'i sorunlu olabiliyor; exact text match.
+    await expect(page.locator('button:has-text("Yeni İş Emri")').first()).toBeVisible({ timeout: 10_000 })
     // NOT: planlama'nın sidebar'da "Veri Yönetimi" görünür (data_backup yetkisi var).
     // Hassas aksiyonlar (data_pass/data_reset) sayfa içinde kontrol ediliyor, sidebar
     // değil — dolayısıyla sidebar locator'ı RBAC testi için uygun değil.
@@ -33,7 +35,8 @@ test.describe('01 — Auth ve RBAC', () => {
   test('depocu → sipariş ekleme butonu görünmez', async ({ page }) => {
     await loginAs(page, 'depocu')
     await page.goto('/#/orders')
-    const yeniBtn = page.getByRole('button', { name: /yeni sipari[şs]/i })
+    await page.waitForLoadState('networkidle', { timeout: 15_000 })
+    const yeniBtn = page.locator('button:has-text("Yeni İş Emri")')
     await expect(yeniBtn).toHaveCount(0, { timeout: 5_000 })
   })
 })
