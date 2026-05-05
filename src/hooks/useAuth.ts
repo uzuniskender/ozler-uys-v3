@@ -52,6 +52,15 @@ export function useAuth() {
   const unsubRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
+    // v16.43 — Test ortamında (vite --mode test) Supabase Auth getSession ve onAuthStateChange
+    // bypass edilir. Test helper'ı (Playwright loginAs) localStorage'a hem
+    // sb-{ref}-auth-token (RLS için) hem uys_v3_auth (rol için) yazar.
+    // ADMIN_EMAILS dışı email'ler için signOut tetiklenmesin → useState initial
+    // (getStored) ile gelen kullanıcı korunur.
+    if (import.meta.env.MODE === 'test') {
+      setLoading(false)
+      return
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       try {
         if (session?.user) {
