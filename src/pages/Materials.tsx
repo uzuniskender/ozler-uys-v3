@@ -561,6 +561,8 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
   async function cascadeAdKod(eskiKod: string, yeniKod: string, yeniAd: string, adChanged: boolean, kodChanged: boolean, mode: 'sadece_acik' | null) {
     if (!adChanged && !kodChanged) return
     let bomC = 0, rcC = 0, woC = 0
+    // v16.42 — İstek #20 KART RENAME altyapısı: 5 tablo daha cascade'e eklendi
+    let abC = 0, kpC = 0, stkC = 0, fireC = 0, logC = 0
 
     // Fresh data — state stale olabilir
     const [{ data: freshBom }, { data: freshRc }, { data: freshWo }] = await Promise.all([
@@ -609,7 +611,113 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
       }
       if (Object.keys(updates).length > 0) { await supabase.from('uys_work_orders').update(updates).eq('id', wo.id); woC++ }
     }
-    const extras = [bomC && `${bomC} ürün ağacı`, rcC && `${rcC} reçete`, woC && `${woC} iş emri`].filter(Boolean).join(' + ')
+
+    // ═══ v16.42 — İstek #20: 5 tablo daha cascade ═══
+    // Plan: kodChanged her zaman güncelle. adChanged yalnızca ad kolonu olan tablolarda.
+    // mode='sadece_acik' (Yeni Revizyon):
+    //   - uys_acik_barlar: durum='acik' olanlar
+    //   - uys_kesim_planlari: durum='bekliyor' olanlar
+    //   - uys_stok_hareketler / uys_fire_logs / uys_logs: DOKUNMA (tarihsel kayıt audit)
+    // mode=null (Tümünü Güncelle): hepsini güncelle (eski kod hiçbir yerde kalmaz)
+
+    // 4. Açık barlar — ham_malkod + ham_malad
+    if (kodChanged || adChanged) {
+      let q = supabase.from('uys_acik_barlar').select('id, ham_malkod, ham_malad, durum').eq('ham_malkod', eskiKod)
+      if (mode === 'sadece_acik') q = q.eq('durum', 'acik')
+      const { data: abList } = await q
+      for (const ab of (abList || [])) {
+        const updates: Record<string, unknown> = {}
+        if (kodChanged) updates.ham_malkod = yeniKod
+        if (adChanged && ab.ham_malad !== yeniAd) updates.ham_malad = yeniAd
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('uys_acik_barlar').update(updates).eq('id', ab.id); abC++
+        }
+      }
+    }
+
+    // 5. Kesim planları — ham_malkod + ham_malad + artik_malzeme_kod + satirlar[].kesimler[].malkod/malad
+    if (kodChanged || adChanged) {
+      let q = supabase.from('uys_kesim_planlari').select('*').or(`ham_malkod.eq.${eskiKod},artik_malzeme_kod.eq.${eskiKod}`)
+      if (mode === 'sadece_acik') q = q.eq('durum', 'bekliyor')
+      const { data: kpList } = await q
+      // satirlar[].kesimler[].malkod için ayrı tarama (ham_malkod eşleşmiyor olabilir)
+      let qSat = supabase.from('uys_kesim_planlari').select('*')
+      if (mode === 'sadece_acik') qSat = qSat.eq('durum', 'bekliyor')
+      const { data: kpAll } = await qSat
+      const kpUnion = new Map<string, any>()
+      for (const k of (kpList || [])) kpUnion.set(k.id, k)
+      for (const k of (kpAll || [])) {
+        const sat = k.satirlar || []
+        if (sat.some((s: any) => (s.kesimler || []).some((c: any) => c.malkod === eskiKod))) {
+          kpUnion.set(k.id, k)
+        }
+      }
+      for (const kp of kpUnion.values()) {
+        const updates: Record<string, unknown> = {}
+        if (kodChanged && kp.ham_malkod === eskiKod) updates.ham_malkod = yeniKod
+        if (adChanged && kp.ham_malkod === eskiKod && kp.ham_malad !== yeniAd) updates.ham_malad = yeniAd
+        if (kodChanged && kp.artik_malzeme_kod === eskiKod) updates.artik_malzeme_kod = yeniKod
+        // satirlar JSONB içinde kesim malkod/malad
+        const sat = kp.satirlar || []
+        let satChanged = false
+        const newSat = sat.map((s: any) => {
+          const newKesimler = (s.kesimler || []).map((c: any) => {
+            if (c.malkod !== eskiKod) return c
+            satChanged = true
+            const nc: any = { ...c }
+            if (kodChanged) nc.malkod = yeniKod
+            if (adChanged) nc.malad = yeniAd
+            return nc
+          })
+          return satChanged ? { ...s, kesimler: newKesimler } : s
+        })
+        if (satChanged) updates.satirlar = newSat
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('uys_kesim_planlari').update(updates).eq('id', kp.id); kpC++
+        }
+      }
+    }
+
+    // 6-8. Tarihsel kayıtlar — sadece "Tümünü Güncelle" modunda dokun
+    if (mode === null && kodChanged) {
+      // 6. Stok hareketleri — malkod + malad
+      const stkUpd: Record<string, unknown> = { malkod: yeniKod }
+      if (adChanged) stkUpd.malad = yeniAd
+      const { count: stkCnt } = await supabase.from('uys_stok_hareketler')
+        .update(stkUpd, { count: 'exact' }).eq('malkod', eskiKod)
+      stkC = stkCnt || 0
+
+      // 7. Fire logları — malkod + malad
+      const fireUpd: Record<string, unknown> = { malkod: yeniKod }
+      if (adChanged) fireUpd.malad = yeniAd
+      const { count: fireCnt } = await supabase.from('uys_fire_logs')
+        .update(fireUpd, { count: 'exact' }).eq('malkod', eskiKod)
+      fireC = fireCnt || 0
+
+      // 8. Loglar — sadece malkod (malad yok)
+      const { count: logCnt } = await supabase.from('uys_logs')
+        .update({ malkod: yeniKod }, { count: 'exact' }).eq('malkod', eskiKod)
+      logC = logCnt || 0
+    } else if (mode === null && adChanged && !kodChanged) {
+      // Sadece ad değişti — stok_hareketler/fire_logs'ta malad güncelle (logs'ta malad yok)
+      const { count: stkCnt } = await supabase.from('uys_stok_hareketler')
+        .update({ malad: yeniAd }, { count: 'exact' }).eq('malkod', eskiKod)
+      stkC = stkCnt || 0
+      const { count: fireCnt } = await supabase.from('uys_fire_logs')
+        .update({ malad: yeniAd }, { count: 'exact' }).eq('malkod', eskiKod)
+      fireC = fireCnt || 0
+    }
+
+    const extras = [
+      bomC && `${bomC} ürün ağacı`,
+      rcC && `${rcC} reçete`,
+      woC && `${woC} iş emri`,
+      abC && `${abC} açık bar`,
+      kpC && `${kpC} kesim planı`,
+      stkC && `${stkC} stok hareketi`,
+      fireC && `${fireC} fire log`,
+      logC && `${logC} log`,
+    ].filter(Boolean).join(' + ')
     if (extras) toast.info(extras + ' güncellendi')
   }
 
