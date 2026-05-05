@@ -63,6 +63,7 @@ export async function createTestOperator(params: { ad: string; bolum?: string })
     ad: `${E2E_PREFIX}${params.ad}`,
     bolum: params.bolum ?? 'Test',
     sifre: '1234',
+    aktif: true, // v16.43 — Messages.tsx aktif !== false filtresi için açıkça true set
   }
   const { error } = await supabaseAdmin.from('uys_operators').insert(row)
   if (error) throw new Error(`Operatör oluşturulamadı: ${error.message}`)

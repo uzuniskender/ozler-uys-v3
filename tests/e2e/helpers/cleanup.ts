@@ -7,27 +7,30 @@ import { supabaseAdmin } from './supabase'
 export const E2E_PREFIX = 'TEST-E2E-'
 
 // Silme sırası: FK'ye saygı göster (leaf → root)
+// v16.43 — Kolon isimleri master_schema ile uyumlandırıldı:
+//   - 'kod' kolonu yok, id kullan; wo_kod yok, wo_id kullan; sipariskod yok, id kullan
+//   - kullanicilar/operators/customers/tedarikciler için ad kullan
 const CLEANUP_ORDER: Array<{ table: string; col: string }> = [
   // Child tables (İE/siparişe bağlı)
-  { table: 'uys_fire_logs', col: 'wo_kod' },
-  { table: 'uys_logs', col: 'wo_kod' },
-  { table: 'uys_active_work', col: 'wo_kod' },
-  { table: 'uys_operator_notes', col: 'wo_kod' },
+  { table: 'uys_fire_logs', col: 'ie_no' },
+  { table: 'uys_logs', col: 'ie_no' },
+  { table: 'uys_active_work', col: 'wo_id' },
+  { table: 'uys_operator_notes', col: 'id' },
   { table: 'uys_stok_hareketler', col: 'aciklama' },
-  { table: 'uys_tedarikler', col: 'kod' },
-  { table: 'uys_sevkler', col: 'sipariskod' },
-  { table: 'uys_kesim_planlari', col: 'kod' },
-  { table: 'uys_work_orders', col: 'kod' },
+  { table: 'uys_tedarikler', col: 'malad' },
+  { table: 'uys_sevkler', col: 'id' },
+  { table: 'uys_kesim_planlari', col: 'id' },
+  { table: 'uys_work_orders', col: 'id' },
   // Parent tables
-  { table: 'uys_orders', col: 'kod' },
-  { table: 'uys_recipes', col: 'kod' },
-  { table: 'uys_bom_trees', col: 'kod' },
-  { table: 'uys_malzemeler', col: 'kod' },
+  { table: 'uys_orders', col: 'id' },
+  { table: 'uys_recipes', col: 'id' },
+  { table: 'uys_bom_trees', col: 'id' },
+  { table: 'uys_malzemeler', col: 'id' },
   { table: 'uys_customers', col: 'ad' },
   { table: 'uys_operators', col: 'ad' },
-  { table: 'uys_kullanicilar', col: 'ad' },
+  { table: 'uys_kullanicilar', col: 'kullanici_ad' },
   { table: 'uys_tedarikciler', col: 'ad' },
-  { table: 'pt_problemler', col: 'tanim' },
+  { table: 'pt_problemler', col: 'id' },
 ]
 
 /**
