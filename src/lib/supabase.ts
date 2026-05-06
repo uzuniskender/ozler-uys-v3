@@ -97,3 +97,20 @@ export async function fetchAll<T = any>(
   }
   return { data: all, error: null }
 }
+
+// ─── Güvenli mutasyon yardımcıları ──────────────────────────────────────────
+export async function dbInsert(table: string, data: Record<string, unknown>): Promise<boolean> {
+  const { error } = await supabase.from(table).insert(data as any)
+  if (error) { console.error(`[dbInsert] ${table}:`, error.message); return false }
+  return true
+}
+export async function dbUpdate(table: string, data: Record<string, unknown>, match: Record<string, unknown>): Promise<boolean> {
+  const { error } = await supabase.from(table).update(data as any).match(match)
+  if (error) { console.error(`[dbUpdate] ${table}:`, error.message); return false }
+  return true
+}
+export async function dbUpsert(table: string, data: Record<string, unknown>): Promise<boolean> {
+  const { error } = await supabase.from(table).upsert(data as any)
+  if (error) { console.error(`[dbUpsert] ${table}:`, error.message); return false }
+  return true
+}
