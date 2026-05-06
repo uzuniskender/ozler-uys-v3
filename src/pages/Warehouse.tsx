@@ -553,6 +553,7 @@ function StokGirisModal({ materials, onClose, onSaved }: {
   const [aciklama, setAciklama] = useState('')
   const [search, setSearch] = useState('')
   const [showMatSearch, setShowMatSearch] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const filteredMats = materials.filter(m => !search || (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())).slice(0, 20)
   const selectedMat = materials.find(m => m.kod === malkod)
@@ -606,7 +607,7 @@ function StokGirisModal({ materials, onClose, onSaved }: {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-          <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+          <button onClick={save} disabled={submitting} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-bg-3 disabled:text-zinc-600 text-white rounded-lg text-xs font-semibold">{submitting ? 'Kaydediliyor…' : 'Kaydet'}</button>
         </div>
       </div>
       {showMatSearch && (
