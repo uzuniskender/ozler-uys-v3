@@ -117,10 +117,11 @@ export function kesimPlanOlustur(
     } else {
       console.log('⚠ w.hm boş — reçeteden aranıyor...')
       // BOM'dan bir seviye aşağı
-      const rc = recipes.find(r => r.id === w.rcId) || recipes.find(r => r.mamulKod === w.malkod)
+      // Önce w.malkod için özel reçete ara; yoksa parent (rcId) reçetesine dön
+      const rc = recipes.find(r => r.mamulKod === w.malkod) || recipes.find(r => r.id === w.rcId)
       if (rc?.satirlar) {
         console.log('Reçete bulundu:', rc.ad, '| mamulKod:', rc.mamulKod, '| satirlar:', rc.satirlar.length)
-        const woKirno = w.kirno || '1'
+        const woKirno = (rc?.mamulKod === w.malkod) ? '1' : (w.kirno || '1')
         const depth = woKirno.split('.').length
         const altlar = rc.satirlar.filter(s =>
           (s.tip === 'Hammadde' || s.tip === 'Sarf') &&
