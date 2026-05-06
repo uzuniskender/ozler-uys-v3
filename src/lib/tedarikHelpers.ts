@@ -18,6 +18,7 @@ export async function markTedarikGeldi(ted: {
   // 2. Stok hareketi — deterministik ID ile upsert (duplicate önleme)
   await supabase.from('uys_stok_hareketler').upsert({
     id: tedarikStokId(ted.id),
+    tedarik_id: ted.id,
     tarih: today(), malkod: ted.malkod, malad: ted.malad,
     miktar: ted.miktar, tip: 'giris',
     aciklama: 'Tedarik girişi' + (ted.siparisNo ? ' — ' + ted.siparisNo : '') + (ted.tedarikcAd ? ' — ' + ted.tedarikcAd : ''),

@@ -212,10 +212,12 @@ CREATE TABLE IF NOT EXISTS public.uys_stok_hareketler (
   log_id text,
   wo_id text,
   aciklama text,
+  tedarik_id text REFERENCES public.uys_tedarikler(id) ON DELETE CASCADE,
   updated_at timestamptz DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_uys_stok_malkod ON public.uys_stok_hareketler(malkod);
+CREATE INDEX IF NOT EXISTS uys_sh_tedarik_id_idx ON public.uys_stok_hareketler(tedarik_id) WHERE tedarik_id IS NOT NULL;
 
 -- 1.14.1 Açık Bar Havuzu (v15.31)
 -- Ham profil/boru kesilince kalan artık barlar. Tekrar kullanılabilir.
