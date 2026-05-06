@@ -74,5 +74,28 @@ export async function autoChainSubBoms(
   if (eklenecekBom.length) await supabase.from('uys_bom_trees').insert(eklenecekBom)
   if (eklenecekRec.length) await supabase.from('uys_recipes').insert(eklenecekRec)
 
+  // hm backfill: yeni reçete yaratılan malkodlar için hm=[] WO'ları güncelle
+  for (const rec of eklenecekRec as any[]) {
+    const hmSatirlar = (rec.satirlar as any[]).filter(
+      (s: any) => s.tip === 'Hammadde' || s.tip === 'Sarf'
+    )
+    if (!hmSatirlar.length) continue
+    const { data: woList } = await supabase
+      .from('uys_work_orders')
+      .select('id, hedef, hm')
+      .eq('malkod', rec.mamul_kod)
+    const bosWolar = (woList || []).filter(
+      (w: any) => !w.hm || (Array.isArray(w.hm) && w.hm.length === 0)
+    )
+    for (const wo of bosWolar) {
+      const hmDolu = hmSatirlar.map((s: any) => ({
+        malkod: s.malkod,
+        malad: s.malad,
+        miktarTotal: Math.round(Number(wo.hedef) * Number(s.miktar) * 1000) / 1000,
+      }))
+      await supabase.from('uys_work_orders').update({ hm: hmDolu }).eq('id', wo.id)
+    }
+  }
+
   return { eklenenBom: eklenecekBom.length, eklenenRecete: eklenecekRec.length }
 }
