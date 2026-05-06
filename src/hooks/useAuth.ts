@@ -169,9 +169,7 @@ let _sgOwner: string | null = null
   // v16.38 — Session claim + Realtime/polling subscription. Fire-and-forget.
   useEffect(() => {
     if (!user || !user.sessionId) {
-      // Logout: subscription'ı kapat
-      if (unsubRef.current) { unsubRef.current(); unsubRef.current = null }
-      _sgOwner = null
+      _sgOwner = null  // Logout: yeni girişte fresh subscription
       return
     }
 
