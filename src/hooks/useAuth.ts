@@ -172,7 +172,12 @@ let _sgOwner: string | null = null
       unsubRef.current()
       unsubRef.current = null
     }
-    if (!user || !user.sessionId) return
+    if (!user || !user.sessionId) {
+      // Logout: subscription'ı kapat
+      if (unsubRef.current) { unsubRef.current(); unsubRef.current = null }
+      _sgOwner = null
+      return
+    }
 
     let userType: UserType | null = null
     let userId: string | null = null
