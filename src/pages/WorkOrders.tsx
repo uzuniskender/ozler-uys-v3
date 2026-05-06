@@ -121,6 +121,14 @@ export function WorkOrders() {
 
   async function topluDurumGuncelle(durum: string) {
     if (!selected.size) return
+    if (durum === 'tamamlandi') {
+      const logsVar = useStore.getState().logs
+      const logSizIds = [...selected].filter(id => !logsVar.some(l => l.woId === id))
+      if (logSizIds.length > 0) {
+        const iezler = logSizIds.map(id => workOrders.find(w => w.id === id)?.ieNo || id).join(', ')
+        if (!await showConfirm(`⚠ ${logSizIds.length} İE'de üretim logu YOK:\n${iezler}\n\nLog girmeden tamamlandı işaretlenecek. Devam?`)) return
+      }
+    }
     if (!await showConfirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
     for (const id of selected) { await supabase.from('uys_work_orders').update({ durum }).eq('id', id) }
     const cnt = selected.size; setSelected(new Set()); loadAll(); toast.success(`${cnt} İE güncellendi`)
