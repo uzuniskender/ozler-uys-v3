@@ -132,11 +132,15 @@ let _sgInitTimer: any = null
  */
 export function subscribeSessionChanges({ userType, userId, currentSessionId, onMismatch }: SubscribeArgs): () => void {
   const table = TABLE_BY_TYPE[userType]
-  // Önceki aboneliği temizle
+  // Aynı user için zaten subscription varsa: kesinlikle no-op
+  if (_sgChannel && _sgUserId === userId) {
+    return () => {}
+  }
+  // Farklı user veya kanal yok: eskiyi kapat, yeni aç
   if (_sgChannel) { try { supabase.removeChannel(_sgChannel) } catch {} _sgChannel = null }
   if (_sgPollTimer) { clearInterval(_sgPollTimer); _sgPollTimer = null }
   if (_sgInitTimer) { clearTimeout(_sgInitTimer); _sgInitTimer = null }
-  // Stable channel name — suffix yok, singleton olduğu için çakışma riski yok
+  _sgUserId = userId
   const channelName = `session_guard_${userType}_${userId}`
   let triggered = false
 
