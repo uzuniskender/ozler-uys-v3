@@ -125,6 +125,7 @@ interface SubscribeArgs {
 let _sgChannel: any = null
 let _sgPollTimer: any = null
 let _sgInitTimer: any = null
+let _sgUserId: string | null = null
 
 /**
  * v16.50 — Singleton subscription: her çağrıda önce eskiyi kapat, sonra yenisini aç.
