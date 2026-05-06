@@ -13,6 +13,7 @@ function altDal(rows: BomRow[], parentKirno: string): BomRow[] {
     .map(r => ({
       ...r, id: uid(),
       kirno: r.kirno === parentKirno ? '1' : '1' + r.kirno.slice(parentKirno.length),
+      miktar: r.kirno === parentKirno ? 1 : r.miktar,  // self-satır her zaman 1
     }))
 }
 
