@@ -163,6 +163,9 @@ export function useAuth() {
     return () => { cancelled = true }
   }, [user?.role, user?.dbId, user?.authUserId])
 
+// Module-level: tüm useAuth instance'ları arasında subscription tek yerde çalışır
+let _sgOwner: string | null = null
+
   // v16.38 — Session claim + Realtime/polling subscription. Fire-and-forget.
   useEffect(() => {
     if (unsubRef.current) {
