@@ -10,6 +10,7 @@ import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Plus, Search, Download, Trash2, Eye, Pencil, Calculator, Copy, Upload, ArrowUp, ArrowDown, X } from 'lucide-react'
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
@@ -47,12 +48,12 @@ export function Orders() {
   const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
   const urlYeni = searchParams.get('yeni') || ''       // v15.57 — WorkOrders'tan ?yeni=1 ile direk modal aç
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [mrpFilter, setMrpFilter] = useState(urlMrpFilter === 'eksik' ? 'eksik' : 'all')
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['active', 'done', 'late']))
+  const [mrpFilter, setMrpFilter] = useState<Set<string>>(urlMrpFilter === 'eksik' ? new Set(['eksik']) : new Set())
   // v15.49a — URL'den geldiyse filtreyi uygula (dropdown da senkron olur)
   useEffect(() => {
-    if (urlMrpFilter === 'eksik' && mrpFilter !== 'eksik') {
-      setMrpFilter('eksik')
+    if (urlMrpFilter === 'eksik' && !mrpFilter.has('eksik')) {
+      setMrpFilter(new Set(['eksik']))
     }
   }, [urlMrpFilter])
   const [showForm, setShowForm] = useState(false)
@@ -156,18 +157,26 @@ export function Orders() {
   const filtered = useMemo(() => {
     return orders.filter(o => {
       if (search) { const q = search.toLowerCase(); if (!(o.siparisNo + o.musteri + o.mamulAd).toLowerCase().includes(q)) return false }
-      // v15.49a — MRP filtresi (Topbar badge'inden geliyor olabilir)
-      if (mrpFilter === 'eksik') {
-        // 'tamam' veya 'tamamlandi' = MRP yapılmış. Diğer her şey eksik sayılır.
-        // Kapalı siparişler MRP eksik bile olsa gündemde değil; bu filtrede gizle.
-        const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
-        if (mrpDone) return false
-        if (o.durum === 'kapalı') return false
-      } else if (mrpFilter === 'tamam') {
-        if (!(o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi')) return false
+      // v16.46 — Multi-select MRP (Set<string>)
+      const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
+      if (mrpFilter.size > 0) {
+        let m = false
+        if (mrpFilter.has('eksik') && !mrpDone && o.durum !== 'kapalı') m = true
+        if (mrpFilter.has('tamam') && mrpDone) m = true
+        if (!m) return false
       }
+      // v16.46 — Multi-select Durum (overlap)
       const nearT = orderNearestTermin(o)
-      if (statusFilter === 'active') return o.durum !== 'kapalı' && orderPct(o.id) < 100
+      const pct = orderPct(o.id)
+      if (statusFilter.size > 0) {
+        let m = false
+        if (statusFilter.has('active') && o.durum !== 'kapalı' && pct < 100) m = true
+        if (statusFilter.has('done') && pct >= 100) m = true
+        if (statusFilter.has('late') && o.durum !== 'kapalı' && nearT && nearT < today() && pct < 100) m = true
+        if (statusFilter.has('closed') && o.durum === 'kapalı') m = true
+        if (!m) return false
+      }
+      return true && orderPct(o.id) < 100
       if (statusFilter === 'done') return orderPct(o.id) >= 100
       if (statusFilter === 'late') return o.durum !== 'kapalı' && nearT && nearT < today() && orderPct(o.id) < 100
       if (statusFilter === 'closed') return o.durum === 'kapalı'
@@ -306,15 +315,17 @@ export function Orders() {
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Sipariş no veya müşteri ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="all">Tümü</option><option value="active">Üretimde</option><option value="done">Tamamlandı</option><option value="late">Gecikmeli</option><option value="closed">Kapalı</option>
-        </select>
+        <MultiCheckDropdown label="Durum" options={[
+          { value: 'active', label: 'Üretimde', color: 'text-accent' },
+          { value: 'done', label: 'Tamamlandı', color: 'text-green' },
+          { value: 'late', label: 'Gecikmeli', color: 'text-red' },
+          { value: 'closed', label: 'Kapalı', color: 'text-zinc-500' },
+        ]} selected={statusFilter} onChange={setStatusFilter} />
         {/* v15.49a — MRP filtresi (Topbar MRP badge'inden de tetiklenir: ?mrp=eksik) */}
-        <select value={mrpFilter} onChange={e => setMrpFilter(e.target.value)} className={`px-3 py-2 border rounded-lg text-xs ${mrpFilter === 'eksik' ? 'bg-red/10 border-red/30 text-red' : mrpFilter === 'tamam' ? 'bg-green/10 border-green/30 text-green' : 'bg-bg-2 border-border text-zinc-300'}`} title="MRP durumuna göre filtrele">
-          <option value="all">MRP: Tümü</option>
-          <option value="eksik">MRP: Eksik</option>
-          <option value="tamam">MRP: Tamam</option>
-        </select>
+        <MultiCheckDropdown label="MRP" options={[
+          { value: 'eksik', label: 'Eksik', color: 'text-red' },
+          { value: 'tamam', label: 'Tamam', color: 'text-green' },
+        ]} selected={mrpFilter} onChange={setMrpFilter} />
       </div>
 
       {selIds.size > 0 && (

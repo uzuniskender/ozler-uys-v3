@@ -34,7 +34,7 @@ export function MultiCheckDropdown({ label, options, selected, onChange }: Multi
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)}
+      <button data-testid={`filter-${label.toLowerCase()}`} onClick={() => setOpen(!open)}
         className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300 flex items-center gap-2 hover:border-zinc-500 min-w-[140px]">
         <span className="flex-1 text-left truncate">
           {count === 0 || count === allVals.length ? label : `${label} (${count})`}
