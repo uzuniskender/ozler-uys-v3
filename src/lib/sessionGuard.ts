@@ -121,15 +121,23 @@ interface SubscribeArgs {
   onMismatch: (newDeviceLabel: string) => void
 }
 
+// v16.50 — Singleton: aynı anda sadece 1 subscription. Birden fazla component useAuth çağırsa bile çakışma yok.
+let _sgChannel: any = null
+let _sgPollTimer: any = null
+let _sgInitTimer: any = null
+
 /**
- * v16.39 — Realtime + polling fallback. Tüm sub işlemi try-catch içinde, hata olursa polling tek başına çalışır.
- * Channel name'e unique suffix → eski channel temizlenmeden yeni kurulsa bile çakışma yok.
+ * v16.50 — Singleton subscription: her çağrıda önce eskiyi kapat, sonra yenisini aç.
+ * Böylece birden fazla React component aynı hook'u kullansa bile tek kanal açık kalır.
  */
 export function subscribeSessionChanges({ userType, userId, currentSessionId, onMismatch }: SubscribeArgs): () => void {
   const table = TABLE_BY_TYPE[userType]
-  // v16.39 — Unique suffix: timestamp + random; useEffect cleanup async olduğu için aynı isimle çakışma riski yok
-  const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  const channelName = `session_guard_${userType}_${userId}_${uniqueSuffix}`
+  // Önceki aboneliği temizle
+  if (_sgChannel) { try { supabase.removeChannel(_sgChannel) } catch {} _sgChannel = null }
+  if (_sgPollTimer) { clearInterval(_sgPollTimer); _sgPollTimer = null }
+  if (_sgInitTimer) { clearTimeout(_sgInitTimer); _sgInitTimer = null }
+  // Stable channel name — suffix yok, singleton olduğu için çakışma riski yok
+  const channelName = `session_guard_${userType}_${userId}`
   let triggered = false
 
   function trigger(deviceLabel: string) {
@@ -180,7 +188,7 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
 
   // 2) Polling fallback — Realtime başarısız olsa bile çalışır
   console.info('[sessionGuard] polling started (10 sn)')
-  const pollTimer = setInterval(async () => {
+  _sgPollTimer = setInterval(async () => {
     if (triggered) return
     const result = await pollOnce(userType, userId)
     if (result.aktif_oturum_id && result.aktif_oturum_id !== currentSessionId) {
@@ -189,18 +197,19 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
   }, POLL_INTERVAL_MS)
 
   // İlk yüklemede 1.5 sn sonra bir kez hızlı poll
-  const initialTimer = setTimeout(async () => {
+  _sgInitTimer = setTimeout(async () => {
     if (triggered) return
     const result = await pollOnce(userType, userId)
     if (result.aktif_oturum_id && result.aktif_oturum_id !== currentSessionId) {
       trigger(result.aktif_oturum_cihaz || 'Başka bir cihaz')
     }
   }, 1500)
+  _sgChannel = channel
 
   return () => {
-    clearInterval(pollTimer)
-    clearTimeout(initialTimer)
-    if (channel) {
+    if (_sgPollTimer) { clearInterval(_sgPollTimer); _sgPollTimer = null }
+    if (_sgInitTimer) { clearTimeout(_sgInitTimer); _sgInitTimer = null }
+    if (_sgChannel) {
       try {
         supabase.removeChannel(channel)
       } catch (e: any) {
