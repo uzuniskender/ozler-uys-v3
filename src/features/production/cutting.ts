@@ -121,26 +121,16 @@ export function kesimPlanOlustur(
       const rc = recipes.find(r => r.mamulKod === w.malkod) || recipes.find(r => r.id === w.rcId)
       if (rc?.satirlar) {
         console.log('Reçete bulundu:', rc.ad, '| mamulKod:', rc.mamulKod, '| satirlar:', rc.satirlar.length)
-        // FIX v16.46: w.kirno boşsa reçetede w.malkod'u bulup kirno'sunu al.
-        // Eski: w.kirno || '1' → woKirno='1' → depth=1 → filter depth+1=2 bekler,
-        // ama hammadde kirno='1.1.1' (length=3) → hiç eşleşmiyordu.
-        let woKirno: string
-        if (rc?.mamulKod === w.malkod) {
-          woKirno = '1'
-        } else if (w.kirno) {
-          woKirno = w.kirno
-        } else {
-          // w.kirno boş — reçetede WO'nun malkod'unu bul, kirno'sunu al
-          const woSatir = rc.satirlar.find(s => s.malkod === w.malkod)
-          woKirno = woSatir?.kirno || '1'
-        }
-        const depth = woKirno.split('.').length
+        const woKirno = (rc?.mamulKod === w.malkod) ? '1' : (w.kirno || '1')
+        // FIX v16.46: depth+1 kısıtı kaldırıldı.
+        // Reçetede kesim WO'sunun direkt altında YarıMamul katmanları olabilir;
+        // Hammadde 1+ seviye daha derinде olabilir (ör. kirno=1.1.1.1 → HM=1.1.1.1.1.1.1).
+        // Kısıt, tüm alt ağaçta ilk Hammadde/Sarf satırlarını alacak şekilde gevşetildi.
         const altlar = rc.satirlar.filter(s =>
           (s.tip === 'Hammadde' || s.tip === 'Sarf') &&
-          (s.kirno || '').startsWith(woKirno + '.') &&
-          (s.kirno || '').split('.').length === depth + 1
+          (s.kirno || '').startsWith(woKirno + '.')
         )
-        console.log(`Kirno "${woKirno}" altındaki HM satırlar:`, altlar.map(s => `${s.kirno} ${s.malkod} ${s.malad} (${s.tip})`))
+        console.log(`Kirno "${woKirno}" altındaki HM satırlar (tüm derinlik):`, altlar.map(s => `${s.kirno} ${s.malkod} ${s.malad} (${s.tip})`))
         altlar.forEach(s => hmSatirlar.push({ malkod: s.malkod || '', malad: s.malad || '' }))
       } else {
         console.log('❌ Reçete bulunamadı! rcId:', w.rcId, '| malkod:', w.malkod)
