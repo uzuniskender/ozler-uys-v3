@@ -414,7 +414,8 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
       .filter((k: any) => k.malkod === o.mamulKod)
       .reduce((a: number, k: any) => a + (k.miktar || 0), 0)
     if (mevcutSevk >= o.adet) {
-      toast.warning(`${o.siparisNo} zaten tamamen sevk edilmiş (${mevcutSevk}/${o.adet})`)
+      toast.error(`${o.siparisNo} zaten tamamen sevk edilmiş (${mevcutSevk}/${o.adet}). Yeni sevkiyat oluşturulamaz.`)
+      return
     }
     setOrderId(o.id)
     setOrderSearch(o.siparisNo + ' — ' + o.musteri)
@@ -444,6 +445,10 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
   async function save() {
     const validKalemler = kalemler.filter(k => k.malad && k.miktar > 0)
     if (!validKalemler.length) { toast.error('En az bir kalem ekleyin'); return }
+    // S2 — Son kalkan: kayıt sırasında tekrar kontrol
+    if (orderId && ord && mevcutSevkAdet >= ord.adet) {
+      toast.error(`${ord.siparisNo} zaten tamamen sevk edilmiş. Kaydedilemez.`); return
+    }
     const sevkId = uid()
     await supabase.from('uys_sevkler').insert({
       id: sevkId, order_id: orderId || null, siparis_no: ord?.siparisNo || '',
