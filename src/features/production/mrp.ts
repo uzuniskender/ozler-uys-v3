@@ -304,9 +304,12 @@ export function hesaplaMRP(
   // Kesim planı varsa HM ihtiyacını BOM yerine gerçek bar sayısından al.
   // KAPSAM FİLTRESİ: ordIds verilmişse, sadece o siparişlere ait kesimlerin
   // hamAdet payını topla (satır paylaşımlı ise kesim adet oranıyla böl).
+  // FIX v16.46: ordIds=[] + secilenYMIds varsa (YM-only mod) cutting plan kapsamını
+  // secilenYMIds'deki WO'larla sınırlandır. Eski: null → "genel mod" → alakasız tüm
+  // kesim planları brutIhtiyac'a ekleniyordu.
   const secilenWoIds = ordIdSet
     ? new Set(workOrders.filter(w => ordIdSet.has(w.orderId)).map(w => w.id))
-    : null
+    : secilenYMIds ?? null
   dbg('[MRP DEBUG] Kapsam filtre:', { ordIds, toplamCuttingPlan: cuttingPlans.length, secilenWoIds: secilenWoIds ? [...secilenWoIds] : null })
   cuttingPlans.filter(p => p.durum !== 'tamamlandi').forEach(p => {
     const hmk = p.hamMalkod; if (!hmk) return
