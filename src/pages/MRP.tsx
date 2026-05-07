@@ -110,6 +110,18 @@ export function MRP() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, workOrders, orderAllWosDone, orderHasEksik, showTamamlanan])
 
+  // v16.50 — aktifOrders değişince artık listede olmayan seçimleri temizle
+  // Böylece kapatılan/tamamlanan siparişler Hesapla'ya dahil edilmez
+  useEffect(() => {
+    setSelectedOrders(prev => {
+      const aktifIds = new Set(aktifOrders.map(o => o.id))
+      const yeni = new Set([...prev].filter(id => aktifIds.has(id)))
+      return yeni.size === prev.size ? prev : yeni
+    })
+    setSonuc([])
+    setHesaplandi(false)
+  }, [aktifOrders])
+
   // v15.95 — Madde 15 P3: Hammadde FIFO termin tahsisi
   // Tum aktif siparişler arasinda hammadde paylastirmasi (request-time).
   // Buradan donen tahsis -> her siparis kartinda rozet (yesil/sari/kirmizi).
