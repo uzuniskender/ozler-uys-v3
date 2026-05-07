@@ -64,6 +64,9 @@ export function MRP() {
   const orderHasEksik = useMemo(() => {
     const map: Record<string, boolean> = {}
     for (const o of orders) {
+      // state terminal ise (DB trigger kesin hesaplar) — eksik yok
+      const terminalState = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
+      if (terminalState) { map[o.id] = false; continue }
       // Tüm WO'lar tamamlandıysa eksik yok
       if (orderAllWosDone[o.id]) { map[o.id] = false; continue }
       // Kilitli ise atla — zaten gizlenecek
@@ -80,7 +83,10 @@ export function MRP() {
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      // Tüm WO'lar tamamlandıysa → arşiv (durum/mrpDurum map'inden bağımsız)
+      // v16.50 — state alanı DB trigger ile kesin hesaplanır, durum string'inden bağımsız
+      const terminalState = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
+      if (terminalState) return showTamamlanan
+      // Tüm WO'lar tamamlandıysa → arşiv
       if (orderAllWosDone[o.id]) return showTamamlanan
       // Kilitli → arşiv
       if (isOrderArchived(o)) return showTamamlanan
