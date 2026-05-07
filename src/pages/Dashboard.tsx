@@ -7,7 +7,7 @@ import { showConfirm } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
 import { uid, today } from '@/lib/utils'
-import { AlertTriangle, Clock, Package, MessageSquare, Truck, Cpu, Tag, CalendarX2, Bell, Database, ChevronRight } from 'lucide-react'
+import { AlertTriangle, Clock, Package, MessageSquare, Truck, Cpu, Tag, CalendarX2, Bell, Database, ChevronRight, Weight, BarChart2 } from 'lucide-react'
 import { InactiveOperatorsCard } from '@/components/InactiveOperatorsCard'
 
 /* ═══════════════════════════════════════════════════════════════
@@ -142,6 +142,15 @@ export function Dashboard() {
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30000)
     return () => clearInterval(id)
+  }, [])
+
+  // ═══ Hammadde tüketim KPI ═══
+  const [hmRows, setHmRows] = useState<{ tarih: string; toplam_metre: number; toplam_kg: number; adet: number; kg_eksik: boolean }[]>([])
+  useEffect(() => {
+    const from30 = new Date(); from30.setDate(from30.getDate() - 29)
+    const from30Str = from30.toISOString().slice(0, 10)
+    supabase.from('v_hammadde_tuketim').select('tarih,toplam_metre,toplam_kg,adet,kg_eksik')
+      .gte('tarih', from30Str).then(({ data }) => setHmRows((data || []) as any))
   }, [])
 
   // ═══ TEMEL HESAPLAMALAR (eskiyle birebir aynı) ═══
@@ -483,6 +492,78 @@ export function Dashboard() {
           )}
         </Panel>
       </div>
+
+      {/* Hammadde Tüketimi */}
+      {(() => {
+        const todayKey = new Date().toISOString().slice(0, 10)
+        const weekStart = (() => { const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() - day + (day === 0 ? -6 : 1)); return d.toISOString().slice(0, 10) })()
+        const monthStart = todayKey.slice(0, 8) + '01'
+        const agg = (fn: (r: typeof hmRows[0]) => boolean) => {
+          const f = hmRows.filter(fn)
+          return { kg: f.reduce((a, r) => a + r.toplam_kg, 0), metre: f.reduce((a, r) => a + r.toplam_metre, 0), adet: f.reduce((a, r) => a + r.adet, 0) }
+        }
+        const bugun = agg(r => r.tarih === todayKey)
+        const hafta = agg(r => r.tarih >= weekStart)
+        const ay = agg(r => r.tarih >= monthStart)
+        const fmtKg = (kg: number) => kg <= 0 ? '—' : kg >= 1000 ? `${(kg / 1000).toFixed(1)} t` : `${Math.round(kg)} kg`
+        const fmtM = (m: number) => m > 0 ? `${m.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} m` : '—'
+        const kgEksikSayisi = new Set(hmRows.filter(r => r.kg_eksik).map(r => r.tarih)).size
+        const sparkData = Array.from({ length: 30 }, (_, i) => {
+          const d = new Date(); d.setDate(d.getDate() - (29 - i))
+          const key = d.toISOString().slice(0, 10)
+          return { key, kg: hmRows.filter(r => r.tarih === key).reduce((a, r) => a + r.toplam_kg, 0) }
+        })
+        const maxKg = Math.max(...sparkData.map(d => d.kg), 1)
+        return (
+          <div className="mb-6">
+            <SectionTitle>Hammadde Tüketimi</SectionTitle>
+            <Panel title={<span className="flex items-center gap-1.5"><Weight size={13} /> Hammadde Tüketim Özeti</span>}
+              count={<button onClick={() => navigate('/hammadde-rapor')} className="text-blue-600 hover:underline text-[11px]">Rapor →</button>}>
+              <div className="p-4">
+                {/* 3 KPI */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[
+                    { label: 'Bugün', data: bugun, icon: '📅' },
+                    { label: 'Bu Hafta', data: hafta, icon: '📆' },
+                    { label: 'Bu Ay', data: ay, icon: '🗓' },
+                  ].map(c => (
+                    <div key={c.label} className="bg-gray-50 border border-gray-200 rounded-lg p-3 cursor-pointer hover:border-blue-300 transition" onClick={() => navigate('/hammadde-rapor')}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="text-sm">{c.icon}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{c.label}</span>
+                      </div>
+                      <div className="text-xl font-semibold font-mono text-gray-900">{fmtKg(c.data.kg)}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{fmtM(c.data.metre)} · {c.data.adet} bar</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Sparkline */}
+                <div className="flex items-end gap-0.5 h-10 mb-1">
+                  {sparkData.map((d, i) => {
+                    const h = Math.max(2, Math.round((d.kg / maxKg) * 40))
+                    const isToday = d.key === todayKey
+                    return (
+                      <div key={i} title={`${d.key}: ${fmtKg(d.kg)}`}
+                        style={{ height: `${h}px` }}
+                        className={`flex-1 rounded-sm ${isToday ? 'bg-blue-600' : d.kg > 0 ? 'bg-blue-300' : 'bg-gray-100'}`} />
+                    )
+                  })}
+                </div>
+                <div className="flex justify-between text-[9px] text-gray-400">
+                  <span>30 gün önce</span>
+                  <span className="flex items-center gap-1"><BarChart2 size={9} /> kg trendi</span>
+                  <span>bugün</span>
+                </div>
+                {kgEksikSayisi > 0 && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
+                    <AlertTriangle size={11} /> {kgEksikSayisi} günde kg/m bilgisi eksik malzeme var — Malzemeler sayfasından kg/m girin
+                  </div>
+                )}
+              </div>
+            </Panel>
+          </div>
+        )
+      })()}
 
       {/* Aktif Çalışmalar */}
       {gercekAktif.length > 0 && (

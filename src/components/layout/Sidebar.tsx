@@ -7,7 +7,7 @@ import { isActive as isOrderActive } from '@/features/order/stateMachine'  // v1
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity, Weight
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -42,6 +42,7 @@ const NAV = [
   ]},
   { label: 'SİSTEM', items: [
     { path: '/reports', label: 'Raporlar', icon: BarChart3, guest: true },
+    { path: '/hammadde-rapor', label: 'Hammadde Tüketim', icon: Weight, guest: false },
     { path: '/problem-takip', label: 'Problem Takip', icon: AlertOctagon, badge: 'problemlerOpen', guest: false },
     { path: '/test-mode', label: 'Test Modu', icon: FlaskConical, badge: 'activeTest', guest: false },
     { path: '/test', label: 'Smoke Test', icon: FlaskConical, guest: false, adminOnly: true },
