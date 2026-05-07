@@ -562,7 +562,7 @@ export function MRP() {
             <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
             <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
             {arsivSayisi > 0 && (
-              <button onClick={() => setShowTamamlanan(!showTamamlanan)}
+              <button onClick={() => { setShowTamamlanan(!showTamamlanan); if (!showTamamlanan) setViewFilter('tum') }}
                 className={`px-2 py-1 rounded text-[10px] ${showTamamlanan ? 'bg-amber/10 text-amber border border-amber/20' : 'bg-bg-3 text-zinc-500 hover:text-white'}`}>
                 {showTamamlanan ? `🔒 Arşiv (${arsivSayisi})` : `+ Arşiv (${arsivSayisi})`}
               </button>
