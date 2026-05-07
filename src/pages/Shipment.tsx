@@ -265,7 +265,17 @@ function SevkEditModal({ sevk, materials, onClose, onSaved }: {
     const validKalemler = kalemler.filter(k => k.malad && k.miktar > 0)
     if (!validKalemler.length) { toast.error('En az bir kalem ekleyin'); return }
     setSaving(true)
+    // 1. Sevkiyat güncelle
     await supabase.from('uys_sevkler').update({ kalemler: validKalemler, not_: not_ }).eq('id', sevk.id)
+    // 2. Eski stok çıkışlarını sil, yeni kalemlerle yeniden yaz
+    await supabase.from('uys_stok_hareketler').delete().eq('aciklama', 'Sevkiyat — ' + sevk.id)
+    for (const k of validKalemler) {
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), tarih: sevk.tarih || today(), malkod: k.malkod, malad: k.malad,
+        miktar: k.miktar, tip: 'cikis',
+        aciklama: 'Sevkiyat — ' + sevk.id,
+      })
+    }
     setSaving(false)
     onSaved()
   }
@@ -419,7 +429,7 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
         await supabase.from('uys_stok_hareketler').insert({
           id: uid(), tarih: today(), malkod: k.malkod, malad: k.malad,
           miktar: k.miktar, tip: 'cikis',
-          aciklama: 'Sevkiyat — ' + (ord?.siparisNo || '') + ' — ' + (ord?.musteri || ''),
+          aciklama: 'Sevkiyat — ' + sevkId,
         })
       }
     }
