@@ -81,7 +81,9 @@ export function MRP() {
       // Topbar (mrp_durum sayar) ile liste (eksikVar bakar) çelişiyordu. v16.02'de kök fix
       // (cutting.ts kesimTip='yuzey' override koruması) gelene kadar saha-açıcı band-aid.
       const dbEksik = (o.mrpDurum || '') === 'eksik'
-      const aktifMi = eksikVar || henuzHesaplanmadi || dbEksik
+      const mrpTamam = (o.mrpDurum || '') === 'tamam'
+      // mrp_durum='tamam' ise MRP tamamlandı — aktif sayma
+      const aktifMi = !mrpTamam && (eksikVar || henuzHesaplanmadi || dbEksik)
       return showTamamlanan ? !aktifMi : aktifMi
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
