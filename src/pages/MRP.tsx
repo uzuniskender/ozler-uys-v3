@@ -164,13 +164,13 @@ export function MRP() {
 
   // v15.71 — ymIEs + ymTamamSayisi useMemo kaldırıldı (madde 18)
 
-  function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }); setHesaplandi(false); setSonuc([]) }
   function selectAll() {
     // v15.78 — sipariş ID'leri + manuel İE WO ID'leri birlikte
     const ids = [...aktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
-    setSelectedOrders(new Set(ids))
+    setSelectedOrders(new Set(ids)); setHesaplandi(false); setSonuc([])
   }
-  function selectNone() { setSelectedOrders(new Set()) }
+  function selectNone() { setSelectedOrders(new Set()); setHesaplandi(false); setSonuc([]) }
 
   // v15.78 — selectedOrders set'i hem order_id hem manuel WO_id taşıyabilir.
   // Hesapla() çağrısında ayrıştırılır.
