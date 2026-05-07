@@ -764,19 +764,19 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold mb-4">{initial ? 'Malzeme Düzenle' : 'Yeni Malzeme'}</h2>
-        <div className="space-y-3">
+      <div className="bg-bg-1 border border-border rounded-xl p-4 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-base font-semibold mb-3">{initial ? 'Malzeme Düzenle' : 'Yeni Malzeme'}</h2>
+        <div className="space-y-2">
           {/* ═══ Malzeme Tipi — tam genişlik, belirgin ═══ */}
-          <div className="p-3 bg-accent/5 border border-accent/30 rounded-lg">
-            <label className="text-[11px] text-accent font-semibold mb-1.5 block uppercase tracking-wide">Malzeme Tipi *</label>
-            <div className="grid grid-cols-4 gap-2">
+          <div className="p-2 bg-accent/5 border border-accent/30 rounded-lg">
+            <label className="text-[11px] text-accent font-semibold mb-1 block uppercase tracking-wide">Malzeme Tipi *</label>
+            <div className="grid grid-cols-4 gap-1.5">
               {(['Hammadde','YarıMamul','Mamul','Sarf'] as const).map(t => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => { setTip(t); if (t !== 'Hammadde') setHammaddeTipi('') }}
-                  className={`px-2 py-2 rounded-lg text-xs font-semibold transition ${tip === t ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-bg-2 border border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'}`}
+                  className={`px-2 py-1.5 rounded text-xs font-semibold transition ${tip === t ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-bg-2 border border-border text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'}`}
                 >
                   {t === 'YarıMamul' ? 'Yarı Mamul' : t}
                 </button>
@@ -787,13 +787,13 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
             )}
           </div>
           {(tip === 'Hammadde' || tip === 'YarıMamul') && (
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">
+          <div><label className="text-[11px] text-zinc-500 mb-0.5 block">
               {tip === 'Hammadde' ? 'Hammadde Tipi' : 'Yarı Mamul Tipi'}
             </label>
             <select
               value={hammaddeTipi}
               onChange={e => setHammaddeTipi(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
+              className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent"
             >
               <option value="">— Seçin —</option>
               {hmTipler.map(t => <option key={t} value={t}>{t}</option>)}
@@ -803,40 +803,40 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
             )}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Kodu *</label>
-            <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Malzeme Adı *</label>
-            <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Malzeme Kodu *</label>
+            <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Malzeme Adı *</label>
+            <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Birim</label>
-            <select value={birim} onChange={e => setBirim(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+          <div className="grid grid-cols-3 gap-2">
+            <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Birim</label>
+            <select value={birim} onChange={e => setBirim(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none">
               <option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option><option>Litre</option><option>Takım</option>
             </select></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Çap (mm)</label>
-            <input type="number" value={cap} onChange={e => setCap(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Min Stok</label>
-            <input type="number" value={minStok} onChange={e => setMinStok(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Çap (mm)</label>
+            <input type="number" value={cap} onChange={e => setCap(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Min Stok</label>
+            <input type="number" value={minStok} onChange={e => setMinStok(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
           </div>
           {/* Ölçü alanları — Sarf hariç */}
           {tip !== 'Sarf' && (
-          <div className="p-3 bg-bg-3/30 border border-border/50 rounded-lg">
-            <div className="text-[10px] text-zinc-500 mb-2">
+          <div className="p-2 bg-bg-3/30 border border-border/50 rounded-lg">
+            <div className="text-[10px] text-zinc-500 mb-1.5">
               {['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? '📐 Kesit: Uzun Kenar × Kısa Kenar × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
             </div>
-            <div className="grid grid-cols-5 gap-3">
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">Uzun Kenar (mm)</label>
-              <input type="number" value={boy} onChange={e => setBoy(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">Kısa Kenar (mm)</label>
-              <input type="number" value={en} onChange={e => setEn(e.target.value)} className={`w-full px-3 py-2 bg-bg-2 border rounded-lg text-sm text-zinc-200 focus:outline-none ${parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 ? 'border-red focus:border-red' : 'border-border focus:border-accent'}`} /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">{['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? 'Et Kalınlığı (mm)' : 'Kalınlık (mm)'}</label>
-              <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-              <div><label className="text-[11px] text-amber mb-1 block font-semibold">Uzunluk (mm)</label>
-              <input type="number" value={uzunluk} onChange={e => setUzunluk(e.target.value)} placeholder="ör: 6000" className="w-full px-3 py-2 bg-bg-2 border border-amber/30 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-amber" /></div>
+            <div className="grid grid-cols-5 gap-2">
+              <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Uzun Kenar (mm)</label>
+              <input type="number" value={boy} onChange={e => setBoy(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Kısa Kenar (mm)</label>
+              <input type="number" value={en} onChange={e => setEn(e.target.value)} className={`w-full px-2 py-1.5 bg-bg-2 border rounded text-sm text-zinc-200 focus:outline-none ${parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 ? 'border-red focus:border-red' : 'border-border focus:border-accent'}`} /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-0.5 block">{['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? 'Et Kalınlığı (mm)' : 'Kalınlık (mm)'}</label>
+              <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-amber mb-0.5 block font-semibold">Uzunluk (mm)</label>
+              <input type="number" value={uzunluk} onChange={e => setUzunluk(e.target.value)} placeholder="ör: 6000" className="w-full px-2 py-1.5 bg-bg-2 border border-amber/30 rounded text-sm text-zinc-200 focus:outline-none focus:border-amber" /></div>
               {tip === 'Hammadde' && (
-              <div><label className="text-[11px] text-zinc-400 mb-1 block font-semibold">kg/m <span className="text-zinc-600 font-normal">(ağırlık)</span></label>
-              <input type="number" step="0.001" value={birimKgMetre} onChange={e => setBirimKgMetre(e.target.value)} placeholder="ör: 4.12" className="w-full px-3 py-2 bg-bg-2 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-zinc-400 mb-0.5 block font-semibold">kg/m <span className="text-zinc-600 font-normal">(ağırlık)</span></label>
+              <input type="number" step="0.001" value={birimKgMetre} onChange={e => setBirimKgMetre(e.target.value)} placeholder="ör: 4.12" className="w-full px-2 py-1.5 bg-bg-2 border border-zinc-600 rounded text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
               )}
             </div>
             {parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 && (
@@ -845,15 +845,15 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
           </div>
           )}
           {tip !== 'Sarf' && <button type="button" onClick={tahminEt} className="text-[11px] text-accent hover:underline">🔮 Benzer malzemelerden uzun/kısa kenar tahmin et</button>}
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Operasyon</label>
-            <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none">
+          <div><label className="text-[11px] text-zinc-500 mb-0.5 block">Operasyon</label>
+            <select value={opId} onChange={e => setOpId(e.target.value)} className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-sm text-zinc-200 focus:outline-none">
               <option value="">— Seçin —</option>
               {operations.map(o => <option key={o.id} value={o.id}>{o.kod} — {o.ad}</option>)}
             </select></div>
         </div>
-        <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
-          <button onClick={save} disabled={saving} className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded-lg text-xs font-semibold">{saving ? 'Kaydediliyor...' : 'Kaydet'}</button>
+        <div className="flex justify-end gap-2 mt-3">
+          <button onClick={onClose} className="px-3 py-1.5 bg-bg-3 text-zinc-400 rounded text-xs hover:text-white">İptal</button>
+          <button onClick={save} disabled={saving} className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white rounded text-xs font-semibold">{saving ? 'Kaydediliyor...' : 'Kaydet'}</button>
         </div>
       </div>
     </div>
