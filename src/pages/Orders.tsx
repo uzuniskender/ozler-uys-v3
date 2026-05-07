@@ -47,6 +47,7 @@ export function Orders() {
   const urlFlowId = searchParams.get('flow') || ''
   const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
   const urlYeni = searchParams.get('yeni') || ''       // v15.57 — WorkOrders'tan ?yeni=1 ile direk modal aç
+  const urlOrderId = searchParams.get('order') || ''   // D2 — Dashboard terminGecen'den direkt modal aç
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['active', 'done', 'late', 'closed']))
   const [mrpFilter, setMrpFilter] = useState<Set<string>>(urlMrpFilter === 'eksik' ? new Set(['eksik']) : new Set())
@@ -66,6 +67,13 @@ export function Orders() {
       setShowForm(true)
     }
   }, [urlYeni])
+
+  // D2 — Dashboard'dan ?order=ID ile gelinince sipariş detay modalını aç
+  useEffect(() => {
+    if (!urlOrderId || !orders.length) return
+    const found = orders.find(o => o.id === urlOrderId)
+    if (found) setSelectedOrder(found)
+  }, [urlOrderId, orders])
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
   const [showBulkImport, setShowBulkImport] = useState(false)

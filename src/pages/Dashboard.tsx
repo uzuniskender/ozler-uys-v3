@@ -165,7 +165,7 @@ export function Dashboard() {
     return avgPct < 100
   })
 
-  const terminGecen = aktifOrders.filter(o => o.termin && o.termin < todayStr)
+  const terminGecen = aktifOrders.filter(o => o.termin && o.termin < todayStr && (o as any).sevkDurum !== 'tamamen_sevk')
   const acikWOs = workOrders.filter(w => {
     if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
     const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
@@ -696,7 +696,7 @@ export function Dashboard() {
           <Panel title="🚨 Termini Geçmiş Siparişler" count={terminGecen.length}>
             <div>
               {terminGecen.map(o => (
-                <ListRow key={o.id} onClick={() => navigate('/orders')}>
+                <ListRow key={o.id} onClick={() => navigate('/orders?order=' + o.id)}>
                   <AlertTriangle size={12} className="text-red-500" />
                   <span className="font-mono text-blue-600">{o.siparisNo}</span>
                   <span className="text-gray-700 flex-1">{o.musteri || '—'}</span>
