@@ -422,18 +422,25 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
     setOrderSearch(o.siparisNo + ' — ' + o.musteri)
     setShowOrderList(false)
 
-    // Otomatik kalem doldur
+    // Otomatik kalem doldur — daha önce sevk edilen miktarlar düşülür
     const sipWOs = workOrders.filter(w => w.orderId === o.id)
     const mamulWOs = sipWOs.filter(w => !w.malkod?.includes('.') || w.malkod === o.mamulKod)
+    // Bu siparişe ait daha önce sevk edilen malkod miktarları
+    const dahaOnceSevk: Record<string, number> = {}
+    sevkler
+      .filter((s: any) => s.orderId === o.id)
+      .flatMap((s: any) => s.kalemler || [])
+      .forEach((k: any) => { dahaOnceSevk[k.malkod] = (dahaOnceSevk[k.malkod] || 0) + (k.miktar || 0) })
     if (mamulWOs.length) {
       const auto = mamulWOs.map(w => {
         const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-        return { malkod: w.malkod, malad: w.malad, miktar: Math.min(prod, w.hedef) }
+        const kalan = Math.max(0, Math.min(prod, w.hedef) - (dahaOnceSevk[w.malkod] || 0))
+        return { malkod: w.malkod, malad: w.malad, miktar: kalan }
       }).filter(k => k.miktar > 0)
       if (auto.length) setKalemler(auto)
-      else setKalemler([{ malkod: o.mamulKod, malad: o.mamulAd || o.mamulKod, miktar: o.adet }])
+      else setKalemler([{ malkod: o.mamulKod, malad: o.mamulAd || o.mamulKod, miktar: Math.max(0, o.adet - (dahaOnceSevk[o.mamulKod] || 0)) }])
     } else if (o.mamulKod) {
-      setKalemler([{ malkod: o.mamulKod, malad: o.mamulAd || o.mamulKod, miktar: o.adet }])
+      setKalemler([{ malkod: o.mamulKod, malad: o.mamulAd || o.mamulKod, miktar: Math.max(0, o.adet - (dahaOnceSevk[o.mamulKod] || 0)) }])
     }
   }
 
