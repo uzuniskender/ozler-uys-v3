@@ -398,12 +398,13 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
   // S1 — Sipariş arama filtresi
   const filteredOrders = useMemo(() => {
     const q = orderSearch.toLowerCase()
-    if (!q) return orders
-    return orders.filter(o =>
-      (o.siparisNo || '').toLowerCase().includes(q) ||
-      (o.musteri || '').toLowerCase().includes(q) ||
-      (o.mamulAd || '').toLowerCase().includes(q)
-    )
+    return orders.filter(o => {
+      if ((o as any).sevkDurum === 'tamamen_sevk') return false  // arşivde olsun
+      if (!q) return true
+      return (o.siparisNo || '').toLowerCase().includes(q) ||
+             (o.musteri || '').toLowerCase().includes(q) ||
+             (o.mamulAd || '').toLowerCase().includes(q)
+    })
   }, [orders, orderSearch])
 
   function selectOrder(o: typeof orders[number]) {
