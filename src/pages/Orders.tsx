@@ -48,7 +48,7 @@ export function Orders() {
   const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
   const urlYeni = searchParams.get('yeni') || ''       // v15.57 — WorkOrders'tan ?yeni=1 ile direk modal aç
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['active', 'done', 'late']))
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['active', 'done', 'late', 'closed']))
   const [mrpFilter, setMrpFilter] = useState<Set<string>>(urlMrpFilter === 'eksik' ? new Set(['eksik']) : new Set())
   // v15.49a — URL'den geldiyse filtreyi uygula (dropdown da senkron olur)
   useEffect(() => {
