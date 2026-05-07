@@ -375,6 +375,7 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
   const [orderId, setOrderId] = useState('')
   const [orderSearch, setOrderSearch] = useState('')  // S1 — sipariş arama
   const [showOrderList, setShowOrderList] = useState(false)
+  const [tarih, setTarih] = useState(today())  // tarih — default bugün
   const [not_, setNot] = useState('')
   const [kalemler, setKalemler] = useState<{ malkod: string; malad: string; miktar: number }[]>([{ malkod: '', malad: '', miktar: 1 }])
   const [stokCikis, setStokCikis] = useState(true)
@@ -446,12 +447,12 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
     const sevkId = uid()
     await supabase.from('uys_sevkler').insert({
       id: sevkId, order_id: orderId || null, siparis_no: ord?.siparisNo || '',
-      musteri: ord?.musteri || '', tarih: today(), kalemler: validKalemler, not_: not_,
+      musteri: ord?.musteri || '', tarih: tarih, kalemler: validKalemler, not_: not_,
     })
     if (stokCikis) {
       for (const k of validKalemler) {
         await supabase.from('uys_stok_hareketler').insert({
-          id: uid(), tarih: today(), malkod: k.malkod, malad: k.malad,
+          id: uid(), tarih: tarih, malkod: k.malkod, malad: k.malad,
           miktar: k.miktar, tip: 'cikis',
           aciklama: 'Sevkiyat — ' + sevkId,
         })
@@ -515,9 +516,9 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
             {ord && (
               <div className="mt-1.5 flex gap-3 text-[11px]">
                 <span className="text-zinc-500">Sipariş: <span className="text-zinc-300 font-mono">{ord.adet}</span></span>
-                <span className="text-zinc-500">Sevk edilen: <span className="text-zinc-300 font-mono">{mevcutSevkAdet}</span></span>
+                <span className="text-zinc-500">Daha önce sevk: <span className="text-zinc-300 font-mono">{mevcutSevkAdet}</span></span>
                 <span className={`font-semibold ${kalanAdet <= 0 ? 'text-red' : 'text-green'}`}>
-                  Kalan: {kalanAdet <= 0 ? '⚠ Tamamen sevk edilmiş' : kalanAdet}
+                  {kalanAdet <= 0 ? '⚠ Tamamen sevk edilmiş' : `Kalan: ${kalanAdet} adet`}
                 </span>
               </div>
             )}
@@ -549,10 +550,17 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
             Sevkiyatta stok çıkışı yap
           </label>
 
-          <div>
-            <label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
-            <input value={not_} onChange={e => setNot(e.target.value)}
-              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Sevkiyat Tarihi</label>
+              <input type="date" value={tarih} onChange={e => setTarih(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
+              <input value={not_} onChange={e => setNot(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+            </div>
           </div>
         </div>
 

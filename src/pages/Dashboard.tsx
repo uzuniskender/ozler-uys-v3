@@ -156,6 +156,7 @@ export function Dashboard() {
   // ═══ TEMEL HESAPLAMALAR (eskiyle birebir aynı) ═══
   const aktifOrders = orders.filter(o => {
     if (o.durum === 'iptal' || o.durum === 'tamamlandi') return false
+    if ((o as any).sevkDurum === 'tamamen_sevk') return false  // D1: tamamen sevk edilenler aktif listede görünmesin
     const wos = workOrders.filter(w => w.orderId === o.id)
     const totalProd = wos.reduce((s, w) => {
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
