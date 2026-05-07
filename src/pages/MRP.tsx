@@ -50,9 +50,22 @@ export function MRP() {
   })), [cuttingPlans])
 
   // Her sipariş için net>0 var mı? Tek seferde tüm aktif siparişler için map'le.
+  // v16.50 — WO bazında tamamlanma kontrolü: tüm WO'lar tamamlandi/iptal ise eksik=false
+  const orderAllWosDone = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const o of orders) {
+      const oWos = workOrders.filter(w => w.orderId === o.id)
+      if (oWos.length === 0) { map[o.id] = false; continue }
+      map[o.id] = oWos.every(w => w.durum === 'tamamlandi' || w.durum === 'iptal')
+    }
+    return map
+  }, [orders, workOrders])
+
   const orderHasEksik = useMemo(() => {
     const map: Record<string, boolean> = {}
     for (const o of orders) {
+      // Tüm WO'lar tamamlandıysa eksik yok
+      if (orderAllWosDone[o.id]) { map[o.id] = false; continue }
       // Kilitli ise atla — zaten gizlenecek
       if (isOrderArchived(o)) { map[o.id] = false; continue }
       try {
@@ -63,10 +76,12 @@ export function MRP() {
       }
     }
     return map
-  }, [orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
+  }, [orders, workOrders, orderAllWosDone, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
+      // Tüm WO'lar tamamlandıysa → arşiv (durum/mrpDurum map'inden bağımsız)
+      if (orderAllWosDone[o.id]) return showTamamlanan
       // Kilitli → arşiv
       if (isOrderArchived(o)) return showTamamlanan
       // v15.88 — "Bekliyor" durumundaki siparis MRP henuz hesaplanmamis demek;
@@ -87,7 +102,7 @@ export function MRP() {
       return showTamamlanan ? !aktifMi : aktifMi
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, orderHasEksik, showTamamlanan])
+  }, [orders, workOrders, orderAllWosDone, orderHasEksik, showTamamlanan])
 
   // v15.95 — Madde 15 P3: Hammadde FIFO termin tahsisi
   // Tum aktif siparişler arasinda hammadde paylastirmasi (request-time).
