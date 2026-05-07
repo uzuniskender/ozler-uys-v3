@@ -31,7 +31,8 @@ export function MRP() {
   // v15.50a.3 — Default 'tum': hesap sonrasi tum satirlar gorunur (eksik+yeterli).
   // Kullanici "X eksik" rozetine tiklayarak filtreleyebilir. Eski default 'eksik'
   // 0 eksik durumda bos tablo gosteriyordu, kullanici "MRP yapildi mi?" karisikliga dusuyordu.
-  const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('tum')
+  const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('eksik')
+  const [orderSearch, setOrderSearch] = useState('')  // v16.46 — sipariş arama
 
   // v15.71 — mrpDoneYMs useMemo kaldırıldı (madde 18)
 
@@ -535,8 +536,25 @@ export function MRP() {
             )}
           </div>
         </div>
+        {/* v16.46 — sipariş arama */}
+        {(aktifOrders.length + aktifManualIes.length) > 4 && (
+          <div className="mb-2">
+            <input
+              type="text"
+              placeholder="Sipariş no veya müşteri ara..."
+              value={orderSearch}
+              onChange={e => setOrderSearch(e.target.value)}
+              className="w-full px-3 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent"
+            />
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[250px] overflow-y-auto">
-          {aktifOrders.map(o => {
+          {aktifOrders.filter(o =>
+            !orderSearch ||
+            (o.siparisNo || '').toLowerCase().includes(orderSearch.toLowerCase()) ||
+            (o.musteri || '').toLowerCase().includes(orderSearch.toLowerCase()) ||
+            (o.mamulAd || '').toLowerCase().includes(orderSearch.toLowerCase())
+          ).map(o => {
             const sel = selectedOrders.has(o.id); const pct = orderPct(o.id)
             const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
             // v15.95 — Madde 15 P3: tahsis ozet rozet
@@ -575,7 +593,11 @@ export function MRP() {
           })}
           {/* v15.78 — Manuel İE'ler aynı görselde, "STOK" rozetiyle.
               Saha vakası IE-MANUAL-MO9SDW3A bug'ı bu sayede MRP'de görünür hale gelir. */}
-          {aktifManualIes.map(w => {
+          {aktifManualIes.filter(w =>
+            !orderSearch ||
+            (w.ieNo || '').toLowerCase().includes(orderSearch.toLowerCase()) ||
+            (w.malad || '').toLowerCase().includes(orderSearch.toLowerCase())
+          ).map(w => {
             const sel = selectedOrders.has(w.id)
             const uretildi = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
             const pct = w.hedef > 0 ? Math.min(100, Math.round(uretildi / w.hedef * 100)) : 0
