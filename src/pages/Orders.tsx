@@ -73,7 +73,7 @@ export function Orders() {
     if (!urlOrderId || !orders.length) return
     const found = orders.find(o => o.id === urlOrderId)
     if (found) setSelectedOrder(found)
-  }, [urlOrderId, orders])
+  }, [urlOrderId, orders.length])
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
   const [showBulkImport, setShowBulkImport] = useState(false)

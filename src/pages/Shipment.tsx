@@ -219,6 +219,7 @@ export function Shipment() {
       {editSevk && (
         <SevkEditModal
           sevk={editSevk}
+          orders={orders}
           materials={materials}
           onClose={() => setEditId(null)}
           onSaved={() => { setEditId(null); loadAll(); toast.success('Sevkiyat güncellendi') }}
@@ -242,8 +243,9 @@ export function Shipment() {
 }
 
 // ═══ S7 — DÜZENLEME MODALI ═══
-function SevkEditModal({ sevk, materials, onClose, onSaved }: {
+function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
   sevk: any
+  orders: { id: string; siparisNo: string; musteri: string; mamulKod: string; adet: number }[]
   materials: import('@/types').Material[]
   onClose: () => void
   onSaved: () => void
@@ -272,9 +274,31 @@ function SevkEditModal({ sevk, materials, onClose, onSaved }: {
     for (const k of validKalemler) {
       await supabase.from('uys_stok_hareketler').insert({
         id: uid(), tarih: sevk.tarih || today(), malkod: k.malkod, malad: k.malad,
-        miktar: k.miktar, tip: 'cikis',
-        aciklama: 'Sevkiyat — ' + sevk.id,
+        miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id,
       })
+    }
+    // 3. sevk_durum güncelle — D1 fix
+    if (sevk.orderId) {
+      const ord = orders.find(o => o.id === sevk.orderId)
+      if (ord) {
+        const { data: tumSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', sevk.orderId)
+        let toplam = 0
+        for (const s of (tumSevkler || [])) {
+          const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
+          // Bu sevkin güncel kalemlerini kullan (henüz DB'ye yansımış)
+          const kalemlerSource = s === tumSevkler?.find((x: any) => x.id === sevk.id) ? validKalemler : kk
+          toplam += kalemlerSource.filter(k => k.malkod === ord.mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+        }
+        // Hesap: eski sevk dahil toplam (güncelleme yapıldığı için yeniden çek)
+        const { data: guncellenmis } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', sevk.orderId)
+        let toplamGun = 0
+        for (const s of (guncellenmis || [])) {
+          const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
+          toplamGun += kk.filter(k => k.malkod === ord.mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+        }
+        const yeniDurum = toplamGun <= 0 ? 'sevk_yok' : toplamGun >= ord.adet ? 'tamamen_sevk' : 'kismi_sevk'
+        await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', sevk.orderId)
+      }
     }
     setSaving(false)
     onSaved()
