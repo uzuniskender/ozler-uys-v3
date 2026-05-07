@@ -454,6 +454,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
   const [uzunluk, setUzunluk] = useState(String(initial?.uzunluk || ''))
   const [cap, setCap] = useState(String(initial?.cap || ''))
   const [minStok, setMinStok] = useState(String(initial?.minStok || ''))
+  const [birimKgMetre, setBirimKgMetre] = useState(String(initial?.birimKgMetre || ''))
   const [opId, setOpId] = useState(initial?.opId || '')
   const [saving, setSaving] = useState(false)
 
@@ -493,6 +494,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
       kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: (tip === 'Hammadde' || tip === 'YarıMamul') ? (hammaddeTipi || '').toLocaleUpperCase('tr-TR') : '', birim, boy: boyNum,
       en: enNum, kalinlik: parseFloat(kalinlik) || 0, uzunluk: parseFloat(uzunluk) || 0, cap: parseFloat(cap) || 0,
       min_stok: parseFloat(minStok) || 0, op_id: opId || null, op_kod: op?.kod || null,
+      birim_kg_metre: parseFloat(birimKgMetre) || null,
     }
 
     // ═══ YENİ MALZEME ═══
@@ -823,7 +825,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
             <div className="text-[10px] text-zinc-500 mb-2">
               {['PROFİL','BORU'].includes((hammaddeTipi || '').toLocaleUpperCase('tr-TR')) ? '📐 Kesit: Uzun Kenar × Kısa Kenar × Et Kalınlığı + Bar Uzunluğu' : '📐 Plaka/Parça Ölçüleri'}
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               <div><label className="text-[11px] text-zinc-500 mb-1 block">Uzun Kenar (mm)</label>
               <input type="number" value={boy} onChange={e => setBoy(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
               <div><label className="text-[11px] text-zinc-500 mb-1 block">Kısa Kenar (mm)</label>
@@ -832,6 +834,10 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
               <input type="number" value={kalinlik} onChange={e => setKalinlik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
               <div><label className="text-[11px] text-amber mb-1 block font-semibold">Uzunluk (mm)</label>
               <input type="number" value={uzunluk} onChange={e => setUzunluk(e.target.value)} placeholder="ör: 6000" className="w-full px-3 py-2 bg-bg-2 border border-amber/30 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-amber" /></div>
+              {tip === 'Hammadde' && (
+              <div><label className="text-[11px] text-zinc-400 mb-1 block font-semibold">kg/m <span className="text-zinc-600 font-normal">(ağırlık)</span></label>
+              <input type="number" step="0.001" value={birimKgMetre} onChange={e => setBirimKgMetre(e.target.value)} placeholder="ör: 4.12" className="w-full px-3 py-2 bg-bg-2 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              )}
             </div>
             {parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 && (
               <div className="text-[10px] text-red mt-2">⚠ Kısa kenar, uzun kenardan büyük olamaz. Kaydetme sırasında otomatik düzeltilecek.</div>
