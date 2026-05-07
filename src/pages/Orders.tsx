@@ -176,11 +176,11 @@ export function Orders() {
         if (statusFilter.has('closed') && o.durum === 'kapalı') m = true
         if (!m) return false
       }
-      return true && orderPct(o.id) < 100
-      if (statusFilter === 'done') return orderPct(o.id) >= 100
-      if (statusFilter === 'late') return o.durum !== 'kapalı' && nearT && nearT < today() && orderPct(o.id) < 100
-      if (statusFilter === 'closed') return o.durum === 'kapalı'
-      return o.durum !== 'kapalı'
+      return true
+
+
+
+
     })
   }, [orders, search, statusFilter, mrpFilter, workOrders, logs])
 
