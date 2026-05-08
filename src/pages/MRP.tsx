@@ -596,6 +596,7 @@ export function MRP() {
             const tahsisOzet = orderTahsisOzeti[o.id]
             return (
               <button key={o.id} onClick={() => toggleOrder(o.id)}
+                data-testid="order-card"
                 className={`text-left px-3 py-2 rounded-lg text-xs transition-colors ${sel ? 'bg-accent/10 border border-accent/30' : mrpDone ? 'bg-green/5 border border-green/15' : 'bg-bg-3 border border-border'}`}>
                 <div className="flex items-center gap-2">
                   <input type="checkbox" checked={sel} readOnly className="accent-accent" />
@@ -712,7 +713,7 @@ export function MRP() {
                 {sonuc.filter(s => viewFilter === 'tum' ? true : viewFilter === 'eksik' ? s.net > 0 : s.net <= 0).map(s => {
                   const color = s.durum === 'yeterli' ? 'text-green' : s.durum === 'eksik' ? 'text-amber' : 'text-red'
                   return (
-                    <tr key={s.malkod} className="border-b border-border/30 hover:bg-bg-3/30">
+                    <tr key={s.malkod} data-testid="mrp-result-row" className="border-b border-border/30 hover:bg-bg-3/30">
                       <td className="px-2 py-1.5">{s.durum !== 'yeterli' && <input type="checkbox" checked={selectedRows.has(s.malkod)} onChange={() => setSelectedRows(prev => { const n = new Set(prev); n.has(s.malkod) ? n.delete(s.malkod) : n.add(s.malkod); return n })} className="accent-accent" />}</td>
                       <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
                       <td className="px-3 py-1.5 text-zinc-300">{s.malad}</td>
