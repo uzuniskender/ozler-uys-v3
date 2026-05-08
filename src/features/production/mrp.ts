@@ -196,7 +196,8 @@ export function hesaplaMRP(
   secilenYMIds?: Set<string> | null,
   mrpRezerve?: MrpRezerve[],
   currentOrderId?: string,
-  logs?: { woId: string; qty: number }[]
+  logs?: { woId: string; qty: number }[],
+  retrospektif?: boolean  // arşiv modu: tamamlanmış siparişlerin geçmiş ihtiyacını göster
 ): MRPRow[] {
   // brutIhtiyac ANAHTARLARI case-insensitive (.trim().toLowerCase())
   // ama her kaydın .malkod field'ı orijinal case'de saklanır (final çıktıda kullanmak için)
@@ -242,7 +243,8 @@ export function hesaplaMRP(
           netAdet = Math.max(0, Math.ceil(u.adet * (1 - oran)))
         }
       }
-      if (netAdet === 0) continue  // Bu ürün tamamen üretilmiş, BOM patlatmaya gerek yok
+      if (netAdet === 0 && !retrospektif) continue  // Bu ürün tamamen üretilmiş, BOM patlatmaya gerek yok
+      if (netAdet === 0 && retrospektif) netAdet = u.adet  // Retrospektif: toplam ihtiyacı göster
 
       const urunTermin = (u as any).termin || o.termin || ''
       const p = bomPatlaNet(u.mamulKod, netAdet, 0, {}, recipes, stokHareketler, materials)
@@ -281,8 +283,8 @@ export function hesaplaMRP(
     const uretilen = logs
       ? logs.filter(l => l.woId === w.id).reduce((a, l) => a + (l.qty || 0), 0)
       : 0
-    const kalan = Math.max(0, w.hedef - uretilen)
-    if (!kalan || !w.malkod) continue
+    const kalan = retrospektif ? w.hedef : Math.max(0, w.hedef - uretilen)
+    if ((!kalan && !retrospektif) || !w.malkod) continue
     const wTermin = (w as any).termin || ''
     const p = bomPatlaNet(w.malkod, kalan, 0, {}, recipes, stokHareketler, materials)
     dbg('[MRP DEBUG] İE', w.id, w.ieNo, w.malkod, 'kalan:', kalan, '(hedef', w.hedef, '- üretildi', uretilen, ')', '→ BOM:', Object.keys(p).length)

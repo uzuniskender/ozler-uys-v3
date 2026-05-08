@@ -66,6 +66,7 @@ export function MRP() {
     for (const o of orders) {
       // state terminal ise (DB trigger kesin hesaplar) — eksik yok
       const terminalState = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
+        || (o.mrpDurum || '') === 'tamam'
       if (terminalState) { map[o.id] = false; continue }
       // Tüm WO'lar tamamlandıysa eksik yok
       if (orderAllWosDone[o.id]) { map[o.id] = false; continue }
@@ -85,6 +86,7 @@ export function MRP() {
     return orders.filter(o => {
       // v16.50 — state alanı DB trigger ile kesin hesaplanır, durum string'inden bağımsız
       const terminalState = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
+        || (o.mrpDurum || '') === 'tamam'
       if (terminalState) return showTamamlanan
       // Tüm WO'lar tamamlandıysa → arşiv
       if (orderAllWosDone[o.id]) return showTamamlanan
@@ -285,7 +287,7 @@ export function MRP() {
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, showTamamlanan)
     setSonuc(result)
     setHesaplandi(true)
 
