@@ -496,6 +496,19 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         // Operasyon malzeme kartından otomatik gelsin
         if (mat.opId && !r.opId) updated.opId = mat.opId
       }
+      // Alt reçeteden süre ve operasyon miras al (YarıMamul/Mamul ise)
+      if (mat?.tip === 'YarıMamul' || mat?.tip === 'Mamul') {
+        const altRc = recipes.find(rc => rc.mamulKod === malkod)
+        if (altRc) {
+          const kokSatir = altRc.satirlar?.find(s => s.kirno === '1')
+          if (kokSatir) {
+            if (kokSatir.opId)                          updated.opId = kokSatir.opId
+            if ((kokSatir.islemSure || 0) > 0)          updated.islemSure = kokSatir.islemSure
+            if ((kokSatir.hazirlikSure || 0) > 0)       updated.hazirlikSure = kokSatir.hazirlikSure
+            if (kokSatir.sureBirim)                     updated.sureBirim = kokSatir.sureBirim
+          }
+        }
+      }
       return updated
     }))
   }

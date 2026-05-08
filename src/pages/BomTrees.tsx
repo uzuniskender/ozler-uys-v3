@@ -406,6 +406,19 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
         if (mat.tip) updated.tip = mat.tip as 'Mamul' | 'YarıMamul' | 'Hammadde' | 'Sarf'
         if (mat.birim) updated.birim = mat.birim
       }
+      // Alt reçeteden süre ve operasyon miras al
+      if (mat?.tip === 'YarıMamul' || mat?.tip === 'Mamul') {
+        const altRc = recipes.find(rc => rc.mamulKod === malkod)
+        if (altRc) {
+          const kokSatir = altRc.satirlar?.find(s => s.kirno === '1')
+          if (kokSatir) {
+            if (kokSatir.opId)                    (updated as any).opId = kokSatir.opId
+            if ((kokSatir.islemSure || 0) > 0)    (updated as any).islemSure = kokSatir.islemSure
+            if ((kokSatir.hazirlikSure || 0) > 0) (updated as any).hazirlikSure = kokSatir.hazirlikSure
+            if (kokSatir.sureBirim)               (updated as any).sureBirim = kokSatir.sureBirim
+          }
+        }
+      }
       return updated
     }))
   }
