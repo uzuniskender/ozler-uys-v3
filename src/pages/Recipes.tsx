@@ -585,7 +585,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     const children = rows.filter(r => r.kirno.startsWith(parentKirno + '.') && r.kirno.split('.').length === parentKirno.split('.').length + 1)
     const nextNum = children.length + 1
     const newKirno = parentKirno + '.' + nextNum
-    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: '', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk' }])
+    setRows([...rows, { id: uid(), kirno: newKirno, malkod: '', malad: '', tip: 'YarıMamul', miktar: 1, birim: 'Adet', opId: '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'sn' }])
   }
 
   function deleteRow(idx: number) {
@@ -602,7 +602,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-5xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-bg-1 border border-border rounded-xl p-4 w-full max-w-[96vw] max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div className="flex-1 mr-4">
             <div className="flex items-center gap-2 mb-1">
@@ -631,17 +631,17 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-zinc-500">
-                <th className="text-left px-2 py-2 w-20">Kırılım</th>
-                <th className="text-left px-2 py-2">Malzeme Kodu</th>
+                <th className="text-left px-2 py-2 w-14">Kırılım</th>
+                <th className="text-left px-2 py-2 w-48">Malzeme Kodu</th>
                 <th className="text-left px-2 py-2">Malzeme Adı</th>
                 <th className="text-left px-2 py-2 w-24">Tip</th>
                 <th className="text-right px-2 py-2 w-16">Miktar</th>
                 <th className="text-left px-2 py-2 w-16">Birim</th>
-                <th className="text-left px-2 py-2">Operasyon</th>
+                <th className="text-left px-2 py-2 w-40">Operasyon</th>
                 <th className="text-right px-2 py-2 w-16">Hazırlık</th>
-                <th className="text-right px-2 py-2 w-16">İşlem</th>
-                <th className="text-left px-2 py-2 w-12">Birim</th>
-                <th className="px-2 py-2 w-20"></th>
+                <th className="text-right px-2 py-2 w-20">İşlem</th>
+                <th className="text-left px-2 py-2 w-14">Birim</th>
+                <th className="px-2 py-2 w-14"></th>
               </tr>
             </thead>
             <tbody>
@@ -653,7 +653,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     <td className="px-2 py-1">
                       <div className="flex items-center gap-1">
                         <div className="flex-1">
-                          <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
+                          <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] font-mono text-accent focus:outline-none focus:border-accent" />
                         </div>
                         <button
                           type="button"
@@ -667,7 +667,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     </td>
                     <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
-                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
+                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] text-zinc-100 focus:outline-none focus:border-accent" />
                     </td>
                     <td className="px-2 py-1">
                       <select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">

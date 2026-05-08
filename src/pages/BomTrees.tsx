@@ -177,7 +177,7 @@ export function BomTrees() {
         return {
           id: uid(), kirno: row.kirno || '1', malkod: row.malkod, malad: row.malad,
           tip: row.tip || 'Hammadde', miktar: row.miktar || 1, birim: row.birim || 'Adet',
-          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk',
+          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'sn',
         }
       })
       const yeniRecId = uid()
@@ -220,7 +220,7 @@ export function BomTrees() {
         yeniSatirlar.push({
           id: uid(), kirno: bomRow.kirno || '1', malkod: bomRow.malkod, malad: bomRow.malad,
           tip: bomRow.tip || 'Hammadde', miktar: bomRow.miktar || 1, birim: bomRow.birim || 'Adet',
-          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'dk',
+          opId: mat?.opId || '', istId: '', hazirlikSure: 0, islemSure: 0, sureBirim: 'sn',
         })
         eklenen++
       }
@@ -549,7 +549,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-4xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-bg-1 border border-border rounded-xl p-4 w-full max-w-[96vw] max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between mb-4">
           <div><h2 className="text-lg font-semibold">{bom.ad || bom.mamulAd}</h2><p className="text-xs text-zinc-500">{bom.mamulKod} · {rows.length} satır</p></div>
           <div className="flex gap-2 items-center">
@@ -580,7 +580,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
         ) : (<>
 
         <table className="w-full text-xs">
-          <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-2 py-2 w-20">Kırılım</th><th className="text-left px-2 py-2">Malzeme Kodu</th><th className="text-left px-2 py-2">Malzeme Adı</th><th className="text-left px-2 py-2 w-24">Tip</th><th className="text-right px-2 py-2 w-16">Miktar</th><th className="text-left px-2 py-2 w-16">Birim</th><th className="px-2 py-2 w-16"></th></tr></thead>
+          <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-2 py-2 w-14">Kırılım</th><th className="text-left px-2 py-2">Malzeme Kodu</th><th className="text-left px-2 py-2">Malzeme Adı</th><th className="text-left px-2 py-2 w-24">Tip</th><th className="text-right px-2 py-2 w-16">Miktar</th><th className="text-left px-2 py-2 w-16">Birim</th><th className="px-2 py-2 w-16"></th></tr></thead>
           <tbody>
             {rows.map((r, i) => {
               const depth = (r.kirno || '').split('.').length - 1
@@ -590,7 +590,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
                   <td className="px-2 py-1">
                     <div className="flex items-center gap-1">
                       <div className="flex-1">
-                        <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
+                        <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] font-mono text-accent focus:outline-none focus:border-accent" />
                       </div>
                       <button
                         type="button"
@@ -602,7 +602,7 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
                       </button>
                     </div>
                   </td>
-                  <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}><input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" /></td>
+                  <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}><input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] text-zinc-100 focus:outline-none focus:border-accent" /></td>
                   <td className="px-2 py-1"><select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200"><option value="Mamul">Mamul</option><option value="YarıMamul">Yarı Mamul</option><option value="Hammadde">Hammadde</option><option value="Sarf">Sarf</option></select></td>
                   <td className="px-2 py-1"><input type="number" value={r.miktar} onChange={e => updateRow(i, 'miktar', parseFloat(e.target.value) || 0)} className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 text-right focus:outline-none" /></td>
                   <td className="px-2 py-1"><select value={r.birim} onChange={e => updateRow(i, 'birim', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200"><option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option></select></td>
