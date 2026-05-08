@@ -18,23 +18,6 @@ export function Recipes() {
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
-  const [filterSüresiz, setFilterSüresiz] = useState(false)
-  const [filterEksikOp, setFilterEksikOp] = useState(false)
-  // Satır yüksekliği — kullanıcı seçer, localStorage'da saklanır
-  const [density, setDensity] = useState<'compact'|'normal'|'comfortable'>(() => {
-    return (localStorage.getItem('uys_table_density') as any) || 'compact'
-  })
-  function changeDensity(d: 'compact'|'normal'|'comfortable') {
-    setDensity(d); localStorage.setItem('uys_table_density', d)
-  }
-  const rowStyle = { paddingTop: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px', paddingBottom: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px' }
-  const [sortCol, setSortCol] = useState<'rcKod' | 'ad' | 'mamulKod' | 'bilesen'>('rcKod')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-
-  function toggleSort(col: typeof sortCol) {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortCol(col); setSortDir('asc') }
-  }
   const fileRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
@@ -45,23 +28,27 @@ export function Recipes() {
     }
     if (filterSüresiz) {
       r = r.filter(x => {
-        const s = x.satirlar || []
-        const ymS = s.filter(row => row.tip === 'YarıMamul' || row.tip === 'Mamul')
-        const tumundeSure = ymS.length > 0 && ymS.every(row => (row.islemSure || 0) > 0 || (row.hazirlikSure || 0) > 0)
-        return ymS.length > 0 && !tumundeSure
+        const ymS = (x.satirlar || []).filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+        return ymS.length > 0 && !ymS.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+      })
+    }
+    if (filterEksikOp) {
+      r = r.filter(x => {
+        const ymS = (x.satirlar || []).filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+        return ymS.length > 0 && !ymS.every(s => s.opId && s.opId.trim() !== '')
       })
     }
     return [...r].sort((a, b) => {
       let v = 0
-      if (sortCol === 'rcKod')    v = (a.rcKod || '').localeCompare(b.rcKod || '', 'tr')
-      if (sortCol === 'ad')       v = (a.ad || '').localeCompare(b.ad || '', 'tr')
-      if (sortCol === 'mamulKod') v = (a.mamulKod || '').localeCompare(b.mamulKod || '', 'tr')
-      if (sortCol === 'bilesen')  v = (a.satirlar?.length || 0) - (b.satirlar?.length || 0)
+      if (sortCol === 'rcKod')    v = (a.rcKod||'').localeCompare(b.rcKod||'', 'tr')
+      if (sortCol === 'ad')       v = (a.ad||'').localeCompare(b.ad||'', 'tr')
+      if (sortCol === 'mamulKod') v = (a.mamulKod||'').localeCompare(b.mamulKod||'', 'tr')
+      if (sortCol === 'bilesen')  v = (a.satirlar?.length||0) - (b.satirlar?.length||0)
       return sortDir === 'asc' ? v : -v
     })
   }, [recipes, search, filterSüresiz, filterEksikOp, sortCol, sortDir])
 
-  // İstatistikler: toplam satır, süresiz/eksik reçete sayısı
+  // İstatistikler: toplam satır, süresiz reçete sayısı
   const stats = useMemo(() => {
     let toplamSatir = 0
     let suresizRecete = 0
@@ -69,12 +56,11 @@ export function Recipes() {
     for (const r of recipes) {
       const satirlar = r.satirlar || []
       toplamSatir += satirlar.length
-      const ymSatirlar = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
-      const tumundeSure = ymSatirlar.length > 0 && ymSatirlar.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
-      if (ymSatirlar.length > 0 && !tumundeSure) suresizRecete++
-      // Eksik operasyon: YarıMamul/Mamul satırında opId boş
-      const tumundeOp = ymSatirlar.length > 0 && ymSatirlar.every(s => s.opId && s.opId.trim() !== '')
-      if (ymSatirlar.length > 0 && !tumundeOp) eksikOpRecete++
+      const ymS = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+      const tamSure = ymS.length > 0 && ymS.every(s => (s.islemSure||0) > 0 || (s.hazirlikSure||0) > 0)
+      if (ymS.length > 0 && !tamSure) suresizRecete++
+      const tamOp = ymS.every(s => s.opId && s.opId.trim() !== '')
+      if (ymS.length > 0 && !tamOp) eksikOpRecete++
     }
     return { toplamSatir, suresizRecete, eksikOpRecete }
   }, [recipes])
@@ -92,7 +78,7 @@ export function Recipes() {
   function exportRecipes() {
     import('xlsx').then(XLSX => {
       const rows = recipes.flatMap(r => (r.satirlar || []).map(s => ({
-        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim, 'OpId': s.opId || '', 'HazırlıkSüre': s.hazirlikSure || 0, 'İşlemSüre': s.islemSure || 0, 'SüreBirim': s.sureBirim || 'dk'
+        'Reçete': r.ad, 'Mamul Kod': r.mamulKod, 'Kırılım': s.kirno, 'Malzeme Kod': s.malkod, 'Malzeme': s.malad, 'Tip': s.tip, 'Miktar': s.miktar, 'Birim': s.birim, 'OpId': s.opId || '', 'HazırlıkSüre': s.hazirlikSure || 0, 'İşlemSüre': s.islemSure || 0, 'SüreBirim': s.sureBirim || 'sn'
       })))
       const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Reçeteler'); XLSX.writeFile(wb, 'receteler.xlsx')
@@ -117,7 +103,7 @@ export function Recipes() {
           id: uid(), kirno: r['Kırılım'] || r.Kirno || r.kirno || '1',
           malkod: r['Malzeme Kod'] || r.MalKod || r.malkod || '', malad: r['Malzeme'] || r.MalAd || r.malad || '',
           tip: (r.Tip || r.tip || 'Hammadde') as RecipeRow['tip'], miktar: parseFloat(r.Miktar || r.miktar) || 1, birim: r.Birim || r.birim || 'Adet',
-          opId: r.OpId || r.opId || '', istId: '', hazirlikSure: parseFloat(r['HazırlıkSüre'] || r.hazirlikSure) || 0, islemSure: parseFloat(r['İşlemSüre'] || r.islemSure) || 0, sureBirim: r['SüreBirim'] || r.sureBirim || 'dk',
+          opId: r.OpId || r.opId || '', istId: '', hazirlikSure: parseFloat(r['HazırlıkSüre'] || r.hazirlikSure) || 0, islemSure: parseFloat(r['İşlemSüre'] || r.islemSure) || 0, sureBirim: r['SüreBirim'] || r.sureBirim || 'sn',
         })
       }
 
@@ -201,19 +187,15 @@ export function Recipes() {
               <span className="font-mono font-semibold text-zinc-200">{stats.toplamSatir}</span> bileşen
             </span>
             {stats.suresizRecete > 0 && (
-              <button
-                onClick={() => setFilterSüresiz(f => !f)}
+              <button onClick={() => setFilterSüresiz(f => !f)}
                 className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${filterSüresiz ? 'bg-amber/25 border-amber/50 text-amber font-semibold' : 'bg-amber/10 border-amber/25 text-amber hover:bg-amber/20'}`}>
-                ⏱ <span className="font-mono font-semibold">{stats.suresizRecete}</span> süresiz
-                {filterSüresiz && ' ✕'}
+                ⏱ <span className="font-mono font-semibold">{stats.suresizRecete}</span> süresiz{filterSüresiz && ' ✕'}
               </button>
             )}
             {stats.eksikOpRecete > 0 && (
-              <button
-                onClick={() => setFilterEksikOp(f => !f)}
+              <button onClick={() => setFilterEksikOp(f => !f)}
                 className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${filterEksikOp ? 'bg-red/25 border-red/50 text-red font-semibold' : 'bg-red/10 border-red/25 text-red hover:bg-red/20'}`}>
-                ⚙ <span className="font-mono font-semibold">{stats.eksikOpRecete}</span> eksik operasyon
-                {filterEksikOp && ' ✕'}
+                ⚙ <span className="font-mono font-semibold">{stats.eksikOpRecete}</span> eksik op{filterEksikOp && ' ✕'}
               </button>
             )}
             {search && (
@@ -259,7 +241,7 @@ export function Recipes() {
         </div>
       </div>
 
-      {/* Arama + Density */}
+      {/* Arama */}
       <div className="flex gap-2 mb-3 items-center">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
@@ -272,13 +254,12 @@ export function Recipes() {
               title="Temizle">×</button>
           )}
         </div>
-        {/* Satır yüksekliği */}
         <div className="flex items-center gap-0.5 ml-2">
           {(['compact','normal','comfortable'] as const).map(d => (
             <button key={d} onClick={() => changeDensity(d)}
-              title={d === 'compact' ? 'Dar' : d === 'normal' ? 'Normal' : 'Geniş'}
-              className={`px-2 py-1 rounded text-[10px] border transition-colors ${density===d ? 'bg-accent/15 border-accent/30 text-accent' : 'bg-bg-2 border-border text-zinc-500 hover:text-zinc-200'}`}>
-              {d === 'compact' ? '━' : d === 'normal' ? '═' : '≡'}
+              title={d==='compact'?'Dar':d==='normal'?'Normal':'Geniş'}
+              className={`px-2 py-1 rounded text-[11px] border ${density===d?'bg-accent/15 border-accent/30 text-accent':'bg-bg-2 border-border text-zinc-500 hover:text-zinc-200'}`}>
+              {d==='compact'?'━':d==='normal'?'═':'≡'}
             </button>
           ))}
         </div>
@@ -296,45 +277,37 @@ export function Recipes() {
                       checked={checkedIds.size === filtered.length && filtered.length > 0}
                       onChange={toggleAll} className="accent-accent" />
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
-                    <button onClick={() => toggleSort('rcKod')} className={`flex items-center gap-1 hover:text-zinc-200 ${sortCol==='rcKod'?'text-accent':''}`}>
-                      Kod {sortCol==='rcKod' ? (sortDir==='asc'?'↑':'↓') : ''}
-                    </button>
+                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold">
+                    <button onClick={() => toggleSort('rcKod')} className={`hover:text-zinc-200 ${sortCol==='rcKod'?'text-accent':''}`}>Kod {sortCol==='rcKod'?(sortDir==='asc'?'↑':'↓'):''}</button>
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
-                    <button onClick={() => toggleSort('ad')} className={`flex items-center gap-1 hover:text-zinc-200 ${sortCol==='ad'?'text-accent':''}`}>
-                      Reçete Adı {sortCol==='ad' ? (sortDir==='asc'?'↑':'↓') : ''}
-                    </button>
+                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold">
+                    <button onClick={() => toggleSort('ad')} className={`hover:text-zinc-200 ${sortCol==='ad'?'text-accent':''}`}>Reçete Adı {sortCol==='ad'?(sortDir==='asc'?'↑':'↓'):''}</button>
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
-                    <button onClick={() => toggleSort('mamulKod')} className={`flex items-center gap-1 hover:text-zinc-200 ${sortCol==='mamulKod'?'text-accent':''}`}>
-                      Mamul Kodu {sortCol==='mamulKod' ? (sortDir==='asc'?'↑':'↓') : ''}
-                    </button>
+                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold">
+                    <button onClick={() => toggleSort('mamulKod')} className={`hover:text-zinc-200 ${sortCol==='mamulKod'?'text-accent':''}`}>Mamul Kodu {sortCol==='mamulKod'?(sortDir==='asc'?'↑':'↓'):''}</button>
                   </th>
-                  <th className="text-right px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
-                    <button onClick={() => toggleSort('bilesen')} className={`flex items-center gap-1 hover:text-zinc-200 ml-auto ${sortCol==='bilesen'?'text-accent':''}`}>
-                      Bileşen {sortCol==='bilesen' ? (sortDir==='asc'?'↑':'↓') : ''}
-                    </button>
+                  <th className="text-right px-4 py-3 text-[10px] uppercase font-semibold">
+                    <button onClick={() => toggleSort('bilesen')} className={`ml-auto hover:text-zinc-200 ${sortCol==='bilesen'?'text-accent':''}`}>Bileşen {sortCol==='bilesen'?(sortDir==='asc'?'↑':'↓'):''}</button>
                   </th>
-                  <th className="text-center px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Süre</th>
+                  <th className="text-center px-4 py-3 text-[10px] uppercase font-semibold">Süre</th>
                   <th className="px-4 py-3 w-[1%]"></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((r, i) => {
                   const satirlar = r.satirlar || []
-                  const ymSatirlar = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
-                  const tumundeSure = ymSatirlar.length > 0 && ymSatirlar.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
-                  const bazisindaSure = ymSatirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
-                  const sureDurum = ymSatirlar.length === 0 ? 'yok' : tumundeSure ? 'tam' : bazisindaSure ? 'eksik' : 'yok'
-                  const eksikOp = ymSatirlar.length > 0 && !ymSatirlar.every(s => s.opId && s.opId.trim() !== '')
+                  const ymSat = satirlar.filter(s => s.tip==='YarıMamul'||s.tip==='Mamul')
+                  const tamSure = ymSat.length>0 && ymSat.every(s=>(s.islemSure||0)>0||(s.hazirlikSure||0)>0)
+                  const bazSure = ymSat.some(s=>(s.islemSure||0)>0||(s.hazirlikSure||0)>0)
+                  const sureDurum = ymSat.length===0?'yok':tamSure?'tam':bazSure?'eksik':'yok'
+                  const eksikOp = ymSat.length>0 && !ymSat.every(s=>s.opId&&s.opId.trim()!=='')
                   return (
                     <tr key={r.id}
-                      style={rowStyle} className={`border-b border-border/25 transition-colors ${
+                      style={rowStyle}
+                      className={`border-b border-border/25 transition-colors ${
                         eksikOp ? 'bg-red/5' :
-                        checkedIds.has(r.id)
-                          ? 'bg-accent/10 hover:bg-accent/15'
-                          : i % 2 === 0 ? 'hover:bg-bg-3/40' : 'bg-bg-3/10 hover:bg-bg-3/40'
+                        checkedIds.has(r.id) ? 'bg-accent/10 hover:bg-accent/15' :
+                        i%2===0 ? 'hover:bg-bg-3/40' : 'bg-bg-3/10 hover:bg-bg-3/40'
                       }`}>
                       <td className="px-3 py-2.5">
                         <input type="checkbox" checked={checkedIds.has(r.id)}
@@ -357,27 +330,12 @@ export function Recipes() {
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono text-zinc-300">{satirlar.length}</td>
                       <td className="px-4 py-2.5 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                        {satirlar.length === 0 ? (
-                          <span className="text-[10px] text-zinc-600">—</span>
-                        ) : sureDurum === 'tam' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold">
-                            <Clock size={9} /> Var
-                          </span>
-                        ) : sureDurum === 'eksik' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">
-                            <Clock size={9} /> Eksik
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold">
-                            <Clock size={9} /> Yok
-                          </span>
-                        )}
-                        {eksikOp && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">
-                            ⚙ Eksik Op
-                          </span>
-                        )}
+                        <div className="flex flex-col items-center gap-0.5">
+                          {satirlar.length===0 ? <span className="text-[10px] text-zinc-600">—</span>
+                          : sureDurum==='tam' ? <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold flex items-center gap-1"><Clock size={9}/>Var</span>
+                          : sureDurum==='eksik' ? <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold flex items-center gap-1"><Clock size={9}/>Eksik</span>
+                          : <span className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold flex items-center gap-1"><Clock size={9}/>Yok</span>}
+                          {eksikOp && <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">⚙ Eksik Op</span>}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
@@ -499,7 +457,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
     if (!a || a.logSayisi === 0) return
     const yeniDeger = Math.round(donusturBirim(a.ortDkPerAdet, row.sureBirim) * 100) / 100
     updateRow(idx, 'islemSure', yeniDeger)
-    toast.success(`İşlem süresi güncellendi: ${yeniDeger} ${row.sureBirim || 'dk'} (${a.logSayisi} log, ${a.toplamAdet} adet)`)
+    toast.success(`İşlem süresi güncellendi: ${yeniDeger} ${row.sureBirim || 'sn'} (${a.logSayisi} log, ${a.toplamAdet} adet)`)
   }
 
   // Tüm satırları güncel veriden önerilen değerlerle güncelle
@@ -514,7 +472,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
       uygulaLazim.map(r => {
         const a = sureAnalizMap[r.kirno]
         const yeni = Math.round(donusturBirim(a.ortDkPerAdet, r.sureBirim) * 100) / 100
-        return `• ${r.kirno} ${r.malad?.slice(0, 30)}: ${r.islemSure || 0} → ${yeni} ${r.sureBirim || 'dk'} (${a.logSayisi} log)`
+        return `• ${r.kirno} ${r.malad?.slice(0, 30)}: ${r.islemSure || 0} → ${yeni} ${r.sureBirim || 'sn'} (${a.logSayisi} log)`
       }).slice(0, 10).join('\n') +
       (uygulaLazim.length > 10 ? `\n… ve ${uygulaLazim.length - 10} daha` : '') +
       '\n\nDevam edilsin mi?'
@@ -543,19 +501,17 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
         updated.malad = mat.ad
         if (mat.tip) updated.tip = mat.tip as RecipeRow['tip']
         if (mat.birim) updated.birim = mat.birim
-        // Operasyon malzeme kartından otomatik gelsin
         if (mat.opId && !r.opId) updated.opId = mat.opId
       }
-      // Alt reçeteden süre ve operasyon miras al (YarıMamul/Mamul ise)
       if (mat?.tip === 'YarıMamul' || mat?.tip === 'Mamul') {
         const altRc = recipes.find(rc => rc.mamulKod === malkod)
         if (altRc) {
-          const kokSatir = altRc.satirlar?.find(s => s.kirno === '1')
-          if (kokSatir) {
-            if (kokSatir.opId)                          updated.opId = kokSatir.opId
-            if ((kokSatir.islemSure || 0) > 0)          updated.islemSure = kokSatir.islemSure
-            if ((kokSatir.hazirlikSure || 0) > 0)       updated.hazirlikSure = kokSatir.hazirlikSure
-            if (kokSatir.sureBirim)                     updated.sureBirim = kokSatir.sureBirim
+          const kok = altRc.satirlar?.find(s => s.kirno === '1')
+          if (kok) {
+            if (kok.opId) updated.opId = kok.opId
+            if ((kok.islemSure||0) > 0) updated.islemSure = kok.islemSure
+            if ((kok.hazirlikSure||0) > 0) updated.hazirlikSure = kok.hazirlikSure
+            if (kok.sureBirim) updated.sureBirim = kok.sureBirim
           }
         }
       }
@@ -737,17 +693,17 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-zinc-500">
-                <th className="text-left px-2 py-2 w-14">Kırılım</th>
-                <th className="text-left px-2 py-2 w-48">Malzeme Kodu</th>
-                <th className="text-left px-2 py-2 min-w-[180px] max-w-xs">Malzeme Adı</th>
+                <th className="text-left px-2 py-2 w-20">Kırılım</th>
+                <th className="text-left px-2 py-2">Malzeme Kodu</th>
+                <th className="text-left px-2 py-2">Malzeme Adı</th>
                 <th className="text-left px-2 py-2 w-24">Tip</th>
                 <th className="text-right px-2 py-2 w-16">Miktar</th>
                 <th className="text-left px-2 py-2 w-16">Birim</th>
-                <th className="text-left px-2 py-2 w-40">Operasyon</th>
+                <th className="text-left px-2 py-2">Operasyon</th>
                 <th className="text-right px-2 py-2 w-16">Hazırlık</th>
-                <th className="text-right px-2 py-2 w-20">İşlem</th>
-                <th className="text-left px-2 py-2 w-14">Birim</th>
-                <th className="px-2 py-2 w-14"></th>
+                <th className="text-right px-2 py-2 w-16">İşlem</th>
+                <th className="text-left px-2 py-2 w-12">Birim</th>
+                <th className="px-2 py-2 w-20"></th>
               </tr>
             </thead>
             <tbody>
@@ -759,7 +715,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     <td className="px-2 py-1">
                       <div className="flex items-center gap-1">
                         <div className="flex-1">
-                          <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] font-mono text-accent focus:outline-none focus:border-accent" />
+                          <SearchSelect options={matOptions} value={r.malkod || ''} onChange={(val) => onMalkodChange(i, val)} placeholder="Kod arayın..." allowNew={true} displayValue={r.malkod || ''} inputClassName="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] font-mono text-accent focus:outline-none focus:border-accent" />
                         </div>
                         <button
                           type="button"
@@ -771,9 +727,9 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                         </button>
                       </div>
                     </td>
-                    <td className="px-2 py-1 min-w-[180px] max-w-xs" style={{ paddingLeft: `${8 + depth * 12}px` }}>
+                    <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
-                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] text-zinc-100 focus:outline-none focus:border-accent" />
+                        className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200 focus:outline-none focus:border-accent" />
                     </td>
                     <td className="px-2 py-1">
                       <select value={r.tip} onChange={e => updateRow(i, 'tip', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
@@ -821,7 +777,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                               <button
                                 type="button"
                                 onClick={() => uygulaSure(i, r)}
-                                title={`Gerçek ort: ${yeni} ${r.sureBirim || 'dk'}\nÖrnek: ${a.logSayisi} log, ${a.toplamAdet} adet\nTıkla uygula`}
+                                title={`Gerçek ort: ${yeni} ${r.sureBirim || 'sn'}\nÖrnek: ${a.logSayisi} log, ${a.toplamAdet} adet\nTıkla uygula`}
                                 className={`px-1 py-0.5 rounded text-[9px] font-mono whitespace-nowrap ${uyarı ? 'bg-amber/20 text-amber hover:bg-amber/30' : 'bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25'}`}
                               >
                                 Ö:{yeni}
