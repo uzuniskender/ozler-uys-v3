@@ -18,13 +18,37 @@ export function Recipes() {
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  const [filterSüresiz, setFilterSüresiz] = useState(false)
+  const [sortCol, setSortCol] = useState<'rcKod' | 'ad' | 'mamulKod' | 'bilesen'>('rcKod')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
   const fileRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
-    if (!search) return recipes
-    const q = search.toLowerCase()
-    return recipes.filter(r => (r.rcKod + ' ' + r.ad + ' ' + r.mamulKod).toLowerCase().includes(q))
-  }, [recipes, search])
+    let r = recipes
+    if (search) {
+      const q = search.toLowerCase()
+      r = r.filter(x => (x.rcKod + ' ' + x.ad + ' ' + x.mamulKod).toLowerCase().includes(q))
+    }
+    if (filterSüresiz) {
+      r = r.filter(x => {
+        const s = x.satirlar || []
+        return s.length > 0 && !s.some(row => (row.islemSure || 0) > 0 || (row.hazirlikSure || 0) > 0)
+      })
+    }
+    return [...r].sort((a, b) => {
+      let v = 0
+      if (sortCol === 'rcKod')    v = (a.rcKod || '').localeCompare(b.rcKod || '', 'tr')
+      if (sortCol === 'ad')       v = (a.ad || '').localeCompare(b.ad || '', 'tr')
+      if (sortCol === 'mamulKod') v = (a.mamulKod || '').localeCompare(b.mamulKod || '', 'tr')
+      if (sortCol === 'bilesen')  v = (a.satirlar?.length || 0) - (b.satirlar?.length || 0)
+      return sortDir === 'asc' ? v : -v
+    })
+  }, [recipes, search, filterSüresiz, sortCol, sortDir])
 
   // İstatistikler: toplam satır, süresiz reçete sayısı
   const stats = useMemo(() => {
@@ -161,9 +185,12 @@ export function Recipes() {
               <span className="font-mono font-semibold text-zinc-200">{stats.toplamSatir}</span> bileşen
             </span>
             {stats.suresizRecete > 0 && (
-              <span className="text-[11px] px-2 py-0.5 bg-amber/10 border border-amber/25 rounded-full text-amber">
+              <button
+                onClick={() => setFilterSüresiz(f => !f)}
+                className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${filterSüresiz ? 'bg-amber/25 border-amber/50 text-amber font-semibold' : 'bg-amber/10 border-amber/25 text-amber hover:bg-amber/20'}`}>
                 ⏱ <span className="font-mono font-semibold">{stats.suresizRecete}</span> süresiz
-              </span>
+                {filterSüresiz && ' ✕'}
+              </button>
             )}
             {search && (
               <span className="text-[11px] px-2 py-0.5 bg-accent/10 border border-accent/25 rounded-full text-accent">
@@ -235,10 +262,26 @@ export function Recipes() {
                       checked={checkedIds.size === filtered.length && filtered.length > 0}
                       onChange={toggleAll} className="accent-accent" />
                   </th>
-                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Kod</th>
-                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Reçete Adı</th>
-                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Mamul Kodu</th>
-                  <th className="text-right px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Bileşen</th>
+                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
+                    <button onClick={() => toggleSort('rcKod')} className={`flex items-center gap-1 hover:text-zinc-200 ${sortCol==='rcKod'?'text-accent':''}`}>
+                      Kod {sortCol==='rcKod' ? (sortDir==='asc'?'↑':'↓') : ''}
+                    </button>
+                  </th>
+                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
+                    <button onClick={() => toggleSort('ad')} className={`flex items-center gap-1 hover:text-zinc-200 ${sortCol==='ad'?'text-accent':''}`}>
+                      Reçete Adı {sortCol==='ad' ? (sortDir==='asc'?'↑':'↓') : ''}
+                    </button>
+                  </th>
+                  <th className="text-left px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
+                    <button onClick={() => toggleSort('mamulKod')} className={`flex items-center gap-1 hover:text-zinc-200 ${sortCol==='mamulKod'?'text-accent':''}`}>
+                      Mamul Kodu {sortCol==='mamulKod' ? (sortDir==='asc'?'↑':'↓') : ''}
+                    </button>
+                  </th>
+                  <th className="text-right px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">
+                    <button onClick={() => toggleSort('bilesen')} className={`flex items-center gap-1 hover:text-zinc-200 ml-auto ${sortCol==='bilesen'?'text-accent':''}`}>
+                      Bileşen {sortCol==='bilesen' ? (sortDir==='asc'?'↑':'↓') : ''}
+                    </button>
+                  </th>
                   <th className="text-center px-4 py-3 font-semibold tracking-wide text-[10px] uppercase">Süre</th>
                   <th className="px-4 py-3 w-[1%]"></th>
                 </tr>
