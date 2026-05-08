@@ -66,7 +66,7 @@ function getSevkNo(aciklama: string | null): string | null {
 
 /* ───────── ana bileşen ───────── */
 export function StokLog() {
-  const { workOrders, orders } = useStore()
+  const { workOrders, orders, materials } = useStore()
 
   const [rows, setRows]           = useState<StokHareket[]>([])
   const [loading, setLoading]     = useState(true)
@@ -77,8 +77,10 @@ export function StokLog() {
   const [dateTo, setDateTo]       = useState('')
   const [selected, setSelected]   = useState<StokHareket | null>(null)
   const [editNote, setEditNote]   = useState('')
-  const [editMode, setEditMode]   = useState(false)
-  const [saving, setSaving]       = useState(false)
+  const [editMode, setEditMode]         = useState(false)
+  const [editMalkodMode, setEditMalkodMode] = useState(false)
+  const [malkodSearch, setMalkodSearch] = useState('')
+  const [saving, setSaving]             = useState(false)
   const [sortCol, setSortCol]     = useState<'tarih' | 'malkod' | 'miktar'>('tarih')
   const [sortDir, setSortDir]     = useState<'desc' | 'asc'>('desc')
 
@@ -149,6 +151,34 @@ export function StokLog() {
     const cikis = filtered.filter(h => h.tip === 'cikis').reduce((a, h) => a + h.miktar, 0)
     return { giris, cikis, net: giris - cikis, sayi: filtered.length }
   }, [filtered])
+
+  /* ── malkod değiştir ── */
+  async function saveMalkod(yeniMal: { kod: string; ad: string }, toplu: boolean) {
+    if (!selected) return
+    setSaving(true)
+    const update = { malkod: yeniMal.kod, malad: yeniMal.ad }
+    let error: any
+    if (toplu) {
+      // Aynı malkod'daki tüm hareketleri güncelle
+      const res = await supabase.from('uys_stok_hareketler')
+        .update(update).eq('malkod', selected.malkod)
+      error = res.error
+    } else {
+      // Sadece bu hareketi güncelle
+      const res = await supabase.from('uys_stok_hareketler')
+        .update(update).eq('id', selected.id)
+      error = res.error
+    }
+    if (error) { toast.error('Kaydedilemedi: ' + error.message); setSaving(false); return }
+    toast.success(toplu
+      ? `"${selected.malkod}" altındaki tüm hareketler → "${yeniMal.kod}" olarak güncellendi`
+      : `Malkod güncellendi → ${yeniMal.kod}`)
+    setEditMalkodMode(false)
+    setMalkodSearch('')
+    setSelected(null)
+    await load()
+    setSaving(false)
+  }
 
   /* ── açıklama düzenle ── */
   async function saveNote() {
@@ -253,6 +283,79 @@ export function StokLog() {
             <Row label="Hareket ID" val={
               <span className="font-mono text-[10px] text-zinc-500">{selected.id}</span>
             }/>
+          </div>
+
+          {/* Malkod Değiştir */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-zinc-400">MALZEMEYİ DEĞİŞTİR</span>
+              {!editMalkodMode && (
+                <button onClick={() => { setEditMalkodMode(true); setMalkodSearch('') }}
+                  className="text-zinc-500 hover:text-amber flex items-center gap-1 text-xs">
+                  <Edit2 size={11}/> Değiştir
+                </button>
+              )}
+            </div>
+            {editMalkodMode ? (
+              <div className="space-y-2">
+                {/* Uyarı */}
+                <div className="text-[10px] text-amber bg-amber/10 rounded px-2 py-1.5">
+                  ⚠ Mevcut malkod: <span className="font-mono font-bold">{selected.malkod}</span>
+                </div>
+                {/* Arama */}
+                <input
+                  autoFocus
+                  value={malkodSearch}
+                  onChange={e => setMalkodSearch(e.target.value)}
+                  placeholder="Malzeme kodu veya adı ara…"
+                  className="w-full px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent"
+                />
+                {/* Sonuçlar */}
+                {malkodSearch.trim().length > 1 && (
+                  <div className="max-h-40 overflow-y-auto border border-border rounded bg-bg-2 divide-y divide-border/50">
+                    {materials
+                      .filter(m => m.aktif && (
+                        m.kod.toLowerCase().includes(malkodSearch.toLowerCase()) ||
+                        m.ad.toLowerCase().includes(malkodSearch.toLowerCase())
+                      ))
+                      .slice(0, 20)
+                      .map(m => (
+                        <div key={m.kod} className="px-2 py-1.5">
+                          <div className="text-[10px] font-mono text-accent">{m.kod}</div>
+                          <div className="text-[10px] text-zinc-400 truncate">{m.ad}</div>
+                          <div className="flex gap-1 mt-1">
+                            <button
+                              onClick={() => saveMalkod({ kod: m.kod, ad: m.ad }, false)}
+                              disabled={saving}
+                              className="px-2 py-0.5 bg-accent text-white text-[10px] rounded disabled:opacity-40">
+                              Bu hareketi değiştir
+                            </button>
+                            <button
+                              onClick={() => saveMalkod({ kod: m.kod, ad: m.ad }, true)}
+                              disabled={saving}
+                              className="px-2 py-0.5 bg-amber/80 text-black text-[10px] rounded disabled:opacity-40">
+                              Tümünü taşı ({selected.malkod})
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {materials.filter(m => m.aktif && (
+                      m.kod.toLowerCase().includes(malkodSearch.toLowerCase()) ||
+                      m.ad.toLowerCase().includes(malkodSearch.toLowerCase())
+                    )).length === 0 && (
+                      <div className="px-2 py-2 text-[10px] text-zinc-500">Sonuç bulunamadı</div>
+                    )}
+                  </div>
+                )}
+                <button onClick={() => { setEditMalkodMode(false); setMalkodSearch('') }}
+                  className="text-xs text-zinc-500 hover:text-zinc-300">İptal</button>
+              </div>
+            ) : (
+              <div className="text-xs text-zinc-500 italic">
+                Yanlış malkod girişlerini buradan malzeme kartından seçerek düzeltebilirsin.
+                "Tümünü taşı" seçeneği aynı eski malkod'a ait tüm hareketleri taşır.
+              </div>
+            )}
           </div>
 
           {/* Açıklama */}

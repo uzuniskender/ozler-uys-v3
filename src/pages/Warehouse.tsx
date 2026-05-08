@@ -166,19 +166,28 @@ export function Warehouse() {
             <tbody>
               {filteredStok.map(s => {
                 const mat = materials.find(m => m.kod === s.malkod)
+                const kartYok = !mat  // Malzeme kartı yok — uyarı göster
                 const minStokAlt = mat?.minStok && s.miktar < mat.minStok
                 // v15.92 — Mamul tespiti: tip kontrolu (Mamul, Yari Mamul, mamul)
                 const isMamul = mat && (mat.tip === 'Mamul' || mat.tip === 'mamul' || mat.tip === 'YariMamul' || mat.tip === 'yari_mamul')
                 return (
-                <tr key={s.malkod} className={`border-b border-border/30 hover:bg-bg-3/30 ${minStokAlt ? 'bg-red/5' : ''}`}>
-                  <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
+                <tr key={s.malkod} className={`border-b border-border/30 hover:bg-bg-3/30 ${kartYok ? 'bg-amber/5' : minStokAlt ? 'bg-red/5' : ''}`}>
+                  <td className="px-4 py-1.5 font-mono text-accent text-[11px]">
+                    {s.malkod}
+                    {kartYok && <span className="ml-1.5 px-1 py-0.5 bg-amber/20 text-amber rounded text-[9px] font-semibold">⚠ Kart Yok</span>}
+                  </td>
                   <td className="px-4 py-1.5 text-zinc-300">{s.malad}</td>
-                  <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{mat?.tip || '—'}</span></td>
+                  <td className="px-4 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[9px] ${kartYok ? 'bg-amber/15 text-amber' : 'bg-bg-3 text-zinc-500'}`}>{mat?.tip || (kartYok ? 'Kart Yok' : '—')}</span></td>
                   <td className={`px-4 py-1.5 text-right font-mono font-semibold ${s.miktar < 0 ? 'text-red' : minStokAlt ? 'text-amber' : 'text-green'}`}>{Math.round(s.miktar)}</td>
                   <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{mat?.birim || 'Ad'}</td>
                   <td className="px-3 py-1.5 text-right font-mono text-zinc-600 text-[10px]">{mat?.minStok || '—'}</td>
                   <td className="px-3 py-1.5 text-right">
-                    {isMamul && s.miktar > 0 && can('stok_cikis') && (
+                    {kartYok && (
+                      <a href="#/stok-log" className="px-2 py-0.5 bg-amber/10 border border-amber/30 text-amber rounded text-[10px] hover:bg-amber/20">
+                        StokLog'da Düzelt
+                      </a>
+                    )}
+                    {!kartYok && isMamul && s.miktar > 0 && can('stok_cikis') && (
                       <button
                         onClick={() => setCikisMalkod({ malkod: s.malkod, malad: s.malad })}
                         className="px-2 py-0.5 bg-amber/10 border border-amber/30 text-amber rounded text-[10px] hover:bg-amber/20"
