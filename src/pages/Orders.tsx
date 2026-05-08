@@ -6,6 +6,7 @@ import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
 import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
+import { auditLog } from '@/lib/audit'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
@@ -398,6 +399,10 @@ export function Orders() {
                     {can('orders_edit') && <button onClick={async () => {
                       const yeniDurum = o.durum === 'kapalı' ? '' : 'kapalı'
                       await supabase.from('uys_orders').update({ durum: yeniDurum }).eq('id', o.id)
+                      auditLog({ olay: 'siparis_durum', tablo: 'uys_orders', kayitId: o.id,
+                        alan: 'durum', eskiDeger: o.durum || '', yeniDeger: yeniDurum,
+                        aciklama: `${o.siparisNo}: ${yeniDurum === 'kapalı' ? 'kapatıldı' : 'açıldı'}`,
+                        ekVeri: { siparis_no: o.siparisNo } })
                       // Sipariş kapatıldı — rezerveleri serbest bırak
                       if (yeniDurum === 'kapalı') await rezerveSil(o.id)
                       loadAll(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))

@@ -360,6 +360,10 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       operator_id: oprList[0]?.id || null, vardiya: '',
     })
 
+    // Audit: üretim logu
+    auditUretimLog({ logId, woId, ieNo: w.ieNo, qty: q, fire: f, malkod: w.malkod,
+      siparisNo: orders?.find((o: any) => o.id === w.orderId)?.siparisNo })
+
     // Stok girişi (üretilen mamul) — sadece sağlam adet varsa
     if (q > 0) {
       await supabase.from('uys_stok_hareketler').insert({
@@ -648,6 +652,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       }
 
       const logId = uid()
+      auditUretimLog({ logId, woId: r.woId, ieNo: wo.ieNo, qty: q, fire: f, malkod: wo.malkod })
       await supabase.from('uys_logs').insert({
         id: logId, wo_id: r.woId, tarih, saat, qty: q, fire: f,
         operatorlar: opr ? [{ id: opr.id, ad: opr.ad, bas: saat, bit: saat }] : [],
