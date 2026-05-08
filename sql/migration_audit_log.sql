@@ -1,7 +1,7 @@
 -- Migration: uys_audit_log — v16.51
 -- Kim, ne zaman, ne yaptı — tüm kritik olaylar burada
 
-CREATE TABLE IF NOT EXISTS uys_audit_log (
+CREATE TABLE IF NOT EXISTS public.uys_audit_log (
   id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
   zaman         timestamptz NOT NULL DEFAULT now(),
   kullanici_id  text,
