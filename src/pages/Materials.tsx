@@ -19,6 +19,13 @@ export function Materials() {
   const [dimKalinlik, setDimKalinlik] = useState('')
   const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
   const [showPasif, setShowPasif] = useState(false)
+  const [sortCol, setSortCol] = useState<'kod'|'ad'|'tip'|'uzunluk'>('kod')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Material | null>(null)
 
@@ -73,8 +80,15 @@ export function Materials() {
         if (!op || !(op.ad || '').toLowerCase().includes(fOp.toLowerCase())) return false
       }
       return true
+    }).sort((a, b) => {
+      let v = 0
+      if (sortCol === 'kod')     v = (a.kod||'').localeCompare(b.kod||'', 'tr')
+      if (sortCol === 'ad')      v = (a.ad||'').localeCompare(b.ad||'', 'tr')
+      if (sortCol === 'tip')     v = (a.tip||'').localeCompare(b.tip||'', 'tr')
+      if (sortCol === 'uzunluk') v = (a.uzunluk||0) - (b.uzunluk||0)
+      return sortDir === 'asc' ? v : -v
     })
-  }, [materials, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet, showPasif, fKod, fAd, fTip, fBirim, fKisa, fUzunluk, fOp, operations])
+  }, [materials, tipFilter, hmTipFilter, dimBoyUz, dimCap, dimKalinlik, receteFilter, receteKodSet, showPasif, fKod, fAd, fTip, fBirim, fKisa, fUzunluk, fOp, operations, sortCol, sortDir])
 
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
@@ -362,8 +376,9 @@ export function Materials() {
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-bg-2 z-10">
               <tr className="border-b border-border text-zinc-500 text-[10px] uppercase tracking-wider">
-                <th className="text-left px-3 py-2 w-[130px]">Kod</th><th className="text-left px-2 py-2">Malzeme Adı</th>
-                <th className="text-left px-2 py-2 w-[110px]">Tip</th><th className="text-center px-2 py-2 w-[50px]">Birim</th>
+                <th className="text-left px-3 py-2 w-[130px]"><button onClick={() => toggleSort('kod')} className={`hover:text-zinc-200 ${sortCol==='kod'?'text-accent':''}`}>Kod {sortCol==='kod'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+                <th className="text-left px-2 py-2"><button onClick={() => toggleSort('ad')} className={`hover:text-zinc-200 ${sortCol==='ad'?'text-accent':''}`}>Malzeme Adı {sortCol==='ad'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+                <th className="text-left px-2 py-2 w-[110px]"><button onClick={() => toggleSort('tip')} className={`hover:text-zinc-200 ${sortCol==='tip'?'text-accent':''}`}>Tip {sortCol==='tip'?(sortDir==='asc'?'↑':'↓'):''}</button></th><th className="text-center px-2 py-2 w-[50px]">Birim</th>
                 <th className="text-right px-2 py-2 w-[65px]">Uzun K.</th><th className="text-right px-2 py-2 w-[60px]">Kısa K.</th>
                 <th className="text-right px-2 py-2 w-[50px]">Kalınlık</th><th className="text-right px-2 py-2 w-[45px]">Çap</th>
                 <th className="text-right px-2 py-2 w-[60px] text-amber">Uzunluk</th>

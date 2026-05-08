@@ -21,6 +21,13 @@ export function BomTrees() {
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [receteFiltre, setReceteFiltre] = useState('')
+  const [sortCol, setSortCol] = useState<'mamulKod' | 'ad' | 'bilesen'>('mamulKod')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
   const fileRef = useRef<HTMLInputElement>(null)
 
   const receteKodSet = useMemo(() => new Set(recipes.map(r => r.mamulKod)), [recipes])
@@ -33,8 +40,14 @@ export function BomTrees() {
     }
     if (receteFiltre === 'var') list = list.filter(bt => receteKodSet.has(bt.mamulKod))
     if (receteFiltre === 'yok') list = list.filter(bt => !receteKodSet.has(bt.mamulKod))
-    return list
-  }, [bomTrees, search, receteFiltre, receteKodSet])
+    return [...list].sort((a, b) => {
+      let v = 0
+      if (sortCol === 'mamulKod') v = (a.mamulKod||'').localeCompare(b.mamulKod||'', 'tr')
+      if (sortCol === 'ad')       v = (a.ad||a.mamulAd||'').localeCompare(b.ad||b.mamulAd||'', 'tr')
+      if (sortCol === 'bilesen')  v = (a.rows?.length||0) - (b.rows?.length||0)
+      return sortDir === 'asc' ? v : -v
+    })
+  }, [bomTrees, search, receteFiltre, receteKodSet, sortCol, sortDir])
 
   function toggleCheck(id: string) {
     setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -272,7 +285,10 @@ export function BomTrees() {
         {filtered.length ? (
           <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500">
             <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={checkedIds.size === filtered.length && filtered.length > 0} onChange={toggleAll} className="accent-accent" /></th>
-            <th className="text-left px-4 py-2.5">Mamul Kodu</th><th className="text-left px-4 py-2.5">Ürün Adı</th><th className="text-right px-4 py-2.5">Bileşen</th><th className="px-4 py-2.5"></th></tr></thead>
+            <th className="text-left px-4 py-2.5"><button onClick={() => toggleSort('mamulKod')} className={`hover:text-zinc-200 ${sortCol==='mamulKod'?'text-accent':''}`}>Mamul Kodu {sortCol==='mamulKod'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+            <th className="text-left px-4 py-2.5"><button onClick={() => toggleSort('ad')} className={`hover:text-zinc-200 ${sortCol==='ad'?'text-accent':''}`}>Ürün Adı {sortCol==='ad'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+            <th className="text-right px-4 py-2.5"><button onClick={() => toggleSort('bilesen')} className={`hover:text-zinc-200 ${sortCol==='bilesen'?'text-accent':''}`}>Bileşen {sortCol==='bilesen'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+            <th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {filtered.map(bt => (
               <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
