@@ -727,7 +727,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                     </td>
                     <td className="px-2 py-1">
                       {(r.tip === 'YarıMamul' || r.tip === 'Mamul') && (
-                        <select value={r.sureBirim || 'dk'} onChange={e => updateRow(i, 'sureBirim', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
+                        <select value={r.sureBirim || 'sn'} onChange={e => updateRow(i, 'sureBirim', e.target.value)} className="w-full px-1 py-1 bg-bg-3/50 border border-border/50 rounded text-[11px] text-zinc-200">
                           <option value="dk">dk</option><option value="sn">sn</option>
                         </select>
                       )}
