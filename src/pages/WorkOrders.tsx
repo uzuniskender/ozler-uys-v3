@@ -3,6 +3,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
+import { auditWoDurum, auditLog } from '@/lib/audit'
 import { uid, today, pctColor } from '@/lib/utils'
 import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
@@ -126,11 +127,18 @@ export function WorkOrders() {
       const logSizIds = [...selected].filter(id => !logsVar.some(l => l.woId === id))
       if (logSizIds.length > 0) {
         const iezler = logSizIds.map(id => workOrders.find(w => w.id === id)?.ieNo || id).join(', ')
-        if (!await showConfirm(`⚠ ${logSizIds.length} İE'de üretim logu YOK:\n${iezler}\n\nLog girmeden tamamlandı işaretlenecek. Devam?`)) return
+        toast.error(`⛔ ${logSizIds.length} İE'de üretim logu yok:\n${iezler}\n\nLog olmadan tamamlandı yapılamaz. Kısmi üretimde "Kısmi Tamam", üretim yoksa "İptal" kullanın.`)
+        return
       }
     }
     if (!await showConfirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
-    for (const id of selected) { await supabase.from('uys_work_orders').update({ durum }).eq('id', id) }
+    for (const id of selected) {
+      const wo = workOrders.find(w => w.id === id)
+      const eskiDurum = wo?.durum || 'bekliyor'
+      await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
+      if (wo) auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
+        siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
+    }
     const cnt = selected.size; setSelected(new Set()); loadAll(); toast.success(`${cnt} İE güncellendi`)
   }
 
@@ -219,7 +227,7 @@ export function WorkOrders() {
       if (statusFilter.size > 0) {
         const pct = wPct(w)
         // Öncelik: DB'deki açık durumlar (iptal/beklemede/tamamlandi). Yoksa pct'e göre türet.
-        const wDurum = (w.durum === 'iptal' || w.durum === 'beklemede' || w.durum === 'tamamlandi') 
+        const wDurum = (w.durum === 'iptal' || w.durum === 'beklemede' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') 
           ? w.durum 
           : (pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor')
         if (!statusFilter.has(wDurum)) return false
@@ -245,6 +253,14 @@ export function WorkOrders() {
   }, [filtered, groupBy, orders])
 
   async function setDurum(id: string, durum: string) {
+    // Tamamlandı için log zorunlu
+    if (durum === 'tamamlandi') {
+      const logsVar = useStore.getState().logs
+      if (!logsVar.some(l => l.woId === id)) {
+        toast.error('⛔ Üretim logu olmadan tamamlandı yapılamaz. Kısmi üretimde "Kısmi Tamam", üretim yoksa "İptal" kullanın.')
+        return
+      }
+    }
     const wo = workOrders.find(w => w.id === id); if (!wo) return
     const prod = logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0)
     const tarih = today()
@@ -264,7 +280,11 @@ export function WorkOrders() {
       await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden }).eq('id', id)
       loadAll(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
+    const wo = workOrders.find(w => w.id === id)
+    const eskiDurum = wo?.durum || 'bekliyor'
     if (durum === 'tamamlandi') await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
+    if (wo) auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
+      siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
     else await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     loadAll(); toast.success(wo.ieNo + ' → ' + durum)
   }
@@ -352,6 +372,7 @@ export function WorkOrders() {
           { value: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
           { value: 'uretimde', label: 'Üretimde', color: 'text-accent' },
           { value: 'kismi', label: 'Kısmi', color: 'text-amber' },
+          { value: 'kismi_tamam', label: 'Kısmi Tamam', color: 'text-cyan' },
           { value: 'beklemede', label: 'Beklemede', color: 'text-purple-400' },
           { value: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
           { value: 'iptal', label: 'İptal', color: 'text-red' },
@@ -373,6 +394,7 @@ export function WorkOrders() {
         <div className="mb-3 p-2 bg-accent/5 border border-accent/20 rounded-lg flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-accent"><CheckSquare size={13} className="inline" /> {selected.size} seçili</span>
           <button onClick={() => topluDurumGuncelle('uretimde')} className="px-2 py-1 bg-accent/20 text-accent rounded text-[10px] hover:bg-accent/30">→ Üretimde</button>
+          <button onClick={() => topluDurumGuncelle('kismi_tamam')} className="px-2 py-1 bg-cyan/20 text-cyan rounded text-[10px] hover:bg-cyan/30">→ Kısmi Tamam</button>
           <button onClick={() => topluDurumGuncelle('tamamlandi')} className="px-2 py-1 bg-green/20 text-green rounded text-[10px] hover:bg-green/30">→ Tamamlandı</button>
           <button onClick={() => topluDurumGuncelle('beklemede')} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-[10px] hover:bg-purple-500/30">→ Beklemede</button>
           {can('wo_status') && <button onClick={() => topluDurumGuncelle('iptal')} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">→ İptal</button>}
@@ -446,8 +468,8 @@ export function WorkOrders() {
                         <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : pct > 0 ? 'bg-accent' : 'bg-zinc-700'}`} style={{ width: `${Math.max(2, pct)}%` }} /></div><span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span></div></td>
                         <td className="px-3 py-1.5">
                           <div className="flex items-center gap-1.5">
-                          <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (w.durum === 'tamamlandi') return 'tamamlandi'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
-                            <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
+                          <select disabled={!can('wo_status')} value={(() => { if (w.durum === 'iptal') return 'iptal'; if (w.durum === 'beklemede') return 'beklemede'; if (w.durum === 'tamamlandi') return 'tamamlandi'; if (pct >= 100) return 'tamamlandi'; if (prod > 0) return 'uretimde'; return 'bekliyor' })()} onChange={e => setDurum(w.id, e.target.value)} className={`px-1.5 py-0.5 rounded text-[10px] bg-bg-3 border border-border ${!can('wo_status') ? 'opacity-60 cursor-not-allowed' : ''} ${w.durum === 'tamamlandi' || pct >= 100 ? 'text-green' : w.durum === 'kismi_tamam' ? 'text-cyan' : w.durum === 'iptal' ? 'text-red' : w.durum === 'beklemede' ? 'text-purple-400' : 'text-accent'}`}>
+                            <option value="bekliyor">Başlamadı</option><option value="uretimde">Üretimde</option><option value="kismi_tamam">Kısmi Tamam</option><option value="beklemede">Beklemede</option><option value="tamamlandi">Tamamlandı</option><option value="iptal">İptal</option>
                           </select>
                           {/* v15.79 — Plan Bekliyor rozeti (madde 8+9): efektif duruma göre.
                               Eksik ne ise tooltip'e yazar (kesim planı / tedarik açılmamış / yolda).
