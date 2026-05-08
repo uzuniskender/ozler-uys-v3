@@ -18,27 +18,41 @@ export function Recipes() {
   const [showNew, setShowNew] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  const [filterSuresiz, setFilterSuresiz] = useState(false)
+  const [filterEksikOp, setFilterEksikOp] = useState(false)
+  const [sortCol, setSortCol] = useState<'rcKod'|'ad'|'mamulKod'|'bilesen'>('rcKod')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
+  const [density, setDensity] = useState<'compact'|'normal'|'comfortable'>('compact')
+  function toggleSort(col: 'rcKod'|'ad'|'mamulKod'|'bilesen') {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+  function changeDensity(d: 'compact'|'normal'|'comfortable') {
+    setDensity(d)
+    try { localStorage.setItem('uys_table_density', d) } catch {}
+  }
+  const tdPad = density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px'
   const fileRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
-    let r = recipes
+    let list = [...recipes]
     if (search) {
       const q = search.toLowerCase()
-      r = r.filter(x => (x.rcKod + ' ' + x.ad + ' ' + x.mamulKod).toLowerCase().includes(q))
+      list = list.filter(x => (x.rcKod + ' ' + x.ad + ' ' + x.mamulKod).toLowerCase().includes(q))
     }
-    if (filterSüresiz) {
-      r = r.filter(x => {
-        const ymS = (x.satirlar || []).filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
-        return ymS.length > 0 && !ymS.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+    if (filterSuresiz) {
+      list = list.filter(x => {
+        const ym = (x.satirlar || []).filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+        return ym.length > 0 && !ym.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
       })
     }
     if (filterEksikOp) {
-      r = r.filter(x => {
-        const ymS = (x.satirlar || []).filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
-        return ymS.length > 0 && !ymS.every(s => s.opId && s.opId.trim() !== '')
+      list = list.filter(x => {
+        const ym = (x.satirlar || []).filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+        return ym.length > 0 && !ym.every(s => s.opId && s.opId.trim() !== '')
       })
     }
-    return [...r].sort((a, b) => {
+    list.sort((a, b) => {
       let v = 0
       if (sortCol === 'rcKod')    v = (a.rcKod||'').localeCompare(b.rcKod||'', 'tr')
       if (sortCol === 'ad')       v = (a.ad||'').localeCompare(b.ad||'', 'tr')
@@ -46,7 +60,8 @@ export function Recipes() {
       if (sortCol === 'bilesen')  v = (a.satirlar?.length||0) - (b.satirlar?.length||0)
       return sortDir === 'asc' ? v : -v
     })
-  }, [recipes, search, filterSüresiz, filterEksikOp, sortCol, sortDir])
+    return list
+  }, [recipes, search, filterSuresiz, filterEksikOp, sortCol, sortDir])
 
   // İstatistikler: toplam satır, süresiz reçete sayısı
   const stats = useMemo(() => {
@@ -56,11 +71,11 @@ export function Recipes() {
     for (const r of recipes) {
       const satirlar = r.satirlar || []
       toplamSatir += satirlar.length
-      const ymS = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
-      const tamSure = ymS.length > 0 && ymS.every(s => (s.islemSure||0) > 0 || (s.hazirlikSure||0) > 0)
-      if (ymS.length > 0 && !tamSure) suresizRecete++
-      const tamOp = ymS.every(s => s.opId && s.opId.trim() !== '')
-      if (ymS.length > 0 && !tamOp) eksikOpRecete++
+      const ym3 = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+      const tamSure3 = ym3.every(s => (s.islemSure||0)>0||(s.hazirlikSure||0)>0)
+      if (ym3.length > 0 && !tamSure3) suresizRecete++
+      const tamOp3 = ym3.every(s => s.opId && s.opId.trim()!=='')
+      if (ym3.length > 0 && !tamOp3) eksikOpRecete++
     }
     return { toplamSatir, suresizRecete, eksikOpRecete }
   }, [recipes])
@@ -187,15 +202,15 @@ export function Recipes() {
               <span className="font-mono font-semibold text-zinc-200">{stats.toplamSatir}</span> bileşen
             </span>
             {stats.suresizRecete > 0 && (
-              <button onClick={() => setFilterSüresiz(f => !f)}
-                className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${filterSüresiz ? 'bg-amber/25 border-amber/50 text-amber font-semibold' : 'bg-amber/10 border-amber/25 text-amber hover:bg-amber/20'}`}>
-                ⏱ <span className="font-mono font-semibold">{stats.suresizRecete}</span> süresiz{filterSüresiz && ' ✕'}
+              <button onClick={() => setFilterSuresiz(f => !f)}
+                className={filterSuresiz ? "text-[11px] px-2 py-0.5 rounded-full border bg-amber/25 border-amber/50 text-amber font-semibold" : "text-[11px] px-2 py-0.5 rounded-full border bg-amber/10 border-amber/25 text-amber hover:bg-amber/20"}>
+                ⏱ {stats.suresizRecete} süresiz{filterSuresiz ? ' ✕' : ''}
               </button>
             )}
             {stats.eksikOpRecete > 0 && (
               <button onClick={() => setFilterEksikOp(f => !f)}
-                className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${filterEksikOp ? 'bg-red/25 border-red/50 text-red font-semibold' : 'bg-red/10 border-red/25 text-red hover:bg-red/20'}`}>
-                ⚙ <span className="font-mono font-semibold">{stats.eksikOpRecete}</span> eksik op{filterEksikOp && ' ✕'}
+                className={filterEksikOp ? "text-[11px] px-2 py-0.5 rounded-full border bg-red/25 border-red/50 text-red font-semibold" : "text-[11px] px-2 py-0.5 rounded-full border bg-red/10 border-red/25 text-red hover:bg-red/20"}>
+                ⚙ {stats.eksikOpRecete} eksik op{filterEksikOp ? ' ✕' : ''}
               </button>
             )}
             {search && (
@@ -254,15 +269,17 @@ export function Recipes() {
               title="Temizle">×</button>
           )}
         </div>
-        <div className="flex items-center gap-0.5 ml-2">
-          {(['compact','normal','comfortable'] as const).map(d => (
-            <button key={d} onClick={() => changeDensity(d)}
-              title={d==='compact'?'Dar':d==='normal'?'Normal':'Geniş'}
-              className={`px-2 py-1 rounded text-[11px] border ${density===d?'bg-accent/15 border-accent/30 text-accent':'bg-bg-2 border-border text-zinc-500 hover:text-zinc-200'}`}>
-              {d==='compact'?'━':d==='normal'?'═':'≡'}
-            </button>
-          ))}
-        </div>
+      </div>
+      <div style={{display:'flex',gap:'2px',marginBottom:'4px'}}>
+        {(['compact','normal','comfortable'] as Array<'compact'|'normal'|'comfortable'>).map(d => (
+          <button key={d} onClick={() => changeDensity(d)}
+            style={{padding:'2px 8px',fontSize:'11px',border:'1px solid',borderRadius:'4px',cursor:'pointer',
+              borderColor: density===d ? 'var(--accent)' : 'var(--border)',
+              color: density===d ? 'var(--accent)' : '#888',
+              background: density===d ? 'rgba(var(--accent-rgb),0.1)' : 'transparent'}}>
+            {d==='compact'?'━':d==='normal'?'═':'≡'}
+          </button>
+        ))}
       </div>
 
       {/* Tablo */}
@@ -277,18 +294,10 @@ export function Recipes() {
                       checked={checkedIds.size === filtered.length && filtered.length > 0}
                       onChange={toggleAll} className="accent-accent" />
                   </th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold">
-                    <button onClick={() => toggleSort('rcKod')} className={`hover:text-zinc-200 ${sortCol==='rcKod'?'text-accent':''}`}>Kod {sortCol==='rcKod'?(sortDir==='asc'?'↑':'↓'):''}</button>
-                  </th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold">
-                    <button onClick={() => toggleSort('ad')} className={`hover:text-zinc-200 ${sortCol==='ad'?'text-accent':''}`}>Reçete Adı {sortCol==='ad'?(sortDir==='asc'?'↑':'↓'):''}</button>
-                  </th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold">
-                    <button onClick={() => toggleSort('mamulKod')} className={`hover:text-zinc-200 ${sortCol==='mamulKod'?'text-accent':''}`}>Mamul Kodu {sortCol==='mamulKod'?(sortDir==='asc'?'↑':'↓'):''}</button>
-                  </th>
-                  <th className="text-right px-4 py-3 text-[10px] uppercase font-semibold">
-                    <button onClick={() => toggleSort('bilesen')} className={`ml-auto hover:text-zinc-200 ${sortCol==='bilesen'?'text-accent':''}`}>Bileşen {sortCol==='bilesen'?(sortDir==='asc'?'↑':'↓'):''}</button>
-                  </th>
+                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold"><button onClick={()=>toggleSort('rcKod')} style={{color:sortCol==='rcKod'?'var(--accent)':undefined}}>Kod {sortCol==='rcKod'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold"><button onClick={()=>toggleSort('ad')} style={{color:sortCol==='ad'?'var(--accent)':undefined}}>Reçete Adı {sortCol==='ad'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+                  <th className="text-left px-4 py-3 text-[10px] uppercase font-semibold"><button onClick={()=>toggleSort('mamulKod')} style={{color:sortCol==='mamulKod'?'var(--accent)':undefined}}>Mamul Kodu {sortCol==='mamulKod'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
+                  <th className="text-right px-4 py-3 text-[10px] uppercase font-semibold"><button onClick={()=>toggleSort('bilesen')} style={{color:sortCol==='bilesen'?'var(--accent)':undefined}}>Bileşen {sortCol==='bilesen'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
                   <th className="text-center px-4 py-3 text-[10px] uppercase font-semibold">Süre</th>
                   <th className="px-4 py-3 w-[1%]"></th>
                 </tr>
@@ -296,14 +305,14 @@ export function Recipes() {
               <tbody>
                 {filtered.map((r, i) => {
                   const satirlar = r.satirlar || []
-                  const ymSat = satirlar.filter(s => s.tip==='YarıMamul'||s.tip==='Mamul')
-                  const tamSure = ymSat.length>0 && ymSat.every(s=>(s.islemSure||0)>0||(s.hazirlikSure||0)>0)
-                  const bazSure = ymSat.some(s=>(s.islemSure||0)>0||(s.hazirlikSure||0)>0)
-                  const sureDurum = ymSat.length===0?'yok':tamSure?'tam':bazSure?'eksik':'yok'
-                  const eksikOp = ymSat.length>0 && !ymSat.every(s=>s.opId&&s.opId.trim()!=='')
+                  const ym7 = satirlar.filter(s => s.tip==='YarıMamul'||s.tip==='Mamul')
+                  const tamSure7 = ym7.length>0 && ym7.every(s=>(s.islemSure||0)>0||(s.hazirlikSure||0)>0)
+                  const bazSure7 = ym7.some(s=>(s.islemSure||0)>0||(s.hazirlikSure||0)>0)
+                  const sureDurum = ym7.length===0?'yok':tamSure7?'tam':bazSure7?'eksik':'yok'
+                  const eksikOp = ym7.length>0 && !ym7.every(s=>s.opId&&s.opId.trim()!=='')
                   return (
                     <tr key={r.id}
-                      style={rowStyle}
+                      style={{paddingTop:tdPad,paddingBottom:tdPad}}
                       className={`border-b border-border/25 transition-colors ${
                         eksikOp ? 'bg-red/5' :
                         checkedIds.has(r.id) ? 'bg-accent/10 hover:bg-accent/15' :
@@ -332,9 +341,9 @@ export function Recipes() {
                       <td className="px-4 py-2.5 text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           {satirlar.length===0 ? <span className="text-[10px] text-zinc-600">—</span>
-                          : sureDurum==='tam' ? <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold flex items-center gap-1"><Clock size={9}/>Var</span>
-                          : sureDurum==='eksik' ? <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold flex items-center gap-1"><Clock size={9}/>Eksik</span>
-                          : <span className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold flex items-center gap-1"><Clock size={9}/>Yok</span>}
+                          : sureDurum==='tam' ? <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold"><Clock size={9}/> Var</span>
+                          : sureDurum==='eksik' ? <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold"><Clock size={9}/> Eksik</span>
+                          : <span className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold"><Clock size={9}/> Yok</span>}
                           {eksikOp && <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">⚙ Eksik Op</span>}
                         </div>
                       </td>
@@ -506,11 +515,11 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
       if (mat?.tip === 'YarıMamul' || mat?.tip === 'Mamul') {
         const altRc = recipes.find(rc => rc.mamulKod === malkod)
         if (altRc) {
-          const kok = altRc.satirlar?.find(s => s.kirno === '1')
+          const kok = (altRc.satirlar || []).find(s => s.kirno === '1')
           if (kok) {
             if (kok.opId) updated.opId = kok.opId
-            if ((kok.islemSure||0) > 0) updated.islemSure = kok.islemSure
-            if ((kok.hazirlikSure||0) > 0) updated.hazirlikSure = kok.hazirlikSure
+            if ((kok.islemSure || 0) > 0) updated.islemSure = kok.islemSure
+            if ((kok.hazirlikSure || 0) > 0) updated.hazirlikSure = kok.hazirlikSure
             if (kok.sureBirim) updated.sureBirim = kok.sureBirim
           }
         }
