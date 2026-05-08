@@ -59,7 +59,11 @@ export function SearchSelect({ options, value, onChange, placeholder = 'Ara...',
         ref={inputRef}
         value={open ? search : displayLabel}
         onChange={e => handleInputChange(e.target.value)}
-        onFocus={() => { setOpen(true); setSearch('') }}
+        onFocus={() => {
+          setSearch(displayLabel)   // mevcut değeri search'e koy
+          setOpen(true)
+          setTimeout(() => inputRef.current?.select(), 0)  // tümünü seç → kopyalanabilir
+        }}
         placeholder={placeholder}
         className={inputClassName || "w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"}
       />
