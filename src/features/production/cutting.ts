@@ -151,6 +151,12 @@ export function kesimPlanOlustur(
       const hamEn = hmM.uzunluk > 0 ? 0 : Math.min(hmM.boy || 0, hmM.en || 0)
       if (!hamBoy) { console.log('❌ HM boy bilgisi yok:', hmalkod, '| boy:', hmM.boy, '| en:', hmM.en, '| uzunluk:', hmM.uzunluk); continue }
 
+      // LEVHA tipli HM'ler bu fonksiyondan çıkarılır — levhaKesim.ts ile ayrıca planlanır
+      if ((hmM as any).hammaddeTipi === 'LEVHA') {
+        console.log('⏩ LEVHA tipi HM atlandı — levha planı ayrıca oluşturulacak:', hmalkod)
+        continue
+      }
+
       const parcaBoy = getParcaBoy(w.malkod, materials)
       const parcaEn = getParcaEn(w.malkod, materials)
       const kesimTip = parcaEn > 0 ? 'yuzey' : 'boy'
