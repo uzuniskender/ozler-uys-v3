@@ -27,3 +27,8 @@ body {
 ::-webkit-scrollbar-track { background: var(--color-bg-1); }
 ::-webkit-scrollbar-thumb { background: var(--color-border-2); border-radius: 3px; }
 ::selection { background: rgba(59, 130, 246, 0.3); }
+
+/* Tablo satır yüksekliği — Recipes/BomTrees/Materials density kontrolü */
+.density-compact td { padding-top: 2px !important; padding-bottom: 2px !important; }
+.density-normal td { padding-top: 6px !important; padding-bottom: 6px !important; }
+.density-comfortable td { padding-top: 10px !important; padding-bottom: 10px !important; }

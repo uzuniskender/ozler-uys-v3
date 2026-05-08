@@ -389,7 +389,7 @@ export function Materials() {
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
-          <table className="w-full text-[11px]">
+          <table className={`w-full text-[11px] density-${density}`}>
             <thead className="sticky top-0 bg-bg-2 z-10">
               <tr className="border-b border-border text-zinc-500 text-[10px] uppercase tracking-wider">
                 <th className="text-left px-3 py-2 w-[130px]"><button onClick={() => toggleSort('kod')} className={`hover:text-zinc-200 ${sortCol==='kod'?'text-accent':''}`}>Kod {sortCol==='kod'?(sortDir==='asc'?'↑':'↓'):''}</button></th>
@@ -419,7 +419,7 @@ export function Materials() {
               {filtered.slice(0, 300).map(m => {
                 const op = operations.find(o => o.id === m.opId)
                 return (
-                  <tr key={m.id} style={rowStyle} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
+                  <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
                     <td className="px-3 py-[5px] cursor-pointer whitespace-nowrap" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni) await recodeMaterial(m, yeni)

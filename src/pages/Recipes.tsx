@@ -286,7 +286,7 @@ export function Recipes() {
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className={`w-full text-xs density-${density}`}>
               <thead className="sticky top-0 z-10 bg-bg-2 border-b border-border">
                 <tr className="text-zinc-500">
                   <th className="px-3 py-3 w-8">
@@ -312,7 +312,6 @@ export function Recipes() {
                   const eksikOp = ym7.length>0 && !ym7.every(s=>s.opId&&s.opId.trim()!=='')
                   return (
                     <tr key={r.id}
-                      style={{paddingTop:tdPad,paddingBottom:tdPad}}
                       className={`border-b border-border/25 transition-colors ${
                         eksikOp ? 'bg-red/5' :
                         checkedIds.has(r.id) ? 'bg-accent/10 hover:bg-accent/15' :
