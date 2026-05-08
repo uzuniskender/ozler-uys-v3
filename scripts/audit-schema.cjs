@@ -41,7 +41,8 @@ const STORE_WHITELIST = new Set([
   'uys_manuel_mudahale_log', // v15.90 — Madde 15 P1 audit log. Tip C (büyük log). Frontend state'e yüklenmez; tikalannca filtreli sorgu (UI Faz 2'de gelecek).
   'uys_mrp_state_global',    // v16.31 IE #14 Faz A — MRP cache (global). mrpCache.ts dogrudan supabase ile okur, store'a girmez.
   'uys_mrp_state_order',     // v16.31 IE #14 Faz A — MRP cache (order bazli). mrpCache.ts dogrudan supabase ile okur, store'a girmez.
-  'uys_audit_log',           // v16.51 — Audit log tablosu. Tip C (büyük log). Frontend state'e yüklenmez; AuditLog.tsx filtreli sorgular.
+
+  'uys_audit_log',           // v16.51 — Audit log. Tip C (büyük log). Frontend state'e yüklenmez; filtreli sorgu.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -57,7 +58,8 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_mrp_state_global',          // v16.31 IE #14 Faz A — MRP cache, yeniden hesaplanabilir, backup gereksiz.
   'uys_mrp_state_order',           // v16.31 IE #14 Faz A — MRP cache, yeniden hesaplanabilir, backup gereksiz.
 
-  'uys_audit_log',                // v16.51 — Audit log. Backup'a girmez (audit kayıtları restore edilemez).])
+  'uys_audit_log',                // v16.51 — Audit log. Backup'a girmez (audit kayıtları restore edilemez).
+])
 
 // ═══════════════════════════════════════════════════════════════
 // SCHEMA — DB'deki tüm tabloları topla (master + diğer SQL dosyaları)
