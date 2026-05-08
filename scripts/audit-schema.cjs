@@ -56,7 +56,8 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_manuel_mudahale_log',       // v15.90 — Madde 15 P1 audit log. Backup'a girmez (audit kayıtları silinemez/restore edilemez prensibi).
   'uys_mrp_state_global',          // v16.31 IE #14 Faz A — MRP cache, yeniden hesaplanabilir, backup gereksiz.
   'uys_mrp_state_order',           // v16.31 IE #14 Faz A — MRP cache, yeniden hesaplanabilir, backup gereksiz.
-])
+
+  'uys_audit_log',                // v16.51 — Audit log. Backup'a girmez (audit kayıtları restore edilemez).])
 
 // ═══════════════════════════════════════════════════════════════
 // SCHEMA — DB'deki tüm tabloları topla (master + diğer SQL dosyaları)
