@@ -303,13 +303,24 @@ export function hesaplaMRP(
   // Bazı WO'lar (örn. plywood kesim) siparişe bağlı ama mamulün kök reçetesinde yok.
   // Bu WO'ların `hm` alanında gerçek hammadde listesi var — bunu da hesaba kat.
   const secilenOrdIds = ordIdSet
+  // Sadece mamul kodu BOM'da (reçetede) OLMAYAN WO'lar — PLY gibi reçete yolu dışındakiler
+  // BOM'dan zaten hesaplananları tekrar ekleme (çift sayım önleme)
+  const bomHesaplananMalkodlar = new Set(siparisler.map(o => {
+    const urunler = o.urunler?.length ? o.urunler : [{ mamulKod: o.mamulKod }]
+    return urunler.map(u => u.mamulKod)
+  }).flat())
+  
   const hmWOs = workOrders.filter(w => {
     if (!w.orderId) return false
     if (secilenOrdIds && !secilenOrdIds.has(w.orderId)) return false
     if (!secilenOrdIds && ordIds !== null) return false  // genel mod değil
     if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return false
-    if (!w.hm || !w.hm.length) return false
-    return true
+    if (!w.hm || !(w.hm as any[]).length) return false
+    // BOM'dan zaten hesaplananları atla — sadece reçete yolu dışındakileri al
+    const rc = recipes.find(r => r.mamulKod === w.malkod)
+    if (!rc) return true  // Reçetesi yok → hm'den hesapla (PLY gibi)
+    // Reçetesi var → BOM zaten hesapladı, atla
+    return false
   })
   for (const w of hmWOs) {
     const uretilen = logs ? logs.filter(l => l.woId === w.id).reduce((a, l) => a + (l.qty || 0), 0) : 0
