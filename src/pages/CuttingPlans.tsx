@@ -106,7 +106,19 @@ export function CuttingPlans() {
     if (!levhaGruplari.size) { toast.info('Levha hammaddesi bulunamadı'); return }
 
     let olusturulan = 0
+    // Mevcut bekleyen levha planlarını kontrol et
+    const { data: mevcutPlanlar } = await supabase
+      .from('uys_kesim_planlari')
+      .select('ham_malkod')
+      .eq('kesim_tip', 'levha')
+      .neq('durum', 'tamamlandi')
+    const mevcutMalkodlar = new Set((mevcutPlanlar || []).map((p: any) => p.ham_malkod))
+
     for (const [hamMalkod, levha] of levhaGruplari) {
+      if (mevcutMalkodlar.has(hamMalkod)) {
+        toast.info(`${levha.malad} için zaten bekleyen plan var — atlanıyor`)
+        continue
+      }
       const parcalar = wolardenParcaListesi(levhaWOs as any, hamMalkod, materials as any)
       if (!parcalar.length) continue
       const sonuc = levhaKesimOptimum(parcalar, hamMalkod, levha.en, levha.boy)
