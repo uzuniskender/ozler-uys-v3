@@ -178,10 +178,12 @@ export function Orders() {
       const pct = orderPct(o.id)
       if (statusFilter.size > 0) {
         let m = false
-        if (statusFilter.has('active') && o.durum !== 'kapalı' && pct < 100) m = true
-        if (statusFilter.has('done') && pct >= 100) m = true
-        if (statusFilter.has('late') && o.durum !== 'kapalı' && nearT && nearT < today() && pct < 100) m = true
-        if (statusFilter.has('closed') && o.durum === 'kapalı') m = true
+        const isTamamlandi = (o as any).state === 'tamamlandi' || pct >= 100
+        const isKapali = o.durum === 'kapalı' || (o as any).state === 'kapali'
+        if (statusFilter.has('active') && !isKapali && !isTamamlandi) m = true
+        if (statusFilter.has('done') && isTamamlandi && !isKapali) m = true
+        if (statusFilter.has('late') && !isKapali && !isTamamlandi && nearT && nearT < today()) m = true
+        if (statusFilter.has('closed') && isKapali) m = true
         if (!m) return false
       }
       return true
