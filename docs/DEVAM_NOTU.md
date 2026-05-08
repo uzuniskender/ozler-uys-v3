@@ -1,73 +1,137 @@
-# DEVAM_NOTU — UYS v3 Oturum Geçişi
+# DEVAM_NOTU — UYS v3 Tek Takip Dosyası
 
-## Son oturum: 5 May 2026 — 8 sürüm kapandı (v16.40 → v16.47)
+**Repo:** uzuniskender/ozler-uys-v3
+**PROD:** lmhcobrgrnvtprvmcito (Frankfurt)
+**TEST:** cowgxwmhlogmswatbltz (Frankfurt)
+**Versiyon:** v16.52 (8 Mayıs 2026)
 
-| Ver | Konu | Durum |
+---
+
+## ✅ Bu Oturumda Tamamlananlar (8 Mayıs 2026)
+
+### Reçete / BOM
+- Sort butonları: Recipes, BomTrees, Materials (Kod/Ad/Mamul/Bileşen ↑↓)
+- Density butonları: ━/═/≡ — `localStorage`'a kaydedilir, `src/index.css`'e `.density-X td` CSS eklendi
+- Eksik operasyon filtresi + badge (⚙ 7 eksik op)
+- Süre durumu: `every()` → tüm YM satırlarında süre olmalı (Eksik/Var/Yok)
+- Alt reçeteden süre miras (`onMalkodChange` → kirno='1' kök satırdan cascade)
+- DB cascade trigger: `trg_recete_sure_cascade` (TEST+PROD)
+- `sureBirim` default → `'sn'`
+
+### Audit Log Sistemi (v16.51)
+- DB tablo `uys_audit_log` (TEST+PROD aktif, RLS açık)
+- `src/lib/audit.ts` → `auditLog`, `auditWoDurum`, `auditUretimLog`, `auditStokHareket`, `auditSilme`
+- `sql/migration_audit_log.sql` → `public.uys_audit_log` (audit-columns.cjs uyumlu)
+- `scripts/audit-schema.cjs` → STORE+DATA_MGMT whitelist'e `uys_audit_log` eklendi
+- Entegre: WorkOrders (durum), ProductionEntry (üretim), Orders (kapat/aç, sil), tedarikHelpers (geldi), useAuth (login/logout)
+
+### WO Mantık
+- Tamamlandı engeli: log olmadan `tamamlandi` **imkansız** (toast.error, return)
+- `kismi_tamam` durumu: filtre + dropdown + toplu buton + renk
+- `wDurum` hesabına `kismi_tamam` dahil edildi
+
+### Sipariş / Orders
+- Filtre default: Üretimde + Gecikmeli (`new Set(['active', 'late'])`)
+- `state` alanına göre filtre (`state='tamamlandi'` → Tamamlandı kategorisine girer)
+
+### Order State Trigger Zinciri
+- `trg_mrp_state_refresh_order`: MRP hesabı → order state anında güncellenir
+- `trg_stok_hareket_refresh_order`: Stok hareketi (wo_id'li) → order state güncellenir
+- Tüm tetikleyiciler: WO durum, tedarik geldi, MRP hesabı, stok hareketi
+
+### MRP
+- PLY/levha WO'ları için "2b" bloğu: `hm` alanından ek HM hesabı (reçete dışı WO'lar)
+- Çift sayım önleme: reçetesi olan WO'lar `hm`'den hesaplanmaz
+- Plywood MRP fix: S26A_03151 + S26A_03150 test edildi
+
+### Levha Kesim Planlayıcısı (v16.52)
+- `src/features/production/levhaKesim.ts` → Guillotine Cut (2D bin-packing)
+  - Best-Fit Decreasing + rotation + artık alan takibi
+  - Tolerans: 4mm (testere kalınlığı)
+- `CuttingPlans.tsx` → "🪵 Levha Planı" butonu + WO bazlı idempotency
+- `cutting.ts` → `hammaddeTipi='LEVHA'` olan HM'ler `kesimPlanOlustur`'dan çıkarıldı
+- Tip sütunu: 📏 Boy / ⬜ Yüzey / 🪵 Levha
+- Test: ✅ olumlu
+
+---
+
+## 🔄 Aktif DB Trigger'lar (TEST+PROD)
+
+| Trigger | Tablo | İşlev |
 |---|---|---|
-| v16.40 | Multi-device DB-only Playwright (6 senaryo) | ✅ 18/18 green |
-| v16.41 | F-21 idempotent fix + uys_mrp_calculations FK CASCADE | ✅ |
-| v16.42 | İstek #20 KART RENAME altyapı (8 tablo cascade) | ✅ |
-| v16.43 | İstek #21 Supabase Auth login + useAuth test mode bypass | ✅ |
-| v16.44 | İE Modal UX (adet boş + draggable Pointer Events) | ✅ |
-| v16.45 | TUR1-3F trg_recipe_op_sync (reçete UPDATE → açık WO senkron) | ✅ |
-| v16.46 | IE-MultiSelectFilters (Orders.tsx) + IE-UYS-002 disiplin | ✅ saha |
-| v16.47 | IE-StokDupGuard (trigger + 28 kayıt/2778 birim temizlik) | ✅ |
+| `trg_recete_sure_cascade` | `uys_recipes` | Alt reçete → üst reçeteye süre cascade |
+| `trg_mrp_state_refresh_order` | `uys_mrp_state_order` | MRP hesabı → order state güncelle |
+| `trg_stok_hareket_refresh_order` | `uys_stok_hareketler` | Stok (wo_id) → order state güncelle |
+| `trg_refresh_state_wo` | `uys_work_orders` | WO durum → order state güncelle |
+| `trg_refresh_state_tedarik` | `uys_tedarikler` | Tedarik geldi → order state güncelle |
+| `trg_malkod_cascade_update` | `uys_malzemeler` | Malkod değişince cascade |
+| `trg_stok_hareket_dup_guard` | `uys_stok_hareketler` | Duplicate önleme |
+| `trg_recipe_op_sync` | `uys_recipes` | Reçete UPDATE → açık WO senkron |
 
-## Aktif altyapı
+---
 
-- **TEST**: cowgxwmhlogmswatbltz (Frankfurt)
-- **PROD**: lmhcobrgrnvtprvmcito (Frankfurt)
-- TEST + PROD şemalar senkron
-- Aktif trigger: `trg_recipe_op_sync`, `trg_stok_hareket_dup_guard`
-- Yedek: `uys_stok_hareketler_dup_temizlik_yedek` (28 satır, rollback için)
+## ⏳ Sıradaki Görevler
 
-## Yarım kalan (sonraki oturumda)
+### Küçük
+- Audit log görüntüleme sayfası (kim ne zaman ne yaptı)
+- WorkOrders "Durumları Güncelle" butonuna audit log
+- Levha kesim artık → stok yönetimi (kesim sonrası kalan levha stoka)
+- Levha kesim görselleştirme (hangi parça levhanın neresinde)
 
-1. **Frontend submit guard** (`Warehouse.tsx` Manuel Giriş/Çıkış modal): `submitting` state + disabled buton. DB güvenli, UX iyileştirme.
-2. **Multi-filter Playwright spec** (07-multi-filter.spec.ts): saha kodu PROD'da çalışıyor; test debt.
-3. **"Tedarik (otomatik onarım)" duplicate'leri** (sn_fark > 30): ayrı bug, ayrı sprint.
-
-## Backlog
-
+### Orta
 - İstek #18: fire → sipariş dışı İE
 - İstek #19: MRP stoktan ver
-- Bilgi Bankası §32.9'a v16.41-v16.47 girdileri
-- UYS dışı: Libya, TL-İSG-017, Mavvo, GFB, COPQ, BSC v3
 
-## IE-UYS-002 disiplin kuralları (5 May 2026'dan aktif)
+### Büyük
+- Sevkiyat (#5)
+- Excel (#7)
 
-- **§3.3 Spec yazımı:** ilk tur inline özet ~30-50 satır → onay → dosya. Hedef 120-180 satır.
-- **§3.4** Max 2 kritik açık soru
-- **§3.5** Aynı dosyayı 2. kez okuma
-- **§5 KISIT:** kalite/hız/doğruluk asla feda edilmez
+---
 
-## Yeni Claude'a kritik kurallar
+## 🔑 Kritik Kurallar (Yeni Claude'a)
 
-- **Buket oturum sonlandırma yetkisini kontrol eder** ("dur", "kapat", "yarın"). Claude oturum sonu önermez.
-- **Sandbox build doğrulama** zip teslim öncesi şart
-- **Supabase değişiklikleri MCP tools ile**, PowerShell SQL talimatı verme
-- **UYS şifreleri konuşmada gösterilmez** (anon key OK, RLS koruyor)
-- **Saha kodu PowerShell ile orchestrate ediliyor** (sandbox file tools yoksa) — pre-check + atomik replace, here-string `@'...'@` ile literal
-- **Manuel test: `npm run dev`** (test mode değil) — `dev:test` auth bypass aktif
-- **`.env` gerekli**: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-- **Memory limit 30/30 dolu** — yeni edit yapılamıyor, bu dosya context'tir.
+- **Buket oturum kapatır** — Claude önerme
+- **Supabase değişiklikleri MCP tools ile** — PowerShell SQL talimatı verme
+- **Şifreler konuşmada gösterilmez**
+- **TEST önce, PROD sonra (onay alarak)**
+- **DEVAM_NOTU.md her oturum sonunda güncelle**
+- **Sandbox build doğrulama** — zip/dosya teslim öncesi şart
+- **Memory limit 30/30** — bu dosya context'tir
 
 ## Ortam
 
-- Repo: `$env:USERPROFILE\Documents\GitHub\ozler-uys-v3`
+- Repo: `C:\Users\iskender.uzun\Documents\GitHub\ozler-uys-v3`
 - Node v22.22.1 portable
-- Playwright: 18/18 green spec'ler (01-auth, 02-ie, 03-mesaj, 04-multi-device, 05-modal-ux, 06-recipe-op-sync)
-- WorkOrders.tsx zaten multi-select kullanıyor (MultiCheckDropdown referans pattern)
+- GitHub Actions → GitHub Pages (otomatik deploy)
+- Playwright: 18/18 green
 
-## Acil durum rollback
+## Rollback Referansı
 
 ```sql
--- v16.45 trigger geri al
-DROP TRIGGER IF EXISTS trg_recipe_op_sync ON uys_recipes;
-DROP FUNCTION IF EXISTS fn_recipe_op_sync();
+-- audit log kaldır
+DROP TABLE IF EXISTS uys_audit_log;
 
--- v16.47 trigger geri al + silinen 28 kaydı geri yükle
-DROP TRIGGER IF EXISTS trg_stok_hareket_dup_guard ON uys_stok_hareketler;
-DROP FUNCTION IF EXISTS fn_stok_hareket_dup_guard();
-INSERT INTO uys_stok_hareketler SELECT * FROM uys_stok_hareketler_dup_temizlik_yedek;
+-- levha trigger kaldır
+DROP TRIGGER IF EXISTS trg_mrp_state_refresh_order ON uys_mrp_state_order;
+DROP TRIGGER IF EXISTS trg_stok_hareket_refresh_order ON uys_stok_hareketler;
+
+-- recete cascade kaldır
+DROP TRIGGER IF EXISTS trg_recete_sure_cascade ON uys_recipes;
 ```
+
+---
+
+## 📚 Geçmiş Büyük Dönüm Noktaları (Referans)
+
+| Versiyon | Konu |
+|---|---|
+| v15.52a | Operatör güvenlik (sicil hash + RBAC) |
+| v15.53 | Yedekleme sistemi |
+| v15.81 | MRP `uretilen=0` hardcode fix |
+| v15.90-96 | Madde 15 (rezerv, mamul tahsis, FIFO) |
+| v16.0 | Supabase Auth migration |
+| v16.31 | MRP cache (`uys_mrp_state_order`) |
+| v16.45 | `trg_recipe_op_sync` |
+| v16.47 | StokDupGuard |
+| v16.51 | Audit log sistemi |
+| v16.52 | 2D Levha kesim planlayıcısı |
