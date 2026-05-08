@@ -299,6 +299,39 @@ export function hesaplaMRP(
     })
   }
 
+  // 2b. Siparişe bağlı WO'ların w.hm alanından ek hammadde ihtiyacı
+  // Bazı WO'lar (örn. plywood kesim) siparişe bağlı ama mamulün kök reçetesinde yok.
+  // Bu WO'ların `hm` alanında gerçek hammadde listesi var — bunu da hesaba kat.
+  const secilenOrdIds = ordIdSet
+  const hmWOs = workOrders.filter(w => {
+    if (!w.orderId) return false
+    if (secilenOrdIds && !secilenOrdIds.has(w.orderId)) return false
+    if (!secilenOrdIds && ordIds !== null) return false  // genel mod değil
+    if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return false
+    if (!w.hm || !w.hm.length) return false
+    return true
+  })
+  for (const w of hmWOs) {
+    const uretilen = logs ? logs.filter(l => l.woId === w.id).reduce((a, l) => a + (l.qty || 0), 0) : 0
+    const kalan = Math.max(0, (w.hedef || 0) - uretilen)
+    if (!kalan) continue
+    const wTermin = (w as any).termin || ''
+    for (const hm of (w.hm as any[])) {
+      const hmkod: string = hm.malkod || ''; if (!hmkod) continue
+      const hmMiktar: number = hm.miktarTotal || hm.miktar || 0; if (!hmMiktar) continue
+      const hmM = materials.find(m => m.kod === hmkod)
+      if (!hmM || hmM.tip === 'YarıMamul') continue  // YM değil, hammadde/sarf olmalı
+      // BOM patlamasından bu hammadde zaten geldiyse ekleme
+      const key = hmkod.trim().toLowerCase() + '__' + wTermin
+      const ihtiyac = hmMiktar * kalan
+      if (!brutIhtiyac[key]) {
+        brutIhtiyac[key] = { malkod: hmkod, malad: hmM.ad || hm.malad || hmkod, tip: hmM.tip || 'Hammadde', birim: hmM.birim || 'Adet', brut: 0, termin: wTermin }
+      }
+      brutIhtiyac[key].brut += ihtiyac
+      dbg('[MRP DEBUG] WO hm ek ihtiyaç:', w.ieNo, hmkod, '+', ihtiyac)
+    }
+  }
+
   // 3. Brüt ihtiyaçları yuvarla
   Object.keys(brutIhtiyac).forEach(k => { brutIhtiyac[k].brut = Math.ceil(brutIhtiyac[k].brut) })
 
