@@ -19,6 +19,13 @@ export function Materials() {
   const [dimKalinlik, setDimKalinlik] = useState('')
   const [receteFilter, setReceteFilter] = useState<string>('')  // '' | 'var' | 'yok'
   const [showPasif, setShowPasif] = useState(false)
+  const [density, setDensity] = useState<'compact'|'normal'|'comfortable'>(() => {
+    return (localStorage.getItem('uys_table_density') as any) || 'compact'
+  })
+  function changeDensity(d: 'compact'|'normal'|'comfortable') {
+    setDensity(d); localStorage.setItem('uys_table_density', d)
+  }
+  const rowPy = density === 'compact' ? 'py-1' : density === 'normal' ? 'py-2' : 'py-3'
   const [sortCol, setSortCol] = useState<'kod'|'ad'|'tip'|'uzunluk'>('kod')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
 
@@ -370,6 +377,15 @@ export function Materials() {
       </div>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[10px] text-zinc-600">{filtered.length} / {materials.length} malzeme gösteriliyor</p>
+        <div className="flex items-center gap-0.5">
+          {(['compact','normal','comfortable'] as const).map(d => (
+            <button key={d} onClick={() => changeDensity(d)}
+              title={d === 'compact' ? 'Dar' : d === 'normal' ? 'Normal' : 'Geniş'}
+              className={`px-2 py-1 rounded text-[10px] border transition-colors ${density===d ? 'bg-accent/15 border-accent/30 text-accent' : 'bg-bg-2 border-border text-zinc-500 hover:text-zinc-200'}`}>
+              {d === 'compact' ? '━' : d === 'normal' ? '═' : '≡'}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
@@ -403,7 +419,7 @@ export function Materials() {
               {filtered.slice(0, 300).map(m => {
                 const op = operations.find(o => o.id === m.opId)
                 return (
-                  <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
+                  <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${rowPy} ${m.aktif === false ? 'opacity-40' : ''}`}>
                     <td className="px-3 py-[5px] cursor-pointer whitespace-nowrap" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni) await recodeMaterial(m, yeni)

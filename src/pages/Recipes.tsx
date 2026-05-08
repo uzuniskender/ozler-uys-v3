@@ -19,6 +19,14 @@ export function Recipes() {
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [filterSüresiz, setFilterSüresiz] = useState(false)
+  // Satır yüksekliği — kullanıcı seçer, localStorage'da saklanır
+  const [density, setDensity] = useState<'compact'|'normal'|'comfortable'>(() => {
+    return (localStorage.getItem('uys_table_density') as any) || 'compact'
+  })
+  function changeDensity(d: 'compact'|'normal'|'comfortable') {
+    setDensity(d); localStorage.setItem('uys_table_density', d)
+  }
+  const rowPy = density === 'compact' ? 'py-1' : density === 'normal' ? 'py-2' : 'py-3'
   const [sortCol, setSortCol] = useState<'rcKod' | 'ad' | 'mamulKod' | 'bilesen'>('rcKod')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -239,8 +247,8 @@ export function Recipes() {
         </div>
       </div>
 
-      {/* Arama */}
-      <div className="flex gap-2 mb-3">
+      {/* Arama + Density */}
+      <div className="flex gap-2 mb-3 items-center">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input value={search} onChange={e => setSearch(e.target.value)}
@@ -251,6 +259,16 @@ export function Recipes() {
               className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-200 hover:bg-bg-3"
               title="Temizle">×</button>
           )}
+        </div>
+        {/* Satır yüksekliği */}
+        <div className="flex items-center gap-0.5 ml-2">
+          {(['compact','normal','comfortable'] as const).map(d => (
+            <button key={d} onClick={() => changeDensity(d)}
+              title={d === 'compact' ? 'Dar' : d === 'normal' ? 'Normal' : 'Geniş'}
+              className={`px-2 py-1 rounded text-[10px] border transition-colors ${density===d ? 'bg-accent/15 border-accent/30 text-accent' : 'bg-bg-2 border-border text-zinc-500 hover:text-zinc-200'}`}>
+              {d === 'compact' ? '━' : d === 'normal' ? '═' : '≡'}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -299,7 +317,7 @@ export function Recipes() {
                   const sureDurum = ymSatirlar.length === 0 ? 'yok' : tumundeSure ? 'tam' : bazisindaSure ? 'eksik' : 'yok'
                   return (
                     <tr key={r.id}
-                      className={`border-b border-border/25 transition-colors ${
+                      className={`border-b border-border/25 transition-colors ${rowPy} ${
                         checkedIds.has(r.id)
                           ? 'bg-accent/10 hover:bg-accent/15'
                           : i % 2 === 0 ? 'hover:bg-bg-3/40' : 'bg-bg-3/10 hover:bg-bg-3/40'

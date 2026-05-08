@@ -21,6 +21,13 @@ export function BomTrees() {
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [receteFiltre, setReceteFiltre] = useState('')
+  const [density, setDensity] = useState<'compact'|'normal'|'comfortable'>(() => {
+    return (localStorage.getItem('uys_table_density') as any) || 'compact'
+  })
+  function changeDensity(d: 'compact'|'normal'|'comfortable') {
+    setDensity(d); localStorage.setItem('uys_table_density', d)
+  }
+  const rowPy = density === 'compact' ? 'py-1' : density === 'normal' ? 'py-2' : 'py-3'
   const [sortCol, setSortCol] = useState<'mamulKod' | 'ad' | 'bilesen'>('mamulKod')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -268,7 +275,7 @@ export function BomTrees() {
           {can('bom_add') && <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Yeni</button>}
         </div>
       </div>
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 items-center">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Mamul kodu veya ad ara..."
@@ -280,6 +287,15 @@ export function BomTrees() {
           <option value="var">✅ Reçete Var</option>
           <option value="yok">⚠ Reçete Yok</option>
         </select>
+        <div className="flex items-center gap-0.5">
+          {(['compact','normal','comfortable'] as const).map(d => (
+            <button key={d} onClick={() => changeDensity(d)}
+              title={d === 'compact' ? 'Dar' : d === 'normal' ? 'Normal' : 'Geniş'}
+              className={`px-2 py-1 rounded text-[10px] border transition-colors ${density===d ? 'bg-accent/15 border-accent/30 text-accent' : 'bg-bg-2 border-border text-zinc-500 hover:text-zinc-200'}`}>
+              {d === 'compact' ? '━' : d === 'normal' ? '═' : '≡'}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
@@ -291,7 +307,7 @@ export function BomTrees() {
             <th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {filtered.map(bt => (
-              <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
+              <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${rowPy} ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
                   const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', bt.mamulKod)
