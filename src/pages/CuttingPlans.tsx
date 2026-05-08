@@ -317,7 +317,9 @@ export function CuttingPlans() {
                       <td className="px-4 py-2">
                         {p.kesimTip === 'levha'
                           ? <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px]">🪵 Levha</span>
-                          : <span className="text-zinc-500 text-[10px]">boy</span>}
+                          : p.kesimTip === 'yuzey'
+                          ? <span className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px]">⬜ Yüzey</span>
+                          : <span className="text-zinc-500 text-[10px]">📏 Boy</span>}
                       </td>
                       <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
                       <td className="px-4 py-2 text-right font-mono">{toplamBar} bar</td>
