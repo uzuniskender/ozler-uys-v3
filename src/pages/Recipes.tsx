@@ -37,7 +37,9 @@ export function Recipes() {
     if (filterSüresiz) {
       r = r.filter(x => {
         const s = x.satirlar || []
-        return s.length > 0 && !s.some(row => (row.islemSure || 0) > 0 || (row.hazirlikSure || 0) > 0)
+        const ymS = s.filter(row => row.tip === 'YarıMamul' || row.tip === 'Mamul')
+        const tumundeSure = ymS.length > 0 && ymS.every(row => (row.islemSure || 0) > 0 || (row.hazirlikSure || 0) > 0)
+        return ymS.length > 0 && !tumundeSure
       })
     }
     return [...r].sort((a, b) => {
@@ -50,15 +52,17 @@ export function Recipes() {
     })
   }, [recipes, search, filterSüresiz, sortCol, sortDir])
 
-  // İstatistikler: toplam satır, süresiz reçete sayısı
+  // İstatistikler: toplam satır, süresiz/eksik reçete sayısı
   const stats = useMemo(() => {
     let toplamSatir = 0
     let suresizRecete = 0
     for (const r of recipes) {
       const satirlar = r.satirlar || []
       toplamSatir += satirlar.length
-      const hasSure = satirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
-      if (satirlar.length > 0 && !hasSure) suresizRecete++
+      const ymSatirlar = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+      const tumundeSure = ymSatirlar.length > 0 && ymSatirlar.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+      // Tamamen yok veya kısmen eksik → süresiz say
+      if (ymSatirlar.length > 0 && !tumundeSure) suresizRecete++
     }
     return { toplamSatir, suresizRecete }
   }, [recipes])
@@ -289,7 +293,10 @@ export function Recipes() {
               <tbody>
                 {filtered.map((r, i) => {
                   const satirlar = r.satirlar || []
-                  const hasSure = satirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+                  const ymSatirlar = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
+                  const tumundeSure = ymSatirlar.length > 0 && ymSatirlar.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+                  const bazisindaSure = ymSatirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
+                  const sureDurum = ymSatirlar.length === 0 ? 'yok' : tumundeSure ? 'tam' : bazisindaSure ? 'eksik' : 'yok'
                   return (
                     <tr key={r.id}
                       className={`border-b border-border/25 transition-colors ${
@@ -320,9 +327,13 @@ export function Recipes() {
                       <td className="px-4 py-2.5 text-center">
                         {satirlar.length === 0 ? (
                           <span className="text-[10px] text-zinc-600">—</span>
-                        ) : hasSure ? (
+                        ) : sureDurum === 'tam' ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold">
                             <Clock size={9} /> Var
+                          </span>
+                        ) : sureDurum === 'eksik' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">
+                            <Clock size={9} /> Eksik
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold">
