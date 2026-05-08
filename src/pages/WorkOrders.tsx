@@ -280,12 +280,10 @@ export function WorkOrders() {
       await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden }).eq('id', id)
       loadAll(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
-    const wo = workOrders.find(w => w.id === id)
-    const eskiDurum = wo?.durum || 'bekliyor'
-    if (durum === 'tamamlandi') await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
-    if (wo) auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
+    const eskiDurum = wo.durum || 'bekliyor'
+    await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
+    auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
       siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
-    else await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     loadAll(); toast.success(wo.ieNo + ' → ' + durum)
   }
 
