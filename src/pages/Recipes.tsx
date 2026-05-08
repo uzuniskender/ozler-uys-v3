@@ -19,6 +19,7 @@ export function Recipes() {
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [filterSüresiz, setFilterSüresiz] = useState(false)
+  const [filterEksikOp, setFilterEksikOp] = useState(false)
   // Satır yüksekliği — kullanıcı seçer, localStorage'da saklanır
   const [density, setDensity] = useState<'compact'|'normal'|'comfortable'>(() => {
     return (localStorage.getItem('uys_table_density') as any) || 'compact'
@@ -64,15 +65,18 @@ export function Recipes() {
   const stats = useMemo(() => {
     let toplamSatir = 0
     let suresizRecete = 0
+    let eksikOpRecete = 0
     for (const r of recipes) {
       const satirlar = r.satirlar || []
       toplamSatir += satirlar.length
       const ymSatirlar = satirlar.filter(s => s.tip === 'YarıMamul' || s.tip === 'Mamul')
       const tumundeSure = ymSatirlar.length > 0 && ymSatirlar.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
-      // Tamamen yok veya kısmen eksik → süresiz say
       if (ymSatirlar.length > 0 && !tumundeSure) suresizRecete++
+      // Eksik operasyon: YarıMamul/Mamul satırında opId boş
+      const tumundeOp = ymSatirlar.length > 0 && ymSatirlar.every(s => s.opId && s.opId.trim() !== '')
+      if (ymSatirlar.length > 0 && !tumundeOp) eksikOpRecete++
     }
-    return { toplamSatir, suresizRecete }
+    return { toplamSatir, suresizRecete, eksikOpRecete }
   }, [recipes])
 
   function toggleCheck(id: string) { setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
@@ -204,6 +208,14 @@ export function Recipes() {
                 {filterSüresiz && ' ✕'}
               </button>
             )}
+            {stats.eksikOpRecete > 0 && (
+              <button
+                onClick={() => setFilterEksikOp(f => !f)}
+                className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${filterEksikOp ? 'bg-red/25 border-red/50 text-red font-semibold' : 'bg-red/10 border-red/25 text-red hover:bg-red/20'}`}>
+                ⚙ <span className="font-mono font-semibold">{stats.eksikOpRecete}</span> eksik operasyon
+                {filterEksikOp && ' ✕'}
+              </button>
+            )}
             {search && (
               <span className="text-[11px] px-2 py-0.5 bg-accent/10 border border-accent/25 rounded-full text-accent">
                 {filtered.length} eşleşen
@@ -315,9 +327,11 @@ export function Recipes() {
                   const tumundeSure = ymSatirlar.length > 0 && ymSatirlar.every(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
                   const bazisindaSure = ymSatirlar.some(s => (s.islemSure || 0) > 0 || (s.hazirlikSure || 0) > 0)
                   const sureDurum = ymSatirlar.length === 0 ? 'yok' : tumundeSure ? 'tam' : bazisindaSure ? 'eksik' : 'yok'
+                  const eksikOp = ymSatirlar.length > 0 && !ymSatirlar.every(s => s.opId && s.opId.trim() !== '')
                   return (
                     <tr key={r.id}
                       className={`border-b border-border/25 transition-colors ${rowPy} ${
+                        eksikOp ? 'bg-red/5' :
                         checkedIds.has(r.id)
                           ? 'bg-accent/10 hover:bg-accent/15'
                           : i % 2 === 0 ? 'hover:bg-bg-3/40' : 'bg-bg-3/10 hover:bg-bg-3/40'
@@ -343,6 +357,7 @@ export function Recipes() {
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono text-zinc-300">{satirlar.length}</td>
                       <td className="px-4 py-2.5 text-center">
+                        <div className="flex flex-col items-center gap-1">
                         {satirlar.length === 0 ? (
                           <span className="text-[10px] text-zinc-600">—</span>
                         ) : sureDurum === 'tam' ? (
@@ -358,6 +373,12 @@ export function Recipes() {
                             <Clock size={9} /> Yok
                           </span>
                         )}
+                        {eksikOp && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">
+                            ⚙ Eksik Op
+                          </span>
+                        )}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
