@@ -607,7 +607,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
           <div className="flex-1 mr-4">
             <div className="flex items-center gap-2 mb-1">
               <input value={rcKod} onChange={e => setRcKod(e.target.value)} placeholder="RC-..."
-                className="px-2 py-1 bg-bg-3/50 border border-border/50 rounded text-xs font-mono text-accent w-28 focus:outline-none focus:border-accent" />
+                className="px-2 py-1 bg-bg-3/50 border border-border/50 rounded text-xs font-mono text-accent w-44 focus:outline-none focus:border-accent" />
               <input value={ad} onChange={e => setAd(e.target.value)} placeholder="Reçete Adı *"
                 className="flex-1 px-2 py-1 bg-bg-3/50 border border-border/50 rounded text-sm font-semibold text-zinc-200 focus:outline-none focus:border-accent" />
             </div>
@@ -633,7 +633,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
               <tr className="border-b border-border text-zinc-500">
                 <th className="text-left px-2 py-2 w-14">Kırılım</th>
                 <th className="text-left px-2 py-2 w-48">Malzeme Kodu</th>
-                <th className="text-left px-2 py-2">Malzeme Adı</th>
+                <th className="text-left px-2 py-2 min-w-[180px] max-w-xs">Malzeme Adı</th>
                 <th className="text-left px-2 py-2 w-24">Tip</th>
                 <th className="text-right px-2 py-2 w-16">Miktar</th>
                 <th className="text-left px-2 py-2 w-16">Birim</th>
@@ -665,7 +665,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
                         </button>
                       </div>
                     </td>
-                    <td className="px-2 py-1" style={{ paddingLeft: `${8 + depth * 12}px` }}>
+                    <td className="px-2 py-1 min-w-[180px] max-w-xs" style={{ paddingLeft: `${8 + depth * 12}px` }}>
                       <input value={r.malad || ''} onChange={e => updateRow(i, 'malad', e.target.value)}
                         className="w-full px-1.5 py-1 bg-bg-3/50 border border-border/50 rounded text-[12px] text-zinc-100 focus:outline-none focus:border-accent" />
                     </td>
