@@ -27,7 +27,7 @@ export function BomTrees() {
   function changeDensity(d: 'compact'|'normal'|'comfortable') {
     setDensity(d); localStorage.setItem('uys_table_density', d)
   }
-  const rowPy = density === 'compact' ? 'py-1' : density === 'normal' ? 'py-2' : 'py-3'
+  const rowStyle = { paddingTop: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px', paddingBottom: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px' }
   const [sortCol, setSortCol] = useState<'mamulKod' | 'ad' | 'bilesen'>('mamulKod')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -307,7 +307,7 @@ export function BomTrees() {
             <th className="px-4 py-2.5"></th></tr></thead>
           <tbody>
             {filtered.map(bt => (
-              <tr key={bt.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${rowPy} ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
+              <tr key={bt.id} style={rowStyle} className={`border-b border-border/30 hover:bg-bg-3/30 ${checkedIds.has(bt.id) ? 'bg-accent/5' : ''}`}>
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
                   const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', bt.mamulKod)

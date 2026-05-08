@@ -25,7 +25,7 @@ export function Materials() {
   function changeDensity(d: 'compact'|'normal'|'comfortable') {
     setDensity(d); localStorage.setItem('uys_table_density', d)
   }
-  const rowPy = density === 'compact' ? 'py-1' : density === 'normal' ? 'py-2' : 'py-3'
+  const rowStyle = { paddingTop: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px', paddingBottom: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px' }
   const [sortCol, setSortCol] = useState<'kod'|'ad'|'tip'|'uzunluk'>('kod')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
 
@@ -419,7 +419,7 @@ export function Materials() {
               {filtered.slice(0, 300).map(m => {
                 const op = operations.find(o => o.id === m.opId)
                 return (
-                  <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${rowPy} ${m.aktif === false ? 'opacity-40' : ''}`}>
+                  <tr key={m.id} style={rowStyle} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
                     <td className="px-3 py-[5px] cursor-pointer whitespace-nowrap" onClick={async () => {
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni) await recodeMaterial(m, yeni)

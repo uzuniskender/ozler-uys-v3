@@ -27,7 +27,7 @@ export function Recipes() {
   function changeDensity(d: 'compact'|'normal'|'comfortable') {
     setDensity(d); localStorage.setItem('uys_table_density', d)
   }
-  const rowPy = density === 'compact' ? 'py-1' : density === 'normal' ? 'py-2' : 'py-3'
+  const rowStyle = { paddingTop: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px', paddingBottom: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px' }
   const [sortCol, setSortCol] = useState<'rcKod' | 'ad' | 'mamulKod' | 'bilesen'>('rcKod')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -59,7 +59,7 @@ export function Recipes() {
       if (sortCol === 'bilesen')  v = (a.satirlar?.length || 0) - (b.satirlar?.length || 0)
       return sortDir === 'asc' ? v : -v
     })
-  }, [recipes, search, filterSüresiz, sortCol, sortDir])
+  }, [recipes, search, filterSüresiz, filterEksikOp, sortCol, sortDir])
 
   // İstatistikler: toplam satır, süresiz/eksik reçete sayısı
   const stats = useMemo(() => {
@@ -330,7 +330,7 @@ export function Recipes() {
                   const eksikOp = ymSatirlar.length > 0 && !ymSatirlar.every(s => s.opId && s.opId.trim() !== '')
                   return (
                     <tr key={r.id}
-                      className={`border-b border-border/25 transition-colors ${rowPy} ${
+                      style={rowStyle} className={`border-b border-border/25 transition-colors ${
                         eksikOp ? 'bg-red/5' :
                         checkedIds.has(r.id)
                           ? 'bg-accent/10 hover:bg-accent/15'
