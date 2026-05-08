@@ -351,6 +351,7 @@ export function WorkOrders() {
         <MultiCheckDropdown label="Durum" options={[
           { value: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
           { value: 'uretimde', label: 'Üretimde', color: 'text-accent' },
+          { value: 'kismi', label: 'Kısmi', color: 'text-amber' },
           { value: 'beklemede', label: 'Beklemede', color: 'text-purple-400' },
           { value: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
           { value: 'iptal', label: 'İptal', color: 'text-red' },
