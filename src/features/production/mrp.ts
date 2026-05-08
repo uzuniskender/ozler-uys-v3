@@ -323,7 +323,7 @@ export function hesaplaMRP(
       if (!hmM || hmM.tip === 'YarıMamul') continue  // YM değil, hammadde/sarf olmalı
       // BOM patlamasından bu hammadde zaten geldiyse ekleme
       const key = hmkod.trim().toLowerCase() + '__' + wTermin
-      const ihtiyac = hmMiktar * kalan
+      const ihtiyac = hmMiktar * (kalan / (w.hedef || 1))  // miktarTotal zaten hedef için toplam
       if (!brutIhtiyac[key]) {
         brutIhtiyac[key] = { malkod: hmkod, malad: hmM.ad || hm.malad || hmkod, tip: hmM.tip || 'Hammadde', birim: hmM.birim || 'Adet', brut: 0, termin: wTermin }
       }
