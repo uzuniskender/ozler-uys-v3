@@ -7,6 +7,7 @@ import { uid, today } from '@/lib/utils'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy, havuzdanYenidenOptimize } from '@/features/production/cutting'
+import { levhaKesimOptimum, levhaSonucunaKesimPlaniDonustur, wolardenParcaListesi } from '@/features/production/levhaKesim'
 import type { WorkOrder, AcikBar } from '@/types'
 import { isWorkOrderOpen, isCuttingPlanPending, isAcikBarAvailable } from '@/lib/statusUtils'
 import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
@@ -76,6 +77,51 @@ export function CuttingPlans() {
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFlowId, workOrders.length, recipes.length])
+
+  async function otomatikLevhaPlan() {
+    const { workOrders: wos, materials } = useStore.getState()
+    const levhaWOs = wos.filter(w =>
+      !w.bagimsiz && w.durum !== 'iptal' && w.durum !== 'tamamlandi' &&
+      Array.isArray(w.hm) && (w.hm as any[]).some((h: any) => {
+        const mat = materials.find(m => m.kod === h.malkod)
+        return (mat as any)?.hammaddeTipi === 'LEVHA'
+      })
+    )
+    if (!levhaWOs.length) { toast.info("Levha WO'su bulunamadı"); return }
+
+    const levhaGruplari = new Map<string, { malkod: string; malad: string; en: number; boy: number; kalinlik: number }>()
+    for (const wo of levhaWOs) {
+      for (const hm of (wo.hm as any[])) {
+        const mat = materials.find(m => m.kod === hm.malkod)
+        if (!mat || (mat as any).hammaddeTipi !== 'LEVHA') continue
+        if (!levhaGruplari.has(hm.malkod)) {
+          levhaGruplari.set(hm.malkod, {
+            malkod: mat.kod, malad: mat.ad,
+            en: (mat as any).en || 1500, boy: (mat as any).boy || 3000,
+            kalinlik: (mat as any).kalinlik || 0
+          })
+        }
+      }
+    }
+    if (!levhaGruplari.size) { toast.info('Levha hammaddesi bulunamadı'); return }
+
+    let olusturulan = 0
+    for (const [hamMalkod, levha] of levhaGruplari) {
+      const parcalar = wolardenParcaListesi(levhaWOs as any, hamMalkod, materials as any)
+      if (!parcalar.length) continue
+      const sonuc = levhaKesimOptimum(parcalar, hamMalkod, levha.en, levha.boy)
+      const { satirlar, gerekliAdet } = levhaSonucunaKesimPlaniDonustur(sonuc)
+      await supabase.from('uys_kesim_planlari').insert({
+        id: uid(), ham_malkod: hamMalkod, ham_malad: levha.malad,
+        ham_boy: levha.boy, ham_en: levha.en, ham_kalinlik: levha.kalinlik,
+        kesim_tip: 'levha', durum: 'bekliyor', tarih: today(),
+        gerekli_adet: gerekliAdet, satirlar
+      })
+      olusturulan++
+    }
+    await loadAll()
+    toast.success(`${olusturulan} levha kesim planı oluşturuldu — %${Math.round((levhaGruplari.size > 0 ? 1 : 0) * 100)} verimlilik`)
+  }
 
   async function deletePlan(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -178,6 +224,7 @@ export function CuttingPlans() {
             })
             setShowOtoOnay(true)
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs font-semibold hover:bg-green/20"><Zap size={13} /> Otomatik Plan</button>}
+          {can('cutting_add') && <button onClick={otomatikLevhaPlan} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 border border-purple-500/25 text-purple-400 rounded-lg text-xs font-semibold hover:bg-purple-500/20">🪵 Levha Planı</button>}
           {can('cutting_add') && <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Scissors size={13} /> Manuel Plan</button>}
         </div>
       </div>
@@ -248,7 +295,11 @@ export function CuttingPlans() {
                           <div><div className="font-mono text-accent text-[11px]">{p.hamMalkod}</div><div className="text-zinc-500 text-[10px]">{p.hamMalad}</div></div>
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-zinc-400">{p.kesimTip}</td>
+                      <td className="px-4 py-2">
+                        {p.kesimTip === 'levha'
+                          ? <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px]">🪵 Levha</span>
+                          : <span className="text-zinc-500 text-[10px]">boy</span>}
+                      </td>
                       <td className="px-4 py-2 text-right font-mono text-zinc-500">{p.hamBoy} mm</td>
                       <td className="px-4 py-2 text-right font-mono">{toplamBar} bar</td>
                       <td className="px-4 py-2">
