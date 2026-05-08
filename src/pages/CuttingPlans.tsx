@@ -106,21 +106,28 @@ export function CuttingPlans() {
     if (!levhaGruplari.size) { toast.info('Levha hammaddesi bulunamadı'); return }
 
     let olusturulan = 0
-    // Mevcut bekleyen levha planlarını kontrol et
-    const { data: mevcutPlanlar } = await supabase
+    // Mevcut levha planlarında hangi WO'lar zaten planlı?
+    const { data: mevcutLevhaPlanlar } = await supabase
       .from('uys_kesim_planlari')
-      .select('ham_malkod')
+      .select('satirlar')
       .eq('kesim_tip', 'levha')
       .neq('durum', 'tamamlandi')
-    const mevcutMalkodlar = new Set((mevcutPlanlar || []).map((p: any) => p.ham_malkod))
+    const planliWoIds = new Set<string>(
+      (mevcutLevhaPlanlar || []).flatMap((p: any) =>
+        (p.satirlar || []).flatMap((s: any) =>
+          (s.kesimler || []).map((k: any) => k.woId).filter(Boolean)
+        )
+      )
+    )
 
     for (const [hamMalkod, levha] of levhaGruplari) {
-      if (mevcutMalkodlar.has(hamMalkod)) {
-        toast.info(`${levha.malad} için zaten bekleyen plan var — atlanıyor`)
+      // Zaten planlanmış WO'ları çıkar
+      const planlanmamisWOs = levhaWOs.filter(w => !planliWoIds.has(w.id))
+      const parcalar = wolardenParcaListesi(planlanmamisWOs as any, hamMalkod, materials as any)
+      if (!parcalar.length) {
+        toast.info(`${levha.malad} için tüm iş emirleri zaten planlanmış`)
         continue
       }
-      const parcalar = wolardenParcaListesi(levhaWOs as any, hamMalkod, materials as any)
-      if (!parcalar.length) continue
       const sonuc = levhaKesimOptimum(parcalar, hamMalkod, levha.en, levha.boy)
       const { satirlar, gerekliAdet } = levhaSonucunaKesimPlaniDonustur(sonuc)
       await supabase.from('uys_kesim_planlari').insert({
