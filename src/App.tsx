@@ -37,6 +37,7 @@ import Chat from '@/pages/Chat'
 import { HmTipleri } from '@/pages/HmTipleri'
 import { Backup } from '@/pages/Backup'
 import { StokLog } from '@/pages/StokLog'
+import AuditLog from '@/pages/AuditLog'
 import { ensureDailyAutoBackup } from '@/lib/backup'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
@@ -82,6 +83,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/hm-tipleri" element={<HmTipleri />} />
           <Route path="/backup" element={<Backup />} />
           <Route path="/stok-log" element={<StokLog />} />
+          <Route path="/audit-log" element={<AuditLog />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

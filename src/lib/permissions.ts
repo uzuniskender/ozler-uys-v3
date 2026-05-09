@@ -121,6 +121,9 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
     { key: 'manuel_mudahale_yap',     label: 'Manuel müdahale (rezerve dokunma)' },
     { key: 'manuel_mudahale_log_view', label: 'Manuel müdahale audit log görme' },
   ]},
+  { group: 'Audit Log', actions: [
+    { key: 'audit_log_goruntule', label: 'Audit log görüntüleme' },
+  ]},
 ]
 
 export const DEFAULTS: Record<string, AdminRole[]> = {
@@ -166,6 +169,7 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   bildirim_okundu_isaretle:['planlama','uretim_sor','depocu'], // herkese
   manuel_mudahale_yap:['planlama','depocu'],                   // sahada uygulayan: planlama + depocu
   manuel_mudahale_log_view:[],                                  // sadece admin (audit gizli)
+  audit_log_goruntule:[],                                       // sadece admin
 }
 
 export const ROLE_LIST: { key: AdminRole; label: string }[] = [
