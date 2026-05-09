@@ -4,6 +4,7 @@ import { stokTuketimIsle } from '@/features/production/stokTuketim'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { isKesimWO, getPlanliWoIds } from '@/lib/statusUtils'
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -14,6 +15,7 @@ import { Search, Play, CheckCircle, ScanBarcode } from 'lucide-react'
 export function ProductionEntry() {
   const { workOrders, logs, operators, operations, loadAll } = useStore()
   const { can } = useAuth()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState('')
   const [selectedOpr, setSelectedOpr] = useState<string | null>(null)
@@ -425,7 +427,14 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
 
     // Fire kaydedildi — telafi İE otomatik açılmaz, yönetim Reports → Fire'dan onaylayacak
     if (f > 0) {
-      toast.info(`⚠ ${f} fire kaydedildi. Telafi İE için Reports → Fire sekmesinden onay verin.`, { duration: 5000 })
+      toast.warning(
+        `⚠️ ${f} adet FIRE kaydedildi — Telafi İE henüz açılmadı!` +
+        `\nReports → Fire Analizi sekmesinden telafi İE oluşturulmalıdır.`,
+        {
+          duration: 10000,
+          action: { label: '→ Fire Analizi', onClick: () => navigate('/reports') },
+        }
+      )
     }
 
     // Auto-close: İE kapasitesi doldu mu? (q + fire >= hedef)
@@ -435,7 +444,11 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     if (yeniKapasite >= w.hedef && w.durum !== 'tamamlandi') {
       await supabase.from('uys_work_orders').update({ durum: 'tamamlandi' }).eq('id', woId)
       if (yeniProdToplam < w.hedef) {
-        toast.info(`İE kapasite dolduğu için kapatıldı (${yeniProdToplam} sağlam, ${yeniFireToplam} fire). Fire için telafi İE açıldı.`)
+        toast.warning(
+          `⚠️ İE kapasite doldu — ${yeniProdToplam} sağlam, ${yeniFireToplam} fire.` +
+          `\nFire varsa Reports → Fire Analizi'nden telafi İE açılmalıdır.`,
+          { duration: 10000, action: { label: '→ Fire Analizi', onClick: () => navigate('/reports') } }
+        )
       }
     } else if (freshProd === 0 && w.durum !== 'uretimde') {
       // İlk üretim girişi → durum "üretimde"
