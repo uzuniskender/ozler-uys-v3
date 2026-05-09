@@ -161,6 +161,29 @@ export function CuttingPlans() {
     toast.info('Artıklar artık "Açık Bar Havuzu"nda otomatik izleniyor — Depolar sayfasındaki yeni tabdan görebilirsiniz.', { duration: 5000 })
   }
 
+  // #19 — Levha kesim artıklarını stoka gir
+  async function levhaArtiklariStokaGir(planId: string, hamMalkod: string, hamMalad: string, satirlar: any[]) {
+    const { data: mevcutlar } = await supabase.from('uys_stok_hareketler')
+      .select('id').eq('log_id', 'levha-artik-' + planId).limit(1)
+    if (mevcutlar && mevcutlar.length > 0) { toast.info('Bu planın artıkları zaten stoka girilmiş.'); return }
+    const artiklar: { en: number; boy: number }[] = []
+    for (const satir of satirlar) {
+      if (Array.isArray(satir.artiklar)) {
+        satir.artiklar.forEach((a: any) => { if (a.en >= 100 && a.boy >= 100) artiklar.push({ en: a.en, boy: a.boy }) })
+      }
+    }
+    if (artiklar.length === 0) { toast.error('100mm×100mm’den büyük artık yok'); return }
+    for (const a of artiklar) {
+      await supabase.from('uys_stok_hareketler').insert({
+        id: uid(), tarih: today(), malkod: hamMalkod, malad: hamMalad + ' (Artık)',
+        miktar: 1, tip: 'giris', log_id: 'levha-artik-' + planId,
+        aciklama: 'Levha artığı — ' + a.en + 'x' + a.boy + 'mm (' + Math.round(a.en * a.boy / 10000) + ' dm2)',
+      })
+    }
+    loadAll()
+    toast.success(artiklar.length + ' artık levha stoka eklendi (' + hamMalkod + ')')
+  }
+
   return (
     <div>
       {/* v15.36 — Flow progress bar */}
@@ -347,6 +370,10 @@ export function CuttingPlans() {
                                 if (topFire <= 0) { toast.error('Artık yok'); return }
                                 artikStokaGir(p.id, p.hamMalkod, p.hamMalad, topFire)
                               }} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-green">♻ Artık</button>
+                              {p.kesimTip === 'levha' && (
+                                <button onClick={() => levhaArtiklariStokaGir(p.id, p.hamMalkod, p.hamMalad, satirlar)}
+                                  className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded text-[10px] hover:bg-purple-500/20 border border-purple-500/20">Levha Artıkları</button>
+                              )}
                             </div>
                           </div>
                           {satirlar.map((s, si) => {
