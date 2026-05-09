@@ -723,22 +723,40 @@ export function MRP() {
                       <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{s.acikTedarik > 0 ? Math.round(s.acikTedarik) : '—'}</td>
                       <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td><td className={`px-3 py-1.5 font-mono text-[11px] ${s.termin && s.termin < today() ? "text-red font-semibold" : "text-zinc-400"}`}>{s.termin || "-"}</td>
                       <td className={`px-3 py-1.5 font-semibold ${color}`}>{s.durum === 'yeterli' ? '✓ Yeterli' : '⚠ Eksik'}</td>
-                      <td className="px-3 py-1.5">{s.durum !== 'yeterli' && (
-                        <button onClick={async () => {
-                          const mevcut = tedarikler.find(t => t.malkod === s.malkod && !t.geldi)
-                          if (mevcut) { toast.info('Zaten açık tedarik var'); return }
-                          await supabase.from('uys_tedarikler').insert({
-                            id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
-                            birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null, durum: 'bekliyor', geldi: false, not_: 'MRP',
-                            order_id: [...selectedOrders][0] || null, siparis_no: orders.find(o => o.id === [...selectedOrders][0])?.siparisNo || null,
-                          })
-                          // Secili siparislerin mrp_durum'unu 'tamam' yap (MRP akisi kapandi)
-                          for (const oid of selectedOrders) {
-                            await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
-                          }
-                          loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
-                        }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>
-                      )}</td>
+                      <td className="px-3 py-1.5 flex gap-1">
+                        {s.durum !== 'yeterli' && (
+                          <button onClick={async () => {
+                            const mevcut = tedarikler.find(t => t.malkod === s.malkod && !t.geldi)
+                            if (mevcut) { toast.info('Zaten açık tedarik var'); return }
+                            await supabase.from('uys_tedarikler').insert({
+                              id: uid(), malkod: s.malkod, malad: s.malad, miktar: Math.ceil(s.net),
+                              birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null, durum: 'bekliyor', geldi: false, not_: 'MRP',
+                              order_id: [...selectedOrders][0] || null, siparis_no: orders.find(o => o.id === [...selectedOrders][0])?.siparisNo || null,
+                            })
+                            for (const oid of selectedOrders) {
+                              await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
+                            }
+                            loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
+                          }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>
+                        )}
+                        {s.durum === 'yeterli' && (
+                          <button onClick={async () => {
+                            const miktar = Math.round(s.brut)
+                            if (miktar <= 0) { toast.error('Geçersiz miktar'); return }
+                            const siparisNo = orders.find(o => selectedOrders.has(o.id))?.siparisNo || 'MRP'
+                            await supabase.from('uys_stok_hareketler').insert({
+                              id: uid(), malkod: s.malkod, malad: s.malad,
+                              miktar, tip: 'cikis', tarih: today(),
+                              aciklama: 'MRP stoktan ver — ' + siparisNo,
+                            })
+                            for (const oid of selectedOrders) {
+                              await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
+                            }
+                            loadAll()
+                            toast.success('Stoktan verildi: ' + s.malkod + ' (' + miktar + ' adet)')
+                          }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">📦 Stoktan Ver</button>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
