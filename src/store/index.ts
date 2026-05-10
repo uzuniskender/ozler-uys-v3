@@ -167,7 +167,7 @@ interface UYSStore {
   stokHareketler: StokHareket[]; cuttingPlans: CuttingPlan[]
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]; mrpRezerve: MrpRezerve[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
-  activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]; izinler: Record<string, unknown>[]
+  activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]; izinler: Record<string, unknown>[]; bildirimler: Record<string, unknown>[]; pendingFlows: Record<string, unknown>[]
   loading: boolean; synced: boolean
   loadAll: () => Promise<void>
   setOrders: (orders: Order[]) => void
@@ -203,7 +203,7 @@ export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [],
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], bildirimler: [], pendingFlows: [],
   loading: true, synced: false,
 
   loadAll: async () => {
