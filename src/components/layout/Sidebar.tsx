@@ -98,11 +98,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       return bekleyen > 0 ? String(bekleyen) : ''
     }
     if (key === 'problemlerOpen') {
-      const acik = store.problemler.filter(p => p.durum !== 'Kapandı').length
+      const acik = (store.problemler || []).filter(p => p.durum !== 'Kapandı').length
       return acik > 0 ? String(acik) : ''
     }
     if (key === 'activeTest') {
-      const aktif = store.testRuns.filter(t => t.durum === 'aktif').length
+      const aktif = (store.testRuns || []).filter(t => t.durum === 'aktif').length
       return aktif > 0 ? 'AKTİF' : ''
     }
     const arr = (store as unknown as Record<string, unknown>)[key]
