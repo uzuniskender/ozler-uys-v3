@@ -51,7 +51,7 @@ export function InactiveOperatorsCard() {
     // İzinler → opId → aktif izin (bugün aralığında, onaylı)
     type IzinInfo = { tip: string; baslangic: string; bitis: string; saatBaslangic?: string; saatBitis?: string }
     const aktifIzinMap = new Map<string, IzinInfo>()
-    for (const iz of izinler) {
+    for (const iz of (izinler || [])) {
       if (iz.durum !== 'onaylandi') continue
       if (iz.baslangic > todayStr || iz.bitis < todayStr) continue
       aktifIzinMap.set(iz.opId, {
