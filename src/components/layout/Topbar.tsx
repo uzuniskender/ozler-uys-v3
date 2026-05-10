@@ -35,7 +35,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   // v15.96 — Okunmamis bildirimler (kendi hedef veya herkes hedefli)
   const myUid = user?.dbId || user?.email || user?.username || ''
   const okunmamisBildirimler = useMemo(() => {
-    return bildirimler
+    return (bildirimler || [])
       .filter(b => !b.okundu && (!b.hedefKullaniciId || b.hedefKullaniciId === myUid))
       .sort((a, b) => (b.olusturma || '').localeCompare(a.olusturma || ''))
   }, [bildirimler, myUid])
@@ -52,7 +52,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   // v15.36 — Aktif yarım işler (sadece bu kullanıcıya ait)
   // v15.65 (madde 17) — 'beklet' durumlu flow'lar da Topbar'da görünür (kullanıcı geri açabilsin)
   const myUserId = user?.dbId || user?.email || user?.username || ''
-  const activeFlows = pendingFlows.filter(f =>
+  const activeFlows = (pendingFlows || []).filter(f =>
     (f.durum === 'aktif' || f.durum === 'beklet') &&
     (f.userId === myUserId || f.userId === user?.username || f.userId === user?.email)
   )
