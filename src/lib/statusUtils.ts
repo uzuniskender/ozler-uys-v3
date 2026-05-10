@@ -249,6 +249,25 @@ export function getPlanliWoIds(cuttingPlans: CuttingPlan[]): Set<string> {
 }
 
 /**
+ * Aktif kesim planlarındaki tüm ieNo değerlerini döner.
+ * Eski planlar woId yerine ieNo ile kaydedilmiş olabilir — fallback için.
+ * v16.53 fix: woId eksik planlarda ieNo üzerinden eşleşme sağlar.
+ */
+export function getPlanliIeNos(cuttingPlans: CuttingPlan[]): Set<string> {
+  const set = new Set<string>()
+  for (const cp of cuttingPlans) {
+    if (!isCuttingPlanActive(cp)) continue
+    for (const s of (cp.satirlar || [])) {
+      for (const k of (s.kesimler || [])) {
+        const ieNo = (k as any).ieNo
+        if (ieNo) set.add(ieNo)
+      }
+    }
+  }
+  return set
+}
+
+/**
  * Kesim eksik olan WO ID'lerini döner.
  * Şartlar:
  *   - WO açık (tamamlanmadı, iptal değil, paused değil)
@@ -262,11 +281,13 @@ export function getKesimEksikWoIds(
   cuttingPlans: CuttingPlan[]
 ): Set<string> {
   const planli = getPlanliWoIds(cuttingPlans)
+  const planliIeNos = getPlanliIeNos(cuttingPlans)
   const eksik = new Set<string>()
   for (const w of workOrders) {
     if (!isWorkOrderOpen(w)) continue
     if (!isKesimWO(w)) continue
     if (planli.has(w.id)) continue
+    if (w.ieNo && planliIeNos.has(w.ieNo)) continue  // v16.53: ieNo fallback
     eksik.add(w.id)
   }
   return eksik
@@ -324,7 +345,9 @@ export function getEffectiveStatus(
   // 2. Kesim opsiyonlu + plan yok
   if (isKesimWO(w)) {
     const planli = getPlanliWoIds(cuttingPlans)
-    if (!planli.has(w.id)) {
+    const planliIeNos = getPlanliIeNos(cuttingPlans)
+    const planliMi = planli.has(w.id) || (w.ieNo ? planliIeNos.has(w.ieNo) : false)
+    if (!planliMi) {
       return { status: 'PlanBekliyor', reason: 'Kesim planı oluşturulmamış', blockedBy: 'kesim_plan' }
     }
   }
