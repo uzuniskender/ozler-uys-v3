@@ -23,6 +23,7 @@ const NAV = [
     { path: '/orders', label: 'Siparişler', icon: ClipboardList, badge: 'orders', guest: true },
     { path: '/work-orders', label: 'İş Emirleri', icon: Clock, badge: 'workOrders', guest: true },
     { path: '/production', label: 'Üretim Girişi', icon: PlusCircle, guest: false },
+    { path: '/active-work', label: 'Canlı Takip', icon: Monitor, badge: 'activeWork', guest: false },
     { path: '/cutting', label: 'Kesim Planları', icon: Scissors, badge: 'cuttingPlans', guest: true },
     { path: '/mrp', label: 'MRP', icon: Calculator, guest: true },
     { path: '/procurement', label: 'Tedarik', icon: ShoppingCart, badge: 'tedarikler', guest: false },
