@@ -47,7 +47,7 @@ export function ActiveWorkPanel() {
   }, [realtime, loadAll])
 
   // activeWork → WO detay birleştir
-  const rows = activeWork.map(aw => {
+  const rows = (activeWork || []).map(aw => {
     const wo = workOrders.find(w => w.id === aw.woId)
     const opr = operators.find(o => o.id === aw.opId)
     const dk = gecenDakika(aw.baslangic)
@@ -55,8 +55,8 @@ export function ActiveWorkPanel() {
   }).sort((a, b) => b.dk - a.dk)
 
   // İstatistikler
-  const toplamCalisanOpr = new Set(activeWork.map(a => a.opId)).size
-  const toplamAktifIE = new Set(activeWork.map(a => a.woId)).size
+  const toplamCalisanOpr = new Set((activeWork || []).map(a => a.opId)).size
+  const toplamAktifIE = new Set((activeWork || []).map(a => a.woId)).size
   const enUzun = rows[0]?.dk ?? 0
 
   return (
