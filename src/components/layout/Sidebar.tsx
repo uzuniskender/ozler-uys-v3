@@ -7,7 +7,7 @@ import { isActive as isOrderActive } from '@/features/order/stateMachine'  // v1
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity, Weight, FileSearch
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity, Weight, FileSearch, Monitor
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
