@@ -254,6 +254,22 @@ export const useStore = create<UYSStore>((set) => ({
           ok++
         }
       })
+      // stokHareketler sayfalama — varsayılan limit (1000) aşılabilir (v16.53 fix)
+      {
+        const PAGE = 1000
+        let sayfa = 0, tumSH: StokHareket[] = []
+        while (true) {
+          const { data, error } = await supabase
+            .from('uys_stok_hareketler')
+            .select('*')
+            .range(sayfa * PAGE, (sayfa + 1) * PAGE - 1)
+          if (error || !data || data.length === 0) break
+          tumSH = [...tumSH, ...data.map(r => M.stokHareket(r as Record<string, unknown>))]
+          if (data.length < PAGE) break
+          sayfa++
+        }
+        if (tumSH.length > 0) updates.stokHareketler = tumSH
+      }
       // yetkiMap — ayrı yükle (uys_yetki_ayarlari: aksiyon + roller kolonları)
       const { data: yetkiData } = await supabase.from('uys_yetki_ayarlari').select('*')
       if (yetkiData) {
