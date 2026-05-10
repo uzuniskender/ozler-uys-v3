@@ -4,7 +4,8 @@ import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem,
+  HmTip, TestRun, Problem, Kullanici
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -19,7 +20,6 @@ const M = {
   }),
   wo: (r: Record<string, unknown>): WorkOrder => {
     const malkod = (r.malkod || '') as string
-    // hm'den kendi kendine referansı temizle (veri bütünlüğü)
     const rawHm = (r.hm || []) as WorkOrder['hm']
     const hm = malkod ? rawHm.filter(h => h.malkod !== malkod) : rawHm
     return {
@@ -158,6 +158,32 @@ const M = {
     tamamlanma: (r.tamamlanma || '') as string, olusturan: (r.olusturan || '') as string,
     notlar: (r.notlar || '') as string,
   }),
+  hmTip: (r: Record<string, unknown>): HmTip => ({
+    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
+    aciklama: (r.aciklama || '') as string, sira: (r.sira as number) || 0,
+    olusturma: (r.olusturma || '') as string,
+  }),
+  testRun: (r: Record<string, unknown>): TestRun => ({
+    id: r.id as string, baslangic: (r.baslangic || '') as string,
+    bitis: (r.bitis || '') as string, durum: (r.durum || 'aktif') as TestRun['durum'],
+    userId: (r.user_id || '') as string, userAd: (r.user_ad || '') as string,
+    aciklama: (r.aciklama || '') as string,
+    temizlenenKayitSayisi: (r.temizlenen_kayit_sayisi || {}) as Record<string, number>,
+    not: (r.not_ || '') as string,
+  }),
+  problem: (r: Record<string, unknown>): Problem => ({
+    id: r.id as string, problem: (r.problem || '') as string,
+    termin: (r.termin || '') as string, sorumlu: (r.sorumlu || '') as string,
+    durum: (r.durum || 'Açık') as string, yapilanlar: (r.yapilanlar || '') as string,
+    notlar: (r.notlar || '') as string, olusturan: (r.olusturan || '') as string,
+    olusturma: (r.olusturma || '') as string, sonDegistiren: (r.son_degistiren || '') as string,
+    sonDegistirme: (r.son_degistirme || '') as string, kapatmaTarihi: (r.kapatma_tarihi || '') as string,
+  }),
+  kullanici: (r: Record<string, unknown>): Kullanici => ({
+    id: r.id as string, ad: (r.ad || '') as string,
+    kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
+    rol: (r.rol || 'depocu') as Kullanici['rol'], aktif: !!r.aktif,
+  }),
 }
 
 interface UYSStore {
@@ -167,7 +193,10 @@ interface UYSStore {
   stokHareketler: StokHareket[]; cuttingPlans: CuttingPlan[]
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]; mrpRezerve: MrpRezerve[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
-  activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]; izinler: Record<string, unknown>[]; bildirimler: Record<string, unknown>[]; pendingFlows: Record<string, unknown>[]
+  activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
+  izinler: Record<string, unknown>[]; bildirimler: Record<string, unknown>[]; pendingFlows: Record<string, unknown>[]
+  hmTipler: HmTip[]; testRuns: TestRun[]; problemler: Problem[]; kullanicilar: Kullanici[]
+  yetkiMap: Record<string, string[]>
   loading: boolean; synced: boolean
   loadAll: () => Promise<void>
   setOrders: (orders: Order[]) => void
@@ -197,13 +226,19 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
   { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
   { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
+  { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
+  { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
+  { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
+  { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
 ]
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], bildirimler: [], pendingFlows: [],
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
+  izinler: [], bildirimler: [], pendingFlows: [],
+  hmTipler: [], testRuns: [], problemler: [], kullanicilar: [], yetkiMap: {},
   loading: true, synced: false,
 
   loadAll: async () => {
@@ -219,6 +254,15 @@ export const useStore = create<UYSStore>((set) => ({
           ok++
         }
       })
+      // yetkiMap — ayrı yükle (uys_yetki_ayarlari: aksiyon + roller kolonları)
+      const { data: yetkiData } = await supabase.from('uys_yetki_ayarlari').select('*')
+      if (yetkiData) {
+        const yetkiMap: Record<string, string[]> = {}
+        yetkiData.forEach((r: Record<string, unknown>) => {
+          if (r.aksiyon) yetkiMap[r.aksiyon as string] = (r.roller || []) as string[]
+        })
+        updates.yetkiMap = yetkiMap
+      }
       if (ok >= 5) {
         set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
         console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)
