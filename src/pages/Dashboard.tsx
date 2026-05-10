@@ -175,7 +175,7 @@ export function Dashboard() {
 
   const bugunFire = fireLogs.filter(f => f.tarih === todayStr)
   const toplamFire = bugunFire.reduce((a, f) => a + f.qty, 0)
-  const bekleyenTelafi = fireLogs.filter(f => !f.telafiWoId)
+  const bekleyenTelafi = (fireLogs || []).filter(f => !f.telafiWoId)
   const bekleyenTelafiAdet = bekleyenTelafi.reduce((a, f) => a + f.qty, 0)
   const okunmamis = operatorNotes.filter(n => !n.okundu && !(n.opAd || '').includes('Yönetim'))
 
@@ -194,10 +194,10 @@ export function Dashboard() {
     ).length
   }, [aktifOrders, workOrders])
 
-  const bugunIzinli = izinler.filter(iz =>
+  const bugunIzinli = (izinler || []).filter(iz =>
     iz.durum === 'onaylandi' && iz.baslangic <= todayStr && iz.bitis >= todayStr
   )
-  const bekleyenIzinler = izinler.filter(iz => iz.durum === 'bekliyor')
+  const bekleyenIzinler = (izinler || []).filter(iz => iz.durum === 'bekliyor')
 
   const durusIstSet = new Set<string>()
   const durusDetay: { istAd: string; durusAd: string; woAd: string }[] = []
