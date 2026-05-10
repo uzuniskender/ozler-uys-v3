@@ -43,6 +43,14 @@ const STORE_WHITELIST = new Set([
   'uys_mrp_state_order',     // v16.31 IE #14 Faz A — MRP cache (order bazli). mrpCache.ts dogrudan supabase ile okur, store'a girmez.
 
   'uys_audit_log',           // v16.51 — Audit log. Tip C (büyük log). Frontend state'e yüklenmez; filtreli sorgu.
+  'pt_problemler',           // Problem Takip — kendi sayfasında fetch ediliyor.
+  'uys_acik_barlar',         // Açık bar havuzu — Warehouse.tsx kendi fetch ediyor.
+  'uys_bildirimler',         // Bildirimler — bildirim merkezi kendi fetch ediyor.
+  'uys_hm_tipleri',          // Hammadde tipleri — HmTipleri.tsx kendi fetch ediyor.
+  'uys_izinler',             // İzinler — OperatorPanel kendi fetch ediyor.
+  'uys_kullanicilar',        // Kullanıcılar — useAuth kendi yönetiyor.
+  'uys_pending_flows',       // Pending flows — pendingFlow.ts kendi fetch ediyor.
+  'uys_test_runs',           // Test runs — TestMode.tsx kendi fetch ediyor.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.

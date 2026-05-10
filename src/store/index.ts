@@ -1,12 +1,10 @@
 import { create } from 'zustand'
-import { supabase, fetchAll } from '@/lib/supabase'
-import { setYetkiOverrides } from '@/lib/permissions'
+import { supabase } from '@/lib/supabase'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem, Izin, Kullanici, HmTip, Problem,
-  AcikBar, PendingFlow, TestRun, Bildirim
+  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -17,13 +15,11 @@ const M = {
     urunler: (r.urunler || []) as Order['urunler'], mamulKod: (r.mamul_kod || '') as string,
     mamulAd: (r.mamul_ad || '') as string, adet: (r.adet as number) || 1,
     receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
-    durum: (r.durum || '') as string, sevkDurum: (r.sevk_durum || 'sevk_yok') as string,
-    oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
-    // IE #14 Faz B (v16.33): DB'de state ENUM kolonu; default 'yeni'
-    state: ((r.state as string) || 'yeni') as Order['state'],
+    durum: (r.durum || '') as string, oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
   }),
   wo: (r: Record<string, unknown>): WorkOrder => {
     const malkod = (r.malkod || '') as string
+    // hm'den kendi kendine referansı temizle (veri bütünlüğü)
     const rawHm = (r.hm || []) as WorkOrder['hm']
     const hm = malkod ? rawHm.filter(h => h.malkod !== malkod) : rawHm
     return {
@@ -44,7 +40,6 @@ const M = {
   },
   log: (r: Record<string, unknown>): ProductionLog => ({
     id: r.id as string, woId: (r.wo_id || '') as string, tarih: (r.tarih || '') as string,
-    saat: (r.saat || '') as string,
     qty: (r.qty as number) || 0, fire: (r.fire as number) || 0,
     operatorlar: (r.operatorlar || []) as ProductionLog['operatorlar'],
     duruslar: (r.duruslar || []) as ProductionLog['duruslar'],
@@ -56,9 +51,10 @@ const M = {
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     tip: (r.tip || '') as string, hammaddeTipi: (r.hammadde_tipi || '') as string, birim: (r.birim || 'Adet') as string,
     boy: (r.boy as number) || 0, en: (r.en as number) || 0, kalinlik: (r.kalinlik as number) || 0,
-    uzunluk: (r.uzunluk as number) || 0,
-    cap: (r.cap as number) || 0, icCap: (r.ic_cap as number) || 0, minStok: (r.min_stok as number) || 0,
+    uzunluk: (r.uzunluk as number) || 0, cap: (r.cap as number) || 0, icCap: (r.ic_cap as number) || 0, minStok: (r.min_stok as number) || 0,
     opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string,
+    revizyon: (r.revizyon as number) || 0, revizyonTarihi: (r.revizyon_tarihi || '') as string,
+    oncekiId: (r.onceki_id || '') as string, aktif: r.aktif !== false,
   }),
   operation: (r: Record<string, unknown>): Operation => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
@@ -127,7 +123,6 @@ const M = {
     id: r.id as string, orderId: (r.order_id || '') as string, siparisNo: (r.siparis_no || '') as string,
     musteri: (r.musteri || '') as string, tarih: (r.tarih || '') as string,
     kalemler: (r.kalemler || []) as Sevk['kalemler'], not: (r.not_ || '') as string,
-    // v16.30a — ek alanlar (DB'de var, PDF için lazım)
     sevkNo: (r.sevk_no || '') as string,
     tip: (r.tip || '') as string,
     musteriKod: (r.musteri_kod || '') as string,
@@ -141,8 +136,6 @@ const M = {
     mesaj: (r.mesaj || '') as string, okundu: !!r.okundu,
     cevap: (r.cevap || '') as string, cevaplayan: (r.cevaplayan || '') as string,
     cevapTarih: (r.cevap_tarih || '') as string,
-    kategori: (r.kategori || undefined) as OperatorNote['kategori'],
-    oncelik: ((r.oncelik as string) || 'Normal') as OperatorNote['oncelik'],
   }),
   activeWork: (r: Record<string, unknown>): ActiveWork => ({
     id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
@@ -154,10 +147,6 @@ const M = {
     tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
     qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
     operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
-    telafiWoId: (r.telafi_wo_id || '') as string,
-    // v15.34.3
-    tip: (r.tip || 'parca') as FireLog['tip'],
-    uzunlukMm: (r.uzunluk_mm as number) || 0,
   }),
   checklist: (r: Record<string, unknown>): ChecklistItem => ({
     id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],
@@ -169,97 +158,6 @@ const M = {
     tamamlanma: (r.tamamlanma || '') as string, olusturan: (r.olusturan || '') as string,
     notlar: (r.notlar || '') as string,
   }),
-  izin: (r: Record<string, unknown>): Izin => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, bitis: (r.bitis || '') as string,
-    tip: (r.tip || 'yıllık') as string, durum: (r.durum || 'bekliyor') as string,
-    saatBaslangic: (r.saat_baslangic || '') as string, saatBitis: (r.saat_bitis || '') as string,
-    onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
-    not: (r.not_ || '') as string, olusturan: (r.olusturan || 'admin') as string,
-  }),
-  hmTip: (r: Record<string, unknown>): HmTip => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    aciklama: (r.aciklama || '') as string, sira: (r.sira as number) || 0,
-    olusturma: (r.olusturma || '') as string,
-  }),
-  kullanici: (r: Record<string, unknown>): Kullanici => ({
-    id: r.id as string, ad: (r.ad || '') as string,
-    kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
-    rol: (r.rol || 'planlama') as Kullanici['rol'], aktif: r.aktif !== false,
-  }),
-  problem: (r: Record<string, unknown>): Problem => ({
-    id: r.id as string,
-    problem: (r.problem || '') as string,
-    termin: (r.termin || '') as string,
-    sorumlu: (r.sorumlu || '') as string,
-    durum: (r.durum || 'Açık') as string,
-    yapilanlar: (r.yapilanlar || '') as string,
-    notlar: (r.notlar || '') as string,
-    olusturan: (r.olusturan || '') as string,
-    olusturma: (r.olusturma || '') as string,
-    sonDegistiren: (r.son_degistiren || '') as string,
-    sonDegistirme: (r.son_degistirme || '') as string,
-    kapatmaTarihi: (r.kapatma_tarihi || '') as string,
-  }),
-  acikBar: (r: Record<string, unknown>): AcikBar => ({
-    id: r.id as string,
-    hamMalkod: (r.ham_malkod || '') as string,
-    hamMalad: (r.ham_malad || '') as string,
-    uzunlukMm: (r.uzunluk_mm as number) || 0,
-    kaynakPlanId: (r.kaynak_plan_id || '') as string,
-    kaynakSatirId: (r.kaynak_satir_id || '') as string,
-    barIndex: (r.bar_index as number) || 0,
-    olusmaTarihi: (r.olusma_tarihi || '') as string,
-    durum: (r.durum || 'acik') as AcikBar['durum'],
-    tuketimLogId: (r.tuketim_log_id || '') as string,
-    tuketimTarihi: (r.tuketim_tarihi || '') as string,
-    not: (r.not_ || '') as string,
-    // v15.34 — hurda alanları
-    hurdaTarihi: (r.hurda_tarihi || '') as string,
-    hurdaSebep: (r.hurda_sebep || '') as string,
-    hurdaKullaniciId: (r.hurda_kullanici_id || '') as string,
-    hurdaKullaniciAd: (r.hurda_kullanici_ad || '') as string,
-  }),
-  // v15.36 — PendingFlow
-  pendingFlow: (r: Record<string, unknown>): PendingFlow => ({
-    id: r.id as string,
-    flowType: (r.flow_type || 'siparis') as PendingFlow['flowType'],
-    currentStep: (r.current_step || 'siparis') as PendingFlow['currentStep'],
-    stateData: (r.state_data || {}) as PendingFlow['stateData'],
-    userId: (r.user_id || '') as string,
-    userAd: (r.user_ad || '') as string,
-    baslangic: (r.baslangic || '') as string,
-    sonAktivite: (r.son_aktivite || '') as string,
-    durum: (r.durum || 'aktif') as PendingFlow['durum'],
-    not: (r.not_ || '') as string,
-  }),
-  // v15.37 — TestRun
-  testRun: (r: Record<string, unknown>): TestRun => ({
-    id: r.id as string,
-    baslangic: (r.baslangic || '') as string,
-    bitis: (r.bitis || '') as string,
-    durum: (r.durum || 'aktif') as TestRun['durum'],
-    userId: (r.user_id || '') as string,
-    userAd: (r.user_ad || '') as string,
-    aciklama: (r.aciklama || '') as string,
-    temizlenenKayitSayisi: (r.temizlenen_kayit_sayisi || {}) as TestRun['temizlenenKayitSayisi'],
-    not: (r.not_ || '') as string,
-  }),
-  // v15.90 — Madde 15 P1: Bildirim merkezi
-  bildirim: (r: Record<string, unknown>): Bildirim => ({
-    id: r.id as string,
-    tip: (r.tip || 'sari') as Bildirim['tip'],
-    kategori: (r.kategori || '') as string,
-    baslik: (r.baslik || '') as string,
-    mesaj: (r.mesaj || '') as string,
-    hedefKullaniciId: (r.hedef_kullanici_id || '') as string,
-    refId: (r.ref_id || '') as string,
-    refTip: (r.ref_tip || '') as string,
-    okundu: !!r.okundu,
-    okunduTarih: (r.okundu_tarih || '') as string,
-    olusturma: (r.olusturma || '') as string,
-    olusturan: (r.olusturan || '') as string,
-  }),
 }
 
 interface UYSStore {
@@ -270,18 +168,11 @@ interface UYSStore {
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]; mrpRezerve: MrpRezerve[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
-  izinler: Izin[]; kullanicilar: Kullanici[]; hmTipler: HmTip[]
-  problemler: Problem[]
-  acikBarlar: AcikBar[]
-  pendingFlows: PendingFlow[]   // v15.36
-  testRuns: TestRun[]             // v15.37
-  bildirimler: Bildirim[]         // v15.90 — Madde 15 P1
   loading: boolean; synced: boolean
-  yetkiMap: Record<string, string[]> | null
   loadAll: () => Promise<void>
-  reloadTables: (tableNames: string[]) => Promise<void>
   setOrders: (orders: Order[]) => void
   setWorkOrders: (wos: WorkOrder[]) => void
+  reloadTables: (tables: string[]) => Promise<void>
 }
 
 export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<string, unknown>) => unknown }> = [
@@ -306,35 +197,19 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
   { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
   { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
-  { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
-  { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
-  { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
-  { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
-  { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
-  { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
-  { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
-  { key: 'bildirimler', table: 'uys_bildirimler', mapper: M.bildirim },   // v15.90 — Madde 15 P1
 ]
-
-// Tablo adı → TABLE_MAP entry lookup (realtime için)
-const TABLE_LOOKUP: Record<string, typeof TABLE_MAP[number]> = TABLE_MAP.reduce((a, t) => { a[t.table] = t; return a }, {} as Record<string, typeof TABLE_MAP[number]>)
 
 export const useStore = create<UYSStore>((set) => ({
   orders: [], workOrders: [], logs: [], materials: [], operations: [],
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [], izinler: [], kullanicilar: [], hmTipler: [],
-  problemler: [],
-  acikBarlar: [],
-  pendingFlows: [],
-  testRuns: [],
-  bildirimler: [],   // v15.90 — Madde 15 P1
-  loading: true, synced: false, yetkiMap: null,
+  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
+  loading: true, synced: false,
 
   loadAll: async () => {
     set({ loading: true })
     try {
-      const results = await Promise.all(TABLE_MAP.map(t => fetchAll(t.table)))
+      const results = await Promise.all(TABLE_MAP.map(t => supabase.from(t.table).select('*')))
       const updates: Partial<UYSStore> = {}
       let ok = 0
       results.forEach((res, i) => {
@@ -345,14 +220,6 @@ export const useStore = create<UYSStore>((set) => ({
         }
       })
       if (ok >= 5) {
-        // Yetki haritasını yükle
-        try {
-          const { data: yaData } = await supabase.from('uys_yetki_ayarlari').select('*').eq('id', 'rbac').limit(1)
-          if (yaData?.[0]?.data) {
-            updates.yetkiMap = yaData[0].data
-            setYetkiOverrides(yaData[0].data)
-          }
-        } catch { /* tablo yoksa varsayılan kullanılır */ }
         set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
         console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)
       } else {
@@ -365,21 +232,17 @@ export const useStore = create<UYSStore>((set) => ({
   },
   setOrders: (orders) => set({ orders }),
   setWorkOrders: (workOrders) => set({ workOrders }),
-
-  // ═══ Selective reload — realtime için ═══
-  reloadTables: async (tableNames: string[]) => {
-    const entries = tableNames.map(t => TABLE_LOOKUP[t]).filter(Boolean)
-    if (!entries.length) return
-    try {
-      const results = await Promise.all(entries.map(e => fetchAll(e.table)))
-      const updates: Record<string, unknown> = {}
-      results.forEach((res, i) => {
-        const e = entries[i]
-        if (!res.error && res.data) updates[e.key as string] = res.data.map(r => e.mapper(r as Record<string, unknown>))
-      })
-      if (Object.keys(updates).length) set(updates as Partial<UYSStore>)
-    } catch (e) {
-      console.error('reloadTables:', e)
-    }
+  reloadTables: async (tables: string[]) => {
+    const hedefler = TABLE_MAP.filter(t => tables.includes(t.table))
+    if (hedefler.length === 0) return
+    const results = await Promise.all(hedefler.map(t => supabase.from(t.table).select('*')))
+    const updates: Partial<UYSStore> = {}
+    results.forEach((res, i) => {
+      const t = hedefler[i]
+      if (!res.error && res.data) {
+        (updates as Record<string, unknown>)[t.key] = res.data.map(r => t.mapper(r as Record<string, unknown>))
+      }
+    })
+    set(updates as Partial<UYSStore>)
   },
 }))
