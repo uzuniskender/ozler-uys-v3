@@ -66,10 +66,12 @@ const M = {
   station: (r: Record<string, unknown>): Station => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     opIds: (r.op_ids || []) as string[],
+    durum: (r.durum || '') as string, arizaNot: (r.ariza_not || '') as string,
   }),
   operator: (r: Record<string, unknown>): Operator => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     bolum: (r.bolum || '') as string, aktif: r.aktif !== false, sifre: (r.sifre || '') as string,
+    durum: (r.durum || '') as string,
   }),
   recipe: (r: Record<string, unknown>): Recipe => ({
     id: r.id as string, rcKod: (r.rc_kod || '') as string, ad: (r.ad || '') as string,
