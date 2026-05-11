@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 import { cuttingPlanTemizle, rezerveleriSenkronla, hesaplaMRP, hesaplaMRPCached } from '@/features/production/mrp'
 import { tedarikStokId } from '@/lib/tedarikHelpers'
+import { isActive as isStateActive } from '@/features/order/stateMachine'
 
 // ═══ SAĞLIK RAPORU TİPLERİ ═══
 type SaglikDurum = 'pass' | 'warn' | 'fail'
@@ -115,7 +116,7 @@ export function DataManagement() {
       const boms = bomRes.data || []
       const acikBars = abRes.data || []   // v15.39
 
-      const aktifOrders = orders.filter((o: any) => o.durum !== 'kapalı' && o.durum !== 'iptal')
+      const aktifOrders = orders.filter((o: any) => isStateActive(o.state))
       const aktifOrderIds = new Set(aktifOrders.map((o: any) => o.id))
       const woIds = new Set(wos.map((w: any) => w.id))
       const logIds = new Set(logs.map((l: any) => l.id))

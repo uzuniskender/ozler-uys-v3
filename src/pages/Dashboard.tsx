@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { isActive as isStateActive } from '@/features/order/stateMachine'
 import { showConfirm } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store'
@@ -155,7 +156,7 @@ export function Dashboard() {
 
   // ═══ TEMEL HESAPLAMALAR (eskiyle birebir aynı) ═══
   const aktifOrders = orders.filter(o => {
-    if (o.durum === 'iptal' || o.durum === 'tamamlandi') return false
+    if (!isStateActive((o as any).state)) return false  // kapali + iptal → dışla (state tek kaynak)
     if ((o as any).sevkDurum === 'tamamen_sevk') return false  // D1: tamamen sevk edilenler aktif listede görünmesin
     const wos = workOrders.filter(w => w.orderId === o.id)
     const totalProd = wos.reduce((s, w) => {
