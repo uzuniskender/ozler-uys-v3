@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
-**Tarih:** 10 Mayıs 2026
-**Versiyon:** v16.53
+**Tarih:** 11 Mayıs 2026
+**Versiyon:** v16.66
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -8,37 +8,31 @@
 
 ## Bu oturumda tamamlananlar
 
-- Audit log görüntüleme sayfası (`AuditLog.tsx`) — Admin only, filtreli, sayfalı
-- İstek #18 — fire uyarısı belirginleştirildi, 10sn warning + Reports'a yönlendirme butonu
-- İstek #19 — MRP stoktan ver butonu (yeterli satırlarda stok çıkışı yazar)
-- Levha kesim artıkları stoka gir (`CuttingPlans.tsx` — idempotent)
-- Sevkiyat planlandı/gerçekleşti (`durum` kolonu eklendi, UI güncellendi)
-- activeWork canlı takip paneli (`ActiveWorkPanel.tsx` + Sidebar + App.tsx)
-- Pre-push hook — npm PATH fix (.cmd formatı)
-- Realtime sync fix — `reloadTables` store'a eklendi, `TABLE_MAP` export edildi
-- Audit schema whitelist güncellendi (8 tablo eklendi)
-- **BUG FIX:** Store'dan silinen alanlar geri eklendi — `hmTipler`, `testRuns`, `problemler`, `kullanicilar`, `yetkiMap` (store/index.ts)
-- **BUG FIX:** `uys_active_work` tablosu TEST'te oluşturuldu (PROD bekliyor — onay alınmadı)
-- **BUG FIX:** `stokHareketler` sayfalama eklendi — 3918 kayıt tam yükleniyor (1000 limit aşımı düzeltildi)
-- **BUG FIX:** `statusUtils.ts` — kesim plan kontrolünde `ieNo` fallback eklendi
-
-## Kontrol edilen — zaten tamamlanmış
-
-- İşlem süresi reçeteye — `islemSure` zaten var (Recipes.tsx + autoChain.ts)
-- Toplu sipariş Excel import — zaten çalışıyor (Orders.tsx)
+- v16.54 — ActiveWorkPanel veri kaynağı (EntryModal açılışında active_work yazar, kapanışında siler)
+- v16.55 — Kesim planı birleştirme (checkbox + ⊕ Birleştir butonu)
+- v16.56 — MRP ghost talep filtresi — tüm WO'ları biten siparişler demand'den çıkarıldı
+- v16.57 — store mapper: order.state + sevkDurum eklendi
+- v16.58 — fetchAll ORDER BY fix (bar_acilis pagination tutarsızlığı)
+- v16.59 — Denetim: rezervOrderId, TABLE_MAP izinler/bildirimler/pendingFlows, fireLog tip/uzunlukMm/telafiWoId, log saat, operatorNote kategori/oncelik, store_index.ts silindi
+- v16.60 — stokTuketimIsle mpm çarpanı + MRP mrp_durum mantığı (tek malzeme = tüm sipariş tamam hatası)
+- v16.61 — order.state tek kaynak — Dashboard + DataManagement durum→state geçişi
+- v16.62 — stok yuvarlama Math.floor standardizasyonu
+- v16.63 — station mapper durum+arizaNot, operator mapper durum
+- v16.64 — acikBarlar store+realtime eklendi (K6 crash düzeltildi), Shipment deterministic stok ID (Y6)
+- v16.65 — Izin/Bildirim/PendingFlow typed mappers, CuttingRow havuzBarId, StokHareket bar_acilis tip, mamulRezerv as any kaldırıldı
+- v16.66 — barAcilisSet + validations.ts as any temizlendi
 
 ## Bekleyen
 
-- `uys_active_work` tablosunu PROD'a da uygula (TEST'te var, PROD'da yok)
-- ActiveWorkPanel'e kim veri yazıyor? (ProductionEntry'de "başla" butonu yok henüz)
+- (temiz — kritik açık kalmadı)
 
 ## Sıradaki görevler
 
-1. Kesim planı birleştirme
-2. Normalize veri geçişi
-3. Operatör mesajları paneli
-4. SR #11 havuz adaptasyonu
-5. Stok anomali raporu
+1. Operatör mesajları paneli
+2. Stok anomali raporu
+3. Normalize veri geçişi
+4. Y1 — mrp_durum race condition (tasarım sorunu, düşük öncelik)
+5. O1 — Stok insert format tutarsızlığı (kısmen çözüldü, kalan by-design)
 
 ## Kritik kurallar
 
