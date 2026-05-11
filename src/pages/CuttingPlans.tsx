@@ -29,6 +29,8 @@ export function CuttingPlans() {
   const [havuzOneriQueue, setHavuzOneriQueue] = useState<string[]>([])
   // v15.36 — flow'da otomatik plan hesabı bir kez çalışsın
   const [flowAutoDone, setFlowAutoDone] = useState(false)
+  // v16.54 — Birleştirme seçimi
+  const [seciliPlanlar, setSeciliPlanlar] = useState<Set<string>>(new Set())
   // v15.48b1 — Otomatik plan modallari
   const [showOtoOnay, setShowOtoOnay] = useState(false)
   const [otoSonuc, setOtoSonuc] = useState<{
@@ -153,6 +155,40 @@ export function CuttingPlans() {
     loadAll(); toast.success('Durum güncellendi')
   }
 
+  // v16.54 — Kesim planı birleştirme
+  function toggleSecim(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    setSeciliPlanlar(prev => {
+      const yeni = new Set(prev)
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id)
+      return yeni
+    })
+  }
+
+  async function birlestir() {
+    const seciliArr = [...seciliPlanlar]
+    if (seciliArr.length < 2) return
+    const planlar = cuttingPlans.filter(p => seciliArr.includes(p.id))
+    const hamlar = new Set(planlar.map(p => p.hamMalkod))
+    const tipler = new Set(planlar.map(p => p.kesimTip || 'boy'))
+    if (hamlar.size > 1) { toast.error('Farklı hammaddeli planlar birleştirilemez'); return }
+    if (tipler.size > 1) { toast.error('Farklı kesim tipli planlar birleştirilemez'); return }
+    if (!await showConfirm(`${planlar.length} plan birleştirilecek. Devam edilsin mi?`)) return
+    const ilk = planlar[0]
+    const tumSatirlar = planlar.flatMap(p => (p.satirlar || []))
+    const yeniGerekliAdet = tumSatirlar.reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
+    await supabase.from('uys_kesim_planlari')
+      .update({ satirlar: tumSatirlar, gerekli_adet: yeniGerekliAdet })
+      .eq('id', ilk.id)
+    const silinecekler = seciliArr.filter(id => id !== ilk.id)
+    for (const id of silinecekler) {
+      await supabase.from('uys_kesim_planlari').delete().eq('id', id)
+    }
+    setSeciliPlanlar(new Set())
+    await loadAll()
+    toast.success(`${planlar.length} plan birleştirildi → ${yeniGerekliAdet} bar`)
+  }
+
   // #10: Kesim artığını stoka gir
   // v15.32: DISABLE. Artıklar artık uys_acik_barlar havuzunda otomatik izleniyor.
   // Bu fonksiyon çağrılsa da kullanıcıya bilgilendirme toast'u atar, stok yazmaz —
@@ -216,6 +252,16 @@ export function CuttingPlans() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Kesim Planları</h1><p className="text-xs text-zinc-500">{cuttingPlans.length} plan · {bekleyen.length} bekleyen · {cuttingPlans.length - bekleyen.length} tamamlanan</p></div>
         <div className="flex gap-2">
+          {seciliPlanlar.size >= 2 && (
+            <button onClick={birlestir} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs font-semibold hover:bg-amber/20">
+              ⊕ Birleştir ({seciliPlanlar.size})
+            </button>
+          )}
+          {seciliPlanlar.size > 0 && (
+            <button onClick={() => setSeciliPlanlar(new Set())} className="px-3 py-1.5 bg-bg-2 border border-border text-zinc-500 rounded-lg text-xs hover:text-white">
+              ✕ Seçimi Temizle
+            </button>
+          )}
           <button onClick={() => setShowTamamlanan(!showTamamlanan)} className={`px-3 py-1.5 rounded-lg text-xs border ${showTamamlanan ? 'bg-green/10 border-green/25 text-green' : 'bg-bg-2 border-border text-zinc-500'}`}>
             {showTamamlanan ? '✓ Tamamlananlar Görünür' : '○ Tamamlananları Göster'}
           </button>
@@ -305,7 +351,7 @@ export function CuttingPlans() {
         {gosterilen.length ? (
           <div>
             <table className="w-full text-xs">
-              <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">Gerekli</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
+              <thead><tr className="border-b border-border text-zinc-500"><th className="w-8 px-2 py-2.5"></th><th className="text-left px-4 py-2.5">Ham Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Boy</th><th className="text-right px-4 py-2.5">Gerekli</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th></tr></thead>
               <tbody>
                 {gosterilen.map(p => {
                   const isOpen = selected === p.id
@@ -331,6 +377,9 @@ export function CuttingPlans() {
                   return (
                     <React.Fragment key={p.id}>
                     <tr className={`border-b border-border/30 hover:bg-bg-3/30 cursor-pointer ${isOpen ? 'bg-bg-3/20' : ''}`} onClick={() => setSelected(isOpen ? null : p.id)}>
+                      <td className="px-2 py-2" onClick={e => toggleSecim(p.id, e)}>
+                        <input type="checkbox" checked={seciliPlanlar.has(p.id)} onChange={() => {}} className="accent-amber cursor-pointer" />
+                      </td>
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-2">
                           <span className="text-zinc-500 text-[10px]">{isOpen ? '▼' : '▶'}</span>
@@ -361,7 +410,7 @@ export function CuttingPlans() {
                     </tr>
                     {isOpen && (
                       <tr className="border-b border-border/30 bg-bg-3/10">
-                        <td colSpan={6} className="px-4 py-3">
+                        <td colSpan={7} className="px-4 py-3">
                           <div className="flex items-center justify-between mb-3">
                             <div className="text-xs text-zinc-400">{p.hamBoy}mm × {toplamBar} bar</div>
                             <div className="flex gap-2">
