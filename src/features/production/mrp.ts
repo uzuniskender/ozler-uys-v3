@@ -20,17 +20,36 @@ const dbg = (...args: any[]) => { if (DEBUG_MRP) console.log(...args) }
 
 export interface MRPRow {
   malkod: string; malad: string; tip: string; birim: string
-  brut: number; stok: number; acikTedarik: number; net: number
+  brut: number; stok: number; rezerve: number; acikTedarik: number; net: number
   durum: 'yeterli' | 'eksik' | 'yok'
   termin: string
   artik?: boolean
 }
 
 // ═══ STOK HESAPLA ═══
+// Serbest stok = giris - cikis - rezerv
+// 'bar_acilis' → çıkış gibi sayılır (hammadde kullanıma açıldı)
+// 'rezerv' → serbest stoktan düşülür ama fiziksel çıkış değil
 function getStok(malkod: string, stokHareketler: StokHareket[]): number {
   return Math.floor(stokHareketler
     .filter(h => h.malkod === malkod)
-    .reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0))
+    .reduce((a, h) => {
+      if (h.tip === 'giris') return a + h.miktar
+      if (h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv') return a - h.miktar
+      return a
+    }, 0))
+}
+
+// Rezerve toplam (hangi siparişe ne kadar rezerve edilmiş)
+export function getRezervDetay(malkod: string, stokHareketler: StokHareket[]): { orderId: string; miktar: number }[] {
+  const map = new Map<string, number>()
+  stokHareketler
+    .filter(h => h.malkod === malkod && h.tip === 'rezerv' && h.rezervOrderId)
+    .forEach(h => {
+      const key = h.rezervOrderId!
+      map.set(key, (map.get(key) || 0) + h.miktar)
+    })
+  return Array.from(map.entries()).map(([orderId, miktar]) => ({ orderId, miktar }))
 }
 
 // ═══ BOM PATLAT NET — v2 bomPatlaNet port'u ═══
@@ -492,9 +511,14 @@ export function hesaplaMRP(
     const net = Math.max(0, Math.ceil(bi.brut - stokDus - acikDus))
     const durum: MRPRow['durum'] = (stokDus + acikDus) >= bi.brut ? 'yeterli' : net > 0 ? 'eksik' : 'yeterli'
 
+    // Rezerve bilgisi — bilgisel, hesabı etkilemez
+    const rezerve = stokHareketler
+      .filter(h => (h.malkod || '').trim().toLowerCase() === kLower && h.tip === 'rezerv')
+      .reduce((a, h) => a + h.miktar, 0)
+
     sonuc.push({
       malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim,
-      brut: bi.brut, stok: stokDus, acikTedarik: acikDus, net, durum,
+      brut: bi.brut, stok: stokDus, rezerve, acikTedarik: acikDus, net, durum,
       termin: bi.termin || '',
     })
   }

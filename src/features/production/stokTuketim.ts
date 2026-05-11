@@ -67,6 +67,19 @@ export async function stokTuketimIsle(
 
   if (rows.length) {
     await supabase.from('uys_stok_hareketler').insert(rows)
+
+    // v16.70 — Üretim girişinde bu WO'nun siparişine ait rezervleri sil
+    // Her tüketilen malkod için aynı order_id'ye bağlı rezerv kaldırılır
+    if (wo.orderId) {
+      const tuketilenMalkodlar = rows.map(r => r.malkod as string)
+      for (const malkod of tuketilenMalkodlar) {
+        await supabase.from('uys_stok_hareketler')
+          .delete()
+          .eq('tip', 'rezerv')
+          .eq('rezerv_order_id', wo.orderId)
+          .eq('malkod', malkod)
+      }
+    }
   }
   return rows.length
 }
