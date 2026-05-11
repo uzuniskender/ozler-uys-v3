@@ -84,29 +84,25 @@ export function MRP() {
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      // v16.50 — state alanı DB trigger ile kesin hesaplanır, durum string'inden bağımsız
-      const terminalState = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
-        || (o.mrpDurum || '') === 'tamam'
-      if (terminalState) return showTamamlanan
-      // Tüm WO'lar tamamlandıysa → arşiv
+      // Kesin terminal: DB trigger'dan gelen state veya tüm WO'lar bitti
+      const trueTerminal = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
+      if (trueTerminal) return showTamamlanan
       if (orderAllWosDone[o.id]) return showTamamlanan
-      // Kilitli → arşiv
       if (isOrderArchived(o)) return showTamamlanan
-      // v15.88 — "Bekliyor" durumundaki siparis MRP henuz hesaplanmamis demek;
-      // ihtiyac belli olmadigi icin EKSIK gibi (aktif) gosterilmeli ki kullanici
-      // Hesapla butonuna basabilsin. Eski kod sadece eksikVar bakiyordu, yeni
-      // siparis acilip MRP hesaplanmamissa "0 aktif siparis" goruntusu cikiyordu.
+
+      // v16.68 — Canlı eksik kontrolü mrp_durum'dan önce gelir.
+      // mrp_durum='tamam' stale olabilir (stok değişmiş, yeni ihtiyaç doğmuş).
+      // Eğer canlı hesap eksik gösteriyorsa → aktif listede tut.
       const eksikVar = orderHasEksik[o.id] ?? false
-      const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
-      // v16.01 — DB'de mrp_durum='eksik' ise zorla aktif say. Sebep: hesaplaMRP cutting plan
-      // override mantığı bazı durumlarda (yüzey kesim, 1D bin-packing) gerçek ihtiyacın
-      // altında plan adedi yazıyor → eksikVar=false dönüyor ama mrp_durum='eksik' kalıyor.
-      // Topbar (mrp_durum sayar) ile liste (eksikVar bakar) çelişiyordu. v16.02'de kök fix
-      // (cutting.ts kesimTip='yuzey' override koruması) gelene kadar saha-açıcı band-aid.
-      const dbEksik = (o.mrpDurum || '') === 'eksik'
+      if (eksikVar) return !showTamamlanan  // gerçek eksik → her zaman aktif
+
+      // Canlı eksik yoksa mrp_durum'a bak
       const mrpTamam = (o.mrpDurum || '') === 'tamam'
-      // mrp_durum='tamam' ise MRP tamamlandı — aktif sayma
-      const aktifMi = !mrpTamam && (eksikVar || henuzHesaplanmadi || dbEksik)
+      if (mrpTamam) return showTamamlanan   // tamam + eksik yok → arşiv
+
+      const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
+      const dbEksik = (o.mrpDurum || '') === 'eksik'
+      const aktifMi = henuzHesaplanmadi || dbEksik
       return showTamamlanan ? !aktifMi : aktifMi
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,13 +197,16 @@ export function MRP() {
 
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }); setHesaplandi(false); setSonuc([]) }
   function selectAll() {
-    // v15.78 — sipariş ID'leri + manuel İE WO ID'leri birlikte
-    // v16.67 — showTamamlanan=true iken bile sadece MRP açık siparişleri seç;
-    //           tamamlanan/tamam siparişler listede görünür ama MRP'ye dahil edilmez.
+    // v16.68 — Gerçekten MRP açık siparişleri seç:
+    // - state terminal değil (tamamlandi/kapali/iptal)
+    // - tüm WO'ları bitmemiş
+    // - canlı eksik VAR → her zaman seç
+    // - canlı eksik yok + mrp_durum='tamam' → seçme
     const mrpAktifOrders = aktifOrders.filter(o => {
       if (o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal') return false
-      if ((o as any).mrpDurum === 'tamam') return false
       if (orderAllWosDone[o.id]) return false
+      if (orderHasEksik[o.id]) return true   // canlı eksik → seç
+      if ((o as any).mrpDurum === 'tamam') return false  // tamam + eksik yok → seçme
       return true
     })
     const ids = [...mrpAktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
