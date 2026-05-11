@@ -538,7 +538,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
               <table className="w-full text-[11px]">
                 <thead><tr className="border-b border-border text-zinc-600"><th className="text-left px-2 py-1">Malzeme</th><th className="text-right px-2 py-1">DB Stok</th><th className="text-right px-2 py-1">Gerekli</th></tr></thead>
                 <tbody>{hmSatirlar.map((hm, i) => {
-                  const mevcut = Math.round(stokNet(hm.malkod))
+                  const mevcut = Math.floor(stokNet(hm.malkod))
                   const q_ = parseInt(qty) || kalan
                   const gerekli = Math.ceil((hm.miktar || 0) * (w.mpm || 1) * q_)
                   return (
