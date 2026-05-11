@@ -104,7 +104,7 @@ export function canDeleteWO(params: {
   }
 
   const myStok = stokHareketler.filter((h) => {
-    const wid = (h as any).woId ?? (h as any).wo_id
+    const wid = h.woId ?? h.wo_id
     return wid === woId
   })
   if (myStok.length > 0) {
@@ -118,7 +118,7 @@ export function canDeleteWO(params: {
   }
 
   const myFire = fireLogs.filter((fr) => {
-    const wid = (fr as any).woId ?? (fr as any).wo_id
+    const wid = fr.woId ?? fr.wo_id
     return wid === woId
   })
   if (myFire.length > 0) {

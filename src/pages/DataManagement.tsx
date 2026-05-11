@@ -626,7 +626,7 @@ export function DataManagement() {
       const havuzOrphan: Array<{ planId: string; satirId: string; havuzBarId: string }> = []
       const havuzAcikKalan: Array<{ planId: string; satirId: string; havuzBarId: string; durum: string }> = []
 
-      const barAcilisSet = new Set(stoks.filter((s: any) => s.tip === 'bar_acilis').map((s: any) => s.id))
+      const barAcilisSet = new Set(stoks.filter(s => s.tip === 'bar_acilis').map(s => s.id))
       const abMap = new Map<string, any>(acikBars.map((a: any): [string, any] => [a.id, a]))
 
       for (const plan of plans) {
