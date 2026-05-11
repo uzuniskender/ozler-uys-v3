@@ -211,13 +211,21 @@ export function DataManagement() {
         hamMalkod: p.ham_malkod, hamMalad: p.ham_malad, durum: p.durum || '',
         gerekliAdet: p.gerekli_adet || 0, satirlar: p.satirlar || [],
       }))
+      // v16.55 — Tüm WO'ları tamamlanmış siparişleri hariç tut.
+      // WO'ları bitti ama sipariş henüz kapatılmamış siparişler ghost talep üretir
+      // (örn. S26A_03151: %100 ilerleme, tüm WO'lar tamamlandi ama sipariş açık).
+      const orderIdsWithActiveWOs = new Set(
+        wos.filter((w: any) => w.durum !== 'tamamlandi' && w.durum !== 'iptal' && w.durum !== 'kismi_tamam')
+           .map((w: any) => w.order_id).filter(Boolean)
+      )
+      const ordersForMRP = orders.filter((o: any) => orderIdsWithActiveWOs.has(o.id))
       // Tüm aktif siparişler + manuel İE'ler — ymSet boş çünkü "tüm açık WO'lar dahil olsun"
       // v16.32 IE #14 Faz A Slice 3 — global cache wrap. saglikRaporuCalistir async, await mümkün.
       const allSonuc: any[] = await (async () => {
         try {
           return await hesaplaMRPCached(
             'global',
-            () => hesaplaMRP(null, orders as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], undefined, logsMapped)
+            () => hesaplaMRP(null, ordersForMRP as any, wos as any, recs as any, stoks as any, teds as any, cpMapped5 as any, mats as any, null, [], undefined, logsMapped)
           )
         } catch { return [] }
       })()
