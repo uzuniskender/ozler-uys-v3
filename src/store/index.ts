@@ -17,7 +17,7 @@ const M = {
     mamulAd: (r.mamul_ad || '') as string, adet: (r.adet as number) || 1,
     receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
     durum: (r.durum || '') as string, oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
-    state: (r.order_state || r.state || 'yeni') as Order['state'],
+    state: (r.state || 'yeni') as Order['state'],
     sevkDurum: (r.sevk_durum || '') as string,
   }),
   wo: (r: Record<string, unknown>): WorkOrder => {

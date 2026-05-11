@@ -211,14 +211,23 @@ export function DataManagement() {
         hamMalkod: p.ham_malkod, hamMalad: p.ham_malad, durum: p.durum || '',
         gerekliAdet: p.gerekli_adet || 0, satirlar: p.satirlar || [],
       }))
-      // v16.55 — Tüm WO'ları tamamlanmış siparişleri hariç tut.
-      // WO'ları bitti ama sipariş henüz kapatılmamış siparişler ghost talep üretir
-      // (örn. S26A_03151: %100 ilerleme, tüm WO'lar tamamlandi ama sipariş açık).
-      const orderIdsWithActiveWOs = new Set(
-        wos.filter((w: any) => w.durum !== 'tamamlandi' && w.durum !== 'iptal' && w.durum !== 'kismi_tamam')
-           .map((w: any) => w.order_id).filter(Boolean)
-      )
-      const ordersForMRP = orders.filter((o: any) => orderIdsWithActiveWOs.has(o.id))
+      // v16.57 — WO'ları tamamen biten siparişleri hariç tut (ghost talep önleme).
+      // Koşul: en az 1 WO var VE tümü tamamlandi/iptal. WO'su hiç olmayan
+      // yeni siparişler hariç tutulmaz — reçeteden talep hesabı yapılabilir.
+      const wosByOrder = new Map<string, { total: number; aktif: number }>()
+      for (const w of wos) {
+        if (!w.order_id) continue
+        const entry = wosByOrder.get(w.order_id) || { total: 0, aktif: 0 }
+        entry.total++
+        if (w.durum !== 'tamamlandi' && w.durum !== 'iptal' && w.durum !== 'kismi_tamam') entry.aktif++
+        wosByOrder.set(w.order_id, entry)
+      }
+      const ordersForMRP = orders.filter((o: any) => {
+        const entry = wosByOrder.get(o.id)
+        if (!entry) return true        // WO'su yok → dahil et (yeni sipariş)
+        if (entry.aktif > 0) return true  // aktif WO var → dahil et
+        return false                   // WO var ama hepsi bitti → ghost, hariç tut
+      })
       // Tüm aktif siparişler + manuel İE'ler — ymSet boş çünkü "tüm açık WO'lar dahil olsun"
       // v16.32 IE #14 Faz A Slice 3 — global cache wrap. saglikRaporuCalistir async, await mümkün.
       const allSonuc: any[] = await (async () => {
