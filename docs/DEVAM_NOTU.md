@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 10 Mayıs 2026
-**Versiyon:** v16.54
+**Versiyon:** v16.53
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -8,12 +8,29 @@
 
 ## Bu oturumda tamamlananlar
 
-- Siyah ekran / runtime crash serisi çözüldü:
-  - `Sidebar.tsx` → `Monitor` import eksikti; `store.problemler` ve `store.testRuns` undefined idi (|| [] guard eklendi)
-  - `Dashboard.tsx` → `izinler` store'da yoktu (|| [] guard eklendi)
-  - `InactiveOperatorsCard.tsx` → `for...of izinler` undefined idi (|| [] guard eklendi)
-  - `Topbar.tsx` → `bildirimler` ve `pendingFlows` store'da yoktu (|| [] guard eklendi)
-  - `src/store/index.ts` → `izinler`, `bildirimler`, `pendingFlows` interface + initial state'e eklendi
+- Audit log görüntüleme sayfası (`AuditLog.tsx`) — Admin only, filtreli, sayfalı
+- İstek #18 — fire uyarısı belirginleştirildi, 10sn warning + Reports'a yönlendirme butonu
+- İstek #19 — MRP stoktan ver butonu (yeterli satırlarda stok çıkışı yazar)
+- Levha kesim artıkları stoka gir (`CuttingPlans.tsx` — idempotent)
+- Sevkiyat planlandı/gerçekleşti (`durum` kolonu eklendi, UI güncellendi)
+- activeWork canlı takip paneli (`ActiveWorkPanel.tsx` + Sidebar + App.tsx)
+- Pre-push hook — npm PATH fix (.cmd formatı)
+- Realtime sync fix — `reloadTables` store'a eklendi, `TABLE_MAP` export edildi
+- Audit schema whitelist güncellendi (8 tablo eklendi)
+- **BUG FIX:** Store'dan silinen alanlar geri eklendi — `hmTipler`, `testRuns`, `problemler`, `kullanicilar`, `yetkiMap` (store/index.ts)
+- **BUG FIX:** `uys_active_work` tablosu TEST'te oluşturuldu (PROD bekliyor — onay alınmadı)
+- **BUG FIX:** `stokHareketler` sayfalama eklendi — 3918 kayıt tam yükleniyor (1000 limit aşımı düzeltildi)
+- **BUG FIX:** `statusUtils.ts` — kesim plan kontrolünde `ieNo` fallback eklendi
+
+## Kontrol edilen — zaten tamamlanmış
+
+- İşlem süresi reçeteye — `islemSure` zaten var (Recipes.tsx + autoChain.ts)
+- Toplu sipariş Excel import — zaten çalışıyor (Orders.tsx)
+
+## Bekleyen
+
+- `uys_active_work` tablosunu PROD'a da uygula (TEST'te var, PROD'da yok)
+- ActiveWorkPanel'e kim veri yazıyor? (ProductionEntry'de "başla" butonu yok henüz)
 
 ## Sıradaki görevler
 
