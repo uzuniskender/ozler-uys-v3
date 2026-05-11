@@ -33,7 +33,7 @@ export async function stokTuketimIsle(
       if (materials && isBarMaterialByKod(h.malkod, materials)) continue
 
       const perUnit = h.miktarTotal / wo.hedef
-      const consume = Math.round(qty * perUnit * 100) / 100
+      const consume = Math.round(qty * perUnit * (wo.mpm || 1) * 100) / 100
       if (consume <= 0) continue
       rows.push({
         id: uid(), tarih: today(),

@@ -733,9 +733,7 @@ export function MRP() {
                               birim: s.birim || 'Adet', tarih: today(), teslim_tarihi: s.termin || null, durum: 'bekliyor', geldi: false, not_: 'MRP',
                               order_id: [...selectedOrders][0] || null, siparis_no: orders.find(o => o.id === [...selectedOrders][0])?.siparisNo || null,
                             })
-                            for (const oid of selectedOrders) {
-                              await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
-                            }
+                            // mrp_durum güncellenmez — tek malzeme tedariki tüm siparişi 'tamam' yapmaz
                             loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
                           }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>
                         )}
@@ -749,8 +747,14 @@ export function MRP() {
                               miktar, tip: 'cikis', tarih: today(),
                               aciklama: 'MRP stoktan ver — ' + siparisNo,
                             })
-                            for (const oid of selectedOrders) {
-                              await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
+                            // Sadece bu malzeme son eksikse 'tamam' yap; başka eksik varsa güncelleme
+                            const kalanEksik = sonuc.filter(r => r.malkod !== s.malkod && r.net > 0)
+                            if (kalanEksik.length === 0) {
+                              for (const oid of selectedOrders) {
+                                if (orders.find(o => o.id === oid)) {
+                                  await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', oid)
+                                }
+                              }
                             }
                             loadAll()
                             toast.success('Stoktan verildi: ' + s.malkod + ' (' + miktar + ' adet)')
