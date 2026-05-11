@@ -202,7 +202,15 @@ export function MRP() {
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }); setHesaplandi(false); setSonuc([]) }
   function selectAll() {
     // v15.78 — sipariş ID'leri + manuel İE WO ID'leri birlikte
-    const ids = [...aktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
+    // v16.67 — showTamamlanan=true iken bile sadece MRP açık siparişleri seç;
+    //           tamamlanan/tamam siparişler listede görünür ama MRP'ye dahil edilmez.
+    const mrpAktifOrders = aktifOrders.filter(o => {
+      if (o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal') return false
+      if ((o as any).mrpDurum === 'tamam') return false
+      if (orderAllWosDone[o.id]) return false
+      return true
+    })
+    const ids = [...mrpAktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
     setSelectedOrders(new Set(ids)); setHesaplandi(false); setSonuc([])
   }
   function selectNone() { setSelectedOrders(new Set()); setHesaplandi(false); setSonuc([]) }
@@ -282,6 +290,17 @@ export function MRP() {
     }
 
     if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş veya iş emri seçin'); return }
+
+    // v16.67 — tamamlanan/tamam siparişleri hesaplamadan çıkar (showTamamlanan açıkken seçilmiş olabilir)
+    ordIds = ordIds.filter(id => {
+      const o = orders.find(ord => ord.id === id)
+      if (!o) return false
+      if ((o as any).state === 'tamamlandi' || (o as any).state === 'kapali' || (o as any).state === 'iptal') return false
+      if ((o as any).mrpDurum === 'tamam') return false
+      if (orderAllWosDone[id]) return false
+      return true
+    })
+    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.info('Seçili siparişlerin tümü tamamlandı — MRP hesaplanacak aktif sipariş yok'); return }
 
     const cpMapped = cuttingPlans.map((p: any) => ({
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
