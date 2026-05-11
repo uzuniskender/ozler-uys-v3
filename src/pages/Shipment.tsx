@@ -45,7 +45,7 @@ export function Shipment() {
     if (!await showConfirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
     const silinenSevk = sevkler.find(s => s.id === id)
     await supabase.from('uys_sevkler').delete().eq('id', id)
-    await supabase.from('uys_stok_hareketler').delete().eq('aciklama', 'Sevkiyat — ' + id)
+    await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + id + '-%')
     if (silinenSevk?.orderId) {
       const ord = orders.find(o => o.id === silinenSevk.orderId)
       if (ord) {
@@ -270,10 +270,11 @@ function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
     // 1. Sevkiyat güncelle
     await supabase.from('uys_sevkler').update({ kalemler: validKalemler, not_: not_ }).eq('id', sevk.id)
     // 2. Eski stok çıkışlarını sil, yeni kalemlerle yeniden yaz
-    await supabase.from('uys_stok_hareketler').delete().eq('aciklama', 'Sevkiyat — ' + sevk.id)
+    await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + sevk.id + '-%')
     for (const k of validKalemler) {
       await supabase.from('uys_stok_hareketler').insert({
-        id: uid(), tarih: sevk.tarih || today(), malkod: k.malkod, malad: k.malad,
+        id: 'sev-' + sevk.id + '-' + k.malkod.replace(/\s+/g, '_').slice(0, 20),
+        tarih: sevk.tarih || today(), malkod: k.malkod, malad: k.malad,
         miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id,
       })
     }
@@ -465,7 +466,8 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
     if (stokCikis) {
       for (const k of validKalemler) {
         await supabase.from('uys_stok_hareketler').insert({
-          id: uid(), tarih: tarih, malkod: k.malkod, malad: k.malad,
+          id: 'sev-' + sevkId + '-' + k.malkod.replace(/\s+/g, '_').slice(0, 20),
+          tarih: tarih, malkod: k.malkod, malad: k.malad,
           miktar: k.miktar, tip: 'cikis',
           aciklama: 'Sevkiyat — ' + sevkId,
         })

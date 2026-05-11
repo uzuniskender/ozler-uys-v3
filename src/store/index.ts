@@ -5,7 +5,7 @@ import type {
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem,
-  HmTip, TestRun, Problem, Kullanici
+  HmTip, TestRun, Problem, Kullanici, AcikBar
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -195,8 +195,20 @@ const M = {
     kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
     rol: (r.rol || 'depocu') as Kullanici['rol'], aktif: !!r.aktif,
   }),
-  izin: (r: Record<string, unknown>): Record<string, unknown> => ({
-    id: r.id, opId: r.op_id, opAd: r.op_ad, baslangic: r.baslangic, bitis: r.bitis,
+  acikBar: (r: Record<string, unknown>): AcikBar => ({
+    id: r.id as string, hamMalkod: (r.ham_malkod || '') as string, hamMalad: (r.ham_malad || '') as string,
+    uzunlukMm: (r.uzunluk_mm as number) || 0, kaynakPlanId: (r.kaynak_plan_id || '') as string,
+    kaynakSatirId: (r.kaynak_satir_id || '') as string, barIndex: (r.bar_index as number) || 0,
+    olusmaTarihi: (r.olusmaTarihi || r.olusma_tarihi || '') as string,
+    durum: (r.durum || 'acik') as AcikBar['durum'],
+    tuketimLogId: (r.tuketim_log_id || '') as string, tuketimTarihi: (r.tuketim_tarihi || '') as string,
+    not: (r.not_ || '') as string,
+    hurdaTarihi: (r.hurda_tarihi || undefined) as string | undefined,
+    hurdaSebep: (r.hurda_sebep || undefined) as string | undefined,
+    hurdaKullaniciId: (r.hurda_kullanici_id || undefined) as string | undefined,
+    hurdaKullaniciAd: (r.hurda_kullanici_ad || undefined) as string | undefined,
+  }),
+  izin: (r: Record<string, unknown>): Record<string, unknown> => ({    id: r.id, opId: r.op_id, opAd: r.op_ad, baslangic: r.baslangic, bitis: r.bitis,
     tip: r.tip, durum: r.durum, saatBaslangic: r.saat_baslangic, saatBitis: r.saat_bitis,
     onaylayan: r.onaylayan, onayTarihi: r.onay_tarihi, not: r.not_, olusturan: r.olusturan,
   }),
@@ -220,6 +232,7 @@ interface UYSStore {
   tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]; mrpRezerve: MrpRezerve[]
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
+  acikBarlar: AcikBar[]
   izinler: Record<string, unknown>[]; bildirimler: Record<string, unknown>[]; pendingFlows: Record<string, unknown>[]
   hmTipler: HmTip[]; testRuns: TestRun[]; problemler: Problem[]; kullanicilar: Kullanici[]
   yetkiMap: Record<string, string[]>
@@ -250,6 +263,7 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'sevkler', table: 'uys_sevkler', mapper: M.sevk },
   { key: 'operatorNotes', table: 'uys_operator_notes', mapper: M.operatorNote },
   { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
+  { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
   { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
   { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
   { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
@@ -266,6 +280,7 @@ export const useStore = create<UYSStore>((set) => ({
   stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
   cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
   customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
+  acikBarlar: [],
   izinler: [], bildirimler: [], pendingFlows: [],
   hmTipler: [], testRuns: [], problemler: [], kullanicilar: [], yetkiMap: {},
   loading: true, synced: false,

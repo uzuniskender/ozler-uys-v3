@@ -22,7 +22,8 @@ const ETIKET: Record<string, string> = {
   uys_customers: 'Müşteri', uys_sevkler: 'Sevk', uys_operator_notes: 'Not',
   uys_active_work: 'Aktif İş', uys_fire_logs: 'Fire', uys_checklist: 'Checklist',
   uys_izinler: 'İzin', uys_kullanicilar: 'Kullanıcı', uys_hm_tipleri: 'HM Tipi',
-  uys_yetki_ayarlari: 'Yetki',
+  uys_yetki_ayarlari: 'Yetki', uys_bildirimler: 'Bildirim',
+  uys_pending_flows: 'Akış', uys_acik_barlar: 'Açık Bar',
   pt_problemler: 'Problem',
 }
 
