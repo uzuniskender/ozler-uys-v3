@@ -86,9 +86,11 @@ export async function fetchAll<T = any>(
   const all: T[] = []
   let from = 0
   // Güvenlik tavanı: 1M satıra kadar okur (pageSize 1000 ile 1000 tur)
+  // ORDER BY id zorunlu — olmadan offset pagination tutarsız sıralama nedeniyle
+  // satır atlayabilir veya tekrar getirebilir (bar_acilis gibi durumlar).
   for (let i = 0; i < 1000; i++) {
     const to = from + pageSize - 1
-    const { data, error } = await supabase.from(table).select('*').range(from, to)
+    const { data, error } = await supabase.from(table).select('*').order('id').range(from, to)
     if (error) return { data: all, error }
     if (!data || !data.length) break
     all.push(...(data as T[]))
