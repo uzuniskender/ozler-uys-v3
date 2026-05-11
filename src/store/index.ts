@@ -5,7 +5,7 @@ import type {
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem,
-  HmTip, TestRun, Problem, Kullanici, AcikBar
+  HmTip, TestRun, Problem, Kullanici, AcikBar, Izin, Bildirim, PendingFlow
 } from '@/types'
 
 // ═══ DB → JS MAPPERS ═══
@@ -208,19 +208,30 @@ const M = {
     hurdaKullaniciId: (r.hurda_kullanici_id || undefined) as string | undefined,
     hurdaKullaniciAd: (r.hurda_kullanici_ad || undefined) as string | undefined,
   }),
-  izin: (r: Record<string, unknown>): Record<string, unknown> => ({    id: r.id, opId: r.op_id, opAd: r.op_ad, baslangic: r.baslangic, bitis: r.bitis,
-    tip: r.tip, durum: r.durum, saatBaslangic: r.saat_baslangic, saatBitis: r.saat_bitis,
-    onaylayan: r.onaylayan, onayTarihi: r.onay_tarihi, not: r.not_, olusturan: r.olusturan,
+  izin: (r: Record<string, unknown>): Izin => ({
+    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
+    baslangic: (r.baslangic || '') as string, bitis: (r.bitis || '') as string,
+    tip: (r.tip || '') as string, durum: (r.durum || '') as string,
+    saatBaslangic: (r.saat_baslangic || '') as string, saatBitis: (r.saat_bitis || '') as string,
+    onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
+    not: (r.not_ || '') as string, olusturan: (r.olusturan || '') as string,
   }),
-  bildirim: (r: Record<string, unknown>): Record<string, unknown> => ({
-    id: r.id, tip: r.tip, kategori: r.kategori, baslik: r.baslik, mesaj: r.mesaj,
-    hedefKullaniciId: r.hedef_kullanici_id, refId: r.ref_id, refTip: r.ref_tip,
-    okundu: !!r.okundu, okunduTarih: r.okundu_tarih, olusturma: r.olusturma, olusturan: r.olusturan,
+  bildirim: (r: Record<string, unknown>): Bildirim => ({
+    id: r.id as string, tip: (r.tip || 'sari') as Bildirim['tip'],
+    kategori: (r.kategori || '') as string, baslik: (r.baslik || '') as string,
+    mesaj: (r.mesaj || '') as string, hedefKullaniciId: (r.hedef_kullanici_id || '') as string,
+    refId: (r.ref_id || '') as string, refTip: (r.ref_tip || '') as string,
+    okundu: !!r.okundu, okunduTarih: (r.okundu_tarih || '') as string,
+    olusturma: (r.olusturma || '') as string, olusturan: (r.olusturan || '') as string,
   }),
-  pendingFlow: (r: Record<string, unknown>): Record<string, unknown> => ({
-    id: r.id, flowType: r.flow_type, currentStep: r.current_step, stateData: r.state_data,
-    userId: r.user_id, userAd: r.user_ad, baslangic: r.baslangic, sonAktivite: r.son_aktivite,
-    durum: r.durum, not: r.not_, orderId: r.order_id,
+  pendingFlow: (r: Record<string, unknown>): PendingFlow => ({
+    id: r.id as string, flowType: (r.flow_type || '') as PendingFlow['flowType'],
+    currentStep: (r.current_step || '') as PendingFlow['currentStep'],
+    stateData: (r.state_data || {}) as PendingFlow['stateData'],
+    userId: (r.user_id || '') as string, userAd: (r.user_ad || '') as string,
+    baslangic: (r.baslangic || '') as string, sonAktivite: (r.son_aktivite || '') as string,
+    durum: (r.durum || 'aktif') as PendingFlow['durum'],
+    not: (r.not_ || '') as string,
   }),
 }
 
@@ -233,7 +244,7 @@ interface UYSStore {
   customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
   activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
   acikBarlar: AcikBar[]
-  izinler: Record<string, unknown>[]; bildirimler: Record<string, unknown>[]; pendingFlows: Record<string, unknown>[]
+  izinler: Izin[]; bildirimler: Bildirim[]; pendingFlows: PendingFlow[]
   hmTipler: HmTip[]; testRuns: TestRun[]; problemler: Problem[]; kullanicilar: Kullanici[]
   yetkiMap: Record<string, string[]>
   loading: boolean; synced: boolean

@@ -223,7 +223,7 @@ export interface StokHareket {
   malkod: string
   malad: string
   miktar: number
-  tip: 'giris' | 'cikis'
+  tip: 'giris' | 'cikis' | 'bar_acilis'
   logId: string
   woId: string
   aciklama: string
@@ -249,6 +249,7 @@ export interface CuttingRow {
   fireMm: number
   kesimler: CuttingItem[]
   durum: string
+  havuzBarId?: string   // v15.35 — havuz barı kullanılıyorsa dolu
 }
 
 export interface CuttingItem {

@@ -63,7 +63,7 @@ export function hesaplaMamulRezervDurum(
     const m = Number(h.miktar) || 0
     if (h.tip === 'giris') {
       girisToplam += m
-      const rezervId = (h as any).rezervOrderId || (h as any).rezerv_order_id
+      const rezervId = h.rezervOrderId
       if (rezervId) {
         rezervMap.set(rezervId, (rezervMap.get(rezervId) || 0) + m)
       }
