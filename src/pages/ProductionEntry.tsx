@@ -221,6 +221,26 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   const [tarih, setTarih] = useState(today())
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
+  const writtenIds = useRef<Set<string>>(new Set())
+
+  // ═══ ACTIVE WORK ═══
+  // Modal açılınca uys_active_work'a kayıt yaz, kapanınca (kaydet veya iptal) sil
+  useEffect(() => {
+    if (!defaultOprId) return
+    const now = new Date()
+    const bas = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+    const opr = operators.find(o => o.id === defaultOprId)
+    const id = `${defaultOprId}_${woId}`
+    writtenIds.current.add(id)
+    supabase.from('uys_active_work').upsert(
+      { id, op_id: defaultOprId, op_ad: opr?.ad || '', wo_id: woId, wo_ad: w?.malad || '', baslangic: bas, tarih: today() },
+      { onConflict: 'id' }
+    )
+    return () => {
+      const ids = [...writtenIds.current]
+      if (ids.length > 0) supabase.from('uys_active_work').delete().in('id', ids)
+    }
+  }, [])
 
   // ═══ STOK KONTROL ═══
   const rc = recipes.find(r => r.id === w?.rcId)
@@ -271,8 +291,25 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     if (oprList.some(o => o.id === selOprId)) { toast.error('Bu operatör zaten ekli'); return }
     setOprList([...oprList, { id: op.id, ad: op.ad, bas: nowHHMM, bit: nowHHMM }])
     setSelOprId('')
+    // Active work kaydı
+    const id = `${op.id}_${woId}`
+    writtenIds.current.add(id)
+    const now2 = new Date()
+    const bas2 = String(now2.getHours()).padStart(2, '0') + ':' + String(now2.getMinutes()).padStart(2, '0')
+    supabase.from('uys_active_work').upsert(
+      { id, op_id: op.id, op_ad: op.ad, wo_id: woId, wo_ad: w?.malad || '', baslangic: bas2, tarih: today() },
+      { onConflict: 'id' }
+    )
   }
-  function removeOpr(i: number) { setOprList(prev => prev.filter((_, idx) => idx !== i)) }
+  function removeOpr(i: number) {
+    const opr = oprList[i]
+    if (opr) {
+      const id = `${opr.id}_${woId}`
+      supabase.from('uys_active_work').delete().eq('id', id)
+      writtenIds.current.delete(id)
+    }
+    setOprList(prev => prev.filter((_, idx) => idx !== i))
+  }
   function updateOpr(i: number, field: string, value: string) {
     setOprList(prev => prev.map((o, idx) => idx === i ? { ...o, [field]: value } : o))
   }
