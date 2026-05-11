@@ -227,6 +227,7 @@ export interface StokHareket {
   logId: string
   woId: string
   aciklama: string
+  rezervOrderId?: string | null
 }
 
 export interface CuttingPlan {

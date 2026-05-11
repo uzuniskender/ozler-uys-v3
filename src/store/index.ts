@@ -42,6 +42,7 @@ const M = {
   },
   log: (r: Record<string, unknown>): ProductionLog => ({
     id: r.id as string, woId: (r.wo_id || '') as string, tarih: (r.tarih || '') as string,
+    saat: (r.saat || '') as string,
     qty: (r.qty as number) || 0, fire: (r.fire as number) || 0,
     operatorlar: (r.operatorlar || []) as ProductionLog['operatorlar'],
     duruslar: (r.duruslar || []) as ProductionLog['duruslar'],
@@ -86,6 +87,7 @@ const M = {
     tip: (r.tip || 'giris') as 'giris' | 'cikis',
     logId: (r.log_id || '') as string, woId: (r.wo_id || '') as string,
     aciklama: (r.aciklama || '') as string,
+    rezervOrderId: (r.rezerv_order_id || null) as string | null,
   }),
   cuttingPlan: (r: Record<string, unknown>): CuttingPlan => ({
     id: r.id as string, hamMalkod: (r.ham_malkod || '') as string, hamMalad: (r.ham_malad || '') as string,
@@ -138,6 +140,8 @@ const M = {
     mesaj: (r.mesaj || '') as string, okundu: !!r.okundu,
     cevap: (r.cevap || '') as string, cevaplayan: (r.cevaplayan || '') as string,
     cevapTarih: (r.cevap_tarih || '') as string,
+    kategori: (r.kategori || undefined) as OperatorNote['kategori'],
+    oncelik: (r.oncelik || 'Normal') as OperatorNote['oncelik'],
   }),
   activeWork: (r: Record<string, unknown>): ActiveWork => ({
     id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
@@ -149,6 +153,9 @@ const M = {
     tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
     qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
     operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
+    telafiWoId: (r.telafi_wo_id || undefined) as string | undefined,
+    tip: (r.tip || undefined) as FireLog['tip'],
+    uzunlukMm: (r.uzunluk_mm as number) || undefined,
   }),
   checklist: (r: Record<string, unknown>): ChecklistItem => ({
     id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],
@@ -185,6 +192,21 @@ const M = {
     id: r.id as string, ad: (r.ad || '') as string,
     kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
     rol: (r.rol || 'depocu') as Kullanici['rol'], aktif: !!r.aktif,
+  }),
+  izin: (r: Record<string, unknown>): Record<string, unknown> => ({
+    id: r.id, opId: r.op_id, opAd: r.op_ad, baslangic: r.baslangic, bitis: r.bitis,
+    tip: r.tip, durum: r.durum, saatBaslangic: r.saat_baslangic, saatBitis: r.saat_bitis,
+    onaylayan: r.onaylayan, onayTarihi: r.onay_tarihi, not: r.not_, olusturan: r.olusturan,
+  }),
+  bildirim: (r: Record<string, unknown>): Record<string, unknown> => ({
+    id: r.id, tip: r.tip, kategori: r.kategori, baslik: r.baslik, mesaj: r.mesaj,
+    hedefKullaniciId: r.hedef_kullanici_id, refId: r.ref_id, refTip: r.ref_tip,
+    okundu: !!r.okundu, okunduTarih: r.okundu_tarih, olusturma: r.olusturma, olusturan: r.olusturan,
+  }),
+  pendingFlow: (r: Record<string, unknown>): Record<string, unknown> => ({
+    id: r.id, flowType: r.flow_type, currentStep: r.current_step, stateData: r.state_data,
+    userId: r.user_id, userAd: r.user_ad, baslangic: r.baslangic, sonAktivite: r.son_aktivite,
+    durum: r.durum, not: r.not_, orderId: r.order_id,
   }),
 }
 
@@ -232,6 +254,9 @@ export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: 
   { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
   { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
   { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
+  { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
+  { key: 'bildirimler', table: 'uys_bildirimler', mapper: M.bildirim },
+  { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
 ]
 
 export const useStore = create<UYSStore>((set) => ({
