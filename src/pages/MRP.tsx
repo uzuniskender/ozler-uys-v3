@@ -107,27 +107,22 @@ export function MRP() {
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      // v16.71 — Aktif flow'a bağlı sipariş → mrp_durum=tamam olsa bile aktif listede tut
-      // (kilitlenme önleme: flow tamamlanana kadar kullanıcı tedarik açabilmeli)
+      // v16.71 fix2 — Flow kilitlenme önleme: aktif flow'a bağlı sipariş her zaman göster
       if (activeFlowOrderId && o.id === activeFlowOrderId) return true
-      // v16.71 — showTamamlanan kaldırıldı; arşiv modal'a taşındı
-      const trueTerminal = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
-      if (trueTerminal) return false
+      // Gerçek terminal: DB state veya tüm WO'lar bitti
+      const terminal = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
+      if (terminal) return false
       if (orderAllWosDone[o.id]) return false
       if (isOrderArchived(o)) return false
-      // v16.68 — Canlı eksik kontrolü mrp_durum'dan önce gelir
-      const eksikVar = orderHasEksik[o.id] ?? false
-      if (eksikVar) return true
-      const mrpTamam = (o.mrpDurum || '') === 'tamam'
-      if (mrpTamam) return false
-      const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
-      const dbEksik = (o.mrpDurum || '') === 'eksik'
-      return henuzHesaplanmadi || dbEksik
+      // mrp_durum=tamam filtresi KALDIRILDI (v16.71 fix2):
+      // Sipariş aktif olduğu sürece MRP listesinde görünmeli.
+      // mrp_durum sadece kart rozeti olarak gösterilir.
+      return true
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, workOrders, orderAllWosDone, orderHasEksik, activeFlowOrderId])
+  }, [orders, workOrders, orderAllWosDone, activeFlowOrderId])
 
-  // v16.71 — Arşiv siparişleri (aktif olmayan tümü → modal için)
+  // v16.71 fix2 — Arşiv = sadece terminal state (tamamlandi/kapali/iptal) + tüm WO'ları biten
   const arsivOrders = useMemo(() => {
     const aktifIds = new Set(aktifOrders.map(o => o.id))
     return orders
@@ -202,34 +197,21 @@ export function MRP() {
   }, [aktifManualIesAll, orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   const aktifManualIes = useMemo(() => {
+    // v16.71 fix2 — Açık tüm manuel IE'ler gösterilir (eksik filtresi kaldırıldı)
     return aktifManualIesAll
-      .filter(w => manualIeHasEksik[w.id] ?? false)
       .sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
-  }, [aktifManualIesAll, manualIeHasEksik])
+  }, [aktifManualIesAll])
 
-  const arsivManualIes = useMemo(() =>
-    aktifManualIesAll.filter(w => !(manualIeHasEksik[w.id] ?? false)).length
-  , [aktifManualIesAll, manualIeHasEksik])
+  const arsivManualIes = 0  // v16.71 fix2: manuel IE'ler hepsi aktif listede
 
-  const arsivSayisi = arsivOrders.length + arsivManualIes
+  const arsivSayisi = arsivOrders.length
 
   // v15.71 — ymIEs + ymTamamSayisi useMemo kaldırıldı (madde 18)
 
   function toggleOrder(id: string) { setSelectedOrders(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }); setHesaplandi(false); setSonuc([]) }
   function selectAll() {
-    // v16.68 — Gerçekten MRP açık siparişleri seç:
-    // - state terminal değil (tamamlandi/kapali/iptal)
-    // - tüm WO'ları bitmemiş
-    // - canlı eksik VAR → her zaman seç
-    // - canlı eksik yok + mrp_durum='tamam' → seçme
-    const mrpAktifOrders = aktifOrders.filter(o => {
-      if (o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal') return false
-      if (orderAllWosDone[o.id]) return false
-      if (orderHasEksik[o.id]) return true   // canlı eksik → seç
-      if ((o as any).mrpDurum === 'tamam') return false  // tamam + eksik yok → seçme
-      return true
-    })
-    const ids = [...mrpAktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
+    // v16.71 fix2 — aktifOrders zaten doğru filtreli; hepsini seç
+    const ids = [...aktifOrders.map(o => o.id), ...aktifManualIes.map(w => w.id)]
     setSelectedOrders(new Set(ids)); setHesaplandi(false); setSonuc([])
   }
   function selectNone() { setSelectedOrders(new Set()); setHesaplandi(false); setSonuc([]) }
@@ -434,13 +416,16 @@ export function MRP() {
   // v15.78 — Manuel İE'ler de auto-select'e dahil
   useEffect(() => {
     if (flowAutoDone || hesaplandi) return
-    if (!orders.length || !workOrders.length) return  // Store hazır olana kadar bekle
-    const ordIds = aktifOrders.map(o => o.id)
+    if (!orders.length || !workOrders.length) return
+    // v16.71 fix2 — Auto-select: sadece mrp_durum eksik/bekliyor olanları seç
+    // (tamam olanlar listede görünür ama otomatik seçilmez)
+    const ordIds = aktifOrders
+      .filter(o => (o.mrpDurum || 'bekliyor') !== 'tamam')
+      .map(o => o.id)
     const ymIds = aktifManualIes.map(w => w.id)
-    if (!ordIds.length && !ymIds.length) return  // Seçilecek bir şey yoksa dokunma
+    if (!ordIds.length && !ymIds.length) return
     setSelectedOrders(new Set([...ordIds, ...ymIds]))
     setFlowAutoDone(true)
-    // Doğrudan override ile hesapla — state async, closure bug önlenir
     hesapla(ordIds, ymIds.length > 0 ? new Set(ymIds) : undefined)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders.length, workOrders.length])
