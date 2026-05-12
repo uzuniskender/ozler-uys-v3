@@ -296,6 +296,13 @@ export function MRP() {
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
+
+    // v16.71 — Hesap öncesi tüm aktif siparişler için rezerv senkronize et.
+    // Bu sayede tek sipariş hesaplarken de diğer siparişlerin payı stoktan düşülmüş olur.
+    // Teker teker = toplu seçim ile aynı sonucu verir.
+    await rezerveleriSenkronla(orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
+    await loadAll()  // Yeni rezervler store'a yansısın
+
     const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
     setHesaplandi(true)

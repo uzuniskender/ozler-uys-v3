@@ -724,17 +724,45 @@ export async function mrpTedarikDuzelt(
 //   Aşama 1 (v15.70): Fonksiyonlar no-op (BU PATCH)
 //   Aşama 2 (1-2 hafta sonra, sahada sorun yoksa): Fonksiyon tanımları + tablo + tip + store kaldırılır
 export async function rezerveYaz(
-  _orderId: string,
-  _mrpRows: MRPRow[]
+  orderId: string,
+  mrpRows: MRPRow[]
 ): Promise<number> {
-  // v15.70: no-op (rezerve sistemi kapatıldı)
-  return 0
+  // v16.71 — Gerçek implementasyon (v15.70 no-op kaldırıldı)
+  if (!orderId || !mrpRows.length) return 0
+
+  // Bu siparişin eski rezervlerini temizle
+  await supabase.from('uys_stok_hareketler')
+    .delete()
+    .eq('rezerv_order_id', orderId)
+    .eq('tip', 'rezerv')
+
+  // Stoktan karşılanabilen malzemeler için rezerv yaz
+  const rows = mrpRows.filter(r => r.brut > 0 && r.stok > 0)
+  if (!rows.length) return 0
+
+  const ts = Date.now()
+  const insertRows = rows.map((r, i) => ({
+    id: `rezerv-${orderId}-${r.malkod.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 18)}-${ts}-${i}`,
+    malkod: r.malkod, malad: r.malad,
+    miktar: Math.min(Math.ceil(r.brut), Math.floor(r.stok)),
+    tip: 'rezerv', tarih: today(),
+    rezerv_order_id: orderId,
+    aciklama: 'MRP otomatik rezerve',
+  }))
+
+  const { error } = await supabase.from('uys_stok_hareketler').insert(insertRows)
+  if (error) { console.error('[rezerveYaz]', error); return 0 }
+  return insertRows.length
 }
 
-// Bir siparişe ait tüm rezerveleri siler — v15.70: no-op
-export async function rezerveSil(_orderId: string): Promise<void> {
-  // v15.70: no-op (rezerve sistemi kapatıldı)
-  return
+// Bir siparişe ait tüm rezerveleri siler
+export async function rezerveSil(orderId: string): Promise<void> {
+  // v16.71 — Gerçek implementasyon (v15.70 no-op kaldırıldı)
+  if (!orderId) return
+  await supabase.from('uys_stok_hareketler')
+    .delete()
+    .eq('rezerv_order_id', orderId)
+    .eq('tip', 'rezerv')
 }
 
 // ═══ KESİM PLANI TEMİZLEME HELPER — woId bazlı ═══
@@ -862,16 +890,86 @@ export async function siparisSilKapsamli(
 //   - Tedarik geldi=true işaretlenmesi
 //   - Stok hareketi (manuel giriş/çıkış)
 export async function rezerveleriSenkronla(
-  _orders: any[],
-  _workOrders: WorkOrder[],
-  _recipes: Recipe[],
-  _stokHareketler: StokHareket[],
-  _tedarikler: Tedarik[],
-  _cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
-  _materials: Material[],
+  orders: any[],
+  workOrders: WorkOrder[],
+  recipes: Recipe[],
+  stokHareketler: StokHareket[],
+  tedarikler: Tedarik[],
+  cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
+  materials: Material[],
 ): Promise<{ siparisSayisi: number; rezerveSayisi: number }> {
-  // v15.70: no-op (rezerve sistemi kapatıldı). Caller imzaları korundu.
-  return { siparisSayisi: 0, rezerveSayisi: 0 }
+  // v16.71 — Gerçek termin-FIFO implementasyonu (v15.70 no-op kaldırıldı)
+  //
+  // MANTIK:
+  // 1. Tüm mevcut otomatik rezervleri sil
+  // 2. Aktif siparişleri termine göre sırala (erken termin önce)
+  // 3. Her sipariş için MRP hesapla — önceki siparişlerin rezervleri
+  //    in-memory birikimi ile stoktan düşülmüş olarak gelir
+  // 4. Rezerv yaz: min(brüt ihtiyaç, kalan serbest stok)
+  // 5. Toplu insert
+
+  // 1. Mevcut otomatik rezervleri temizle (manuel "Rezerve Et" kayıtları korunur)
+  await supabase.from('uys_stok_hareketler')
+    .delete()
+    .eq('tip', 'rezerv')
+    .eq('aciklama', 'MRP otomatik rezerve')
+
+  // 2. Aktif siparişler — termin sıralı
+  const aktif = orders
+    .filter(o => o.state !== 'tamamlandi' && o.state !== 'kapali' && o.state !== 'iptal')
+    .sort((a, b) => (a.termin || '9999-99-99').localeCompare(b.termin || '9999-99-99'))
+
+  if (!aktif.length) return { siparisSayisi: 0, rezerveSayisi: 0 }
+
+  // 3-4. Her sipariş için hesap + in-memory birikim
+  // extraRezerv: malkod → bu oturumda yazılmış toplam rezerv miktarı
+  const extraRezerv: Record<string, number> = {}
+  const allInserts: any[] = []
+  const ts = Date.now()
+
+  for (const order of aktif) {
+    // Gerçek stok hareketlerine in-memory rezervleri ekle
+    const fakeEktra = Object.entries(extraRezerv)
+      .filter(([, m]) => m > 0)
+      .map(([malkod, miktar]) => ({
+        malkod, miktar, tip: 'rezerv' as const,
+        rezervOrderId: '__senkron__', tarih: today(),
+        id: '', malad: '', birim: '', aciklama: '',
+      }))
+
+    const birlesikStok = [...stokHareketler, ...fakeEktra] as StokHareket[]
+
+    const rows = hesaplaMRP(
+      [order.id], orders, workOrders, recipes,
+      birlesikStok, tedarikler, cuttingPlans, materials,
+      null, [], order.id
+    )
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]
+      if (r.brut <= 0 || r.stok <= 0) continue
+      const rezervMiktar = Math.min(Math.ceil(r.brut), Math.floor(r.stok))
+      if (rezervMiktar <= 0) continue
+
+      allInserts.push({
+        id: `rezerv-${order.id}-${r.malkod.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 18)}-${ts}-${allInserts.length}`,
+        malkod: r.malkod, malad: r.malad,
+        miktar: rezervMiktar, tip: 'rezerv', tarih: today(),
+        rezerv_order_id: order.id,
+        aciklama: 'MRP otomatik rezerve',
+      })
+
+      extraRezerv[r.malkod] = (extraRezerv[r.malkod] || 0) + rezervMiktar
+    }
+  }
+
+  // 5. Toplu insert (100'erli batch)
+  for (let i = 0; i < allInserts.length; i += 100) {
+    const { error } = await supabase.from('uys_stok_hareketler').insert(allInserts.slice(i, i + 100))
+    if (error) console.error('[rezerveleriSenkronla] insert error:', error)
+  }
+
+  return { siparisSayisi: aktif.length, rezerveSayisi: allInserts.length }
 }
 
 // ═══ v15.74 — SİPARİŞ DELTA HESABI (İş Emri #13 madde 11) ═══
