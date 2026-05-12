@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo } from 'react'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -272,11 +273,7 @@ function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
     // 2. Eski stok çıkışlarını sil, yeni kalemlerle yeniden yaz
     await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + sevk.id + '-%')
     for (const k of validKalemler) {
-      await supabase.from('uys_stok_hareketler').insert({
-        id: 'sev-' + sevk.id + '-' + k.malkod.replace(/\s+/g, '_').slice(0, 20),
-        tarih: sevk.tarih || today(), malkod: k.malkod, malad: k.malad,
-        miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id,
-      })
+      await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id, tarih: sevk.tarih || today() })
     }
     // 3. sevk_durum güncelle — D1 fix
     if (sevk.orderId) {
@@ -465,12 +462,7 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
     })
     if (stokCikis) {
       for (const k of validKalemler) {
-        await supabase.from('uys_stok_hareketler').insert({
-          id: 'sev-' + sevkId + '-' + k.malkod.replace(/\s+/g, '_').slice(0, 20),
-          tarih: tarih, malkod: k.malkod, malad: k.malad,
-          miktar: k.miktar, tip: 'cikis',
-          aciklama: 'Sevkiyat — ' + sevkId,
-        })
+        await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevkId, tarih: tarih })
       }
     }
     if (orderId && ord) {

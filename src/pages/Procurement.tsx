@@ -105,9 +105,7 @@ export function Procurement() {
     await supabase.from('uys_tedarikler').delete().eq('id', id)
     if (orderId) {
       await supabase.from('uys_orders').update({ mrp_durum: 'bekliyor' }).eq('id', orderId)
-      console.log('[del] sipariş bekliyor:', orderId)
     } else {
-      console.log('[del] tedarikin order_id yok, sipariş güncellenmedi')
     }
     // v15.36.1 — Rezerve state'i tedarik silince güncelle (MRP'de tutarlı sonuç için)
     try {

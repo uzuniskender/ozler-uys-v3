@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { addStokHareketi } from '@/lib/stokHelper'
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
@@ -210,11 +211,7 @@ export function CuttingPlans() {
     }
     if (artiklar.length === 0) { toast.error('100mm×100mm’den büyük artık yok'); return }
     for (const a of artiklar) {
-      await supabase.from('uys_stok_hareketler').insert({
-        id: uid(), tarih: today(), malkod: hamMalkod, malad: hamMalad + ' (Artık)',
-        miktar: 1, tip: 'giris', log_id: 'levha-artik-' + planId,
-        aciklama: 'Levha artığı — ' + a.en + 'x' + a.boy + 'mm (' + Math.round(a.en * a.boy / 10000) + ' dm2)',
-      })
+      await addStokHareketi({ malkod: hamMalkod, malad: hamMalad + ' (Artık)', miktar: 1, tip: 'giris', aciklama: 'Levha artığı — ' + a.en + 'x' + a.boy + 'mm (' + Math.round(a.en * a.boy / 10000) + ' dm2)', logId: 'levha-artik-' + planId })
     }
     loadAll()
     toast.success(artiklar.length + ' artık levha stoka eklendi (' + hamMalkod + ')')

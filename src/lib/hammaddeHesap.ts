@@ -3,6 +3,12 @@
  * KURAL: Stok / ihtiyaç / net durum hesabı yalnızca buradan yapılır.
  */
 
+// WO aktif kontrolü — circular import önlemek için statusUtils'ten bağımsız mini helper
+function _isWoAktif(w: any): boolean {
+  const d = w.durum || ''
+  return d !== 'iptal' && d !== 'tamamlandi' && d !== 'kismi_tamam'
+}
+
 // ─── 1. FİZİKSEL STOK ────────────────────────────────────────────────────────
 export function getStok(malkod: string, stokHareketler: any[]): number {
   return Math.floor(
@@ -39,7 +45,7 @@ export function buildIhtiyacMap(
   }
 
   for (const w of (allWos || [])) {
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') continue
+    if (!_isWoAktif(w)) continue
     for (const h of (w.hm || [])) {
       const mk: string = (h.malkod || '').trim()
       if (!mk || planliMalkodlar.has(mk)) continue
@@ -97,7 +103,7 @@ export function computeOrderEksik(
 
   for (const o of (orders || [])) {
     const oWos = (allWos || []).filter((w: any) =>
-      w.orderId === o.id && w.durum !== 'iptal' && w.durum !== 'tamamlandi'
+      w.orderId === o.id && _isWoAktif(w)
     )
     const hmGrup: Record<string, number> = {}
 

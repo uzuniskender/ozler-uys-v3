@@ -1,4 +1,5 @@
 import { getStok } from '@/lib/hammaddeHesap'
+import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
@@ -861,13 +862,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       await supabase.from('uys_stok_hareketler').delete().eq('log_id', editLogId)
       // Mamul stok girişi — sadece sağlam adet
       if (q > 0) {
-        await supabase.from('uys_stok_hareketler').insert({
-          id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-          tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
-          tarih, log_id: editLogId, wo_id: woId,
-          // v15.92 — Madde 15 P2: rezerv_order_id propagation
-          rezerv_order_id: w.orderId || null,
-        })
+        await addStokHareketi({ malkod: w.malkod, malad: w.malad, miktar: q, tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '), woId: woId, logId: editLogId })
       }
       // HM tüketim — sağlam + fire = toplam harcanan
       // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
@@ -910,13 +905,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       })
       // Mamul stok girişi — sadece sağlam adet
       if (q > 0) {
-        await supabase.from('uys_stok_hareketler').insert({
-          id: uid(), malkod: w.malkod, malad: w.malad, miktar: q,
-          tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '),
-          tarih, log_id: logId, wo_id: woId,
-          // v15.92 — Madde 15 P2: rezerv_order_id propagation
-          rezerv_order_id: w.orderId || null,
-        })
+        await addStokHareketi({ malkod: w.malkod, malad: w.malad, miktar: q, tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '), woId: woId, logId: logId })
       }
       // HM tüketim — sağlam + fire = toplam harcanan
       // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
@@ -981,7 +970,6 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
       const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useStore.getState()
       const r = await barModelSync(woId, cpState, woState, logState, materials)
       if (r.barSayisi > 0) {
-        console.log(`[barModel] ${r.barSayisi} bar açıldı, ${r.acikBarSayisi} açık bar havuza girdi`)
         // Bar kayıtları yazıldıysa açık barları tekrar yükle
         try { await useStore.getState().reloadTables(['uys_stok_hareketler', 'uys_acik_barlar']) } catch {}
       }

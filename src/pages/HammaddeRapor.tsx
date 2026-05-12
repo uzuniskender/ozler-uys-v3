@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { fmtDate } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useEffect } from 'react'
 import { Download, BarChart2, Package, Weight, Calendar, Filter, AlertTriangle } from 'lucide-react'
@@ -38,12 +39,12 @@ function grupKey(tarih: string, gran: Granularite): string {
 
 function grupLabel(key: string, gran: Granularite): string {
   if (gran === 'gunluk') {
-    return new Date(key).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' })
+    return fmtDate(key)
   }
   if (gran === 'haftalik') {
     const d = new Date(key)
     const end = new Date(d); end.setDate(d.getDate() + 6)
-    return `${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} – ${end.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' })}`
+    return `${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} – ${fmtDate(end)}`
   }
   const [y, m] = key.split('-')
   return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })

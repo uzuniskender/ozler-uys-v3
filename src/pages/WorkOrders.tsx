@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
@@ -273,10 +274,10 @@ export function WorkOrders() {
       if (!neden?.trim()) { toast.error('İptal nedeni zorunlu'); return }
       if (prod > 0) {
         if (!await showConfirm(`${wo.ieNo}: ${prod} adet üretim var.\nİptal edilirse stok ters kayıt yapılır. Devam?`)) return
-        await supabase.from('uys_stok_hareketler').insert({ id: uid(), tarih, malkod: wo.malkod, malad: wo.malad, miktar: prod, tip: 'cikis', aciklama: 'İPTAL ters — ' + wo.ieNo + ' (' + neden + ')', wo_id: id })
+        await addStokHareketi({ malkod: wo.malkod, malad: wo.malad, miktar: prod, tip: 'cikis', aciklama: 'İPTAL ters — ' + wo.ieNo + ' (' + neden + ')', woId: id })
         const hmCikislar = stokHareketler.filter(h => h.woId === id && h.tip === 'cikis' && h.logId)
         for (const h of hmCikislar) {
-          await supabase.from('uys_stok_hareketler').insert({ id: uid(), tarih, malkod: h.malkod, malad: h.malad, miktar: h.miktar, tip: 'giris', aciklama: 'İPTAL HM iadesi — ' + wo.ieNo, wo_id: id })
+          await addStokHareketi({ malkod: h.malkod, malad: h.malad, miktar: h.miktar, tip: 'giris', aciklama: 'İPTAL HM iadesi — ' + wo.ieNo, woId: id })
         }
         toast.info('Ters stok hareketi yazıldı')
       }
@@ -594,18 +595,10 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
         const hmDelta = birAdet * Math.abs(delta)
         if (delta > 0) {
           // Arttı → ek HM tüketimi
-          await supabase.from('uys_stok_hareketler').insert({
-            id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmDelta,
-            tip: 'cikis', aciklama: wo.ieNo + ' düzeltme +' + delta,
-            tarih: today(), log_id: l.id, wo_id: wo.id,
-          })
+          await addStokHareketi({ malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmDelta, tip: 'cikis', aciklama: wo.ieNo + ' düzeltme +' + delta, woId: wo.id, logId: l.id })
         } else {
           // Azaldı → HM iadesi
-          await supabase.from('uys_stok_hareketler').insert({
-            id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmDelta,
-            tip: 'giris', aciklama: wo.ieNo + ' düzeltme ' + delta,
-            tarih: today(), log_id: l.id, wo_id: wo.id,
-          })
+          await addStokHareketi({ malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmDelta, tip: 'giris', aciklama: wo.ieNo + ' düzeltme ' + delta, woId: wo.id, logId: l.id })
         }
       }
       toast.success(`Log güncellendi: ${l.qty} → ${yeniQty} (${delta > 0 ? '+' : ''}${delta}) · HM stok ${delta > 0 ? 'tüketildi' : 'iade edildi'}`)

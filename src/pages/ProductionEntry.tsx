@@ -1,4 +1,5 @@
 import { getStok } from '@/lib/hammaddeHesap'
+import { addStokHareketi } from '@/lib/stokHelper'
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle } from '@/features/production/stokTuketim'
@@ -406,15 +407,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
 
     // Stok girişi (üretilen mamul) — sadece sağlam adet varsa
     if (q > 0) {
-      await supabase.from('uys_stok_hareketler').insert({
-        id: uid(), tarih, malkod: w.malkod, malad: w.malad,
-        miktar: q, tip: 'giris', log_id: logId, wo_id: woId,
-        aciklama: 'Üretim — ' + w.ieNo,
-        // v15.92 — Madde 15 P2: rezerv_order_id propagation
-        // Eğer İE bir siparişe bağlıysa, üretilen mamul O sipariş için rezervdir.
-        // Tekil İE / manuel İE'de orderId NULL -> serbest stok olur.
-        rezerv_order_id: w.orderId || null,
-      })
+      await addStokHareketi({ malkod: w.malkod, malad: w.malad, miktar: q, tip: 'giris', aciklama: 'Üretim — ' + w.ieNo, woId: woId, logId: logId })
     }
 
     // Fire logu (fire mamul stoğuna girmediği için çıkış kaydı yok — HM tüketimi aşağıda q+f üzerinden hesaplanır)
@@ -457,7 +450,6 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       const freshLogs = [...logState, { id: logId, woId, qty: q, fire: f } as any]
       const r = await barModelSync(woId, cpState, woState, freshLogs, materials)
       if (r.barSayisi > 0) {
-        console.log(`[barModel] ${r.barSayisi} bar açıldı, ${r.acikBarSayisi} açık bar havuza girdi`)
       }
     } catch (err) {
       console.error('[barModel] Sync hatası:', err)
@@ -711,13 +703,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       })
 
       if (q > 0) {
-        await supabase.from('uys_stok_hareketler').insert({
-          id: uid(), tarih, malkod: wo.malkod, malad: wo.malad,
-          miktar: q, tip: 'giris', log_id: logId, wo_id: r.woId,
-          aciklama: 'Toplu üretim — ' + wo.ieNo,
-          // v15.92 — Madde 15 P2: rezerv_order_id propagation
-          rezerv_order_id: wo.orderId || null,
-        })
+        await addStokHareketi({ malkod: wo.malkod, malad: wo.malad, miktar: q, tip: 'giris', aciklama: 'Toplu üretim — ' + wo.ieNo, woId: r.woId, logId: logId })
       }
 
       // HM tüketim — sağlam + fire (fire da hammadde harcar)
