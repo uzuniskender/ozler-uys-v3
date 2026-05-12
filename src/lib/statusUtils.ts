@@ -316,6 +316,8 @@ export function getEffectiveStatus(
     if (!planliMi) {
       return { status: 'PlanBekliyor', reason: 'Kesim planı oluşturulmamış', blockedBy: 'kesim_plan' }
     }
+    // Kesim planında → hammadde ihtiyacı plan karşılar, stok kontrolünü atla
+    return { status: 'Uretilebilir', reason: '', blockedBy: null }
   }
 
   // 3-5. Hammadde stoğu kontrolü
@@ -353,9 +355,7 @@ export function getEffectiveStatus(
   let ilkTedarikYolda: { malkod: string; malad: string } | null = null
 
   for (const h of hm) {
-    const stok = stokHareketler
-      .filter(s => s.malkod === h.malkod)
-      .reduce((a, s) => a + (s.tip === 'giris' ? s.miktar : -s.miktar), 0)
+    const stok = getStok(h.malkod, stokHareketler)
     const kalanIhtiyac = h.miktarTotal * kalanOran
     if (stok >= kalanIhtiyac) continue  // bu hammadde yeterli
 
