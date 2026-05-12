@@ -376,51 +376,53 @@ export function MRP() {
     setHesaplandi(true)
     setViewMode('kumülatif')  // v16.71 — hesap sonrası kümülatif'e sıfırla
 
-    // v16.71 — Per-order sonuçları topla (Sipariş Bazlı toggle için)
+    // v16.71 — Per-order sonuçları: hm hesabı (hesaplaMRP değil)
     const perOrderResults: { orderId: string; siparisNo: string; musteri: string; mamulAd: string; rows: MRPRow[] }[] = []
 
-    // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz (manuel İE'lerde mrp_durum kolonu yok, atla)
     for (const oid of ordIds) {
-      // v16.32 IE #14 Faz A Slice 3 — tek-order cache wrap
-      // v16.71 — Flow context'inde forceRefresh=true: stale cache → yanlış mrp_durum yazımı önlenir
-      const tekResult = await hesaplaMRPCached(
-        { orderId: oid },
-        () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs),
-        activeFlowId ? { forceRefresh: true } : undefined
+      const ordWOs = workOrders.filter(w =>
+        w.orderId === oid && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'kismi_tamam'
       )
-      // v16.71 — Sipariş Bazlı toggle için per-order sonuç topla
-      const ordForPO = orders.find((x: any) => x.id === oid)
-      if (ordForPO) perOrderResults.push({
-        orderId: oid,
-        siparisNo: (ordForPO as any).siparisNo || oid,
-        musteri: (ordForPO as any).musteri || '',
-        mamulAd: (ordForPO as any).mamulAd || '',
-        rows: tekResult,
-      })
-      const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
-
-      // v16.04 — #23 sentinel: UPDATE DB'ye yansidi mi dogrula. Saha vakasi (30 Nis):
-      // Hesapla basildi, ekranda eksik gorundu, ama DB'de updated_at degismedi.
-      // RLS / network / async yutma olabilir. Sentinel: hata sessiz kalmasin.
-      const o = orders.find((x: any) => x.id === oid)
-      const { error: updErr, data: updData } = await supabase
-        .from('uys_orders')
-        .update({ mrp_durum: yeniDurum })
-        .eq('id', oid)
-        .select('id, mrp_durum, updated_at')
-      if (updErr) {
-        console.error('[v16.04 #23 sentinel] UPDATE error:', updErr, 'oid:', oid)
-        toast.error(`MRP UPDATE hatasi (sip ${o?.siparisNo || oid}): ${updErr.message}`)
-      } else if (!updData || updData.length === 0) {
-        // RLS row-level filtre nedeniyle satira ulasilamadi
-        console.error('[v16.04 #23 sentinel] UPDATE silently rejected (0 rows):', oid)
-        toast.error(`MRP UPDATE atilmadi (sip ${o?.siparisNo || oid}): RLS engelliyor olabilir`)
+      const ordBrutMap: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
+      for (const wo of ordWOs) {
+        const hmList = (wo.hm || []) as any[]
+        if (!hmList.length) continue
+        const uretilen = logs ? logs.filter((l: any) => l.woId === wo.id).reduce((a: number, l: any) => a + (l.qty || 0), 0) : 0
+        const kalanOran = wo.hedef > 0 ? Math.max(0, (wo.hedef - uretilen) / wo.hedef) : 0
+        if (kalanOran === 0) continue
+        const termin = (wo as any).termin || ''
+        for (const hm of hmList) {
+          const malkod = (hm.malkod || '').trim(); if (!malkod) continue
+          const mat = materials.find((m: any) => m.kod === malkod)
+          if (mat?.tip === 'YarıMamul') continue
+          const key = malkod.toLowerCase() + '__' + termin
+          if (!ordBrutMap[key]) ordBrutMap[key] = { malkod, malad: hm.malad || '', tip: mat?.tip || 'Hammadde', birim: mat?.birim || 'Adet', brut: 0, termin }
+          ordBrutMap[key].brut += (hm.miktarTotal || 0) * kalanOran
+        }
       }
-
-      // Rezerve kayıtları yaz (eskileri silip yenilerini oluştur)
-      await rezerveYaz(oid, tekResult)
+      const ordSP: Record<string, number> = {}
+      const ordAP: Record<string, number> = {}
+      const tekResult: MRPRow[] = []
+      for (const bi of Object.values(ordBrutMap).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))) {
+        bi.brut = Math.ceil(bi.brut); if (bi.brut <= 0) continue
+        const kl = bi.malkod.toLowerCase()
+        if (ordSP[kl] === undefined) {
+          ordSP[kl] = Math.max(0, getStok(bi.malkod, stokGercek))
+          ordAP[kl] = tedarikler.filter((t: any) => (t.malkod || '').toLowerCase() === kl && !t.geldi).reduce((a: number, t: any) => a + (t.miktar || 0), 0)
+        }
+        const sd = Math.min(ordSP[kl], bi.brut); ordSP[kl] -= sd
+        const ad = Math.min(ordAP[kl], bi.brut - sd); ordAP[kl] -= ad
+        const net = Math.max(0, bi.brut - sd - ad)
+        tekResult.push({ malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim, brut: bi.brut, stok: sd, rezerve: 0, acikTedarik: ad, net, durum: net > 0 ? 'eksik' : 'yeterli', termin: bi.termin })
+      }
+      const ordForPO = orders.find((x: any) => x.id === oid)
+      if (ordForPO) perOrderResults.push({ orderId: oid, siparisNo: (ordForPO as any).siparisNo || oid, musteri: (ordForPO as any).musteri || '', mamulAd: (ordForPO as any).mamulAd || '', rows: tekResult })
+      const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
+      const { error: updErr, data: updData } = await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid).select('id')
+      if (updErr) toast.error(`MRP UPDATE hatası: ${updErr.message}`)
+      else if (!updData || updData.length === 0) console.error('[MRP] UPDATE 0 rows:', oid)
     }
-    setSonucPerOrder(perOrderResults)  // v16.71
+    setSonucPerOrder(perOrderResults)
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle
     if (ymSet && ymSet.size > 0) {
       const prev = new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[])
