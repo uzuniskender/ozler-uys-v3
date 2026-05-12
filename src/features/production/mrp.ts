@@ -981,11 +981,11 @@ export async function rezerveleriSenkronla(
 
     const birlesikStok = [...stokHareketlerTemiz, ...fakeEktra] as StokHareket[]
 
-    const rows = hesaplaMRP(
-      [order.id], orders, workOrders, recipes,
-      birlesikStok, tedarikler, cuttingPlans, materials,
-      null, [], order.id
-    )
+    const rows = _hesaplaMRPCore({
+      ordIds: [order.id], orders, workOrders, recipes,
+      stokHareketler: birlesikStok, tedarikler, cuttingPlans, materials,
+      secilenYMIds: null, mrpRezerve: [], currentOrderId: order.id
+    })
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]
