@@ -355,9 +355,14 @@ export function MRP() {
       if (bi.brut <= 0) continue
       const kLower = bi.malkod.toLowerCase()
       if (stokPool[kLower] === undefined) {
+        // Stok = sadece giris - cikis (bar_acilis stoktan düşülmez — bar açılmış ama kullanılmamış hammadde hâlâ stokta)
         stokPool[kLower] = Math.max(0, stokGercek
           .filter((h: any) => (h.malkod || '').toLowerCase() === kLower)
-          .reduce((a: number, h: any) => h.tip === 'giris' ? a + h.miktar : a - h.miktar, 0))
+          .reduce((a: number, h: any) => {
+            if (h.tip === 'giris') return a + (h.miktar || 0)
+            if (h.tip === 'cikis') return a - (h.miktar || 0)
+            return a  // bar_acilis ve diğerleri stoktan düşülmez
+          }, 0))
         acikTedPool[kLower] = tedarikler
           .filter((t: any) => (t.malkod || '').toLowerCase() === kLower && !t.geldi)
           .reduce((a: number, t: any) => a + (t.miktar || 0), 0)
