@@ -166,6 +166,11 @@ export function MRP() {
   const orderTahsisOzeti = useMemo(() => {
     const map: Record<string, { durum: 'yesil' | 'sari' | 'kirmizi' | 'yok'; eksikSayi: number; toplamMalzeme: number }> = {}
     for (const o of aktifOrders) {
+      // mrp_durum=tamam ise hesaplaMRP çalıştırma, direkt yeşil göster
+      if ((o.mrpDurum || '') === 'tamam') {
+        map[o.id] = { durum: 'yesil', eksikSayi: 0, toplamMalzeme: 0 }
+        continue
+      }
       map[o.id] = siparisTahsisOzeti(o.id, hammaddeTahsis)
     }
     return map
