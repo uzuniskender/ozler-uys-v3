@@ -13,7 +13,7 @@ import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/producti
 import { MamulCikisModal } from '@/components/MamulCikisModal'
 
 export function Warehouse() {
-  const { stokHareketler, materials, acikBarlar, orders, loadAll } = useStore()
+  const { stokHareketler, materials, acikBarlar, orders, workOrders, loadAll } = useStore()
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
@@ -34,6 +34,19 @@ export function Warehouse() {
     })
     return Object.values(map).filter(s => Math.abs(s.miktar) > 0.01).sort((a, b) => a.malad.localeCompare(b.malad, 'tr'))
   }, [stokHareketler])
+
+  // Anlık ihtiyaç: aktif WO'ların hm toplamı (malkod bazında)
+  const ihtiyacMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    workOrders.forEach(w => {
+      if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return
+      ;(w.hm || []).forEach((h: any) => {
+        if (!h.malkod) return
+        map[h.malkod] = (map[h.malkod] || 0) + Number(h.miktarTotal || 0)
+      })
+    })
+    return map
+  }, [workOrders])
 
   const filteredStok = useMemo(() => {
     let result = stokMap
@@ -162,16 +175,17 @@ export function Warehouse() {
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
         {tab === 'stok' && (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th><th className="text-right px-3 py-2.5">Aksiyon</th></tr></thead>
+            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-right px-3 py-2.5 text-orange-400">İhtiyaç</th><th className="text-right px-3 py-2.5 text-cyan-400">Fark</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th><th className="text-right px-3 py-2.5">Aksiyon</th></tr></thead>
             <tbody>
               {filteredStok.map(s => {
                 const mat = materials.find(m => m.kod === s.malkod)
-                const kartYok = !mat  // Malzeme kartı yok — uyarı göster
+                const kartYok = !mat
                 const minStokAlt = mat?.minStok && s.miktar < mat.minStok
-                // v15.92 — Mamul tespiti: tip kontrolu (Mamul, Yari Mamul, mamul)
                 const isMamul = mat && (mat.tip === 'Mamul' || mat.tip === 'mamul' || mat.tip === 'YariMamul' || mat.tip === 'yari_mamul')
+                const ihtiyac = Math.ceil(ihtiyacMap[s.malkod] || 0)
+                const fark = Math.round(s.miktar) - ihtiyac
                 return (
-                <tr key={s.malkod} className={`border-b border-border/30 hover:bg-bg-3/30 ${kartYok ? 'bg-amber/5' : minStokAlt ? 'bg-red/5' : ''}`}>
+                <tr key={s.malkod} className={`border-b border-border/30 hover:bg-bg-3/30 ${kartYok ? 'bg-amber/5' : fark < 0 ? 'bg-red/5' : minStokAlt ? 'bg-red/5' : ''}`}>
                   <td className="px-4 py-1.5 font-mono text-accent text-[11px]">
                     {s.malkod}
                     {kartYok && <span className="ml-1.5 px-1 py-0.5 bg-amber/20 text-amber rounded text-[9px] font-semibold">⚠ Kart Yok</span>}
@@ -179,6 +193,8 @@ export function Warehouse() {
                   <td className="px-4 py-1.5 text-zinc-300">{s.malad}</td>
                   <td className="px-4 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[9px] ${kartYok ? 'bg-amber/15 text-amber' : 'bg-bg-3 text-zinc-500'}`}>{mat?.tip || (kartYok ? 'Kart Yok' : '—')}</span></td>
                   <td className={`px-4 py-1.5 text-right font-mono font-semibold ${s.miktar < 0 ? 'text-red' : minStokAlt ? 'text-amber' : 'text-green'}`}>{Math.round(s.miktar)}</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-orange-400">{ihtiyac > 0 ? ihtiyac : '—'}</td>
+                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${fark < 0 ? 'text-red' : 'text-zinc-500'}`}>{ihtiyac > 0 ? (fark < 0 ? `⚠ ${fark}` : `+${fark}`) : '—'}</td>
                   <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{mat?.birim || 'Ad'}</td>
                   <td className="px-3 py-1.5 text-right font-mono text-zinc-600 text-[10px]">{mat?.minStok || '—'}</td>
                   <td className="px-3 py-1.5 text-right">
