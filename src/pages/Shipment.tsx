@@ -1,3 +1,4 @@
+import { getStok } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo } from 'react'
@@ -10,7 +11,7 @@ import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive } from 'lu
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Shipment() {
-  const { sevkler, orders, workOrders, logs, materials, loadAll } = useStore()
+  const { sevkler, orders, workOrders, logs, materials, stokHareketler, loadAll } = useStore()
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -272,6 +273,20 @@ function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
     await supabase.from('uys_sevkler').update({ kalemler: validKalemler, not_: not_ }).eq('id', sevk.id)
     // 2. Eski stok çıkışlarını sil, yeni kalemlerle yeniden yaz
     await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + sevk.id + '-%')
+    // Stok kontrolü: eski çıkışlar silindi, şu anki stok + yeni miktar uyuyor mu?
+    const stokYetersiz = validKalemler.filter(k => {
+      const stokSonrasiSilme = getStok(k.malkod, stokHareketler)
+      return stokSonrasiSilme < k.miktar
+    })
+    if (stokYetersiz.length > 0) {
+      // Eski çıkışları geri yaz
+      for (const k of (sevk.kalemler || [])) {
+        await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id, tarih: sevk.tarih || today() })
+      }
+      toast.error('Stok yetersiz: ' + stokYetersiz.map(k => `${k.malad || k.malkod} (mevcut stok: ${getStok(k.malkod, stokHareketler)}, talep: ${k.miktar})`).join(' · '))
+      setSaving(false)
+      return
+    }
     for (const k of validKalemler) {
       await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id, tarih: sevk.tarih || today() })
     }
@@ -461,6 +476,16 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
       musteri: ord?.musteri || '', tarih: tarih, kalemler: validKalemler, not_: not_,
     })
     if (stokCikis) {
+      // Stok kontrolü — yetersizse kaydetme
+      const stokYetersiz = validKalemler.filter(k => {
+        const mevcutStok = getStok(k.malkod, stokHareketler)
+        return mevcutStok < k.miktar
+      })
+      if (stokYetersiz.length > 0) {
+        toast.error('Stok yetersiz: ' + stokYetersiz.map(k => `${k.malad || k.malkod} (stok: ${getStok(k.malkod, stokHareketler)}, talep: ${k.miktar})`).join(' · '))
+        setSaving(false)
+        return
+      }
       for (const k of validKalemler) {
         await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevkId, tarih: tarih })
       }
