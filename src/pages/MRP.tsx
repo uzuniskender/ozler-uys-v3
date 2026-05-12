@@ -300,16 +300,14 @@ export function MRP() {
     // v16.71 — Hesap öncesi tüm aktif siparişler için rezerv senkronize et.
     // Bu sayede tek sipariş hesaplarken de diğer siparişlerin payı stoktan düşülmüş olur.
     // Teker teker = toplu seçim ile aynı sonucu verir.
-    await rezerveleriSenkronla(orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
+    const { yazılanRezerv } = await rezerveleriSenkronla(orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
+    await loadAll()
 
-    // v16.71 — Rezerv yazıldıktan sonra taze stok hareketlerini doğrudan DB'den al.
-    // loadAll() + useStore.getState() arasında race condition var; store güncellenmeden
-    // eski stok referansı kullanılıyor. Direkt sorgu garantili taze veri verir.
-    const { data: freshSHData } = await supabase.from('uys_stok_hareketler').select('*')
-    const tazeSH = (freshSHData || stokHareketler) as typeof stokHareketler
-    await loadAll()  // UI için store'u güncelle (hesap için değil)
+    // v16.71 — Rezervler in-memory geçiriliyor: DB/store sorgusuna bağımlılık yok.
+    // rezerveleriSenkronla'nın yazdığı rezervleri eski stokHareketler'e ekle.
+    const kombineSH = [...stokHareketler, ...yazılanRezerv] as typeof stokHareketler
 
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, tazeSH, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, kombineSH, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
     setHesaplandi(true)
     setViewMode('kumülatif')  // v16.71 — hesap sonrası kümülatif'e sıfırla

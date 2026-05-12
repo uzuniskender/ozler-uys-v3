@@ -912,7 +912,7 @@ export async function rezerveleriSenkronla(
   tedarikler: Tedarik[],
   cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
   materials: Material[],
-): Promise<{ siparisSayisi: number; rezerveSayisi: number }> {
+): Promise<{ siparisSayisi: number; rezerveSayisi: number; yazılanRezerv: any[] }> {
   // v16.71 — Gerçek termin-FIFO implementasyonu (v15.70 no-op kaldırıldı)
   //
   // MANTIK:
@@ -984,7 +984,7 @@ export async function rezerveleriSenkronla(
     if (error) console.error('[rezerveleriSenkronla] insert error:', error)
   }
 
-  return { siparisSayisi: aktif.length, rezerveSayisi: allInserts.length }
+  return { siparisSayisi: aktif.length, rezerveSayisi: allInserts.length, yazılanRezerv: allInserts as any[] }
 }
 
 // ═══ v15.74 — SİPARİŞ DELTA HESABI (İş Emri #13 madde 11) ═══
