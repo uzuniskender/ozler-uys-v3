@@ -28,11 +28,18 @@ export function MRP() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [flowAutoDone, setFlowAutoDone] = useState(false)  // v15.36
 
-  const [showTamamlanan, setShowTamamlanan] = useState(false)
-  // v15.71 — selectedYMs, showYMTamamlanan, mrpDoneYMs, ymIEs, ymTamamSayisi, toggleYM kaldırıldı (madde 18)
-  // v15.50a.3 — Default 'tum': hesap sonrasi tum satirlar gorunur (eksik+yeterli).
-  // Kullanici "X eksik" rozetine tiklayarak filtreleyebilir. Eski default 'eksik'
-  // 0 eksik durumda bos tablo gosteriyordu, kullanici "MRP yapildi mi?" karisikliga dusuyordu.
+  // v16.71 — Kümülatif / Sipariş Bazlı toggle
+  const [viewMode, setViewMode] = useState<'kumülatif' | 'sipariş'>('kumülatif')
+  const [sonucPerOrder, setSonucPerOrder] = useState<{ orderId: string; siparisNo: string; musteri: string; mamulAd: string; rows: MRPRow[] }[]>([])
+  const [collapsedOrders, setCollapsedOrders] = useState<Set<string>>(new Set())
+
+  // v16.71 — Arşiv Modal (showTamamlanan toggle kaldırıldı)
+  const [showArsivModal, setShowArsivModal] = useState(false)
+  const [arsivSearch, setArsivSearch] = useState('')
+  const [arsivSonucMap, setArsivSonucMap] = useState<Record<string, MRPRow[]>>({})
+  const [arsivHesaplaniyor, setArsivHesaplaniyor] = useState<Set<string>>(new Set())
+
+  // v15.50a.3 — Default 'eksik': hesap sonrasi eksik satirlar gorunur
   const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('eksik')
   const [orderSearch, setOrderSearch] = useState('')  // v16.46 — sipariş arama
 
@@ -86,29 +93,30 @@ export function MRP() {
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
-      // Kesin terminal: DB trigger'dan gelen state veya tüm WO'lar bitti
+      // v16.71 — showTamamlanan kaldırıldı; arşiv modal'a taşındı
       const trueTerminal = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
-      if (trueTerminal) return showTamamlanan
-      if (orderAllWosDone[o.id]) return showTamamlanan
-      if (isOrderArchived(o)) return showTamamlanan
-
-      // v16.68 — Canlı eksik kontrolü mrp_durum'dan önce gelir.
-      // mrp_durum='tamam' stale olabilir (stok değişmiş, yeni ihtiyaç doğmuş).
-      // Eğer canlı hesap eksik gösteriyorsa → aktif listede tut.
+      if (trueTerminal) return false
+      if (orderAllWosDone[o.id]) return false
+      if (isOrderArchived(o)) return false
+      // v16.68 — Canlı eksik kontrolü mrp_durum'dan önce gelir
       const eksikVar = orderHasEksik[o.id] ?? false
-      if (eksikVar) return !showTamamlanan  // gerçek eksik → her zaman aktif
-
-      // Canlı eksik yoksa mrp_durum'a bak
+      if (eksikVar) return true
       const mrpTamam = (o.mrpDurum || '') === 'tamam'
-      if (mrpTamam) return showTamamlanan   // tamam + eksik yok → arşiv
-
+      if (mrpTamam) return false
       const henuzHesaplanmadi = (o.mrpDurum || 'bekliyor') === 'bekliyor'
       const dbEksik = (o.mrpDurum || '') === 'eksik'
-      const aktifMi = henuzHesaplanmadi || dbEksik
-      return showTamamlanan ? !aktifMi : aktifMi
+      return henuzHesaplanmadi || dbEksik
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, workOrders, orderAllWosDone, orderHasEksik, showTamamlanan])
+  }, [orders, workOrders, orderAllWosDone, orderHasEksik])
+
+  // v16.71 — Arşiv siparişleri (aktif olmayan tümü → modal için)
+  const arsivOrders = useMemo(() => {
+    const aktifIds = new Set(aktifOrders.map(o => o.id))
+    return orders
+      .filter(o => !aktifIds.has(o.id))
+      .sort((a, b) => (b.termin || '').localeCompare(a.termin || ''))
+  }, [orders, aktifOrders])
 
   // v16.50 — aktifOrders değişince artık listede olmayan seçimleri temizle
   // Böylece kapatılan/tamamlanan siparişler Hesapla'ya dahil edilmez
@@ -177,23 +185,16 @@ export function MRP() {
   }, [aktifManualIesAll, orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   const aktifManualIes = useMemo(() => {
-    return aktifManualIesAll.filter(w => {
-      const eksikVar = manualIeHasEksik[w.id] ?? false
-      return showTamamlanan ? !eksikVar : eksikVar
-    }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
-  }, [aktifManualIesAll, manualIeHasEksik, showTamamlanan])
+    return aktifManualIesAll
+      .filter(w => manualIeHasEksik[w.id] ?? false)
+      .sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
+  }, [aktifManualIesAll, manualIeHasEksik])
 
   const arsivManualIes = useMemo(() =>
     aktifManualIesAll.filter(w => !(manualIeHasEksik[w.id] ?? false)).length
   , [aktifManualIesAll, manualIeHasEksik])
 
-  const arsivSayisi = useMemo(() =>
-    orders.filter(o => {
-      if (isOrderArchived(o)) return true
-      return !(orderHasEksik[o.id] ?? false)
-    }).length + arsivManualIes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [orders, orderHasEksik, arsivManualIes])
+  const arsivSayisi = arsivOrders.length + arsivManualIes
 
   // v15.71 — ymIEs + ymTamamSayisi useMemo kaldırıldı (madde 18)
 
@@ -296,9 +297,13 @@ export function MRP() {
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
       gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
     }))
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, showTamamlanan)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
     setHesaplandi(true)
+    setViewMode('kumülatif')  // v16.71 — hesap sonrası kümülatif'e sıfırla
+
+    // v16.71 — Per-order sonuçları topla (Sipariş Bazlı toggle için)
+    const perOrderResults: { orderId: string; siparisNo: string; musteri: string; mamulAd: string; rows: MRPRow[] }[] = []
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz (manuel İE'lerde mrp_durum kolonu yok, atla)
     for (const oid of ordIds) {
@@ -307,6 +312,15 @@ export function MRP() {
         { orderId: oid },
         () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
       )
+      // v16.71 — Sipariş Bazlı toggle için per-order sonuç topla
+      const ordForPO = orders.find((x: any) => x.id === oid)
+      if (ordForPO) perOrderResults.push({
+        orderId: oid,
+        siparisNo: (ordForPO as any).siparisNo || oid,
+        musteri: (ordForPO as any).musteri || '',
+        mamulAd: (ordForPO as any).mamulAd || '',
+        rows: tekResult,
+      })
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
 
       // v16.04 — #23 sentinel: UPDATE DB'ye yansidi mi dogrula. Saha vakasi (30 Nis):
@@ -330,6 +344,7 @@ export function MRP() {
       // Rezerve kayıtları yaz (eskileri silip yenilerini oluştur)
       await rezerveYaz(oid, tekResult)
     }
+    setSonucPerOrder(perOrderResults)  // v16.71
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle
     if (ymSet && ymSet.size > 0) {
       const prev = new Set(JSON.parse(localStorage.getItem('uys_mrp_done_ym') || '[]') as string[])
@@ -573,9 +588,9 @@ export function MRP() {
             <button onClick={selectAll} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Tümünü Seç</button>
             <button onClick={selectNone} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Hiçbirini</button>
             {arsivSayisi > 0 && (
-              <button onClick={() => { setShowTamamlanan(!showTamamlanan); if (!showTamamlanan) setViewFilter('tum') }}
-                className={`px-2 py-1 rounded text-[10px] ${showTamamlanan ? 'bg-amber/10 text-amber border border-amber/20' : 'bg-bg-3 text-zinc-500 hover:text-white'}`}>
-                {showTamamlanan ? `🔒 Arşiv (${arsivSayisi})` : `+ Arşiv (${arsivSayisi})`}
+              <button onClick={() => setShowArsivModal(true)}
+                className="px-2 py-1 rounded text-[10px] bg-bg-3 text-zinc-500 hover:text-white">
+                📁 Arşiv ({arsivSayisi})
               </button>
             )}
           </div>
@@ -660,7 +675,7 @@ export function MRP() {
             )
           })}
         </div>
-        {aktifOrders.length === 0 && aktifManualIes.length === 0 && !showTamamlanan && (
+        {aktifOrders.length === 0 && aktifManualIes.length === 0 && (
           <div className="p-3 text-center text-xs text-green">
             ✓ Aktif sipariş veya manuel İE yok.{arsivSayisi > 0 ? ` Arşivdeki ${arsivSayisi} kapalı kaydı görmek için "+ Arşiv" butonuna tıklayın.` : ''}
           </div>
@@ -702,6 +717,19 @@ export function MRP() {
           <div className="px-4 py-3 border-b border-border flex items-center gap-3">
             <button onClick={() => setViewFilter(viewFilter === 'eksik' ? 'tum' : 'eksik')} className={`px-2 py-1 rounded text-[10px] font-semibold ${viewFilter === 'eksik' ? 'bg-red text-white' : 'bg-red/10 text-red hover:bg-red/20'}`}>⚠ {eksikler.length} eksik</button>
             <button onClick={() => setViewFilter(viewFilter === 'yeterli' ? 'tum' : 'yeterli')} className={`px-2 py-1 rounded text-[10px] font-semibold ${viewFilter === 'yeterli' ? 'bg-green text-white' : 'bg-green/10 text-green hover:bg-green/20'}`}>✓ {yeterliler.length} yeterli</button>
+            {/* v16.71 — Kümülatif / Sipariş Bazlı toggle (tek siparişte gösterme) */}
+            {sonucPerOrder.length > 1 && (
+              <div className="flex gap-1 border border-border rounded overflow-hidden ml-2">
+                <button onClick={() => setViewMode('kumülatif')}
+                  className={`px-2 py-1 text-[10px] ${viewMode === 'kumülatif' ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
+                  Kümülatif
+                </button>
+                <button onClick={() => setViewMode('sipariş')}
+                  className={`px-2 py-1 text-[10px] ${viewMode === 'sipariş' ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
+                  Sipariş Bazlı
+                </button>
+              </div>
+            )}
             <span className="flex-1" />
             {selectedRows.size > 0 && (
               <button onClick={() => topluTedarikOlustur()} className="px-3 py-1.5 bg-accent text-white rounded-lg text-[10px] font-semibold">
@@ -711,6 +739,8 @@ export function MRP() {
             <button onClick={() => setSelectedRows(new Set(eksikler.map(s => s.malkod)))} className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">☑ Eksikleri Seç</button>
           </div>
           <div className="max-h-[400px] overflow-y-auto">
+            {/* ═══ KÜMÜLATİF GÖRÜNÜM ═══ */}
+            {viewMode === 'kumülatif' && (
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500">
                 <th className="px-2 py-2 w-6"><input type="checkbox" onChange={e => setSelectedRows(e.target.checked ? new Set(eksikler.map(s => s.malkod)) : new Set())} className="accent-accent" /></th>
@@ -769,6 +799,83 @@ export function MRP() {
                 })}
               </tbody>
             </table>
+            )}
+            {/* ═══ SİPARİŞ BAZLI GÖRÜNÜM — v16.71 ═══ */}
+            {viewMode === 'sipariş' && (
+              <div>
+                {sonucPerOrder.map(po => {
+                  const poEksik = po.rows.filter(r => r.net > 0)
+                  const poFiltered = po.rows.filter(r =>
+                    viewFilter === 'tum' ? true : viewFilter === 'eksik' ? r.net > 0 : r.net <= 0
+                  )
+                  const collapsed = collapsedOrders.has(po.orderId)
+                  return (
+                    <div key={po.orderId} className="border-b border-border/30">
+                      {/* Sipariş başlığı (tıklanabilir collapse) */}
+                      <button
+                        onClick={() => setCollapsedOrders(prev => {
+                          const n = new Set(prev); n.has(po.orderId) ? n.delete(po.orderId) : n.add(po.orderId); return n
+                        })}
+                        className="w-full flex items-center gap-2 px-3 py-2 bg-bg-3/50 hover:bg-bg-3 text-left"
+                      >
+                        <span className="text-[10px] text-zinc-500">{collapsed ? '▶' : '▼'}</span>
+                        <span className="font-mono text-accent text-xs font-semibold">{po.siparisNo}</span>
+                        {po.musteri && <span className="text-zinc-400 text-xs truncate">{po.musteri}</span>}
+                        {po.mamulAd && <span className="text-zinc-500 text-[10px] truncate">{po.mamulAd}</span>}
+                        <span className="ml-auto flex gap-2">
+                          {poEksik.length > 0 && (
+                            <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[9px] font-semibold">⚠ {poEksik.length} eksik</span>
+                          )}
+                          {poEksik.length === 0 && po.rows.length > 0 && (
+                            <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[9px]">✓ Tamam</span>
+                          )}
+                          <span className="text-zinc-600 text-[9px]">{po.rows.length} kalem</span>
+                        </span>
+                      </button>
+                      {/* Detay satırları */}
+                      {!collapsed && poFiltered.length > 0 && (
+                        <table className="w-full text-xs">
+                          <thead><tr className="border-b border-border text-zinc-500">
+                            <th className="text-left px-3 py-1.5">Malzeme Kodu</th>
+                            <th className="text-left px-3 py-1.5">Malzeme Adı</th>
+                            <th className="text-left px-3 py-1.5">Tip</th>
+                            <th className="text-right px-3 py-1.5">Brüt</th>
+                            <th className="text-right px-3 py-1.5 text-green">Serbest Stok</th>
+                            <th className="text-right px-3 py-1.5 text-amber/70">Rezerve</th>
+                            <th className="text-right px-3 py-1.5">Açık Ted.</th>
+                            <th className="text-right px-3 py-1.5">Net</th>
+                            <th className="text-left px-3 py-1.5">Durum</th>
+                          </tr></thead>
+                          <tbody>
+                            {poFiltered.map(s => {
+                              const color = s.durum === 'yeterli' ? 'text-green' : s.durum === 'eksik' ? 'text-amber' : 'text-red'
+                              return (
+                                <tr key={s.malkod + s.termin} className="border-b border-border/20 hover:bg-bg-3/30">
+                                  <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{s.malkod}</td>
+                                  <td className="px-3 py-1.5 text-zinc-300">{s.malad}</td>
+                                  <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{s.tip || '—'}</span></td>
+                                  <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut)}</td>
+                                  <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok)}</td>
+                                  <td className="px-3 py-1.5 text-right font-mono text-amber/70">{s.rezerve > 0 ? Math.round(s.rezerve) : '—'}</td>
+                                  <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{s.acikTedarik > 0 ? Math.round(s.acikTedarik) : '—'}</td>
+                                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td>
+                                  <td className={`px-3 py-1.5 font-semibold ${color}`}>{s.durum === 'yeterli' ? '✓' : '⚠'}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                      {!collapsed && poFiltered.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-zinc-600 italic">
+                          {viewFilter === 'eksik' ? 'Bu siparişte eksik malzeme yok.' : viewFilter === 'yeterli' ? 'Bu siparişte yeterli malzeme yok.' : 'Bu sipariş için malzeme hesaplanmadı.'}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
             {/* v15.50a.3 — Filtre sebebiyle bos tablo durumunda kullaniciyi yonlendir */}
             {sonuc.length > 0 && sonuc.filter(s => viewFilter === 'tum' ? true : viewFilter === 'eksik' ? s.net > 0 : s.net <= 0).length === 0 && (
               <div className="p-4 text-center text-xs text-zinc-500">
@@ -784,7 +891,146 @@ export function MRP() {
         </div>
       )}
 
-      {/* ═══ REZERVE ET MODAL ═══ */}
+      {/* ═══ ARŞİV MODAL — v16.71 ═══ */}
+      {showArsivModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 pt-16 pb-8 px-4 overflow-y-auto" onClick={() => setShowArsivModal(false)}>
+          <div className="bg-bg-2 border border-border rounded-xl shadow-2xl w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+            {/* Modal başlık */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div>
+                <h2 className="font-semibold text-base">📁 MRP Arşivi</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">{arsivOrders.length} sipariş · tamamlanan / mrp_tamam</p>
+              </div>
+              <button onClick={() => setShowArsivModal(false)} className="text-zinc-500 hover:text-white text-lg">✕</button>
+            </div>
+            {/* Arama */}
+            <div className="px-5 py-3 border-b border-border">
+              <input
+                type="text"
+                placeholder="Sipariş no, müşteri veya ürün ara..."
+                value={arsivSearch}
+                onChange={e => setArsivSearch(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-3 border border-border rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent"
+              />
+            </div>
+            {/* Arşiv siparişler tablosu */}
+            <div className="overflow-y-auto max-h-[60vh]">
+              {arsivOrders.filter(o => {
+                if (!arsivSearch) return true
+                const q = arsivSearch.toLowerCase()
+                return (o.siparisNo || '').toLowerCase().includes(q)
+                  || (o.musteri || '').toLowerCase().includes(q)
+                  || (o.mamulAd || '').toLowerCase().includes(q)
+              }).length === 0 && (
+                <div className="p-8 text-center text-sm text-zinc-500">Sonuç bulunamadı.</div>
+              )}
+              {arsivOrders.filter(o => {
+                if (!arsivSearch) return true
+                const q = arsivSearch.toLowerCase()
+                return (o.siparisNo || '').toLowerCase().includes(q)
+                  || (o.musteri || '').toLowerCase().includes(q)
+                  || (o.mamulAd || '').toLowerCase().includes(q)
+              }).map(o => {
+                const rows = arsivSonucMap[o.id]
+                const loading = arsivHesaplaniyor.has(o.id)
+                const eksikCount = rows ? rows.filter(r => r.net > 0).length : null
+                return (
+                  <div key={o.id} className="border-b border-border/30">
+                    {/* Sipariş satırı */}
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-bg-3/30">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-accent text-xs font-semibold">{o.siparisNo}</span>
+                          {/* Durum badge */}
+                          {(o.state === 'tamamlandi' || o.state === 'kapali') && (
+                            <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[9px]">✓ Tamamlandı</span>
+                          )}
+                          {o.state === 'iptal' && (
+                            <span className="px-1.5 py-0.5 bg-zinc-700 text-zinc-400 rounded text-[9px]">İptal</span>
+                          )}
+                          {(o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi') && o.state !== 'tamamlandi' && o.state !== 'kapali' && (
+                            <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[9px]">MRP ✓</span>
+                          )}
+                          {o.termin && <span className={`text-[10px] font-mono ${o.termin < today() ? 'text-red' : 'text-zinc-500'}`}>{o.termin}</span>}
+                        </div>
+                        <div className="text-zinc-500 text-[11px] truncate mt-0.5">
+                          {o.musteri}{o.mamulAd ? ' · ' + o.mamulAd : ''}
+                        </div>
+                      </div>
+                      {/* MRP hesapla butonu */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {rows && eksikCount !== null && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded ${eksikCount > 0 ? 'bg-red/10 text-red' : 'bg-green/10 text-green'}`}>
+                            {eksikCount > 0 ? `⚠ ${eksikCount} eksik` : '✓ Yeterli'}
+                          </span>
+                        )}
+                        <button
+                          disabled={loading}
+                          onClick={async () => {
+                            setArsivHesaplaniyor(prev => new Set([...prev, o.id]))
+                            try {
+                              const cpMapped = cuttingPlans.map((p: any) => ({
+                                hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
+                                gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
+                              }))
+                              const r = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, o.id, logs, true)
+                              setArsivSonucMap(prev => ({ ...prev, [o.id]: r }))
+                            } finally {
+                              setArsivHesaplaniyor(prev => { const n = new Set(prev); n.delete(o.id); return n })
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-bg-3 hover:bg-accent/20 border border-border hover:border-accent/30 text-zinc-400 hover:text-accent rounded text-[10px] disabled:opacity-50"
+                        >
+                          {loading ? '⏳' : rows ? '↺ Yenile' : '▶ MRP Hesapla'}
+                        </button>
+                      </div>
+                    </div>
+                    {/* MRP sonuç satırları (inline, açılır) */}
+                    {rows && rows.length > 0 && (
+                      <div className="px-4 pb-3">
+                        <table className="w-full text-xs">
+                          <thead><tr className="border-b border-border text-zinc-600">
+                            <th className="text-left py-1.5 pr-3">Malzeme</th>
+                            <th className="text-left py-1.5 pr-3">Tip</th>
+                            <th className="text-right py-1.5 pr-3">Brüt</th>
+                            <th className="text-right py-1.5 pr-3 text-green">Stok</th>
+                            <th className="text-right py-1.5 pr-3">Açık Ted.</th>
+                            <th className="text-right py-1.5 pr-3">Net</th>
+                            <th className="text-left py-1.5">Durum</th>
+                          </tr></thead>
+                          <tbody>
+                            {rows.map(r => {
+                              const c = r.durum === 'yeterli' ? 'text-green' : 'text-red'
+                              return (
+                                <tr key={r.malkod + r.termin} className="border-b border-border/20">
+                                  <td className="py-1 pr-3">
+                                    <span className="font-mono text-accent text-[10px]">{r.malkod}</span>
+                                    <span className="text-zinc-400 ml-2">{r.malad}</span>
+                                  </td>
+                                  <td className="py-1 pr-3 text-zinc-600">{r.tip || '—'}</td>
+                                  <td className="py-1 pr-3 text-right font-mono">{Math.round(r.brut)}</td>
+                                  <td className="py-1 pr-3 text-right font-mono text-green">{Math.round(r.stok)}</td>
+                                  <td className="py-1 pr-3 text-right font-mono text-cyan-400">{r.acikTedarik > 0 ? Math.round(r.acikTedarik) : '—'}</td>
+                                  <td className={`py-1 pr-3 text-right font-mono font-semibold ${c}`}>{Math.round(r.net)}</td>
+                                  <td className={`py-1 ${c}`}>{r.durum === 'yeterli' ? '✓' : '⚠'}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {rows && rows.length === 0 && (
+                      <div className="px-4 pb-3 text-xs text-zinc-600 italic">Malzeme ihtiyacı bulunamadı.</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {rezervModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRezervModal(null)}>
           <div className="bg-bg-2 border border-border rounded-xl p-6 w-[400px] shadow-2xl" onClick={e => e.stopPropagation()}>
