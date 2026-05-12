@@ -565,7 +565,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
         if (birAdet <= 0) continue
         const ekTuketim = birAdet * delta
         const mevcut = stokHareketler.filter((h: any) => h.malkod === (hm.malkod || hm.kod))
-          .reduce((a: number, h: any) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+          .reduce((a: number, h: any) => a + (h.tip === 'giris' ? Number(h.miktar) : -Number(h.miktar)), 0)
         if (mevcut < ekTuketim) {
           eksikler.push(`${hm.malad || hm.malkod}: mevcut ${Math.round(mevcut)}, gerekli ${Math.round(ekTuketim)}`)
         }

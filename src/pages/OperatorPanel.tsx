@@ -1,3 +1,4 @@
+import { getStok } from '@/lib/hammaddeHesap'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/store'
@@ -736,7 +737,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   )
 
   function stokNet(malkod: string) {
-    return stokHareketler.filter(h => h.malkod === malkod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    return getStok(malkod, stokHareketler)
   }
   function maxYapilabilir() {
     if (!hmSatirlar.length) return kalan

@@ -1,3 +1,4 @@
+import { getStok } from '@/lib/hammaddeHesap'
 import { useNavigate } from 'react-router-dom'
 import { useMemo, useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -238,7 +239,7 @@ export function Dashboard() {
 
   const minStokUyari = materials.filter(m => {
     if (!m.minStok || m.minStok <= 0) return false
-    const stok = stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    const stok = getStok(m.kod, stokHareketler)
     return stok < m.minStok
   })
 
@@ -334,7 +335,7 @@ export function Dashboard() {
     if (!await showConfirm(`${minStokUyari.length} malzeme için tedarik önerisi oluşturulsun mu?`)) return
     let count = 0
     for (const m of minStokUyari) {
-      const stok = stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+      const stok = getStok(m.kod, stokHareketler)
       const eksik = Math.max(0, m.minStok - stok)
       if (eksik <= 0) continue
       await supabase.from('uys_tedarikler').insert({

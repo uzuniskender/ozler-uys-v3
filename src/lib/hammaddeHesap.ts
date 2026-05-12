@@ -132,3 +132,25 @@ export function computeOrderEksik(
 
   return result
 }
+
+// ─── 5. TOPLU STOK MAP ───────────────────────────────────────────────────────
+// Tüm stokHareketler'den malkod → net stok haritası (tek geçiş, O(n))
+export function buildStokMap(stokHareketler: any[]): Record<string, number> {
+  const map: Record<string, number> = {}
+  for (const h of (stokHareketler || [])) {
+    const mk: string = h.malkod
+    if (!mk) continue
+    if (!map[mk]) map[mk] = 0
+    if (h.tip === 'giris') map[mk] += Number(h.miktar)
+    else map[mk] -= Number(h.miktar)  // cikis, bar_acilis, rezerv
+  }
+  return map
+}
+
+// ─── 6. TEDARİK YOLDA ────────────────────────────────────────────────────────
+// Malkod için açık (gelmemiş) tedarik toplamı
+export function getYolda(malkod: string, tedarikler: any[]): number {
+  return (tedarikler || [])
+    .filter((t: any) => t.malkod === malkod && !t.geldi)
+    .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
+}

@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, mrpTedarikOlustur, type MRPRow } from '@/features/production/mrp'
-import { getStok, buildIhtiyacMap } from '@/lib/hammaddeHesap'
+import { getStok, buildIhtiyacMap, getYolda } from '@/lib/hammaddeHesap'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
 import { isOrderArchived } from '@/lib/statusUtils'

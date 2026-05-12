@@ -1,3 +1,4 @@
+import { getStok } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle } from '@/features/production/stokTuketim'
@@ -255,7 +256,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   }, [w, rc])
 
   function stokNet(malkod: string) {
-    return stokHareketler.filter(h => h.malkod === malkod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    return getStok(malkod, stokHareketler)
   }
 
   const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)

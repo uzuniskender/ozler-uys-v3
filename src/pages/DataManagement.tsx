@@ -1,3 +1,4 @@
+import { getStok, getYolda } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
 import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
@@ -1195,10 +1196,10 @@ export function DataManagement() {
   // #20: Min Stok Uyarı
   const minStokUyarilari = store.materials.filter(m => {
     if (!m.minStok || m.minStok <= 0) return false
-    const stok = store.stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    const stok = getStok(m.kod, store.stokHareketler)
     return stok < m.minStok
   }).map(m => {
-    const stok = store.stokHareketler.filter(h => h.malkod === m.kod).reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    const stok = getStok(m.kod, store.stokHareketler)
     return { ...m, stok: Math.round(stok), eksik: Math.round(m.minStok - stok) }
   })
 

@@ -1,3 +1,4 @@
+import { getStok, getYolda } from '@/lib/hammaddeHesap'
 import type { WorkOrder, StokHareket, Tedarik, Material, Recipe } from '@/types'
 
 export interface StokKontrolSatir {
@@ -20,7 +21,7 @@ export interface StokKontrolSonuc {
 function netStok(malkod: string, stokHareketler: StokHareket[]): number {
   return stokHareketler
     .filter(h => h.malkod === malkod)
-    .reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+    .reduce((a: any, h: any) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
 }
 
 function netAcikTed(malkod: string, tedarikler: Tedarik[]): number {

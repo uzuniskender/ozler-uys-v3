@@ -1,3 +1,4 @@
+import { getStok } from '@/lib/hammaddeHesap'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import type { FireLog, WorkOrder, Recipe, StokHareket, Material } from '@/types'
@@ -15,11 +16,6 @@ export interface TelafiAkisSonuc {
   hatalar: string[]
 }
 
-function getStok(malkod: string, stokHareketler: StokHareket[]): number {
-  return Math.floor(stokHareketler
-    .filter(h => h.malkod === malkod)
-    .reduce((a, h) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0))
-}
 
 // ═══ v15.76 — FİRE TELAFİ AKIŞI (İş Emri #13 madde 13) ═══
 // Spec: "Fire çıktıysa, fire iş emri açıldıysa, yeni sipariş/iş emri adımları gerçekleştirilir."
