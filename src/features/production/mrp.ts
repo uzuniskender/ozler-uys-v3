@@ -216,29 +216,20 @@ export interface HesaplaMRPParams {
 }
 
 export function hesaplaMRP(
-  p: HesaplaMRPParams | string[] | null,
-  ...legacy: any[]
+  ordIds: string[] | null,
+  orders: HesaplaMRPParams['orders'],
+  workOrders: WorkOrder[],
+  recipes: Recipe[],
+  stokHareketler: StokHareket[],
+  tedarikler: Tedarik[],
+  cuttingPlans: HesaplaMRPParams['cuttingPlans'],
+  materials: Material[],
+  secilenYMIds?: Set<string> | null,
+  mrpRezerve?: MrpRezerve[],
+  currentOrderId?: string,
+  logs?: { woId: string; qty: number }[],
+  retrospektif?: boolean
 ): MRPRow[] {
-  // Geriye dönük uyumluluk: eski pozisyonel çağrıları obje çağrısına dönüştür
-  let params: HesaplaMRPParams
-  if (p !== null && !Array.isArray(p) && typeof p === 'object' && 'orders' in p) {
-    params = p as HesaplaMRPParams
-  } else {
-    params = {
-      ordIds: p as string[] | null,
-      orders: legacy[0], workOrders: legacy[1], recipes: legacy[2],
-      stokHareketler: legacy[3], tedarikler: legacy[4], cuttingPlans: legacy[5],
-      materials: legacy[6], secilenYMIds: legacy[7], mrpRezerve: legacy[8],
-      currentOrderId: legacy[9], logs: legacy[10], retrospektif: legacy[11],
-    }
-  }
-  return _hesaplaMRPCore(params)
-}
-
-function _hesaplaMRPCore({
-  ordIds, orders, workOrders, recipes, stokHareketler, tedarikler,
-  cuttingPlans, materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif
-}: HesaplaMRPParams): MRPRow[] {
   // brutIhtiyac ANAHTARLARI case-insensitive (.trim().toLowerCase())
   // ama her kaydın .malkod field'ı orijinal case'de saklanır (final çıktıda kullanmak için)
   const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
@@ -981,11 +972,11 @@ export async function rezerveleriSenkronla(
 
     const birlesikStok = [...stokHareketlerTemiz, ...fakeEktra] as StokHareket[]
 
-    const rows = _hesaplaMRPCore({
-      ordIds: [order.id], orders, workOrders, recipes,
-      stokHareketler: birlesikStok, tedarikler, cuttingPlans, materials,
-      secilenYMIds: null, mrpRezerve: [], currentOrderId: order.id
-    })
+    const rows = hesaplaMRP(
+      [order.id], orders, workOrders, recipes,
+      birlesikStok, tedarikler, cuttingPlans, materials,
+      null, [], order.id
+    )
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]
