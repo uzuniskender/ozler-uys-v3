@@ -1,27 +1,16 @@
 /**
  * hammaddeHesap.ts — Tek kaynak hammadde hesaplama modülü
- *
- * KURAL: Stok, ihtiyaç, net durum hesabı yalnızca buradan yapılır.
- * Başka dosyada bu hesap tekrarlanmaz.
- *
- * Fonksiyonlar:
- *   getStok(malkod, stokHareketler)        → fiziksel stok
- *   buildIhtiyacMap(allWos, cuttingPlans)  → ihtiyaç haritası
- *   getNetDurum(malkod, ...)               → {stok, ihtiyac, yolda, net}
- *   computeOrderEksik(orders, ...)         → sipariş bazında eksik malzeme seti
+ * KURAL: Stok / ihtiyaç / net durum hesabı yalnızca buradan yapılır.
  */
 
-import type { WorkOrder, CuttingPlan, StokHareket } from '@/types'
-
 // ─── 1. FİZİKSEL STOK ────────────────────────────────────────────────────────
-// giris - cikis - bar_acilis - rezerv
-export function getStok(malkod: string, stokHareketler: StokHareket[]): number {
+export function getStok(malkod: string, stokHareketler: any[]): number {
   return Math.floor(
     stokHareketler
-      .filter(h => h.malkod === malkod)
-      .reduce((a, h) => {
-        if (h.tip === 'giris') return a + h.miktar
-        if (h.tip === 'cikis' || h.tip === 'bar_acilis' || (h.tip as string) === 'rezerv') return a - h.miktar
+      .filter((h: any) => h.malkod === malkod)
+      .reduce((a: number, h: any) => {
+        if (h.tip === 'giris') return a + Number(h.miktar)
+        if (h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv') return a - Number(h.miktar)
         return a
       }, 0)
   )
@@ -31,32 +20,31 @@ export function getStok(malkod: string, stokHareketler: StokHareket[]): number {
 // Kesim planı olan malzeme → plan bar adedi
 // Kesim planı olmayan      → WO hm.miktarTotal
 export function buildIhtiyacMap(
-  allWos: WorkOrder[],
-  cuttingPlans: CuttingPlan[],
-  materials?: { kod: string; tip: string }[]
+  allWos: any[],
+  cuttingPlans: any[],
+  materials?: any[]
 ): Record<string, { malkod: string; malad: string; ihtiyac: number }> {
   const map: Record<string, { malkod: string; malad: string; ihtiyac: number }> = {}
   const planliMalkodlar = new Set<string>()
 
-  // 1. Aktif kesim planlarından malkod → toplam bar
-  for (const p of cuttingPlans) {
+  for (const p of (cuttingPlans || [])) {
     if (p.durum === 'tamamlandi' || p.durum === 'iptal') continue
-    const toplamBar = (p.satirlar || []).reduce((a, s) => a + ((s as any).hamAdet || 0), 0)
+    const toplamBar = (p.satirlar || []).reduce((a: number, s: any) => a + (Number(s.hamAdet) || 0), 0)
     if (toplamBar <= 0) continue
-    const mk = p.hamMalkod
+    const mk: string = p.hamMalkod
+    if (!mk) continue
     if (!map[mk]) map[mk] = { malkod: mk, malad: p.hamMalad || '', ihtiyac: 0 }
     map[mk].ihtiyac += toplamBar
     planliMalkodlar.add(mk)
   }
 
-  // 2. Aktif WO'ların hm — kesim planında olmayan malzemeler
-  for (const w of allWos) {
+  for (const w of (allWos || [])) {
     if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') continue
-    for (const h of ((w.hm || []) as any[])) {
-      const mk = (h.malkod || '').trim()
+    for (const h of (w.hm || [])) {
+      const mk: string = (h.malkod || '').trim()
       if (!mk || planliMalkodlar.has(mk)) continue
       if (materials) {
-        const mat = materials.find(m => m.kod === mk)
+        const mat = materials.find((m: any) => m.kod === mk)
         if (mat?.tip === 'YarıMamul') continue
       }
       if (!map[mk]) map[mk] = { malkod: mk, malad: h.malad || '', ihtiyac: 0 }
@@ -70,68 +58,61 @@ export function buildIhtiyacMap(
 // ─── 3. TEK MALKOD NET DURUM ──────────────────────────────────────────────────
 export function getNetDurum(
   malkod: string,
-  stokHareketler: StokHareket[],
-  allWos: WorkOrder[],
-  cuttingPlans: CuttingPlan[],
-  tedarikler: { malkod: string; miktar: number; geldi: boolean }[],
-  materials?: { kod: string; tip: string }[]
+  stokHareketler: any[],
+  allWos: any[],
+  cuttingPlans: any[],
+  tedarikler: any[],
+  materials?: any[]
 ): { stok: number; ihtiyac: number; yolda: number; net: number } {
   const stok = getStok(malkod, stokHareketler)
-  const ihtiyacMap = buildIhtiyacMap(allWos, cuttingPlans, materials)
-  const ihtiyac = Math.ceil(ihtiyacMap[malkod]?.ihtiyac || 0)
-  const yolda = tedarikler
-    .filter(t => t.malkod === malkod && !t.geldi)
-    .reduce((a, t) => a + t.miktar, 0)
+  const ihtiyacMapResult = buildIhtiyacMap(allWos, cuttingPlans, materials)
+  const ihtiyac = Math.ceil(ihtiyacMapResult[malkod]?.ihtiyac || 0)
+  const yolda = (tedarikler || [])
+    .filter((t: any) => t.malkod === malkod && !t.geldi)
+    .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
   return { stok, ihtiyac, yolda, net: Math.max(0, ihtiyac - stok - yolda) }
 }
 
 // ─── 4. SİPARİŞ BAZINDA EKSİK ────────────────────────────────────────────────
-// WorkOrders.tsx ve statusUtils.ts'te kullanılır
 export function computeOrderEksik(
   orders: any[],
-  allWos: WorkOrder[],
-  stokHareketler: StokHareket[],
-  tedarikler: { malkod: string; miktar: number; geldi: boolean }[],
-  cuttingPlans: CuttingPlan[],
-  materials?: { kod: string; tip: string }[]
+  allWos: any[],
+  stokHareketler: any[],
+  tedarikler: any[],
+  cuttingPlans: any[],
+  materials?: any[]
 ): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>()
 
-  // Tüm aktif planların malkod → bar haritası (sipariş bağımsız, global)
   const planBarMap: Record<string, number> = {}
   const planliMalkodlar = new Set<string>()
-  for (const p of cuttingPlans) {
+  for (const p of (cuttingPlans || [])) {
     if (p.durum === 'tamamlandi' || p.durum === 'iptal') continue
-    const toplam = (p.satirlar || []).reduce((a, s) => a + ((s as any).hamAdet || 0), 0)
-    if (toplam > 0) {
+    const toplam = (p.satirlar || []).reduce((a: number, s: any) => a + (Number(s.hamAdet) || 0), 0)
+    if (toplam > 0 && p.hamMalkod) {
       planBarMap[p.hamMalkod] = (planBarMap[p.hamMalkod] || 0) + toplam
       planliMalkodlar.add(p.hamMalkod)
     }
   }
 
-  for (const o of orders) {
-    const oWos = allWos.filter(w =>
-      w.orderId === o.id &&
-      w.durum !== 'iptal' &&
-      w.durum !== 'tamamlandi'
+  for (const o of (orders || [])) {
+    const oWos = (allWos || []).filter((w: any) =>
+      w.orderId === o.id && w.durum !== 'iptal' && w.durum !== 'tamamlandi'
     )
-
     const hmGrup: Record<string, number> = {}
 
-    // Kesim planındaki malzemeler — bu siparişin WO'larında varsa ekle
     for (const [mk, adet] of Object.entries(planBarMap)) {
-      if (oWos.some(w => ((w.hm || []) as any[]).some((h: any) => h.malkod === mk))) {
-        hmGrup[mk] = adet
+      if (oWos.some((w: any) => (w.hm || []).some((h: any) => h.malkod === mk))) {
+        hmGrup[mk] = adet as number
       }
     }
 
-    // Kesim planında olmayan WO hm'leri
     for (const w of oWos) {
-      for (const h of ((w.hm || []) as any[])) {
-        const mk = (h.malkod || '').trim()
+      for (const h of (w.hm || [])) {
+        const mk: string = (h.malkod || '').trim()
         if (!mk || planliMalkodlar.has(mk)) continue
         if (materials) {
-          const mat = materials.find(m => m.kod === mk)
+          const mat = materials.find((m: any) => m.kod === mk)
           if (mat?.tip === 'YarıMamul') continue
         }
         hmGrup[mk] = (hmGrup[mk] || 0) + Number(h.miktarTotal || 0)
@@ -141,10 +122,10 @@ export function computeOrderEksik(
     const eksikSet = new Set<string>()
     for (const [malkod, ihtiyac] of Object.entries(hmGrup)) {
       const stok = getStok(malkod, stokHareketler)
-      const yolda = tedarikler
-        .filter(t => t.malkod === malkod && !t.geldi)
-        .reduce((a, t) => a + t.miktar, 0)
-      if (ihtiyac > stok + yolda) eksikSet.add(malkod)
+      const yolda = (tedarikler || [])
+        .filter((t: any) => t.malkod === malkod && !t.geldi)
+        .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
+      if ((ihtiyac as number) > stok + yolda) eksikSet.add(malkod)
     }
     if (eksikSet.size > 0) result.set(o.id, eksikSet)
   }
