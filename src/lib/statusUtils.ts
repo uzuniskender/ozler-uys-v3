@@ -35,8 +35,23 @@ export function computeOrderHammaddeEksik(
   orders: any[],
   allWos: WorkOrder[],
   stokHareketler: any[],
-  tedarikler: any[]
+  tedarikler: any[],
+  cuttingPlans?: any[]
 ): Map<string, Set<string>> {
+  // Kesim planındaki malkodlar ve toplam bar (tüm aktif planlar)
+  const planBarMap: Record<string, number> = {}
+  const planliMalkodlar = new Set<string>()
+  if (cuttingPlans) {
+    for (const p of cuttingPlans) {
+      if (p.durum === 'tamamlandi' || p.durum === 'iptal') continue
+      const toplam = (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
+      if (toplam > 0) {
+        planBarMap[p.hamMalkod] = (planBarMap[p.hamMalkod] || 0) + toplam
+        planliMalkodlar.add(p.hamMalkod)
+      }
+    }
+  }
+
   const result = new Map<string, Set<string>>()
   for (const o of orders) {
     const oWos = allWos.filter(w =>
@@ -44,11 +59,17 @@ export function computeOrderHammaddeEksik(
       w.durum !== 'iptal' &&
       w.durum !== 'tamamlandi'
     )
-    // Hammadde bazında toplam ihtiyaç
+    // Hammadde bazında toplam ihtiyaç — kesim planı olanlar için plan adedi
     const hmGrup: Record<string, number> = {}
+    // Kesim planındakileri doğrudan ekle
+    for (const [malkod, adet] of Object.entries(planBarMap)) {
+      const woForOrder = oWos.some(w => (w.hm || []).some((h: any) => h.malkod === malkod))
+      if (woForOrder) hmGrup[malkod] = adet
+    }
+    // Kesim planında olmayan WO'ların hm'si
     for (const w of oWos) {
       for (const h of (w.hm || [])) {
-        if (!h.malkod) continue
+        if (!h.malkod || planliMalkodlar.has(h.malkod)) continue
         hmGrup[h.malkod] = (hmGrup[h.malkod] || 0) + Number(h.miktarTotal || 0)
       }
     }
