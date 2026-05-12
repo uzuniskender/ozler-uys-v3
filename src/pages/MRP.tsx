@@ -301,10 +301,13 @@ export function MRP() {
     // Bu sayede tek sipariş hesaplarken de diğer siparişlerin payı stoktan düşülmüş olur.
     // Teker teker = toplu seçim ile aynı sonucu verir.
     await rezerveleriSenkronla(orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
-    await loadAll()
-    // v16.71 — loadAll sonrası closure'daki stokHareketler eski kalır; taze store'dan al
-    const tazeStore = (useStore as any).getState()
-    const tazeSH = tazeStore.stokHareketler || stokHareketler
+
+    // v16.71 — Rezerv yazıldıktan sonra taze stok hareketlerini doğrudan DB'den al.
+    // loadAll() + useStore.getState() arasında race condition var; store güncellenmeden
+    // eski stok referansı kullanılıyor. Direkt sorgu garantili taze veri verir.
+    const { data: freshSHData } = await supabase.from('uys_stok_hareketler').select('*')
+    const tazeSH = (freshSHData || stokHareketler) as typeof stokHareketler
+    await loadAll()  // UI için store'u güncelle (hesap için değil)
 
     const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, tazeSH, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
