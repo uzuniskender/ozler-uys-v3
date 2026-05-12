@@ -13,7 +13,7 @@ import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/producti
 import { MamulCikisModal } from '@/components/MamulCikisModal'
 
 export function Warehouse() {
-  const { stokHareketler, materials, acikBarlar, orders, workOrders, loadAll } = useStore()
+  const { stokHareketler, materials, acikBarlar, orders, workOrders, cuttingPlans, loadAll } = useStore()
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
@@ -35,18 +35,29 @@ export function Warehouse() {
     return Object.values(map).filter(s => Math.abs(s.miktar) > 0.01).sort((a, b) => a.malad.localeCompare(b.malad, 'tr'))
   }, [stokHareketler])
 
-  // Anlık ihtiyaç: aktif WO'ların hm toplamı (malkod bazında)
+  // Anlık ihtiyaç: kesim planı varsa plan bar adedi, yoksa WO hm toplamı
   const ihtiyacMap = useMemo(() => {
     const map: Record<string, number> = {}
+    // 1. Kesim planlarından malkod → toplam bar
+    const planliMalkodlar = new Set<string>()
+    cuttingPlans.forEach((p: any) => {
+      if (p.durum === 'tamamlandi' || p.durum === 'iptal') return
+      const toplamBar = (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
+      if (toplamBar > 0) {
+        map[p.hamMalkod] = (map[p.hamMalkod] || 0) + toplamBar
+        planliMalkodlar.add(p.hamMalkod)
+      }
+    })
+    // 2. Kesim planında olmayan malzemeler için WO hm
     workOrders.forEach(w => {
       if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return
       ;(w.hm || []).forEach((h: any) => {
-        if (!h.malkod) return
+        if (!h.malkod || planliMalkodlar.has(h.malkod)) return
         map[h.malkod] = (map[h.malkod] || 0) + Number(h.miktarTotal || 0)
       })
     })
     return map
-  }, [workOrders])
+  }, [workOrders, cuttingPlans])
 
   const filteredStok = useMemo(() => {
     let result = stokMap
@@ -194,7 +205,9 @@ export function Warehouse() {
                   <td className="px-4 py-1.5"><span className={`px-1.5 py-0.5 rounded text-[9px] ${kartYok ? 'bg-amber/15 text-amber' : 'bg-bg-3 text-zinc-500'}`}>{mat?.tip || (kartYok ? 'Kart Yok' : '—')}</span></td>
                   <td className={`px-4 py-1.5 text-right font-mono font-semibold ${s.miktar < 0 ? 'text-red' : minStokAlt ? 'text-amber' : 'text-green'}`}>{Math.round(s.miktar)}</td>
                   <td className="px-3 py-1.5 text-right font-mono text-orange-400">{ihtiyac > 0 ? ihtiyac : '—'}</td>
-                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${fark < 0 ? 'text-red' : 'text-zinc-500'}`}>{ihtiyac > 0 ? (fark < 0 ? `⚠ ${fark}` : `+${fark}`) : '—'}</td>
+                  <td className={`px-3 py-1.5 text-right font-mono font-semibold ${fark < 0 ? 'text-red' : fark > 0 ? 'text-amber' : 'text-zinc-500'}`}>
+                    {ihtiyac > 0 ? (fark < 0 ? `⚠ ${fark}` : `+${fark}`) : Math.round(s.miktar) > 0 ? <span className="text-amber">+{Math.round(s.miktar)}</span> : '—'}
+                  </td>
                   <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{mat?.birim || 'Ad'}</td>
                   <td className="px-3 py-1.5 text-right font-mono text-zinc-600 text-[10px]">{mat?.minStok || '—'}</td>
                   <td className="px-3 py-1.5 text-right">
