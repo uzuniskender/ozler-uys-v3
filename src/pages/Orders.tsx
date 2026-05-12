@@ -1344,7 +1344,9 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
     try {
       const s = useStore.getState()
       const kalemler = order.urunler || []
-      let woCount = workOrders.length
+      // DB'den anlık sorgu — store stale olabilir, tekrar WO açılmasını önler
+      const { data: woRows } = await supabase.from('uys_work_orders').select('id').eq('order_id', order.id)
+      let woCount = (woRows?.length || 0)
       if (!woCount) {
         if (kalemler.length > 0) {
           for (const u of kalemler) {
