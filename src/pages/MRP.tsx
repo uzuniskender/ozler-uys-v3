@@ -7,7 +7,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
-import { hesaplaMRP, hesaplaMRPCached, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, type MRPRow } from '@/features/production/mrp'
+import { hesaplaMRP, hesaplaMRPCached, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, getStok, type MRPRow } from '@/features/production/mrp'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
 import { isOrderArchived } from '@/lib/statusUtils'
@@ -355,14 +355,7 @@ export function MRP() {
       if (bi.brut <= 0) continue
       const kLower = bi.malkod.toLowerCase()
       if (stokPool[kLower] === undefined) {
-        // Stok = sadece giris - cikis (bar_acilis stoktan düşülmez — bar açılmış ama kullanılmamış hammadde hâlâ stokta)
-        stokPool[kLower] = Math.max(0, stokGercek
-          .filter((h: any) => (h.malkod || '').toLowerCase() === kLower)
-          .reduce((a: number, h: any) => {
-            if (h.tip === 'giris') return a + (h.miktar || 0)
-            if (h.tip === 'cikis') return a - (h.miktar || 0)
-            return a  // bar_acilis ve diğerleri stoktan düşülmez
-          }, 0))
+        stokPool[kLower] = Math.max(0, getStok(bi.malkod, stokGercek))
         acikTedPool[kLower] = tedarikler
           .filter((t: any) => (t.malkod || '').toLowerCase() === kLower && !t.geldi)
           .reduce((a: number, t: any) => a + (t.miktar || 0), 0)

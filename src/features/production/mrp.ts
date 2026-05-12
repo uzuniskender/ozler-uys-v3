@@ -30,7 +30,7 @@ export interface MRPRow {
 // Serbest stok = giris - cikis - rezerv
 // 'bar_acilis' → çıkış gibi sayılır (hammadde kullanıma açıldı)
 // 'rezerv' → serbest stoktan düşülür ama fiziksel çıkış değil
-function getStok(malkod: string, stokHareketler: StokHareket[]): number {
+export function getStok(malkod: string, stokHareketler: StokHareket[]): number {
   return Math.floor(stokHareketler
     .filter(h => h.malkod === malkod)
     .reduce((a, h) => {
