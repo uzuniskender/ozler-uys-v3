@@ -86,7 +86,7 @@ export function WorkOrders() {
   useEffect(() => {
     const statusParam = searchParams.get('statusFilter')
     if (statusParam === 'PlanBekliyor') {
-      setStatusFilter(new Set(['Uretilemiyor']))
+      setStatusFilter(new Set(['PlanBekliyor']))  // v16.71 fix: 'Uretilemiyor' → 'PlanBekliyor'
       // URL'i temizle
       const sp = new URLSearchParams(searchParams)
       sp.delete('statusFilter')
@@ -226,10 +226,12 @@ export function WorkOrders() {
       }
       if (statusFilter.size > 0) {
         const pct = wPct(w)
-        // Öncelik: DB'deki açık durumlar (iptal/beklemede/tamamlandi). Yoksa pct'e göre türet.
-        const wDurum = (w.durum === 'iptal' || w.durum === 'beklemede' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') 
-          ? w.durum 
-          : (pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor')
+        // v16.71 fix: planBekliyorIds kontrolü eklendi — önceden PlanBekliyor wDurum'a hiç girmiyordu
+        const wDurum = planBekliyorIds.has(w.id)
+          ? 'PlanBekliyor'
+          : (w.durum === 'iptal' || w.durum === 'beklemede' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam')
+            ? w.durum
+            : (pct >= 100 ? 'tamamlandi' : pct > 0 ? 'uretimde' : 'bekliyor')
         if (!statusFilter.has(wDurum)) return false
       }
       if (search) {
