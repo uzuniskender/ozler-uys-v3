@@ -303,14 +303,12 @@ export function MRP() {
     const { yazılanRezerv } = await rezerveleriSenkronla(orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
     await loadAll()
 
-    // v16.71 DEBUG — console'dan kaldırılacak
-    console.log('[MRP DEBUG] yazılanRezerv sayısı:', yazılanRezerv?.length ?? 'undefined')
-    const debugSH = yazılanRezerv?.filter((h: any) => h.malkod === 'H0102C030086600')
-    console.log('[MRP DEBUG] H0102C030086600 rezervleri:', JSON.stringify(debugSH))
-
-    const kombineSH = [...stokHareketler, ...(yazılanRezerv || [])] as typeof stokHareketler
-    const debugStok = kombineSH.filter((h: any) => h.malkod === 'H0102C030086600' && h.tip === 'rezerv')
-    console.log('[MRP DEBUG] kombineSH rezerv count:', debugStok.length, 'toplam:', debugStok.reduce((a: number, h: any) => a + (h.miktar || 0), 0))
+    // v16.71 — kombineSH: closure stokHareketler'den eski otomatik rezervleri temizle,
+    // aksi hâlde çifte rezerv → stok sıfır → yanlış eksik hesabı
+    const stokTemiz = stokHareketler.filter((h: any) =>
+      !(h.tip === 'rezerv' && h.aciklama === 'MRP otomatik rezerve')
+    )
+    const kombineSH = [...stokTemiz, ...(yazılanRezerv || [])] as typeof stokHareketler
 
     const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, kombineSH, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
