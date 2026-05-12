@@ -302,9 +302,54 @@ export function MRP() {
 
     // hm alanından brüt hesapla (malkod__termin gruplaması)
     const brutMap: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
+    // Kesim planından malkod → toplam bar adedi (aktif planlar, seçili WO'lar)
+    const secilenWoIds = new Set(secilenWOlar.map((w: any) => w.id))
+    const planBarMap: Record<string, { malkod: string; malad: string; adet: number; termin: string }> = {}
+    const planliWoIds = new Set<string>()
+    for (const p of cpMapped) {
+      if (p.durum === 'tamamlandi' || p.durum === 'iptal') continue
+      let planAdet = 0
+      let planTermin = ''
+      for (const s of (p.satirlar || [])) {
+        const kesimler = (s.kesimler || []) as any[]
+        const kapsamKesim = kesimler.filter((k: any) => secilenWoIds.has(k.woId))
+        if (!kapsamKesim.length) continue
+        const toplamKesim = kesimler.reduce((a: number, k: any) => a + (k.adet || 0), 0)
+        const kapsamKesim2 = kapsamKesim.reduce((a: number, k: any) => a + (k.adet || 0), 0)
+        const pay = toplamKesim > 0 ? (kapsamKesim2 / toplamKesim) * (s.hamAdet || 0) : 0
+        planAdet += pay
+        if (!planTermin) {
+          const woTerminler = kapsamKesim.map((k: any) => {
+            const w = workOrders.find((ww: any) => ww.id === k.woId)
+            return (w as any)?.termin || ''
+          }).filter(Boolean).sort()
+          planTermin = woTerminler[0] || ''
+        }
+      }
+      if (planAdet > 0) {
+        const mk = (p.hamMalkod || '').toLowerCase()
+        if (!planBarMap[mk]) planBarMap[mk] = { malkod: p.hamMalkod, malad: p.hamMalad || '', adet: 0, termin: planTermin }
+        planBarMap[mk].adet += planAdet
+        // Bu plana dahil WO'lar planli sayılır — hm'den sayılmaz
+        for (const s of (p.satirlar || [])) {
+          for (const k of (s.kesimler || [])) {
+            if (secilenWoIds.has(k.woId)) planliWoIds.add(k.woId)
+          }
+        }
+      }
+    }
+    // Kesim planı brütlerini brutMap'e ekle
+    for (const pb of Object.values(planBarMap)) {
+      const key = pb.malkod.toLowerCase() + '__' + pb.termin
+      const mat = materials.find((m: any) => m.kod === pb.malkod)
+      if (!brutMap[key]) brutMap[key] = { malkod: pb.malkod, malad: pb.malad, tip: mat?.tip || 'Hammadde', birim: mat?.birim || 'Adet', brut: 0, termin: pb.termin }
+      brutMap[key].brut += pb.adet
+    }
+
     for (const wo of secilenWOlar) {
       const hmList = (wo.hm || []) as any[]
       if (!hmList.length) continue
+      if (planliWoIds.has(wo.id)) continue  // Kesim planında var — hm'den sayma
       const uretilen = logs ? logs.filter((l: any) => l.woId === wo.id).reduce((a: number, l: any) => a + (l.qty || 0), 0) : 0
       const kalanOran = wo.hedef > 0 ? Math.max(0, (wo.hedef - uretilen) / wo.hedef) : 0
       if (kalanOran === 0) continue
