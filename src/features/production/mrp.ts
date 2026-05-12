@@ -959,6 +959,10 @@ export async function rezerveleriSenkronla(
       birlesikStok, tedarikler, cuttingPlans, materials,
       null, [], order.id
     )
+    // DEBUG v16.71 — kaldırılacak
+    if ((order as any).siparisNo === 'S26A_03108' || order.id === 'mp26pahmeostx0') {
+      console.log('[SENKRON DEBUG] S26A_03108 rows:', JSON.stringify(rows.map(r => ({ malkod: r.malkod, brut: r.brut, stok: r.stok }))))
+    }
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]
