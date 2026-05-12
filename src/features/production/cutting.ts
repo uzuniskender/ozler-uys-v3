@@ -468,6 +468,27 @@ export async function kesimPlanlariKaydet(planlar: KesimPlanSonuc[]): Promise<nu
       tarih: plan.tarih,
     }, { onConflict: 'id' })
   }
+
+  // Bu planlardaki WO'lara ait siparişlerin state'ini güncelle: plan_bekliyor → uretilebilir
+  try {
+    const woIds = new Set<string>()
+    planlar.forEach(p => (p.satirlar || []).forEach((s: any) =>
+      (s.kesimler || []).forEach((k: any) => { if (k.woId) woIds.add(k.woId) })
+    ))
+    if (woIds.size > 0) {
+      const { data: wos } = await supabase.from('uys_work_orders')
+        .select('order_id').in('id', [...woIds])
+      const orderIds = [...new Set((wos || []).map((w: any) => w.order_id).filter(Boolean))]
+      if (orderIds.length) {
+        await supabase.from('uys_orders')
+          .update({ state: 'uretilebilir' })
+          .in('id', orderIds)
+          .eq('state', 'plan_bekliyor')
+          .eq('mrp_durum', 'tamam')
+      }
+    }
+  } catch (e) { console.warn('[kesimPlanlariKaydet] state güncelleme hatası:', e) }
+
   return planlar.length
 }
 

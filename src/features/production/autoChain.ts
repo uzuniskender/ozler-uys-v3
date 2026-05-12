@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
-import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, rezerveYaz, type MRPRow } from './mrp'
+import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, type MRPRow } from './mrp'
 // v15.85 — test_run_id propagation: autoZincir snapshot kayitlarinin
 // canli veriye karismasini onler. Etiketsiz kayit cleanup'a takilmazdi.
 import { withTestRunId } from '@/lib/testRun'
@@ -289,12 +289,9 @@ export async function autoZincir(
       console.warn('[v15.51] uys_mrp_calculations insert (autoZincir) failed:', e)
     }
 
-    // mrp_durum güncellemesi — Faz 3 modal davranışıyla hizalı (eksik/tamam)
+    // mrp_durum güncellemesi
     const yeniDurum = mrpSonuc.some(r => r.net > 0) ? 'eksik' : 'tamam'
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', orderId)
-
-    // Rezerve kayıtları (manuel akıştaki runMRP de yapıyor)
-    await rezerveYaz(orderId, mrpSonuc)
   } catch (e: any) {
     adimlar.push('⚠️ MRP hatası: ' + e.message)
   }
@@ -334,6 +331,25 @@ export async function autoZincir(
   const eksikler = mrpSonuc.filter(x => x.durum === 'eksik').map(x => ({
     malkod: x.malkod, malad: x.malad, brut: x.brut, stok: x.stok, net: x.net,
   }))
+
+  // State güncelleme: plan_bekliyor → uretilebilir (kesim planları oluşturuldu + MRP tamam)
+  try {
+    const { data: orderRow } = await supabase.from('uys_orders').select('state,mrp_durum').eq('id', orderId).single()
+    if (orderRow?.state === 'plan_bekliyor' && (orderRow?.mrp_durum === 'tamam' || eksikler.length === 0)) {
+      // Kesim WO'larının tümü planlı mı kontrol et
+      const { data: kesimWOs } = await supabase.from('uys_work_orders')
+        .select('id,ie_no').eq('order_id', orderId).not('durum', 'in', '(iptal,tamamlandi)').ilike('op_ad', '%KES%')
+      const { data: planRows } = await supabase.from('uys_kesim_planlari').select('satirlar').not('durum', 'eq', 'iptal')
+      const planliIds = new Set<string>()
+      planRows?.forEach((p: any) => (p.satirlar || []).forEach((s: any) =>
+        (s.kesimler || []).forEach((k: any) => { if (k.woId) planliIds.add(k.woId); if (k.ieNo) planliIds.add(k.ieNo) })
+      ))
+      const allPlanned = !kesimWOs?.length || kesimWOs.every(w => planliIds.has(w.id) || planliIds.has(w.ie_no))
+      if (allPlanned) {
+        await supabase.from('uys_orders').update({ state: 'uretilebilir' }).eq('id', orderId)
+      }
+    }
+  } catch (e) { console.warn('[autoZincir] state güncelleme hatası:', e) }
 
   return { woCount, kesimCount, mrpCount: mrpSonuc.length, tedCount, eksikler, adimlar, mrpCalculationId: calcId }
 }
