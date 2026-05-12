@@ -24,6 +24,7 @@ export function Orders() {
   const { can, isGuest, user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { stokHareketler } = useStore()
   const urlFlowId = searchParams.get('flow') || ''
   const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
   const urlYeni = searchParams.get('yeni') || ''       // v15.57 — WorkOrders'tan ?yeni=1 ile direk modal aç
@@ -413,6 +414,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { stokHareketler } = useStore()
   const activeFlowId = searchParams.get('flow') || ''  // Zaten bir flow içindeyse (örn. CuttingPlans'tan geri geldi)
   const { user } = useAuth()
   const [siparisNo, setSiparisNo] = useState(initial?.siparisNo || '')
@@ -434,7 +436,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   // v16.43 — UX iyileştirmesi: yeni kalemde adet '' (boş) başlasın, kullanıcı
   // varsayılan 1'i silmek zorunda kalmasın. OrderItem tipi number bekliyor;
   // local state'te number | '' tutuyoruz, save() sırasında Number cast + validate.
-  type LocalKalem = Omit<OrderItem, 'adet'> & { adet: number | '' }
+  type LocalKalem = Omit<OrderItem, 'adet'> & { adet: number | ''; ymStok?: number }
   const [kalemler, setKalemler] = useState<LocalKalem[]>(() => {
     if (initial?.urunler && initial.urunler.length > 0) {
       // Eski kayıtlarda kalem-termin/not olmayabilir — sipariş seviyesinden doldur
@@ -908,6 +910,11 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
                         <>
                           <span className="font-mono text-accent">{k.mamulKod}</span>
                           <span className="text-zinc-400"> · {k.mamulAd}</span>
+                          {(k.ymStok !== undefined && k.ymStok > 0) && (
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded font-semibold">
+                              Stokta {k.ymStok}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <span className="text-amber">⚠ Ürün/reçete seç... (tıkla)</span>
@@ -920,6 +927,20 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
                       </button>
                     )}
                   </div>
+                  {(k.ymStok !== undefined && k.ymStok > 0) && (
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                      <div
+                        onClick={() => updateKalem(idx, { stoktan: !k.stoktan })}
+                        className={`relative w-9 h-5 rounded-full transition-colors ${k.stoktan ? 'bg-emerald-500' : 'bg-bg-3 border border-border'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${k.stoktan ? 'translate-x-4' : ''}`} />
+                      </div>
+                      <span className="text-xs text-zinc-300">
+                        Stoktan karşıla
+                        {k.stoktan && <span className="ml-1 text-emerald-400 font-semibold">— WO açılmayacak</span>}
+                      </span>
+                    </label>
+                  )}
                   <div className="grid grid-cols-[90px_140px_1fr] gap-2">
                     <div>
                       <label className="text-[10px] text-zinc-500 block mb-0.5">Adet</label>
@@ -976,7 +997,12 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
           recipes={recipes as any}
           materials={materials}
           onSelect={(r) => {
-            updateKalem(searchKalemIdx, { rcId: r.rcId, mamulKod: r.mamulKod, mamulAd: r.mamulAd })
+            const ymStok = Math.floor(
+              stokHareketler
+                .filter((h: any) => h.malkod === r.mamulKod)
+                .reduce((a: number, h: any) => a + (h.tip === 'giris' ? Number(h.miktar) : -Number(h.miktar)), 0)
+            )
+            updateKalem(searchKalemIdx, { rcId: r.rcId, mamulKod: r.mamulKod, mamulAd: r.mamulAd, ymStok, stoktan: false })
             setSearchKalemIdx(null)
           }}
           onClose={() => setSearchKalemIdx(null)}

@@ -46,6 +46,7 @@ export interface OrderItem {
   adet: number
   termin: string
   not?: string
+  stoktan?: boolean   // true → WO açılmaz, YM stoktan karşılanır
 }
 
 export interface WorkOrder {

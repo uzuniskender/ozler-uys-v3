@@ -1318,11 +1318,24 @@ export async function siparisRevizeUygula(
       // newOrder.urunler içinden bu rcId'li kalemi bul (yeni eklenmiş olmalı)
       const yeniKalem = newOrder.urunler.find(k => k.rcId === kd.rcId)
       if (yeniKalem) {
-        const c = await buildWorkOrders(
-          delta.orderId, newOrder.siparisNo, kd.rcId, kd.yeniAdet,
-          recipes, yeniKalem.termin, baslangicSira
-        )
-        ozetler.push(`Yeni kalem → ${c} İE oluşturuldu`)
+        // stoktan:true → WO açma, YM stoktan çıkış yaz
+        if ((yeniKalem as any).stoktan) {
+          const { addStokHareketi } = await import('@/lib/stokHelper')
+          await addStokHareketi({
+            malkod: yeniKalem.mamulKod,
+            malad: yeniKalem.mamulAd || yeniKalem.mamulKod,
+            miktar: kd.yeniAdet,
+            tip: 'cikis',
+            aciklama: `Stoktan karşılandı — ${newOrder.siparisNo}`,
+          })
+          ozetler.push(`Stoktan karşılandı → ${kd.yeniAdet} adet ${yeniKalem.mamulKod}`)
+        } else {
+          const c = await buildWorkOrders(
+            delta.orderId, newOrder.siparisNo, kd.rcId, kd.yeniAdet,
+            recipes, yeniKalem.termin, baslangicSira
+          )
+          ozetler.push(`Yeni kalem → ${c} İE oluşturuldu`)
+        }
       }
     }
 
