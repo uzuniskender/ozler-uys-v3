@@ -12,7 +12,7 @@ interface StokHareket {
   malkod: string
   malad: string | null
   miktar: number
-  tip: 'giris' | 'cikis'
+  tip: 'giris' | 'cikis' | 'bar_acilis' | 'rezerv'
   log_id: string | null
   wo_id: string | null
   aciklama: string | null
@@ -71,7 +71,7 @@ export function StokLog() {
   const [rows, setRows]           = useState<StokHareket[]>([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
-  const [tipFilter, setTipFilter] = useState<'tumu' | 'giris' | 'cikis'>('tumu')
+  const [tipFilter, setTipFilter] = useState<'tumu' | 'giris' | 'cikis' | 'bar_acilis' | 'rezerv'>('tumu')
   const [kaynakFilter, setKaynakFilter] = useState<'tumu' | Kaynak>('tumu')
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo, setDateTo]       = useState('')
@@ -147,8 +147,8 @@ export function StokLog() {
 
   /* ── özet ── */
   const ozet = useMemo(() => {
-    const giris = filtered.filter(h => h.tip === 'giris').reduce((a, h) => a + h.miktar, 0)
-    const cikis = filtered.filter(h => h.tip === 'cikis').reduce((a, h) => a + h.miktar, 0)
+    const giris    = filtered.filter(h => h.tip === 'giris').reduce((a, h) => a + h.miktar, 0)
+    const cikis    = filtered.filter(h => h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv').reduce((a, h) => a + h.miktar, 0)
     return { giris, cikis, net: giris - cikis, sayi: filtered.length }
   }, [filtered])
 
@@ -450,7 +450,7 @@ export function StokLog() {
 
         {/* Tip */}
         <div className="flex rounded border border-border overflow-hidden text-xs">
-          {(['tumu','giris','cikis'] as const).map(t => (
+          {(['tumu','giris','cikis','bar_acilis','rezerv'] as const).map(t => (
             <button key={t} onClick={() => setTipFilter(t)}
               className={`px-3 py-1.5 ${tipFilter===t ? 'bg-accent text-white font-medium' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
               {t === 'tumu' ? 'Tümü' : t === 'giris' ? '↑ Giriş' : '↓ Çıkış'}
@@ -530,6 +530,10 @@ export function StokLog() {
                       <td className="px-4 py-2">
                         {h.tip === 'giris'
                           ? <ArrowUpCircle size={15} className="text-green-400"/>
+                          : h.tip === 'bar_acilis'
+                          ? <Wrench size={15} className="text-orange-400"/>
+                          : h.tip === 'rezerv'
+                          ? <Package size={15} className="text-purple-400"/>
                           : <ArrowDownCircle size={15} className="text-red-400"/>}
                       </td>
                       <td className="px-4 py-2 text-zinc-200 font-mono text-xs">{h.malkod}</td>
