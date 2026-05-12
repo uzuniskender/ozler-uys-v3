@@ -934,7 +934,13 @@ export async function rezerveleriSenkronla(
     .filter(o => o.state !== 'tamamlandi' && o.state !== 'kapali' && o.state !== 'iptal')
     .sort((a, b) => (a.termin || '9999-99-99').localeCompare(b.termin || '9999-99-99'))
 
-  if (!aktif.length) return { siparisSayisi: 0, rezerveSayisi: 0 }
+  if (!aktif.length) return { siparisSayisi: 0, rezerveSayisi: 0, yazılanRezerv: [] }
+
+  // v16.71 fix — closure stokHareketler önceki hesaptan otomatik rezervleri içerebilir.
+  // DELETE DB'den siliyor ama closure güncellemiyor → çifte rezerv → stok sıfır.
+  const stokHareketlerTemiz = stokHareketler.filter((h: any) =>
+    !(h.tip === 'rezerv' && h.aciklama === 'MRP otomatik rezerve')
+  )
 
   // 3-4. Her sipariş için hesap + in-memory birikim
   // extraRezerv: malkod → bu oturumda yazılmış toplam rezerv miktarı
@@ -952,7 +958,7 @@ export async function rezerveleriSenkronla(
         id: '', malad: '', birim: '', aciklama: '',
       }))
 
-    const birlesikStok = [...stokHareketler, ...fakeEktra] as StokHareket[]
+    const birlesikStok = [...stokHareketlerTemiz, ...fakeEktra] as StokHareket[]
 
     const rows = hesaplaMRP(
       [order.id], orders, workOrders, recipes,
