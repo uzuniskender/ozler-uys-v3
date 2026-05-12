@@ -335,10 +335,25 @@ export function hesaplaMRP(
     if (!secilenOrdIds && ordIds !== null) return false  // genel mod değil
     if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return false
     if (!w.hm || !(w.hm as any[]).length) return false
-    // BOM'dan zaten hesaplananları atla — sadece reçete yolu dışındakileri al
     const rc = recipes.find(r => r.mamulKod === w.malkod)
     if (!rc) return true  // Reçetesi yok → hm'den hesapla (PLY gibi)
-    // Reçetesi var → BOM zaten hesapladı, atla
+    // v16.71 — Kesim WO + kesim planına dahil değilse → hm'den hesapla.
+    // BOM YM stokunu görüp netAdet=0 yapabilir; kesim planı olmayan WO
+    // gerçekte hammadde keseceği için hm'den hesaplanmalı.
+    const KESIM_KW = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH', 'ROUTER']
+    const isKesim = KESIM_KW.some(k => (w.opAd || '').toUpperCase().includes(k))
+    if (isKesim) {
+      const planliIds = new Set(
+        cuttingPlans
+          .filter(p => (p.durum || '').toLowerCase() !== 'iptal')
+          .flatMap(p => (p.satirlar || []).flatMap((s: any) =>
+            (s.kesimler || []).map((k: any) => k.woId)
+          ))
+          .filter(Boolean)
+      )
+      if (!planliIds.has(w.id)) return true  // Kesim planı yok → hm kullan
+    }
+    // Reçetesi var + kesim planı var → BOM zaten hesapladı, atla
     return false
   })
   for (const w of hmWOs) {
