@@ -50,6 +50,7 @@ export async function startFlow(params: {
   userAd: string
   stateData?: PendingFlow['stateData']
   not?: string
+  orderId?: string  // v16.71 — flow'un bağlı olduğu sipariş (kilitlenme önleme için)
 }): Promise<PendingFlow | null> {
   const now = new Date().toISOString()
   const id = uid()
@@ -64,6 +65,7 @@ export async function startFlow(params: {
     son_aktivite: now,
     durum: 'aktif',
     not_: params.not || '',
+    order_id: params.orderId || null,  // v16.71
   }
   const { error } = await supabase.from(TABLE).insert(row)
   if (error) { console.error('[pendingFlow] startFlow:', error); return null }
