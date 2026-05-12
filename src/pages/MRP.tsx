@@ -777,11 +777,6 @@ export function MRP() {
           </button>
           <span className="text-xs text-zinc-500">{selectedOrders.size} kayıt seçili</span>
           <span className="flex-1" />
-          <button onClick={senkronla} disabled={!can('mrp_calc')}
-            title="Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar"
-            className="px-3 py-2 bg-amber/10 hover:bg-amber/20 border border-amber/25 disabled:opacity-40 text-amber rounded-lg text-xs font-semibold">
-            🔄 Rezerveleri Senkronla
-          </button>
         </div>
       </div>
 
