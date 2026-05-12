@@ -3,7 +3,7 @@ import { logAction } from '@/lib/activityLog'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveYaz, rezerveSil, rezerveleriSenkronla, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
+import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditLog } from '@/lib/audit'
@@ -18,27 +18,6 @@ import { RecipeSearchModal } from '@/components/RecipeSearchModal'
 import { startFlow, advanceFlow } from '@/lib/pendingFlow'
 import { getKesimEksikWoIds, isKesimWO } from '@/lib/statusUtils'
 import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
-
-// Tüm aktif siparişlerin rezervelerini termin-FIFO ile yeniden hesaplar.
-// Sipariş ekleme/revize/silme/kapatma, toplu MRP, tedarik değişimi sonrası çağrılmalı.
-// Store'dan taze veri okur — loadAll()'dan SONRA çağır.
-async function triggerRezerveSync() {
-  const s = useStore.getState()
-  const cpMapped = s.cuttingPlans.map((p: any) => ({
-    hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
-    gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
-  }))
-  try {
-    await rezerveleriSenkronla(
-      s.orders as any, s.workOrders, s.recipes,
-      s.stokHareketler, s.tedarikler, cpMapped, s.materials
-    )
-    // Store'u tekrar yükle ki UI rezerve değişikliklerini görsün
-    await s.loadAll()
-  } catch (e) {
-    console.error('[Orders] rezerve senkron hatası:', e)
-  }
-}
 
 export function Orders() {
   const { orders, workOrders, logs, recipes, cuttingPlans, materials, pendingFlows, loadAll } = useStore()
@@ -277,7 +256,6 @@ export function Orders() {
       const yeniDurum = tekMrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
       // Rezerve kayıtları yaz
-      await rezerveYaz(o.id, tekMrpRows)
     }
     loadAll()
     await triggerRezerveSync()
@@ -1066,7 +1044,6 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     const yeniDurum = rows.some(r => r.net > 0) ? 'eksik' : 'tamam'
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', order.id)
     // Rezerve kayıtları yaz
-    await rezerveYaz(order.id, rows)
 
     // v15.56 F-19/20 — Otomatik tedarik açma (İş Emri #13 madde 19, 20)
     // Spec: "İE girildi + stok yetersiz → MRP tedarik açar, tedarik adımına geçilir."

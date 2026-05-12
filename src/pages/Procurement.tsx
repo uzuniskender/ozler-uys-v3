@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
 import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/lib/tedarikHelpers'
-import { rezerveleriSenkronla } from '@/features/production/mrp'
+
 import { FlowProgress } from '@/components/FlowProgress'
 import { isProcurementPending } from '@/lib/statusUtils'
 
@@ -115,11 +115,6 @@ export function Procurement() {
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
       }))
-      await rezerveleriSenkronla(
-        orders as any, workOrders, recipes, stokHareketler,
-        tedarikler.filter(t => t.id !== id),  // silinen hariç
-        cpMapped, materials
-      )
     } catch (e) { console.warn('[del] rezerve sync:', e) }
     loadAll(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
   }

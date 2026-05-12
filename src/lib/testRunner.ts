@@ -11,7 +11,7 @@ import { uid, today } from './utils'
 import { getActiveTestRunId, tempSetActiveTestRunId, cascadeDeleteTestRun, newTestRunId } from './testRun'
 import { buildWorkOrders, autoZincir, type KesimFarkItem } from '@/features/production/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cutting'
-import { hesaplaMRP, rezerveYaz, siparisDelta } from '@/features/production/mrp'
+import { hesaplaMRP, siparisDelta } from '@/features/production/mrp'
 import { markTedarikGeldi } from './tedarikHelpers'
 import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/features/production/fireTelafi'
 import { canProduceWO, canDurus, canDeleteWO } from '@/features/production/validations'
@@ -297,8 +297,6 @@ async function _runMRPAndCreateTedarik(state: RunnerState): Promise<{ mrpKalem: 
     store.stokHareketler, store.tedarikler, cpMapped, store.materials,
     ymSet, store.mrpRezerve, undefined, store.logs as any
   )
-
-  if (state.orderId) await rezerveYaz(state.orderId, result)
 
   const eksikler = result.filter(r => r.net > 0)
   let yeniTedarik = 0

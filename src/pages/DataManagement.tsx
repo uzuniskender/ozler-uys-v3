@@ -8,7 +8,7 @@ import { Download, Upload, RefreshCw, AlertTriangle, Info } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
-import { cuttingPlanTemizle, rezerveleriSenkronla, hesaplaMRP, hesaplaMRPCached } from '@/features/production/mrp'
+import { cuttingPlanTemizle, hesaplaMRP, hesaplaMRPCached } from '@/features/production/mrp'
 import { tedarikStokId } from '@/lib/tedarikHelpers'
 import { isActive as isStateActive } from '@/features/order/stateMachine'
 
