@@ -300,63 +300,11 @@ export function MRP() {
     // v16.71 — Hesap öncesi tüm aktif siparişler için rezerv senkronize et.
     // Bu sayede tek sipariş hesaplarken de diğer siparişlerin payı stoktan düşülmüş olur.
     // Teker teker = toplu seçim ile aynı sonucu verir.
-    // v16.71 kalıcı çözüm — DB'ye rezerv yazma yok.
-    // Tüm aktif siparişleri termin sırasına göre in-memory stoktan ayır.
-    // Seçili siparişler bu ayırmayı görerek hesaplanır.
-    // Closure/race condition/constraint sorunları tamamen ortadan kalkar.
+    // v16.71 final — Basit ve net hesap. Rezervasyon yok, allocation yok.
+    // Fiziksel stok (rezerv hariç) vs seçili siparişlerin brüt ihtiyacı.
+    const stokGercek = stokHareketler.filter((h: any) => h.tip !== 'rezerv') as typeof stokHareketler
 
-    // Gerçek stok: sadece giris-cikis-bar_acilis (otomatik rezervler yok)
-    const stokGercek = stokHareketler.filter((h: any) =>
-      !(h.tip === 'rezerv' && h.aciklama === 'MRP otomatik rezerve')
-    )
-
-    // Tüm aktif siparişler termine göre sıralı
-    const tumAktifSirali = [...aktifOrders]
-      .sort((a, b) => (a.termin || '9999-99-99').localeCompare(b.termin || '9999-99-99'))
-
-    // In-memory stok havuzu (malkod → kalan stok)
-    const stokHavuzu: Record<string, number> = {}
-
-    // Başka siparişlere ayrılan miktar (seçili sipariş hesabında rezerv olarak görünür)
-    const digerAyirma: Array<{ malkod: string; malad: string; miktar: number }> = []
-
-    for (const ord of tumAktifSirali) {
-      const isSecili = ordIds.includes(ord.id)
-      const ordResult = hesaplaMRP(
-        [ord.id], orders as any, workOrders, recipes,
-        stokGercek, tedarikler, cpMapped, materials,
-        null, mrpRezerve, ord.id, logs, false
-      )
-      for (const row of ordResult) {
-        const kLower = row.malkod.toLowerCase()
-        if (stokHavuzu[kLower] === undefined) {
-          // İlk kez: havuzu gerçek stokla başlat
-          stokHavuzu[kLower] = Math.max(0, stokGercek
-            .filter((h: any) => (h.malkod || '').toLowerCase() === kLower)
-            .reduce((a: number, h: any) => {
-              if (h.tip === 'giris') return a + (h.miktar || 0)
-              return a - (h.miktar || 0)
-            }, 0))
-        }
-        const ayrilacak = Math.min(row.brut, stokHavuzu[kLower])
-        stokHavuzu[kLower] = Math.max(0, stokHavuzu[kLower] - ayrilacak)
-        if (!isSecili && ayrilacak > 0) {
-          digerAyirma.push({ malkod: row.malkod, malad: row.malad, miktar: ayrilacak })
-        }
-      }
-    }
-
-    // Seçili siparişler için hesap: diğer siparişlerin ayırmasını rezerv olarak ekle
-    const fakeRezerv = digerAyirma.map(d => ({
-      id: 'alloc-' + d.malkod,
-      malkod: d.malkod, malad: d.malad,
-      miktar: d.miktar, tip: 'rezerv' as const,
-      aciklama: 'MRP otomatik rezerve',
-      tarih: '', logId: '', woId: '', rezervOrderId: null,
-    }))
-    const hesapSH = [...stokGercek, ...fakeRezerv] as typeof stokHareketler
-
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, hesapSH, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokGercek, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
     setHesaplandi(true)
     setViewMode('kumülatif')  // v16.71 — hesap sonrası kümülatif'e sıfırla
