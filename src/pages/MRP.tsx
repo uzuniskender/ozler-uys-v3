@@ -27,6 +27,8 @@ export function MRP() {
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [flowAutoDone, setFlowAutoDone] = useState(false)  // v15.36
+  // v16.71 — Flow kilitlenme önleme: aktif flow'un bağlı olduğu sipariş ID'si
+  const [activeFlowOrderId, setActiveFlowOrderId] = useState<string | null>(null)
 
   // v16.71 — Kümülatif / Sipariş Bazlı toggle
   const [viewMode, setViewMode] = useState<'kumülatif' | 'sipariş'>('kumülatif')
@@ -44,6 +46,18 @@ export function MRP() {
   const [orderSearch, setOrderSearch] = useState('')  // v16.46 — sipariş arama
 
   // v15.71 — mrpDoneYMs useMemo kaldırıldı (madde 18)
+
+  // v16.71 — Flow kilitlenme önleme: URL'de ?flow= varsa o flow'un sipariş ID'sini al.
+  // mrp_durum=tamam olsa bile aktif flow'a bağlı sipariş aktif listede tutulur.
+  useEffect(() => {
+    if (!activeFlowId) { setActiveFlowOrderId(null); return }
+    supabase.from('uys_pending_flows')
+      .select('order_id')
+      .eq('id', activeFlowId)
+      .eq('durum', 'aktif')
+      .single()
+      .then(({ data }) => setActiveFlowOrderId(data?.order_id || null))
+  }, [activeFlowId])
 
   // v15.50a.5 — TEK KURAL:
   // Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP sonucunda net > 0 var.
@@ -93,6 +107,9 @@ export function MRP() {
 
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
+      // v16.71 — Aktif flow'a bağlı sipariş → mrp_durum=tamam olsa bile aktif listede tut
+      // (kilitlenme önleme: flow tamamlanana kadar kullanıcı tedarik açabilmeli)
+      if (activeFlowOrderId && o.id === activeFlowOrderId) return true
       // v16.71 — showTamamlanan kaldırıldı; arşiv modal'a taşındı
       const trueTerminal = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
       if (trueTerminal) return false
@@ -108,7 +125,7 @@ export function MRP() {
       return henuzHesaplanmadi || dbEksik
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, workOrders, orderAllWosDone, orderHasEksik])
+  }, [orders, workOrders, orderAllWosDone, orderHasEksik, activeFlowOrderId])
 
   // v16.71 — Arşiv siparişleri (aktif olmayan tümü → modal için)
   const arsivOrders = useMemo(() => {
@@ -308,9 +325,11 @@ export function MRP() {
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz (manuel İE'lerde mrp_durum kolonu yok, atla)
     for (const oid of ordIds) {
       // v16.32 IE #14 Faz A Slice 3 — tek-order cache wrap
+      // v16.71 — Flow context'inde forceRefresh=true: stale cache → yanlış mrp_durum yazımı önlenir
       const tekResult = await hesaplaMRPCached(
         { orderId: oid },
-        () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+        () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs),
+        activeFlowId ? { forceRefresh: true } : undefined
       )
       // v16.71 — Sipariş Bazlı toggle için per-order sonuç topla
       const ordForPO = orders.find((x: any) => x.id === oid)
