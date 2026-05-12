@@ -1,3 +1,4 @@
+import { isWorkOrderOpen } from '@/lib/statusUtils'
 import type { Recipe, StokHareket, Tedarik, WorkOrder, Material, MrpRezerve } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -196,21 +197,48 @@ function bomPatlaNet(
 // v15.81 — logs parametresi eklendi (saha bug fix).
 // Önceden 'uretilen=0' hardcode'du → tamamlanmış WO'lar bile hammadde "ihtiyacı" üretiyordu.
 // (Bilgi Bankası §25). Yeni: kalan = max(0, hedef - log toplam). logs verilmezse eski davranış.
+
+// ─── hesaplaMRP Parametre Interface ──────────────────────────────────────────
+export interface HesaplaMRPParams {
+  ordIds: string[] | null
+  orders: { id: string; adet: number; mamulKod: string; receteId: string; durum: string; termin?: string; urunler?: { mamulKod: string; adet: number; termin?: string }[] }[]
+  workOrders: WorkOrder[]
+  recipes: Recipe[]
+  stokHareketler: StokHareket[]
+  tedarikler: Tedarik[]
+  cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[]
+  materials: Material[]
+  secilenYMIds?: Set<string> | null
+  mrpRezerve?: MrpRezerve[]
+  currentOrderId?: string
+  logs?: { woId: string; qty: number }[]
+  retrospektif?: boolean
+}
+
 export function hesaplaMRP(
-  ordIds: string[] | null,
-  orders: { id: string; adet: number; mamulKod: string; receteId: string; durum: string; termin?: string; urunler?: { mamulKod: string; adet: number; termin?: string }[] }[],
-  workOrders: WorkOrder[],
-  recipes: Recipe[],
-  stokHareketler: StokHareket[],
-  tedarikler: Tedarik[],
-  cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; gerekliAdet: number; satirlar: any[] }[],
-  materials: Material[],
-  secilenYMIds?: Set<string> | null,
-  mrpRezerve?: MrpRezerve[],
-  currentOrderId?: string,
-  logs?: { woId: string; qty: number }[],
-  retrospektif?: boolean  // arşiv modu: tamamlanmış siparişlerin geçmiş ihtiyacını göster
+  p: HesaplaMRPParams | string[] | null,
+  ...legacy: any[]
 ): MRPRow[] {
+  // Geriye dönük uyumluluk: eski pozisyonel çağrıları obje çağrısına dönüştür
+  let params: HesaplaMRPParams
+  if (p !== null && !Array.isArray(p) && typeof p === 'object' && 'orders' in p) {
+    params = p as HesaplaMRPParams
+  } else {
+    params = {
+      ordIds: p as string[] | null,
+      orders: legacy[0], workOrders: legacy[1], recipes: legacy[2],
+      stokHareketler: legacy[3], tedarikler: legacy[4], cuttingPlans: legacy[5],
+      materials: legacy[6], secilenYMIds: legacy[7], mrpRezerve: legacy[8],
+      currentOrderId: legacy[9], logs: legacy[10], retrospektif: legacy[11],
+    }
+  }
+  return _hesaplaMRPCore(params)
+}
+
+function _hesaplaMRPCore({
+  ordIds, orders, workOrders, recipes, stokHareketler, tedarikler,
+  cuttingPlans, materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif
+}: HesaplaMRPParams): MRPRow[] {
   // brutIhtiyac ANAHTARLARI case-insensitive (.trim().toLowerCase())
   // ama her kaydın .malkod field'ı orijinal case'de saklanır (final çıktıda kullanmak için)
   const brutIhtiyac: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
@@ -280,7 +308,7 @@ export function hesaplaMRP(
   //         hammadde ihtiyacı üretiyordu çünkü 'uretilen=0' hardcode'du, iptal/tamamlandi filtresi yoktu).
   const ymIEs = workOrders.filter(w => {
     if (!w.bagimsiz && !w.siparisDisi) return false
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false  // v15.81 — tamamlandi eklendi
+    if (!isWorkOrderOpen(w)) return false  // v15.81 — tamamlandi eklendi
     // Explicit YM seçimi varsa override: sadece set içindekiler dahil, ordIdSet bypass.
     if (secilenYMIds) return secilenYMIds.has(w.id)
     // Explicit seçim yok → sipariş kapsamına bak
@@ -326,7 +354,7 @@ export function hesaplaMRP(
     if (!w.orderId) return false
     if (secilenOrdIds && !secilenOrdIds.has(w.orderId)) return false
     if (!secilenOrdIds && ordIds !== null) return false  // genel mod değil
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return false
+    if (!isWorkOrderOpen(w) || w.durum === 'kismi_tamam') return false
     if (!w.hm || !(w.hm as any[]).length) return false
     const rc = recipes.find(r => r.mamulKod === w.malkod)
     if (!rc) return true  // Reçetesi yok → hm'den hesapla (PLY gibi)

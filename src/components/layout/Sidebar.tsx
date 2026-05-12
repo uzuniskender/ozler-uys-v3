@@ -1,3 +1,4 @@
+import { isWorkOrderOpen } from '@/lib/statusUtils'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
@@ -76,7 +77,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     if (key === 'workOrders') {
       const active = store.workOrders.filter(w => {
         const prod = store.logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
-        return prod < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi'
+        return prod < w.hedef && isWorkOrderOpen(w)
       }).length
       return active > 0 ? String(active) : ''
     }

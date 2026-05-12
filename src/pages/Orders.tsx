@@ -16,7 +16,7 @@ import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
 import { startFlow, advanceFlow } from '@/lib/pendingFlow'
-import { getKesimEksikWoIds, isKesimWO } from '@/lib/statusUtils'
+import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen} from '@/lib/statusUtils'
 import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
 
 export function Orders() {
@@ -697,7 +697,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
             .select('id, op_ad, durum')
             .eq('order_id', orderId)
           const kesimVarMi = (tumWOs || []).some((w: any) =>
-            w.durum !== 'iptal' && w.durum !== 'tamamlandi' && isKesimWO({ opAd: w.op_ad })
+            isWorkOrderOpen(w) && isKesimWO({ opAd: w.op_ad })
           )
           if (kesimVarMi) {
             if (myActiveFlow) {

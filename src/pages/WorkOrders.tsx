@@ -9,7 +9,7 @@ import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
-import { getPlanliWoIds, isKesimWO, getEffectiveStatus, type StatusReason } from '@/lib/statusUtils'
+import { getPlanliWoIds, isKesimWO, getEffectiveStatus, type StatusReason , isWorkOrderOpen} from '@/lib/statusUtils'
 import { computeOrderEksik } from '@/lib/hammaddeHesap'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
@@ -671,7 +671,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
           {can('wo_status') && (wo.durum === 'beklemede' || wo.durum === 'tamamlandi') && <button onClick={() => { setDurum(wo.id, 'uretimde'); onClose() }} className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg text-xs hover:bg-accent/20">▶ {wo.durum === 'tamamlandi' ? 'Devam Ettir' : 'Devam Et'}</button>}
           {can('wo_status') && wo.durum !== 'beklemede' && wo.durum !== 'tamamlandi' && wo.durum !== 'iptal' && <button onClick={() => { setDurum(wo.id, 'beklemede'); onClose() }} className="px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg text-xs hover:bg-purple-500/20">⏸ Beklet</button>}
           {can('wo_status') && wo.durum !== 'tamamlandi' && wo.durum !== 'iptal' && prod > 0 && <button onClick={() => { setDurum(wo.id, 'tamamlandi'); onClose() }} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">✓ Tamamla</button>}
-          {wo.durum !== 'iptal' && wo.durum !== 'tamamlandi' && (prod === 0 ? (can('wo_delete') && <button onClick={() => { deleteWO(wo.id); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button>) : (can('wo_status') && <button onClick={() => { setDurum(wo.id, 'iptal'); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>))}
+          {isWorkOrderOpen(wo) && (prod === 0 ? (can('wo_delete') && <button onClick={() => { deleteWO(wo.id); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">🗑 Sil</button>) : (can('wo_status') && <button onClick={() => { setDurum(wo.id, 'iptal'); onClose() }} className="px-3 py-1.5 bg-red/10 text-red rounded-lg text-xs hover:bg-red/20">✕ İptal Et</button>))}
         </div>
 
         {(() => {

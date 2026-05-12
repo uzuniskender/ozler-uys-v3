@@ -1,3 +1,4 @@
+import { isWorkOrderOpen } from '@/lib/statusUtils'
 /**
  * levhaKesim.ts — 2D Guillotine Cut Algoritması
  * v16.52 — Plywood / Levha kesim optimizasyonu
@@ -279,7 +280,7 @@ export function wolardenParcaListesi(
   const parcalar: LevhaParca[] = []
 
   for (const wo of wos) {
-    if (wo.durum === 'iptal' || wo.durum === 'tamamlandi') continue
+    if (!isWorkOrderOpen(wo)) continue
     if (!wo.hm?.some(h => h.malkod === hamMalkod)) continue
 
     const mat = materials.find(m => m.kod === wo.malkod)

@@ -11,7 +11,7 @@ import { hesaplaMRP, mrpTedarikOlustur, type MRPRow } from '@/features/productio
 import { getStok, buildIhtiyacMap, getYolda } from '@/lib/hammaddeHesap'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
-import { isOrderArchived } from '@/lib/statusUtils'
+import { isOrderArchived , isWorkOrderOpen} from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
 
@@ -257,7 +257,7 @@ export function MRP() {
     const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: any) => (s.kesimler || []).map((k: any) => k.woId))))
     return workOrders.filter(w => {
       if (!selectedOrders.has(w.orderId)) return false
-      if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+      if (!isWorkOrderOpen(w)) return false
       if (planliWoIds.has(w.id)) return false
       return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
     }).length
@@ -298,7 +298,7 @@ export function MRP() {
     const secilenWOlar = workOrders.filter(w => {
       if (ordIds.length > 0 && !ordIds.includes(w.orderId)) return false
       if (ymSet && !ymSet.has(w.id)) return false
-      return w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'kismi_tamam'
+      return isWorkOrderOpen(w)
     })
 
     // hm alanından brüt hesapla (malkod__termin gruplaması)
@@ -414,7 +414,7 @@ export function MRP() {
 
     for (const oid of ordIds) {
       const ordWOs = workOrders.filter(w =>
-        w.orderId === oid && w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'kismi_tamam'
+        w.orderId === oid && isWorkOrderOpen(w)
       )
       const ordBrutMap: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
       for (const wo of ordWOs) {

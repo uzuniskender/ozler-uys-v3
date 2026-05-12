@@ -83,7 +83,7 @@ export function CuttingPlans() {
   async function otomatikLevhaPlan() {
     const { workOrders: wos, materials } = useStore.getState()
     const levhaWOs = wos.filter(w =>
-      !w.bagimsiz && w.durum !== 'iptal' && w.durum !== 'tamamlandi' &&
+      !w.bagimsiz && isWorkOrderOpen(w) &&
       Array.isArray(w.hm) && (w.hm as any[]).some((h: any) => {
         const mat = materials.find(m => m.kod === h.malkod)
         return (mat as any)?.hammaddeTipi === 'LEVHA'

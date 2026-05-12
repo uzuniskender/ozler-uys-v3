@@ -1,3 +1,4 @@
+import { isWorkOrderOpen } from '@/lib/statusUtils'
 import { getStok, getYolda } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
 import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
@@ -920,7 +921,7 @@ export function DataManagement() {
       for (const o of aktifOrders) {
         const oWos = wos.filter((w: any) =>
           (w.orderId === o.id || w.order_id === o.id) &&
-          w.durum !== 'iptal' && w.durum !== 'tamamlandi'
+          isWorkOrderOpen(w)
         )
         const hmGrup: Record<string, { malad: string; ihtiyac: number }> = {}
         for (const w of oWos) {
@@ -982,7 +983,7 @@ export function DataManagement() {
       }> = []
 
       for (const w of wos) {
-        if (w.durum === 'iptal' || w.durum === 'tamamlandi') continue
+        if (!isWorkOrderOpen(w)) continue
         const recete = recs.find((r: any) => r.id === w.rc_id)
         if (!recete) continue
         for (const h of (w.hm || [])) {

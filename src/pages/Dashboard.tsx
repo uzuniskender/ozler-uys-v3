@@ -1,3 +1,4 @@
+import { isWorkOrderOpen } from '@/lib/statusUtils'
 import { getStok } from '@/lib/hammaddeHesap'
 import { useNavigate } from 'react-router-dom'
 import { useMemo, useState, useEffect } from 'react'
@@ -170,7 +171,7 @@ export function Dashboard() {
 
   const terminGecen = aktifOrders.filter(o => o.termin && o.termin < todayStr && (o as any).sevkDurum !== 'tamamen_sevk')
   const acikWOs = workOrders.filter(w => {
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    if (!isWorkOrderOpen(w)) return false
     const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
     return w.hedef > 0 && prod < w.hedef
   })
@@ -229,7 +230,7 @@ export function Dashboard() {
   const kesimOps = ['KESİM', 'KESME', 'KES', 'LAZER', 'PLAZMA', 'PUNCH']
   const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: { kesimler?: { woId?: string }[] }) => (s.kesimler || []).map((k) => k.woId))))
   const kesimEksik = workOrders.filter(w => {
-    if (w.durum === 'iptal' || w.durum === 'tamamlandi') return false
+    if (!isWorkOrderOpen(w)) return false
     const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
     if (prod >= w.hedef) return false
     if (planliWoIds.has(w.id)) return false

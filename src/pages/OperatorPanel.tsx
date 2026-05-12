@@ -10,7 +10,7 @@ import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-r
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { canProduceWO, canDurus } from '@/features/production/validations'
-import { getEffectiveStatus } from '@/lib/statusUtils'
+import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
 
 export function OperatorPanel() {
   const { operators, operations, loadAll, loading } = useStore()
@@ -434,7 +434,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                 <div className="text-[10px] text-zinc-700 bg-bg-2 rounded-lg p-3 text-left font-mono">
                   Operatör bölüm: "{opr.bolum}"<br/>
                   Eşleşen operasyonlar: {operations.filter(o => (o.bolum || '').trim().toUpperCase() === (opr.bolum || '').trim().toUpperCase() || (o.ad || '').toUpperCase().includes((opr.bolum || '').toUpperCase())).map(o => o.ad).join(', ') || 'YOK'}<br/>
-                  Toplam açık İE: {workOrders.filter(w => w.hedef > 0 && logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef && w.durum !== 'iptal' && w.durum !== 'tamamlandi').length}<br/>
+                  Toplam açık İE: {workOrders.filter(w => w.hedef > 0 && logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0) < w.hedef && isWorkOrderOpen(w)).length}<br/>
                   İE operasyonları: {[...new Set(workOrders.filter(w => w.hedef > 0).map(w => w.opAd))].join(', ')}
                 </div>
               </div>
