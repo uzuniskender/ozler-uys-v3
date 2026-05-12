@@ -25,8 +25,8 @@ export function WorkOrders() {
 
   // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
   const orderHmEksikMap = useMemo(
-    () => computeOrderHammaddeEksik(orders, workOrders, stokHareketler, tedarikler, cuttingPlans as any),
-    [orders, workOrders, stokHareketler, tedarikler, cuttingPlans]
+    () => computeOrderEksik(orders, workOrders, stokHareketler as any, tedarikler as any, cuttingPlans as any, materials as any),
+    [orders, workOrders, stokHareketler, tedarikler, cuttingPlans, materials]
   )
   const { can, isGuest, user } = useAuth()
   const [search, setSearch] = useState('')

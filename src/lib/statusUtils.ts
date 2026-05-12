@@ -1,3 +1,5 @@
+import { getStok, computeOrderEksik } from '@/lib/hammaddeHesap'
+export { computeOrderEksik as computeOrderHammaddeEksik }
 /**
  * Durum String Normalizasyon Helper'ları (v15.47.2)
  *
@@ -31,63 +33,6 @@ import type { Order, WorkOrder, CuttingPlan, Tedarik, AcikBar } from '@/types'
  *
  * @returns Map<orderId, Set<eksik_malkod>>
  */
-export function computeOrderHammaddeEksik(
-  orders: any[],
-  allWos: WorkOrder[],
-  stokHareketler: any[],
-  tedarikler: any[],
-  cuttingPlans?: any[]
-): Map<string, Set<string>> {
-  // Kesim planındaki malkodlar ve toplam bar (tüm aktif planlar)
-  const planBarMap: Record<string, number> = {}
-  const planliMalkodlar = new Set<string>()
-  if (cuttingPlans) {
-    for (const p of cuttingPlans) {
-      if (p.durum === 'tamamlandi' || p.durum === 'iptal') continue
-      const toplam = (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
-      if (toplam > 0) {
-        planBarMap[p.hamMalkod] = (planBarMap[p.hamMalkod] || 0) + toplam
-        planliMalkodlar.add(p.hamMalkod)
-      }
-    }
-  }
-
-  const result = new Map<string, Set<string>>()
-  for (const o of orders) {
-    const oWos = allWos.filter(w =>
-      w.orderId === o.id &&
-      w.durum !== 'iptal' &&
-      w.durum !== 'tamamlandi'
-    )
-    // Hammadde bazında toplam ihtiyaç — kesim planı olanlar için plan adedi
-    const hmGrup: Record<string, number> = {}
-    // Kesim planındakileri doğrudan ekle
-    for (const [malkod, adet] of Object.entries(planBarMap)) {
-      const woForOrder = oWos.some(w => (w.hm || []).some((h: any) => h.malkod === malkod))
-      if (woForOrder) hmGrup[malkod] = adet
-    }
-    // Kesim planında olmayan WO'ların hm'si
-    for (const w of oWos) {
-      for (const h of (w.hm || [])) {
-        if (!h.malkod || planliMalkodlar.has(h.malkod)) continue
-        hmGrup[h.malkod] = (hmGrup[h.malkod] || 0) + Number(h.miktarTotal || 0)
-      }
-    }
-    // Stok + yolda kontrolü
-    const eksikSet = new Set<string>()
-    for (const [malkod, ihtiyac] of Object.entries(hmGrup)) {
-      const stok = stokHareketler
-        .filter(s => s.malkod === malkod)
-        .reduce((a, s) => a + (s.tip === 'giris' ? Number(s.miktar) : -Number(s.miktar)), 0)
-      const yolda = tedarikler
-        .filter(t => t.malkod === malkod && !t.geldi)
-        .reduce((a, t) => a + Number(t.miktar || 0), 0)
-      if (ihtiyac > stok + yolda) eksikSet.add(malkod)
-    }
-    if (eksikSet.size > 0) result.set(o.id, eksikSet)
-  }
-  return result
-}
 
 // ─── ORDERS (siparişler) ─────────────────────────────────────────
 

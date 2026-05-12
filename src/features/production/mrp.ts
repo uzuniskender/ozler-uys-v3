@@ -30,15 +30,8 @@ export interface MRPRow {
 // Serbest stok = giris - cikis - rezerv
 // 'bar_acilis' → çıkış gibi sayılır (hammadde kullanıma açıldı)
 // 'rezerv' → serbest stoktan düşülür ama fiziksel çıkış değil
-export function getStok(malkod: string, stokHareketler: StokHareket[]): number {
-  return Math.floor(stokHareketler
-    .filter(h => h.malkod === malkod)
-    .reduce((a, h) => {
-      if (h.tip === 'giris') return a + h.miktar
-      if (h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv') return a - h.miktar
-      return a
-    }, 0))
-}
+// getStok → merkezi kaynak: hammaddeHesap.ts
+export { getStok } from '@/lib/hammaddeHesap'
 
 // Rezerve toplam (hangi siparişe ne kadar rezerve edilmiş)
 export function getRezervDetay(malkod: string, stokHareketler: StokHareket[]): { orderId: string; miktar: number }[] {

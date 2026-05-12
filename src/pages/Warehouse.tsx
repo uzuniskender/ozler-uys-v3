@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
+import { buildIhtiyacMap, getStok } from '@/lib/hammaddeHesap'
 import { useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -36,28 +37,13 @@ export function Warehouse() {
   }, [stokHareketler])
 
   // Anlık ihtiyaç: kesim planı varsa plan bar adedi, yoksa WO hm toplamı
+  // ihtiyacMap → merkezi kaynak: hammaddeHesap.ts → buildIhtiyacMap
   const ihtiyacMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    // 1. Kesim planlarından malkod → toplam bar
-    const planliMalkodlar = new Set<string>()
-    cuttingPlans.forEach((p: any) => {
-      if (p.durum === 'tamamlandi' || p.durum === 'iptal') return
-      const toplamBar = (p.satirlar || []).reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
-      if (toplamBar > 0) {
-        map[p.hamMalkod] = (map[p.hamMalkod] || 0) + toplamBar
-        planliMalkodlar.add(p.hamMalkod)
-      }
-    })
-    // 2. Kesim planında olmayan malzemeler için WO hm
-    workOrders.forEach(w => {
-      if (w.durum === 'iptal' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam') return
-      ;(w.hm || []).forEach((h: any) => {
-        if (!h.malkod || planliMalkodlar.has(h.malkod)) return
-        map[h.malkod] = (map[h.malkod] || 0) + Number(h.miktarTotal || 0)
-      })
-    })
-    return map
-  }, [workOrders, cuttingPlans])
+    const raw = buildIhtiyacMap(workOrders, cuttingPlans as any, materials)
+    const m: Record<string, number> = {}
+    for (const v of Object.values(raw)) m[v.malkod] = v.ihtiyac
+    return m
+  }, [workOrders, cuttingPlans, materials])
 
   const filteredStok = useMemo(() => {
     let result = stokMap
