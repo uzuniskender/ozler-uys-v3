@@ -7,7 +7,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight } from 'lucide-react'
-import { hesaplaMRP, hesaplaMRPCached, rezerveYaz, rezerveleriSenkronla, mrpTedarikOlustur, getStok, type MRPRow } from '@/features/production/mrp'
+import { hesaplaMRP, mrpTedarikOlustur, getStok, type MRPRow } from '@/features/production/mrp'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
 import { isOrderArchived } from '@/lib/statusUtils'
@@ -256,24 +256,6 @@ export function MRP() {
       return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
     }).length
   }, [selectedOrders, workOrders, cuttingPlans])
-
-  async function senkronla() {
-    if (!await showConfirm('Tüm aktif siparişlerin rezerveleri termin-FIFO ile yeniden hesaplanacak. Eski rezerve kayıtları silinip doğru değerlerle yeniden yazılacak. Devam?')) return
-    const cpMapped = cuttingPlans.map((p: any) => ({
-      hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
-      gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
-    }))
-    try {
-      const { siparisSayisi, rezerveSayisi } = await rezerveleriSenkronla(
-        orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials
-      )
-      loadAll()
-      toast.success(`${siparisSayisi} sipariş · ${rezerveSayisi} rezerve kaydı yazıldı`)
-    } catch (e: any) {
-      toast.error('Senkronizasyon hatası: ' + (e?.message || 'bilinmeyen'))
-      console.error(e)
-    }
-  }
 
   async function hesapla(overrideOrderIds?: string[], overrideYMs?: Set<string>) {
     // v15.36: override parametreleri auto-run için (state async olduğundan state'e güvenilemez)
