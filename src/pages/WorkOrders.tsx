@@ -226,7 +226,7 @@ export function WorkOrders() {
       }
       if (statusFilter.size > 0) {
         const pct = wPct(w)
-        // v16.71 fix: planBekliyorIds kontrolü eklendi — önceden PlanBekliyor wDurum'a hiç girmiyordu
+        // v16.71 fix: PlanBekliyor önce kontrol edilir
         const wDurum = planBekliyorIds.has(w.id)
           ? 'PlanBekliyor'
           : (w.durum === 'iptal' || w.durum === 'beklemede' || w.durum === 'tamamlandi' || w.durum === 'kismi_tamam')
@@ -374,6 +374,7 @@ export function WorkOrders() {
           { value: 'kismi', label: 'Kısmi', color: 'text-amber' },
           { value: 'kismi_tamam', label: 'Kısmi Tamam', color: 'text-cyan' },
           { value: 'beklemede', label: 'Beklemede', color: 'text-purple-400' },
+          { value: 'PlanBekliyor', label: 'Plan Bekliyor', color: 'text-orange-400' },
           { value: 'tamamlandi', label: 'Tamamlandı', color: 'text-green' },
           { value: 'iptal', label: 'İptal', color: 'text-red' },
         ]} selected={statusFilter} onChange={setStatusFilter} />

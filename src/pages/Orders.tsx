@@ -710,40 +710,43 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       // v16.71 — İlave/revize: kalem_ekle varsa kesim flow'u tetikle
       const ilaveVarMi = delta.kalemDeltalari.some((k: any) => k.tip === 'kalem_ekle')
       if (ilaveVarMi && user && initial) {
-        const orderId = initial.id
-        const userId = user.dbId || user.email || user.username || ''
-        const userAd = user.username || ''
-        const { data: tumWOs } = await supabase
-          .from('uys_work_orders')
-          .select('id, op_ad, durum')
-          .eq('order_id', orderId)
-        const kesimVarMi = (tumWOs || []).some((w: any) =>
-          w.durum !== 'iptal' && w.durum !== 'tamamlandi' && isKesimWO({ opAd: w.op_ad })
-        )
-        if (kesimVarMi) {
-          if (myActiveFlow) {
-            await advanceFlow(myActiveFlow.id, 'kesim', { siparisNo: etkinSiparisNo, orderId })
-            toast.success('İlave eklendi — kesim planına yönlendiriliyor')
-            onSaved()
-            navigate('/cutting?flow=' + myActiveFlow.id)
-            return
-          } else {
-            const flow = await startFlow({
-              flowType: 'siparis',
-              initialStep: 'kesim',
-              userId, userAd,
-              orderId,
-              stateData: { siparisNo: etkinSiparisNo, orderId, baslik: `Sipariş ${etkinSiparisNo} (ilave)` },
-            })
-            if (flow) {
+        try {
+          const orderId = initial.id
+          const userId = user.dbId || user.email || user.username || ''
+          const userAd = user.username || ''
+          const { data: tumWOs } = await supabase
+            .from('uys_work_orders')
+            .select('id, op_ad, durum')
+            .eq('order_id', orderId)
+          const kesimVarMi = (tumWOs || []).some((w: any) =>
+            w.durum !== 'iptal' && w.durum !== 'tamamlandi' && isKesimWO({ opAd: w.op_ad })
+          )
+          if (kesimVarMi) {
+            if (myActiveFlow) {
+              await advanceFlow(myActiveFlow.id, 'kesim', { siparisNo: etkinSiparisNo, orderId })
               toast.success('İlave eklendi — kesim planına yönlendiriliyor')
-              onSaved()
-              navigate('/cutting?flow=' + flow.id)
+              setSaving(false); onSaved()
+              navigate('/cutting?flow=' + myActiveFlow.id)
               return
+            } else {
+              const flow = await startFlow({
+                flowType: 'siparis', initialStep: 'kesim',
+                userId, userAd, orderId,
+                stateData: { siparisNo: etkinSiparisNo, orderId, baslik: `Sipariş ${etkinSiparisNo} (ilave)` },
+              })
+              if (flow) {
+                toast.success('İlave eklendi — kesim planına yönlendiriliyor')
+                setSaving(false); onSaved()
+                navigate('/cutting?flow=' + flow.id)
+                return
+              }
             }
+          } else {
+            toast.success('İlave eklendi — MRP yeniden hesaplanmalı', { duration: 5000 })
           }
-        } else {
-          toast.success('İlave eklendi — MRP yeniden hesaplanmalı', { duration: 5000 })
+        } catch (e) {
+          console.error('[ilave flow]', e)
+          // Hata olsa da kaydetme devam eder
         }
       }
     } else {

@@ -301,9 +301,12 @@ export function MRP() {
     // Bu sayede tek sipariş hesaplarken de diğer siparişlerin payı stoktan düşülmüş olur.
     // Teker teker = toplu seçim ile aynı sonucu verir.
     await rezerveleriSenkronla(orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials)
-    await loadAll()  // Yeni rezervler store'a yansısın
+    await loadAll()
+    // v16.71 — loadAll sonrası closure'daki stokHareketler eski kalır; taze store'dan al
+    const tazeStore = (useStore as any).getState()
+    const tazeSH = tazeStore.stokHareketler || stokHareketler
 
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
+    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, tazeSH, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
     setSonuc(result)
     setHesaplandi(true)
     setViewMode('kumülatif')  // v16.71 — hesap sonrası kümülatif'e sıfırla
