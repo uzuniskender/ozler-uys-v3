@@ -300,11 +300,80 @@ export function MRP() {
     // v16.71 — Hesap öncesi tüm aktif siparişler için rezerv senkronize et.
     // Bu sayede tek sipariş hesaplarken de diğer siparişlerin payı stoktan düşülmüş olur.
     // Teker teker = toplu seçim ile aynı sonucu verir.
-    // v16.71 final — Basit ve net hesap. Rezervasyon yok, allocation yok.
-    // Fiziksel stok (rezerv hariç) vs seçili siparişlerin brüt ihtiyacı.
+    // v16.71 — WO hm alanından direkt brüt hesap. BOM bypass.
+    // Brüt = seçili WO'ların hammadde ihtiyacı (YM stok gözetmeden, tam ihtiyaç)
+    // Stok = fiziksel (rezerv hariç)
+    // Net = Brüt - Stok - Yolda
     const stokGercek = stokHareketler.filter((h: any) => h.tip !== 'rezerv') as typeof stokHareketler
 
-    const result = hesaplaMRP(ordIds, orders as any, workOrders, recipes, stokGercek, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
+    // Seçili WO'ları topla
+    const secilenWOlar = workOrders.filter(w => {
+      if (ordIds.length > 0 && !ordIds.includes(w.orderId)) return false
+      if (ymSet && !ymSet.has(w.id)) return false
+      return w.durum !== 'iptal' && w.durum !== 'tamamlandi' && w.durum !== 'kismi_tamam'
+    })
+
+    // hm alanından brüt hesapla (malkod__termin gruplaması)
+    const brutMap: Record<string, { malkod: string; malad: string; tip: string; birim: string; brut: number; termin: string }> = {}
+    for (const wo of secilenWOlar) {
+      const hmList = (wo.hm || []) as any[]
+      if (!hmList.length) continue
+      const uretilen = logs ? logs.filter((l: any) => l.woId === wo.id).reduce((a: number, l: any) => a + (l.qty || 0), 0) : 0
+      const kalanOran = wo.hedef > 0 ? Math.max(0, (wo.hedef - uretilen) / wo.hedef) : 0
+      if (kalanOran === 0) continue
+      const termin = (wo as any).termin || ''
+      for (const hm of hmList) {
+        const malkod = (hm.malkod || '').trim(); if (!malkod) continue
+        const mat = materials.find((m: any) => m.kod === malkod)
+        if (mat?.tip === 'YarıMamul') continue
+        const ihtiyac = (hm.miktarTotal || 0) * kalanOran
+        const key = malkod.toLowerCase() + '__' + termin
+        if (!brutMap[key]) brutMap[key] = { malkod, malad: hm.malad || '', tip: mat?.tip || 'Hammadde', birim: mat?.birim || 'Adet', brut: 0, termin }
+        brutMap[key].brut += ihtiyac
+      }
+    }
+
+    // hm alanı olmayan siparişler için BOM fallback
+    const hmWOOrderIds = new Set(secilenWOlar.filter((w: any) => (w.hm || []).length > 0).map((w: any) => w.orderId))
+    const hmEksikOrderIds = ordIds.filter(id => !hmWOOrderIds.has(id))
+    if (hmEksikOrderIds.length > 0) {
+      const bomResult = hesaplaMRP(hmEksikOrderIds, orders as any, workOrders, recipes, stokGercek, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
+      for (const r of bomResult) {
+        const key = r.malkod.toLowerCase() + '__' + r.termin
+        if (!brutMap[key]) brutMap[key] = { malkod: r.malkod, malad: r.malad, tip: r.tip, birim: r.birim, brut: 0, termin: r.termin }
+        brutMap[key].brut += r.brut
+      }
+    }
+
+    // Stok havuzu ve MRPRow oluştur
+    const stokPool: Record<string, number> = {}
+    const acikTedPool: Record<string, number> = {}
+    const sirali = Object.values(brutMap).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
+    const result: MRPRow[] = []
+    for (const bi of sirali) {
+      bi.brut = Math.ceil(bi.brut)
+      if (bi.brut <= 0) continue
+      const kLower = bi.malkod.toLowerCase()
+      if (stokPool[kLower] === undefined) {
+        stokPool[kLower] = Math.max(0, stokGercek
+          .filter((h: any) => (h.malkod || '').toLowerCase() === kLower)
+          .reduce((a: number, h: any) => h.tip === 'giris' ? a + h.miktar : a - h.miktar, 0))
+        acikTedPool[kLower] = tedarikler
+          .filter((t: any) => (t.malkod || '').toLowerCase() === kLower && !t.geldi)
+          .reduce((a: number, t: any) => a + (t.miktar || 0), 0)
+      }
+      const stokDus = Math.min(stokPool[kLower], bi.brut)
+      stokPool[kLower] -= stokDus
+      const kalanHm = bi.brut - stokDus
+      const acikDus = Math.min(acikTedPool[kLower], kalanHm)
+      acikTedPool[kLower] -= acikDus
+      const net = Math.max(0, bi.brut - stokDus - acikDus)
+      result.push({
+        malkod: bi.malkod, malad: bi.malad, tip: bi.tip, birim: bi.birim,
+        brut: bi.brut, stok: stokDus, rezerve: 0, acikTedarik: acikDus, net,
+        durum: net > 0 ? 'eksik' : 'yeterli', termin: bi.termin,
+      })
+    }
     setSonuc(result)
     setHesaplandi(true)
     setViewMode('kumülatif')  // v16.71 — hesap sonrası kümülatif'e sıfırla

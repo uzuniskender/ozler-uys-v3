@@ -65,9 +65,9 @@ function bomPatlaNet(
 ): Record<string, { malkod: string; malad: string; tip: string; birim: string; miktar: number }> {
   if (derinlik > 10) return {}
 
-  // v16.71 — YM stok düşümü kaldırıldı. Brüt ihtiyaç her zaman tam gösterilir.
-  // Stok ne olursa olsun, üretilecek miktara göre hammadde ihtiyacı hesaplanır.
-  const netAdet = Math.max(0, adet)
+  // YM stoku düş
+  const ymStok = Math.floor(getStok(mamulKod, stokHareketler))
+  const netAdet = Math.max(0, adet - (derinlik > 0 ? ymStok : 0)) // Kök seviyede stok düşme
   if (netAdet <= 0 && derinlik > 0) return {}
 
   const sonuc: Record<string, { malkod: string; malad: string; tip: string; birim: string; miktar: number }> = {}
