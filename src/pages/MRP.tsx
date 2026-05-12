@@ -810,7 +810,6 @@ export function MRP() {
                 <th className="text-left px-3 py-2">Malzeme Kodu</th><th className="text-left px-3 py-2">Malzeme Adı</th><th className="text-left px-3 py-2">Tip</th>
                 <th className="text-right px-3 py-2">Brüt</th>
                 <th className="text-right px-3 py-2">Serbest Stok</th>
-                <th className="text-right px-3 py-2 text-amber/70">Rezerve</th>
                 <th className="text-right px-3 py-2">Açık Ted.</th>
                 <th className="text-right px-3 py-2">Net</th>
                 <th className="text-left px-3 py-2">Termin</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2"></th>
@@ -826,11 +825,6 @@ export function MRP() {
                       <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{s.tip || '—'}</span></td>
                       <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut)}</td>
                       <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-amber/70">
-                        {s.rezerve > 0 ? (
-                          <span title="Bu malzeme başka siparişlere rezerve edilmiş">{Math.round(s.rezerve)}</span>
-                        ) : '—'}
-                      </td>
                       <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{s.acikTedarik > 0 ? Math.round(s.acikTedarik) : '—'}</td>
                       <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td>
                       <td className={`px-3 py-1.5 font-mono text-[11px] ${s.termin && s.termin < today() ? "text-red font-semibold" : "text-zinc-400"}`}>{s.termin || "-"}</td>
@@ -847,14 +841,6 @@ export function MRP() {
                             })
                             loadAll(); toast.success('Tedarik oluşturuldu: ' + s.malkod)
                           }} className="px-2 py-0.5 bg-accent/10 text-accent rounded text-[10px] hover:bg-accent/20">+ Tedarik</button>
-                        )}
-                        {s.durum === 'yeterli' && (
-                          <button onClick={() => setRezervModal({ malkod: s.malkod, malad: s.malad, max: Math.round(s.stok), oneri: Math.round(s.brut) })}
-                            className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">📦 Rezerve Et</button>
-                        )}
-                        {s.durum !== 'yeterli' && s.stok > 0 && (
-                          <button onClick={() => setRezervModal({ malkod: s.malkod, malad: s.malad, max: Math.round(s.stok), oneri: Math.round(Math.min(s.stok, s.net)) })}
-                            className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">📦 Kısmi Rezerve</button>
                         )}
                       </td>
                     </tr>
@@ -904,7 +890,6 @@ export function MRP() {
                             <th className="text-left px-3 py-1.5">Tip</th>
                             <th className="text-right px-3 py-1.5">Brüt</th>
                             <th className="text-right px-3 py-1.5 text-green">Serbest Stok</th>
-                            <th className="text-right px-3 py-1.5 text-amber/70">Rezerve</th>
                             <th className="text-right px-3 py-1.5">Açık Ted.</th>
                             <th className="text-right px-3 py-1.5">Net</th>
                             <th className="text-left px-3 py-1.5">Durum</th>
@@ -919,7 +904,6 @@ export function MRP() {
                                   <td className="px-3 py-1.5"><span className="px-1.5 py-0.5 bg-bg-3 rounded text-[9px] text-zinc-500">{s.tip || '—'}</span></td>
                                   <td className="px-3 py-1.5 text-right font-mono">{Math.round(s.brut)}</td>
                                   <td className="px-3 py-1.5 text-right font-mono text-green">{Math.round(s.stok)}</td>
-                                  <td className="px-3 py-1.5 text-right font-mono text-amber/70">{s.rezerve > 0 ? Math.round(s.rezerve) : '—'}</td>
                                   <td className="px-3 py-1.5 text-right font-mono text-cyan-400">{s.acikTedarik > 0 ? Math.round(s.acikTedarik) : '—'}</td>
                                   <td className={`px-3 py-1.5 text-right font-mono font-semibold ${color}`}>{Math.round(s.net)}</td>
                                   <td className={`px-3 py-1.5 font-semibold ${color}`}>{s.durum === 'yeterli' ? '✓' : '⚠'}</td>
@@ -1094,45 +1078,6 @@ export function MRP() {
         </div>
       )}
 
-      {rezervModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setRezervModal(null)}>
-          <div className="bg-bg-2 border border-border rounded-xl p-6 w-[400px] shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="font-semibold text-lg mb-1">📦 Rezerve Et</h3>
-            <p className="text-zinc-400 text-sm mb-4">{rezervModal.malad}</p>
-            <div className="bg-bg-3 rounded-lg p-3 mb-4 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-zinc-500">Serbest Stok</span><span className="font-mono text-green">{rezervModal.max}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Brüt İhtiyaç</span><span className="font-mono">{rezervModal.oneri}</span></div>
-            </div>
-            <label className="block text-sm text-zinc-400 mb-1">Rezerve Miktarı <span className="text-zinc-600">(0 – {rezervModal.max})</span></label>
-            <input
-              type="number" min={0} max={rezervModal.max}
-              defaultValue={rezervModal.oneri}
-              onChange={e => setRezervMiktar(e.target.value)}
-              className="w-full bg-bg-3 border border-border rounded-lg px-3 py-2 font-mono text-lg mb-4 text-center"
-            />
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => { setRezervModal(null); setRezervMiktar('') }} className="px-4 py-2 rounded-lg bg-bg-3 text-zinc-400 hover:bg-bg-1">İptal</button>
-              <button onClick={async () => {
-                const miktar = parseInt(rezervMiktar === '' ? String(rezervModal.oneri) : rezervMiktar)
-                if (!miktar || miktar <= 0 || miktar > rezervModal.max) { toast.error('Geçersiz miktar'); return }
-                const orderId = [...selectedOrders].find(id => orders.find(o => o.id === id)) || ''
-                const siparisNo = orders.find(o => o.id === orderId)?.siparisNo || 'MRP'
-                await supabase.from('uys_stok_hareketler').insert({
-                  id: 'rezerv-' + orderId + '-' + rezervModal.malkod.replace(/\s+/g, '_').slice(0, 20) + '-' + Date.now(),
-                  malkod: rezervModal.malkod, malad: rezervModal.malad,
-                  miktar, tip: 'rezerv', tarih: today(),
-                  rezerv_order_id: orderId,
-                  aciklama: 'MRP rezerve — ' + siparisNo,
-                })
-                loadAll()
-                setRezervModal(null)
-                setRezervMiktar('')
-                toast.success('Rezerve edildi: ' + rezervModal.malkod + ' (' + miktar + ' adet)')
-              }} className="px-4 py-2 rounded-lg bg-accent text-white hover:opacity-90 font-semibold">Rezerve Et</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
