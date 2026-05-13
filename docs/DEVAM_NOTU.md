@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
-**Tarih:** 11 Mayıs 2026
-**Versiyon:** v16.70
+**Tarih:** 13 Mayıs 2026
+**Versiyon:** v16.72c
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -31,16 +31,38 @@
   - Eksik + stok var → "Kısmi Rezerve" butonu
   - tip='rezerv' için PROD+TEST index eklendi
   - Üretim girişinde (stokTuketim.ts) o siparişin rezervleri otomatik silinir
+- v16.71 — MRP Kümülatif/Sipariş Bazlı toggle + Arşiv modal temel yapısı
+- v16.72 — MRP Arşiv modal genişletme:
+  - Durum filtresi (✓ Tamamlandı / İptal / MRP ✓) + termin aralığı
+  - Tümünü Hesapla butonu (filtrelenmiş siparişler toplu)
+  - 📦 Tedarik geçmişi: her siparişe ait tedarikler (tarih/malzeme/miktar/durum)
+- v16.72b — DevSync sistemi:
+  - uys_dev_files tablosu (PROD+TEST)
+  - src/pages/DevSync.tsx — GitHub'dan dosya sync, Claude değişikliklerini indirme
+  - Route: /#/dev-sync (Admin only)
+  - 107 dosya · 1.8 MB sync edildi — Claude artık repo'ya Supabase üzerinden erişiyor
+- v16.72c — fmtDate stack overflow fix:
+  - utils.ts: return fmtDate(d) → return d.toLocaleDateString(...)
+  - HammaddeRapor haftalık granülaritede çöküyordu
 
 ---
 
 ## Sıradaki görevler
 
-1. MRP Arşiv modal (detaylı filtreleme, tarihsel görünüm)
-2. MRP Kümülatif / Sipariş Bazlı toggle
-3. Operatör mesajları paneli (kapsam belirsiz — beklemede)
-4. Stok anomali raporu (kapsam belirsiz — beklemede)
-5. Normalize veri geçişi
+1. Operatör mesajları paneli (kapsam belirsiz — beklemede)
+2. Stok anomali raporu (kapsam belirsiz — beklemede)
+3. Normalize veri geçişi
+4. DevSync: docs/ klasörünü de sync et (DEVAM_NOTU dahil olsun)
+
+---
+
+## DevSync — yeni iş akışı
+
+- Oturum başında DEVAM_NOTU.md upload gerekmez — Claude Supabase'den okur
+- Dosya upload gerekmez — Claude execute_sql ile okur/yazar
+- Değişiklik sonrası: DevSync → ✏ Claude Değişiklikleri → İndir → git push
+- docs/ de sync edilirse DEVAM_NOTU da otomatik güncel olur
+- DevSync URL: /#/dev-sync
 
 ---
 
@@ -54,4 +76,5 @@
 - npm PATH: `C:\Users\iskender.uzun\nodejs\`
 - Pre-push hook: `.git/hooks/pre-push.cmd` formatında
 - Sandbox build (npm ci + npm run build) zorunlu — patch zip'ten önce
-- Tek takip dosyası: `docs/DEVAM_NOTU.md` — her oturum başında upload et
+- Tek takip dosyası: `docs/DEVAM_NOTU.md` — her oturum başında Claude Supabase'den okur
+- **DevSync aktif:** Claude repo dosyalarını Supabase'den okur (uys_dev_files tablosu)
