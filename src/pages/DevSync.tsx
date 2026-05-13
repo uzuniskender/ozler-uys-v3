@@ -37,6 +37,44 @@ type PendingChange = {
   updated_by: string
 }
 
+
+function GitKomutPanel({ pendingChanges }: { pendingChanges: { path: string; updated_at: string; updated_by: string }[] }) {
+  const REPO = 'C:\\Users\\iskender.uzun\\Documents\\GitHub\\ozler-uys-v3'
+
+  function buildCmd() {
+    const copies = pendingChanges.map(c => {
+      const fn = c.path.split('/').pop() || ''
+      const dest = c.path.split('/').join('\\')
+      return 'Copy-Item "$env:USERPROFILE\\Downloads\\' + fn + '" "' + dest + '" -Force'
+    }).join('\n')
+    const adds = pendingChanges.map(c => c.path).join(' ')
+    const names = pendingChanges.map(c => c.path.split('/').pop()).join(', ')
+    return 'cd ' + REPO + '\ngit pull\n' + copies + '\ngit add ' + adds + '\ngit commit -m "Claude: ' + names + '"\ngit push'
+  }
+
+  return (
+    <div className="mt-4 p-4 bg-bg-2 border border-border rounded-lg">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] text-zinc-500 font-semibold">Önce dosyaları indir, sonra komutu çalıştır:</span>
+        <button
+          onClick={() => {
+            const cmd = buildCmd()
+            navigator.clipboard.writeText(cmd)
+              .then(() => alert('Komut kopyalandı — PowerShell\'e yapıştır'))
+              .catch(() => alert('Kopyalanamadı, aşağıdan seç'))
+          }}
+          className="px-3 py-1 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 rounded text-[10px] font-semibold"
+        >
+          📋 Komutu Kopyala
+        </button>
+      </div>
+      <pre className="text-[10px] font-mono text-zinc-400 leading-5 select-all whitespace-pre-wrap break-all">
+        {buildCmd()}
+      </pre>
+    </div>
+  )
+}
+
 export function DevSync() {
   const [repoFiles, setRepoFiles] = useState<DevFile[]>([])
   const [syncedFiles, setSyncedFiles] = useState<SyncedFile[]>([])
@@ -298,19 +336,9 @@ export function DevSync() {
         </div>
       )}
 
-      {/* Git komutları */}
+      {/* Git komutları + Kopyala butonu */}
       {pendingChanges.length > 0 && (
-        <div className="mt-4 p-4 bg-bg-2 border border-border rounded-lg">
-          <div className="text-[10px] text-zinc-500 font-semibold mb-2">Değişiklikleri uygulamak için:</div>
-          <pre className="text-[10px] font-mono text-zinc-400 leading-5 select-all">
-{`cd C:\\Users\\iskender.uzun\\Documents\\GitHub\\ozler-uys-v3
-git pull
-# İndirilen dosyaları kopyala
-git add ${pendingChanges.map(c => c.path).join(' ')}
-git commit -m "Claude değişiklikleri uygulandı"
-git push`}
-          </pre>
-        </div>
+        <GitKomutPanel pendingChanges={pendingChanges} />
       )}
     </div>
   )
