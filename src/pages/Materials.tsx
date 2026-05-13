@@ -125,8 +125,8 @@ function hesaplaKgm(
     const D = cap, t = kalinlik
     if (D <= 0 || t <= 0 || t >= D / 2) return null
     A = Math.PI * t * (D - t)
-  } else if (tip === 'MIL') {
-    // Dolu silindir
+  } else if (tip === 'MIL' || tip === 'TIEROD') {
+    // Dolu silindir (TIEROD: dis dibi capi)
     const d = cap
     if (d <= 0) return null
     A = Math.PI * (d / 2) ** 2
@@ -613,6 +613,7 @@ function getAlanConfig(hmTip: string): AlanConfig {
   const t = hmTip.toUpperCase()
   if (t === 'BORU')  return { cap: 'Dış Çap (mm)', kalinlik: 'Et Kalınlığı (mm)', uzunluk: true }
   if (t === 'MIL')   return { cap: 'Çap (mm)', uzunluk: true }
+  if (t === 'TIEROD') return { cap: 'Dis Dibi Capi — d1 (mm)', uzunluk: true }
   if (t === 'ALTK')  return { boy: 'Genişlik Açıklığı — s (mm)', uzunluk: true }
   if (t === 'KARE')  return { boy: 'Kenar (mm)', uzunluk: true }
   if (t === 'KSB')   return { boy: 'Boy — h (mm)', en: 'En — b (mm)', kalinlik: 'Et Kalınlığı (mm)', uzunluk: true }
