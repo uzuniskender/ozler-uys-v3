@@ -28,23 +28,20 @@ function isoDate(d: Date) {
 }
 
 function grupKey(tarih: string, gran: Granularite): string {
-  const d = new Date(tarih)
   if (gran === 'gunluk') return tarih
   if (gran === 'haftalik') {
     const sw = startOfWeek(new Date(tarih))
     return isoDate(sw)
   }
-  return tarih.slice(0, 7) // YYYY-MM
+  return tarih.slice(0, 7)
 }
 
 function grupLabel(key: string, gran: Granularite): string {
-  if (gran === 'gunluk') {
-    return fmtDate(key)
-  }
+  if (gran === 'gunluk') return fmtDate(key)
   if (gran === 'haftalik') {
     const d = new Date(key)
     const end = new Date(d); end.setDate(d.getDate() + 6)
-    return `${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} – ${fmtDate(end)}`
+    return `${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} \u2013 ${fmtDate(end)}`
   }
   const [y, m] = key.split('-')
   return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })
@@ -72,9 +69,10 @@ export function HammaddeRapor() {
         .lte('tarih', bitis)
         .order('tarih', { ascending: false })
       if (error) { toast.error('Veri yuklenemedi: ' + error.message); setLoading(false); return }
-      // Supabase ROUND() sonuclarini string olarak dondurebilir -- Number() ile parse et
+      // Supabase numeric alanlari string dondurebilir, Number() ile normalize et
       setRows((data || []).map(r => ({
         ...r,
+        malad: r.malad ?? r.malkod ?? '',
         adet: Number(r.adet),
         toplam_metre: Number(r.toplam_metre),
         toplam_kg: Number(r.toplam_kg),
@@ -84,21 +82,18 @@ export function HammaddeRapor() {
     load()
   }, [baslangic, bitis])
 
-  // Malzeme gruplari (adin ilk kelimesi)
   const gruplar = useMemo(() => {
-    const s = new Set(rows.map(r => r.malad.split(' ')[0]))
+    const s = new Set(rows.map(r => (r.malad || '').split(' ')[0]).filter(Boolean))
     return Array.from(s).sort()
   }, [rows])
 
-  // Filtre uygula
   const filtrelenmis = useMemo(() => rows.filter(r => {
-    if (malkodFiltre && !r.malkod.toLowerCase().includes(malkodFiltre.toLowerCase()) &&
-        !r.malad.toLowerCase().includes(malkodFiltre.toLowerCase())) return false
-    if (grupFiltre && !r.malad.startsWith(grupFiltre)) return false
+    if (malkodFiltre && !(r.malkod || '').toLowerCase().includes(malkodFiltre.toLowerCase()) &&
+        !(r.malad || '').toLowerCase().includes(malkodFiltre.toLowerCase())) return false
+    if (grupFiltre && !(r.malad || '').startsWith(grupFiltre)) return false
     return true
   }), [rows, malkodFiltre, grupFiltre])
 
-  // Granularite gruplama
   const grouped = useMemo(() => {
     const map: Record<string, { tarihLabel: string; malkodler: Record<string, TuketimRow & { key: string }> }> = {}
     for (const r of filtrelenmis) {
@@ -116,7 +111,6 @@ export function HammaddeRapor() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
   }, [filtrelenmis, gran])
 
-  // Toplamlar
   const toplamlar = useMemo(() => ({
     adet: filtrelenmis.reduce((a, r) => a + r.adet, 0),
     metre: filtrelenmis.reduce((a, r) => a + r.toplam_metre, 0),
@@ -217,7 +211,7 @@ export function HammaddeRapor() {
             <Package size={14} className="text-accent" />
             <span className="text-[10px] text-zinc-500 uppercase">Bar Adedi</span>
           </div>
-          <div className="text-2xl font-bold">{loading ? '—' : toplamlar.adet.toLocaleString('tr-TR')}</div>
+          <div className="text-2xl font-bold">{loading ? '\u2014' : toplamlar.adet.toLocaleString('tr-TR')}</div>
           <div className="text-[10px] text-zinc-500 mt-1">secili donem</div>
         </div>
         <div className="bg-bg-2 border border-border rounded-lg p-4">
@@ -225,7 +219,7 @@ export function HammaddeRapor() {
             <BarChart2 size={14} className="text-blue-400" />
             <span className="text-[10px] text-zinc-500 uppercase">Toplam Metre</span>
           </div>
-          <div className="text-2xl font-bold">{loading ? '—' : toplamlar.metre.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-zinc-400">m</span></div>
+          <div className="text-2xl font-bold">{loading ? '\u2014' : toplamlar.metre.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-zinc-400">m</span></div>
           <div className="text-[10px] text-zinc-500 mt-1">secili donem</div>
         </div>
         <div className="bg-bg-2 border border-border rounded-lg p-4">
@@ -234,7 +228,7 @@ export function HammaddeRapor() {
             <span className="text-[10px] text-zinc-500 uppercase">Toplam Agirlik</span>
           </div>
           <div className="text-2xl font-bold">
-            {loading ? '—' : toplamlar.kg >= 1000
+            {loading ? '\u2014' : toplamlar.kg >= 1000
               ? `${(toplamlar.kg / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} t`
               : `${Math.round(toplamlar.kg).toLocaleString('tr-TR')} kg`}
           </div>
