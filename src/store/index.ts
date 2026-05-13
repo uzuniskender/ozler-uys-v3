@@ -58,6 +58,7 @@ const M = {
     opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string,
     revizyon: (r.revizyon as number) || 0, revizyonTarihi: (r.revizyon_tarihi || '') as string,
     oncekiId: (r.onceki_id || '') as string, aktif: r.aktif !== false,
+    birimKgMetre: (r.birim_kg_metre as number | null) ?? undefined,
   }),
   operation: (r: Record<string, unknown>): Operation => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,

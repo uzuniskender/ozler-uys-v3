@@ -138,6 +138,7 @@ export interface Material {
   revizyonTarihi: string
   oncekiId: string
   aktif: boolean
+  birimKgMetre?: number  // v16.78
 }
 
 export interface HmTip {
@@ -426,6 +427,7 @@ export interface Kullanici {
   sifre: string
   rol: 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
   aktif: boolean
+  birimKgMetre?: number  // v16.78
 }
 
 // v15.31 — Bar Model: açık bar havuzu
