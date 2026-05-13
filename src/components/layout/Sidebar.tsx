@@ -7,6 +7,7 @@ import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import { isActive as isOrderActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
+  RefreshCw,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
   Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity, Weight, FileSearch, Monitor
 } from 'lucide-react'
@@ -52,6 +53,7 @@ const NAV = [
     { path: '/logs', label: 'Loglar', icon: Activity, guest: false },
     { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
     { path: '/backup', label: 'Yedekler', icon: Save, guest: false },
+    { path: '/dev-sync', label: 'DevSync', icon: RefreshCw, guest: false, adminOnly: true },
     { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
   ]},
 ]
