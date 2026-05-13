@@ -71,14 +71,20 @@ export function HammaddeRapor() {
         .gte('tarih', baslangic)
         .lte('tarih', bitis)
         .order('tarih', { ascending: false })
-      if (error) { toast.error('Veri yüklenemedi: ' + error.message); setLoading(false); return }
-      setRows((data || []) as TuketimRow[])
+      if (error) { toast.error('Veri yuklenemedi: ' + error.message); setLoading(false); return }
+      // Supabase ROUND() sonuclarini string olarak dondurebilir -- Number() ile parse et
+      setRows((data || []).map(r => ({
+        ...r,
+        adet: Number(r.adet),
+        toplam_metre: Number(r.toplam_metre),
+        toplam_kg: Number(r.toplam_kg),
+      })) as TuketimRow[])
       setLoading(false)
     }
     load()
   }, [baslangic, bitis])
 
-  // Malzeme grupları (adın ilk kelimesi)
+  // Malzeme gruplari (adin ilk kelimesi)
   const gruplar = useMemo(() => {
     const s = new Set(rows.map(r => r.malad.split(' ')[0]))
     return Array.from(s).sort()
@@ -92,7 +98,7 @@ export function HammaddeRapor() {
     return true
   }), [rows, malkodFiltre, grupFiltre])
 
-  // Granülarite gruplama
+  // Granularite gruplama
   const grouped = useMemo(() => {
     const map: Record<string, { tarihLabel: string; malkodler: Record<string, TuketimRow & { key: string }> }> = {}
     for (const r of filtrelenmis) {
@@ -123,17 +129,16 @@ export function HammaddeRapor() {
     const exportRows = filtrelenmis.map(r => ({
       'Tarih': r.tarih,
       'Malzeme Kodu': r.malkod,
-      'Malzeme Adı': r.malad,
+      'Malzeme Adi': r.malad,
       'Bar Adedi': r.adet,
       'Toplam (m)': r.toplam_metre,
       'Toplam (kg)': r.toplam_kg,
       'kg/m Eksik': r.kg_eksik ? 'Evet' : '',
     }))
-    // Toplam satırı
     exportRows.push({
       'Tarih': 'TOPLAM',
       'Malzeme Kodu': '',
-      'Malzeme Adı': '',
+      'Malzeme Adi': '',
       'Bar Adedi': toplamlar.adet,
       'Toplam (m)': Math.round(toplamlar.metre * 1000) / 1000,
       'Toplam (kg)': Math.round(toplamlar.kg),
@@ -142,50 +147,48 @@ export function HammaddeRapor() {
     const ws = XLSX.utils.json_to_sheet(exportRows)
     ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 48 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Hammadde Tüketim')
+    XLSX.utils.book_append_sheet(wb, ws, 'Hammadde Tuketim')
     XLSX.writeFile(wb, `hammadde_tuketim_${baslangic}_${bitis}.xlsx`)
     toast.success('Excel indirildi')
   }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Başlık */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <BarChart2 size={20} className="text-accent" />
-            Hammadde Tüketim Raporu
+            Hammadde Tuketim Raporu
           </h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Tüketilen bar bazlı hammadde özeti</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Tuketilen bar bazli hammadde ozeti</p>
         </div>
         <button
           onClick={exportExcel}
           disabled={loading || filtrelenmis.length === 0}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-green/10 border border-green/25 text-green rounded-lg text-xs hover:bg-green/20 disabled:opacity-40"
         >
-          <Download size={13} /> Excel İndir
+          <Download size={13} /> Excel Indir
         </button>
       </div>
 
-      {/* Filtreler */}
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-zinc-500 uppercase">Başlangıç</label>
+          <label className="text-[10px] text-zinc-500 uppercase">Baslangic</label>
           <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)}
             className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-zinc-500 uppercase">Bitiş</label>
+          <label className="text-[10px] text-zinc-500 uppercase">Bitis</label>
           <input type="date" value={bitis} onChange={e => setBitis(e.target.value)}
             className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-zinc-500 uppercase">Granülarite</label>
+          <label className="text-[10px] text-zinc-500 uppercase">Granularite</label>
           <div className="flex rounded overflow-hidden border border-border">
             {(['gunluk', 'haftalik', 'aylik'] as Granularite[]).map(g => (
               <button key={g} onClick={() => setGran(g)}
                 className={`px-3 py-1.5 text-xs ${gran === g ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
-                {g === 'gunluk' ? 'Günlük' : g === 'haftalik' ? 'Haftalık' : 'Aylık'}
+                {g === 'gunluk' ? 'Gunluk' : g === 'haftalik' ? 'Haftalik' : 'Aylik'}
               </button>
             ))}
           </div>
@@ -194,7 +197,7 @@ export function HammaddeRapor() {
           <label className="text-[10px] text-zinc-500 uppercase">Malzeme Grubu</label>
           <select value={grupFiltre} onChange={e => setGrupFiltre(e.target.value)}
             className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent">
-            <option value="">Tümü</option>
+            <option value="">Tumu</option>
             {gruplar.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
@@ -208,7 +211,6 @@ export function HammaddeRapor() {
         </div>
       </div>
 
-      {/* KPI Kartları */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -216,7 +218,7 @@ export function HammaddeRapor() {
             <span className="text-[10px] text-zinc-500 uppercase">Bar Adedi</span>
           </div>
           <div className="text-2xl font-bold">{loading ? '—' : toplamlar.adet.toLocaleString('tr-TR')}</div>
-          <div className="text-[10px] text-zinc-500 mt-1">seçili dönem</div>
+          <div className="text-[10px] text-zinc-500 mt-1">secili donem</div>
         </div>
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -224,12 +226,12 @@ export function HammaddeRapor() {
             <span className="text-[10px] text-zinc-500 uppercase">Toplam Metre</span>
           </div>
           <div className="text-2xl font-bold">{loading ? '—' : toplamlar.metre.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-zinc-400">m</span></div>
-          <div className="text-[10px] text-zinc-500 mt-1">seçili dönem</div>
+          <div className="text-[10px] text-zinc-500 mt-1">secili donem</div>
         </div>
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <Weight size={14} className="text-amber" />
-            <span className="text-[10px] text-zinc-500 uppercase">Toplam Ağırlık</span>
+            <span className="text-[10px] text-zinc-500 uppercase">Toplam Agirlik</span>
           </div>
           <div className="text-2xl font-bold">
             {loading ? '—' : toplamlar.kg >= 1000
@@ -244,12 +246,11 @@ export function HammaddeRapor() {
         </div>
       </div>
 
-      {/* Tablo */}
       {loading ? (
-        <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-xs text-zinc-500">Yükleniyor...</div>
+        <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-xs text-zinc-500">Yukleniyor...</div>
       ) : grouped.length === 0 ? (
         <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-xs text-zinc-500">
-          Seçili dönemde tüketim kaydı yok.
+          Secili donemde tuketim kaydi yok.
         </div>
       ) : (
         <div className="space-y-3">
@@ -260,7 +261,6 @@ export function HammaddeRapor() {
             const topAdet = satirlar.reduce((a, r) => a + r.adet, 0)
             return (
               <div key={gk} className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-                {/* Grup başlık */}
                 <div className="flex items-center justify-between px-4 py-2.5 bg-bg-3 border-b border-border">
                   <div className="flex items-center gap-2">
                     <Calendar size={13} className="text-accent" />
@@ -274,14 +274,13 @@ export function HammaddeRapor() {
                       : `${Math.round(topKg)} kg`}</span>}
                   </div>
                 </div>
-                {/* Satırlar */}
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-[10px] text-zinc-500 uppercase border-b border-border">
                       <th className="px-4 py-2 text-left">Malzeme</th>
                       <th className="px-3 py-2 text-right">Bar</th>
                       <th className="px-3 py-2 text-right">Metre</th>
-                      <th className="px-3 py-2 text-right">Ağırlık</th>
+                      <th className="px-3 py-2 text-right">Agirlik</th>
                     </tr>
                   </thead>
                   <tbody>
