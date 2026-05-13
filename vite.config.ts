@@ -14,6 +14,10 @@ export default defineConfig(({ command, mode }) => ({
     },
   },
   build: {
+    minify: 'esbuild',
+    esbuild: {
+      drop: ['console', 'debugger'],
+    },
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
