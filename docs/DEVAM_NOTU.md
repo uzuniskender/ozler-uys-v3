@@ -57,6 +57,14 @@
 - v16.73b — DevSync GitHub Actions (her push'ta otomatik sync)
 - v16.73b — fmtDate stack overflow fix (utils.ts)
 
+## Bu oturumda tamamlananlar (devam)
+
+- v16.74 — Stok girişinde mrp_state_order + mrp_durum otomatik invalidate (2 DB trigger)
+- v16.75 — MRP badge sadece gerçek eksik sayar (isOrderMrpPending: bekliyor false positive giderildi)
+- S26A_03150 ve S26A_03108 state düzeltmeleri (stale mrp_state_order temizlendi)
+- DevSync: 📋 Komutu Kopyala butonu eklendi
+- GitHubActions: her push'ta otomatik Supabase sync
+
 ## Sıradaki görevler
 
 1. Güvenlik konuşması (Buket notu)
