@@ -53,7 +53,7 @@ const NAV = [
     { path: '/logs', label: 'Loglar', icon: Activity, guest: false },
     { path: '/data', label: 'Veri Yönetimi', icon: Database, guest: false },
     { path: '/backup', label: 'Yedekler', icon: Save, guest: false },
-    { path: '/dev-sync', label: 'DevSync', icon: RefreshCw, guest: false, adminOnly: true },
+    { path: '/dev-sync', label: '🔄 DevSync', icon: RefreshCw, guest: false, adminOnly: true },
     { path: '/operator', label: 'Operatör Paneli', icon: HardHat, guest: false },
   ]},
 ]
