@@ -47,12 +47,20 @@
 
 ---
 
+## Bu oturumda tamamlananlar (devam)
+
+- v16.73 — Sidebar DevSync menüsü (Admin only, RefreshCw icon)
+- v16.73 — Google OAuth fix (Supabase provider aktif edildi, redirect URI güncellendi)
+- v16.73 — stoktan karşıla WO kontrolü aktif:
+  - Sipariş formunda stoktan: true olan kalemler için WO açılmıyor
+  - OrderDetailModal kalem listesinde "Stoktan" yeşil badge
+- v16.73b — DevSync GitHub Actions (her push'ta otomatik sync)
+- v16.73b — fmtDate stack overflow fix (utils.ts)
+
 ## Sıradaki görevler
 
-1. Operatör mesajları paneli (kapsam belirsiz — beklemede)
-2. Stok anomali raporu (kapsam belirsiz — beklemede)
-3. Normalize veri geçişi
-4. DevSync: docs/ klasörünü de sync et (DEVAM_NOTU dahil olsun)
+1. Güvenlik konuşması (Buket notu)
+2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
 
 ---
 
