@@ -1,9 +1,9 @@
 // .github/scripts/devsync.js
 // Her push'ta değişen dosyaları Supabase uys_dev_files tablosuna sync eder.
 
-const { execSync } = require('child_process')
-const fs = require('fs')
-const path = require('path')
+import { execSync } from 'child_process'
+import { readFileSync, existsSync, statSync } from 'fs'
+import { join } from 'path'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_KEY
@@ -22,9 +22,8 @@ function shouldSync(filePath) {
 }
 
 async function upsertFile(filePath) {
-  const fullPath = path.join(process.cwd(), filePath)
-  if (!fs.existsSync(fullPath)) {
-    // Silinen dosya — Supabase'den de kaldır
+  const fullPath = join(process.cwd(), filePath)
+  if (!existsSync(fullPath)) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/uys_dev_files?path=eq.${encodeURIComponent(filePath)}`, {
       method: 'DELETE',
       headers: {
@@ -37,8 +36,8 @@ async function upsertFile(filePath) {
     return
   }
 
-  const content = fs.readFileSync(fullPath, 'utf-8')
-  const size_bytes = fs.statSync(fullPath).size
+  const content = readFileSync(fullPath, 'utf-8')
+  const size_bytes = statSync(fullPath).size
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/uys_dev_files`, {
     method: 'POST',
