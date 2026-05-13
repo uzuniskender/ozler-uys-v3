@@ -37,6 +37,7 @@ import Chat from '@/pages/Chat'
 import { HmTipleri } from '@/pages/HmTipleri'
 import { Backup } from '@/pages/Backup'
 import { StokLog } from '@/pages/StokLog'
+import { DevSync } from '@/pages/DevSync'
 import { ActiveWorkPanel } from '@/pages/ActiveWorkPanel'
 import { ensureDailyAutoBackup } from '@/lib/backup'
 
@@ -84,6 +85,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
           <Route path="/backup" element={<Backup />} />
           <Route path="/stok-log" element={<StokLog />} />
           <Route path="/active-work" element={<ActiveWorkPanel />} />
+          <Route path="/dev-sync" element={<DevSync />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

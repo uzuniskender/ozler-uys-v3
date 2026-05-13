@@ -52,6 +52,7 @@ const STORE_WHITELIST = new Set([
   'uys_pending_flows',       // Pending flows — pendingFlow.ts kendi fetch ediyor.
   'uys_test_runs',           // Test runs — TestMode.tsx kendi fetch ediyor.
   'uys_session_memory',      // v16.72 — Claude session memory. Oturum başında doğrudan supabase ile okunur, global state'e girmez.
+  'uys_dev_files',           // v16.72 — DevSync repo dosyaları. DevSync.tsx kendi fetch ediyor, store'a girmez.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -69,6 +70,7 @@ const DATA_MGMT_WHITELIST = new Set([
 
   'uys_audit_log',                // v16.51 — Audit log. Backup'a girmez (audit kayıtları restore edilemez).
   'uys_session_memory',           // v16.72 — Claude session memory. Runtime state, backup gerekmez; Claude her oturumda yeniden yazar.
+  'uys_dev_files',                // v16.72 — DevSync repo dosyaları. Repo'dan yeniden çekilebilir, backup gereksiz.
 ])
 
 // ═══════════════════════════════════════════════════════════════
