@@ -41,6 +41,11 @@ export function MRP() {
   const [arsivSearch, setArsivSearch] = useState('')
   const [arsivSonucMap, setArsivSonucMap] = useState<Record<string, MRPRow[]>>({})
   const [arsivHesaplaniyor, setArsivHesaplaniyor] = useState<Set<string>>(new Set())
+  // v16.72 — Arşiv detaylı filtreler + tedarik geçmişi
+  const [arsivDurumFilter, setArsivDurumFilter] = useState<Set<string>>(new Set())
+  const [arsivTerminBas, setArsivTerminBas] = useState('')
+  const [arsivTerminBit, setArsivTerminBit] = useState('')
+  const [arsivExpandedTedarik, setArsivExpandedTedarik] = useState<Set<string>>(new Set())
 
   // v15.50a.3 — Default 'eksik': hesap sonrasi eksik satirlar gorunur
   const [viewFilter, setViewFilter] = useState<'eksik' | 'yeterli' | 'tum'>('eksik')
@@ -994,10 +999,43 @@ export function MRP() {
                 <h2 className="font-semibold text-base">📁 MRP Arşivi</h2>
                 <p className="text-xs text-zinc-500 mt-0.5">{arsivOrders.length} sipariş · tamamlanan / mrp_tamam</p>
               </div>
-              <button onClick={() => setShowArsivModal(false)} className="text-zinc-500 hover:text-white text-lg">✕</button>
+              <div className="flex items-center gap-2">
+                {/* v16.72 — Toplu MRP Hesapla */}
+                {(() => {
+                  const filtreliIds = arsivOrders.filter(o => {
+                    if (arsivSearch) { const q = arsivSearch.toLowerCase(); if (!((o.siparisNo||'').toLowerCase().includes(q)||(o.musteri||'').toLowerCase().includes(q)||(o.mamulAd||'').toLowerCase().includes(q))) return false }
+                    if (arsivDurumFilter.size > 0) { const match = (arsivDurumFilter.has('tamamlandi') && (o.state==='tamamlandi'||o.state==='kapali')) || (arsivDurumFilter.has('iptal') && o.state==='iptal') || (arsivDurumFilter.has('mrp_tamam') && (o.mrpDurum==='tamam'||o.mrpDurum==='tamamlandi')); if (!match) return false }
+                    if (arsivTerminBas && o.termin && o.termin < arsivTerminBas) return false
+                    if (arsivTerminBit && o.termin && o.termin > arsivTerminBit) return false
+                    return true
+                  }).map(o => o.id)
+                  const bekleyen = filtreliIds.filter(id => !arsivSonucMap[id] && !arsivHesaplaniyor.has(id))
+                  if (bekleyen.length === 0) return null
+                  return (
+                    <button
+                      onClick={async () => {
+                        const cpMapped = cuttingPlans.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum||'', gerekliAdet: p.gerekliAdet||0, satirlar: p.satirlar||[] }))
+                        setArsivHesaplaniyor(prev => new Set([...prev, ...bekleyen]))
+                        for (const oid of bekleyen) {
+                          try {
+                            const r = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs, true)
+                            setArsivSonucMap(prev => ({ ...prev, [oid]: r }))
+                          } finally {
+                            setArsivHesaplaniyor(prev => { const n = new Set(prev); n.delete(oid); return n })
+                          }
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent rounded text-[10px] font-semibold"
+                    >
+                      ▶▶ Tümünü Hesapla ({bekleyen.length})
+                    </button>
+                  )
+                })()}
+                <button onClick={() => setShowArsivModal(false)} className="text-zinc-500 hover:text-white text-lg">✕</button>
+              </div>
             </div>
-            {/* Arama */}
-            <div className="px-5 py-3 border-b border-border">
+            {/* v16.72 — Filtreler */}
+            <div className="px-5 py-3 border-b border-border space-y-2">
               <input
                 type="text"
                 placeholder="Sipariş no, müşteri veya ürün ara..."
@@ -1005,28 +1043,49 @@ export function MRP() {
                 onChange={e => setArsivSearch(e.target.value)}
                 className="w-full px-3 py-2 bg-bg-3 border border-border rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent"
               />
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Durum filtresi */}
+                <div className="flex items-center gap-1.5">
+                  {([['tamamlandi','✓ Tamamlandı','text-green','bg-green/10'],['iptal','İptal','text-zinc-400','bg-zinc-700/50'],['mrp_tamam','MRP ✓','text-accent','bg-accent/10']] as [string,string,string,string][]).map(([key,label,tc,bg]) => (
+                    <button key={key}
+                      onClick={() => setArsivDurumFilter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
+                      className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${arsivDurumFilter.has(key) ? `${bg} ${tc} border-current` : 'bg-bg-3 text-zinc-500 border-border hover:text-white'}`}>
+                      {label}
+                    </button>
+                  ))}
+                  {arsivDurumFilter.size > 0 && <button onClick={() => setArsivDurumFilter(new Set())} className="text-[10px] text-zinc-600 hover:text-zinc-400">✕ Temizle</button>}
+                </div>
+                {/* Termin aralığı */}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <label className="text-[10px] text-zinc-500">Termin</label>
+                  <input type="date" value={arsivTerminBas} onChange={e => setArsivTerminBas(e.target.value)}
+                    className="px-2 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-300 focus:outline-none focus:border-accent" />
+                  <span className="text-[10px] text-zinc-600">–</span>
+                  <input type="date" value={arsivTerminBit} onChange={e => setArsivTerminBit(e.target.value)}
+                    className="px-2 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-300 focus:outline-none focus:border-accent" />
+                  {(arsivTerminBas || arsivTerminBit) && <button onClick={() => { setArsivTerminBas(''); setArsivTerminBit('') }} className="text-[10px] text-zinc-600 hover:text-zinc-400">✕</button>}
+                </div>
+              </div>
             </div>
             {/* Arşiv siparişler tablosu */}
             <div className="overflow-y-auto max-h-[60vh]">
-              {arsivOrders.filter(o => {
-                if (!arsivSearch) return true
-                const q = arsivSearch.toLowerCase()
-                return (o.siparisNo || '').toLowerCase().includes(q)
-                  || (o.musteri || '').toLowerCase().includes(q)
-                  || (o.mamulAd || '').toLowerCase().includes(q)
-              }).length === 0 && (
-                <div className="p-8 text-center text-sm text-zinc-500">Sonuç bulunamadı.</div>
-              )}
-              {arsivOrders.filter(o => {
-                if (!arsivSearch) return true
-                const q = arsivSearch.toLowerCase()
-                return (o.siparisNo || '').toLowerCase().includes(q)
-                  || (o.musteri || '').toLowerCase().includes(q)
-                  || (o.mamulAd || '').toLowerCase().includes(q)
-              }).map(o => {
+              {(() => {
+                // v16.72 — tek filter tanımı (durum + tarih + metin)
+                const arsivFiltered = arsivOrders.filter(o => {
+                  if (arsivSearch) { const q = arsivSearch.toLowerCase(); if (!((o.siparisNo||'').toLowerCase().includes(q)||(o.musteri||'').toLowerCase().includes(q)||(o.mamulAd||'').toLowerCase().includes(q))) return false }
+                  if (arsivDurumFilter.size > 0) { const m = (arsivDurumFilter.has('tamamlandi')&&(o.state==='tamamlandi'||o.state==='kapali'))||(arsivDurumFilter.has('iptal')&&o.state==='iptal')||(arsivDurumFilter.has('mrp_tamam')&&(o.mrpDurum==='tamam'||o.mrpDurum==='tamamlandi')); if (!m) return false }
+                  if (arsivTerminBas && o.termin && o.termin < arsivTerminBas) return false
+                  if (arsivTerminBit && o.termin && o.termin > arsivTerminBit) return false
+                  return true
+                })
+                if (arsivFiltered.length === 0) return <div className="p-8 text-center text-sm text-zinc-500">Sonuç bulunamadı.</div>
+                return arsivFiltered.map(o => {
                 const rows = arsivSonucMap[o.id]
                 const loading = arsivHesaplaniyor.has(o.id)
                 const eksikCount = rows ? rows.filter(r => r.net > 0).length : null
+                // v16.72 — Bu siparişe ait tedarikler
+                const sipTedarikler = tedarikler.filter((t: any) => t.order_id === o.id).sort((a: any, b: any) => (b.tarih||'').localeCompare(a.tarih||''))
+                const tedarikAcik = arsivExpandedTedarik.has(o.id)
                 return (
                   <div key={o.id} className="border-b border-border/30">
                     {/* Sipariş satırı */}
@@ -1050,8 +1109,18 @@ export function MRP() {
                           {o.musteri}{o.mamulAd ? ' · ' + o.mamulAd : ''}
                         </div>
                       </div>
-                      {/* MRP hesapla butonu */}
+                      {/* Sağ taraf butonlar */}
                       <div className="flex items-center gap-2 shrink-0">
+                        {/* v16.72 — Tedarik geçmişi butonu */}
+                        {sipTedarikler.length > 0 && (
+                          <button
+                            onClick={() => setArsivExpandedTedarik(prev => { const n = new Set(prev); n.has(o.id) ? n.delete(o.id) : n.add(o.id); return n })}
+                            className={`px-2 py-1 rounded text-[10px] border transition-colors ${tedarikAcik ? 'bg-cyan-400/10 text-cyan-400 border-cyan-400/30' : 'bg-bg-3 text-zinc-500 border-border hover:text-white'}`}
+                            title="Tedarik geçmişini göster"
+                          >
+                            📦 {sipTedarikler.length}
+                          </button>
+                        )}
                         {rows && eksikCount !== null && (
                           <span className={`text-[10px] px-2 py-0.5 rounded ${eksikCount > 0 ? 'bg-red/10 text-red' : 'bg-green/10 text-green'}`}>
                             {eksikCount > 0 ? `⚠ ${eksikCount} eksik` : '✓ Yeterli'}
@@ -1078,6 +1147,35 @@ export function MRP() {
                         </button>
                       </div>
                     </div>
+                    {/* v16.72 — Tedarik geçmişi paneli */}
+                    {tedarikAcik && sipTedarikler.length > 0 && (
+                      <div className="px-4 pb-3 bg-cyan-400/5 border-b border-cyan-400/10">
+                        <div className="text-[10px] text-cyan-400 font-semibold py-1.5 mb-1">📦 Tedarik Geçmişi</div>
+                        <table className="w-full text-xs">
+                          <thead><tr className="text-zinc-600 border-b border-border">
+                            <th className="text-left py-1 pr-3">Tarih</th>
+                            <th className="text-left py-1 pr-3">Malzeme</th>
+                            <th className="text-right py-1 pr-3">Miktar</th>
+                            <th className="text-left py-1 pr-3">Durum</th>
+                            <th className="text-left py-1">Geldi</th>
+                          </tr></thead>
+                          <tbody>
+                            {sipTedarikler.map((t: any) => (
+                              <tr key={t.id} className="border-b border-border/20">
+                                <td className="py-1 pr-3 font-mono text-zinc-500 text-[10px]">{t.tarih || '—'}</td>
+                                <td className="py-1 pr-3">
+                                  <span className="font-mono text-accent text-[10px]">{t.malkod}</span>
+                                  {t.malad && <span className="text-zinc-400 ml-1.5">{t.malad}</span>}
+                                </td>
+                                <td className="py-1 pr-3 text-right font-mono">{t.miktar ?? '—'}</td>
+                                <td className="py-1 pr-3 text-zinc-400">{t.durum || '—'}</td>
+                                <td className="py-1">{t.geldi ? <span className="text-green text-[10px]">✓ Geldi</span> : <span className="text-zinc-500 text-[10px]">Bekliyor</span>}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                     {/* MRP sonuç satırları (inline, açılır) */}
                     {rows && rows.length > 0 && (
                       <div className="px-4 pb-3">
@@ -1118,7 +1216,8 @@ export function MRP() {
                     )}
                   </div>
                 )
-              })}
+              })
+            })()}
             </div>
           </div>
         </div>
