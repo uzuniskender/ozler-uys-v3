@@ -735,12 +735,16 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
       let woTotal = 0
       for (const k of kalemler) {
+        // v16.73 — stoktan: true ise WO açılmaz, mamul stoktan karşılanır
+        if (k.stoktan) continue
         // v15.86 — BUG FIX: siparisNo.trim() yerine etkinSiparisNo kullan.
         // Tekil IE modunda siparisNo state bos kaliyordu, etkinSiparisNo ise IE-AUTO-...
         // formatini iceriyor. Eski kod ie_no'yu IE--01 / IE--02 (bos prefix) uretiyordu.
         if (k.rcId) { const c = await buildWorkOrders(newId, etkinSiparisNo, k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
       }
-      toast.info(woTotal + ' iş emri oluşturuldu')
+      const stokKarsiSayi = kalemler.filter(k => k.stoktan).length
+      if (stokKarsiSayi > 0) toast.info(stokKarsiSayi + ' kalem stoktan karşılandı — WO açılmadı')
+      if (woTotal > 0) toast.info(woTotal + ' iş emri oluşturuldu')
     }
 
     logAction(initial ? 'Sipariş güncellendi' : 'Sipariş oluşturuldu', siparisNo.trim())
@@ -1211,7 +1215,10 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                       </td>
                       <td className="px-2 py-1.5 text-right font-mono text-zinc-300">{u.adet}</td>
                       <td className={`px-2 py-1.5 font-mono ${gecikti ? 'text-red font-semibold' : 'text-zinc-400'}`}>{u.termin || '—'}</td>
-                      <td className="px-2 py-1.5 text-zinc-500 truncate max-w-[200px]">{u.not || '—'}</td>
+                      <td className="px-2 py-1.5 text-zinc-500 truncate max-w-[200px]">
+                        <span>{u.not || '—'}</span>
+                        {(u as any).stoktan && <span className="ml-1 px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded text-[9px] font-semibold">Stoktan</span>}
+                      </td>
                     </tr>
                   )
                 })}
