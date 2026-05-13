@@ -516,10 +516,14 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
     const op = operations.find(o => o.id === opId)
     let boyNum = parseFloat(boy) || 0
     let enNum = parseFloat(en) || 0
-    // Uzun kenar > Kısa kenar garanti et — swap gerekirse
-    if (enNum > boyNum && boyNum > 0) {
+    // PLY malzemelerde yon onemli — swap yapma, diger malzemelerde uzun >= kisa garanti et
+    const isPly = (hammaddeTipi || '').toUpperCase().startsWith('PLY')
+    if (!isPly && enNum > boyNum && boyNum > 0) {
       [boyNum, enNum] = [enNum, boyNum]
       toast.info('Uzun kenar / Kısa kenar otomatik düzeltildi')
+    }
+    if (isPly && enNum > boyNum && boyNum > 0) {
+      toast.info('Plywood/panel malzemede yon korundu — giris siraniz gecerli')
     }
     const row: Record<string, unknown> = {
       kod: kod.trim(), ad: ad.trim(), tip, hammadde_tipi: (tip === 'Hammadde' || tip === 'YarıMamul') ? (hammaddeTipi || '').toLocaleUpperCase('tr-TR') : '', birim, boy: boyNum,
