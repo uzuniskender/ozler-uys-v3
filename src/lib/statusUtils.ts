@@ -74,13 +74,15 @@ export function isOrderArchived(o: Order): boolean {
 const MRP_DONE_STATES = new Set(['tamamlandi', 'tamam'])
 
 /**
- * Bu siparişin MRP'si bekleniyor mu?
- * (Sadece aktif siparişler için anlamlı — kapanmış siparişin MRP'si artık beklenmiyor.)
+ * Bu siparişin MRP'si uyarı vermeli mi?
+ * v16.74 — Sadece mrp_durum='eksik' olan aktif siparişler badge'e yansır.
+ * 'bekliyor' = MRP henüz çalıştırılmamış → uyarı vermez (false positive önlenir).
+ * Stok değişince trigger mrp_durum'u 'bekliyor'a çeker → badge temizlenir.
  */
 export function isOrderMrpPending(o: Order): boolean {
   if (!isOrderActive(o)) return false
   const m = (o.mrpDurum || '').toLowerCase().trim()
-  return !MRP_DONE_STATES.has(m)
+  return m === 'eksik'
 }
 
 // ─── WORK ORDERS (iş emirleri) ───────────────────────────────────
