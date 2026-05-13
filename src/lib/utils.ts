@@ -39,5 +39,5 @@ export function fmtDate(tarih: string | null | undefined, format: 'long' | 'shor
   if (format === 'short') return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   if (format === 'month') return d.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })
   if (format === 'monthday') return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })
-  return fmtDate(d)
+  return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
