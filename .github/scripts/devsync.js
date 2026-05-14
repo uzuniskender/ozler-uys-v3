@@ -1,4 +1,4 @@
-// .github/scripts/devsync.js — v1.3
+// .github/scripts/devsync.js — v1.3.1
 // Her push'ta changedFiles'i Supabase uys_dev_files'a sync eder.
 // updated_by='claude' dosyalar: bu commit'te varsa sync et, yoksa koru.
 import { execSync } from 'child_process'
