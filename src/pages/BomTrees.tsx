@@ -403,7 +403,7 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => void; onSaved: () => void }) {
   const [rows, setRows] = useState(bom.rows || [])
   const [viewMode, setViewMode] = useState<'edit'|'tree'>('edit')
-  const { materials, loadAll: storeLoadAll } = useStore()
+  const { materials, recipes, loadAll: storeLoadAll } = useStore()
   const { can } = useAuth()
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
