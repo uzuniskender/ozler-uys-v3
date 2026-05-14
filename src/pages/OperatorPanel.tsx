@@ -398,17 +398,34 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                 const match = (w.malkod + ' ' + w.malad).match(/(\d{3,5})\s*[mM]{2}/)
                 return match ? match[1] + ' mm' : ''
               }
-              const afterSiparis = filterSiparis ? acikWOs.filter(w => orders.find(o => o.id === w.orderId)?.siparisNo === filterSiparis) : acikWOs
-              const olcuOpts = [...new Set(afterSiparis.map(getUzunluk).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
+              // v16.82 faceted — her filtre seçeneği DİĞER aktif filtrelere göre daralır
               const getKalinlik = (w: typeof acikWOs[0]) => {
                 const mat = materials.find(m => m.kod === w.malkod)
                 if (mat && (mat as any).kalinlik > 0) return String((mat as any).kalinlik) + ' mm'
                 return ''
               }
-              const afterOlcu = filterOlcu ? afterSiparis.filter(w => getUzunluk(w) === filterOlcu) : afterSiparis
-              const kalinlikOpts = [...new Set(afterOlcu.map(getKalinlik).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
-              const afterKalinlik = filterKalinlik ? afterOlcu.filter(w => getKalinlik(w) === filterKalinlik) : afterOlcu
-              const hmOpts = [...new Set(afterKalinlik.flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean))]
+              const getSipNo = (w: typeof acikWOs[0]) => orders.find(o => o.id === w.orderId)?.siparisNo || ''
+              const matchesHm = (w: typeof acikWOs[0]) => !filterHm || (w.hm as any[] || []).some((h: any) => h.malkod === filterHm)
+              // Sipariş seçenekleri: olcu+kalinlik+hm filtreli
+              const siparsisOpts = [...new Set(
+                acikWOs.filter(w => (!filterOlcu || getUzunluk(w) === filterOlcu) && (!filterKalinlik || getKalinlik(w) === filterKalinlik) && matchesHm(w))
+                .map(getSipNo).filter(Boolean)
+              )] as string[]
+              // Uzunluk seçenekleri: siparis+kalinlik+hm filtreli
+              const olcuOpts = [...new Set(
+                acikWOs.filter(w => (!filterSiparis || getSipNo(w) === filterSiparis) && (!filterKalinlik || getKalinlik(w) === filterKalinlik) && matchesHm(w))
+                .map(getUzunluk).filter(Boolean)
+              )].sort((a,b) => parseInt(a)-parseInt(b))
+              // Kalınlık seçenekleri: siparis+olcu+hm filtreli
+              const kalinlikOpts = [...new Set(
+                acikWOs.filter(w => (!filterSiparis || getSipNo(w) === filterSiparis) && (!filterOlcu || getUzunluk(w) === filterOlcu) && matchesHm(w))
+                .map(getKalinlik).filter(Boolean)
+              )].sort((a,b) => parseInt(a)-parseInt(b))
+              // HM seçenekleri: siparis+olcu+kalinlik filtreli
+              const hmOpts = [...new Set(
+                acikWOs.filter(w => (!filterSiparis || getSipNo(w) === filterSiparis) && (!filterOlcu || getUzunluk(w) === filterOlcu) && (!filterKalinlik || getKalinlik(w) === filterKalinlik))
+                .flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean)
+              )]
               return (
                 <div className="mb-3 space-y-2">
                   <select value={filterSiparis} onChange={e => setFilterSiparis(e.target.value)}
