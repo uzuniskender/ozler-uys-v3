@@ -70,7 +70,17 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
       isWorkOrderOpen(w) && isKesimWO(w) && !planliWoIds.has(w.id)
     ).length
 
-    const mrp = orders.filter(isOrderMrpPending).length
+    // v16.82 — MRP badge düzeltme: mrp_durum='eksik' ama tüm İE'leri Üretilebilir
+    // olan siparişleri badge'den çıkar (kesim planı yapıldı → MRP stale kalmış).
+    const planBekleyenWoIdSet = getPlanBekleyenWoIds(
+      workOrders, cuttingPlans as any, tedarikler, stokHareketler as any, logs as any, orderHmEksikMap
+    )
+    const planBekleyenOrderIds = new Set(
+      workOrders.filter(w => planBekleyenWoIdSet.has(w.id) && w.orderId).map(w => w.orderId!)
+    )
+    const mrp = orders.filter(o =>
+      isOrderMrpPending(o) && planBekleyenOrderIds.has(o.id)
+    ).length
     const tedarik = tedarikler.filter(isProcurementPending).length
 
     // v15.79 — Plan Bekleyen: Üretilebilir olmayan açık WO'ların toplamı.

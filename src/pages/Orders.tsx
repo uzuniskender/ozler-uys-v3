@@ -150,7 +150,16 @@ export function Orders() {
       const mrpDone = o.mrpDurum === 'tamam' || o.mrpDurum === 'tamamlandi'
       if (mrpFilter.size > 0) {
         let m = false
-        if (mrpFilter.has('eksik') && !mrpDone && o.durum !== 'kapalı') m = true
+        // v16.82 — mrp=eksik: eğer siparişin TÜM kesim İE'leri planlanmışsa → MRP'ye gerek yok
+        if (mrpFilter.has('eksik') && !mrpDone && o.durum !== 'kapalı') {
+          const oWos = workOrders.filter(w => w.orderId === o.id && isWorkOrderOpen(w))
+          // Hiç açık İE yoksa veya en az 1 kesim İE kesim planı dışındaysa → göster
+          const kesimEksikIds = getKesimEksikWoIds(workOrders, cuttingPlans as any)
+          const kesimDisiVar = oWos.filter(isKesimWO).some(w => kesimEksikIds.has(w.id))
+          // Kesim İE'si varsa → kesim planı bitmeden MRP göster
+          // Kesim İE'si yoksa → MRP zaten eksik demek, göster
+          if (oWos.length === 0 || !oWos.some(isKesimWO) || kesimDisiVar) m = true
+        }
         if (mrpFilter.has('tamam') && mrpDone) m = true
         if (!m) return false
       }
