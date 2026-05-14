@@ -83,14 +83,14 @@ export function HammaddeRapor() {
   }, [baslangic, bitis])
 
   const gruplar = useMemo(() => {
-    const s = new Set(rows.map(r => (r.malad || '').split(' ')[0]).filter(Boolean))
+    const s = new Set(rows.map(r => r.hammadde_tipi || '(Diger)').filter(Boolean))
     return Array.from(s).sort()
   }, [rows])
 
   const filtrelenmis = useMemo(() => rows.filter(r => {
     if (malkodFiltre && !(r.malkod || '').toLowerCase().includes(malkodFiltre.toLowerCase()) &&
         !(r.malad || '').toLowerCase().includes(malkodFiltre.toLowerCase())) return false
-    if (grupFiltre && !(r.malad || '').startsWith(grupFiltre)) return false
+    if (grupFiltre && (r.hammadde_tipi || '(Diger)') !== grupFiltre) return false
     return true
   }), [rows, malkodFiltre, grupFiltre])
 
