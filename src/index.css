@@ -2,21 +2,18 @@
 
 @theme {
   /* ── Açık tema — göz dostu, yüksek kontrast ── */
-  --color-bg-0: #f0f4f8;     /* Ana arka plan — soğuk gri */
-  --color-bg-1: #ffffff;     /* Kart arka plan */
-  --color-bg-2: #f5f8fc;     /* İkincil kart */
-  --color-bg-3: #e4eaf3;     /* Hover / aktif */
-  --color-border: #c8d4e3;   /* Kenarlık */
-  --color-border-2: #a0b4c8; /* Koyu kenarlık */
-
-  /* Renkler — açık zeminde okunabilir, koyu tonlar */
-  --color-accent: #1d4ed8;       /* Mavi — blue-700 */
-  --color-accent-hover: #1e40af; /* blue-800 */
-  --color-green: #047857;        /* Yeşil — emerald-700 */
-  --color-red: #b91c1c;          /* Kırmızı — red-700 */
-  --color-amber: #b45309;        /* Turuncu — amber-700 */
-  --color-cyan: #0e7490;         /* Turkuaz — cyan-700 */
-
+  --color-bg-0: #f0f4f8;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #f5f8fc;
+  --color-bg-3: #e4eaf3;
+  --color-border: #c8d4e3;
+  --color-border-2: #a0b4c8;
+  --color-accent: #1d4ed8;
+  --color-accent-hover: #1e40af;
+  --color-green: #047857;
+  --color-red: #b91c1c;
+  --color-amber: #b45309;
+  --color-cyan: #0e7490;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 }
 
@@ -36,13 +33,37 @@ body {
 .text-zinc-600 { color: #64748b !important; }
 .text-zinc-700 { color: #475569 !important; }
 
+/* ── text-white: main içinde karart, renkli bg'lerde beyaz kalsın ── */
+main .text-white { color: #1e293b; }
+
+/* Renkli arka plan üstünde text-white → beyaz kalır */
+main .bg-accent .text-white,
+main .bg-green .text-white,
+main .bg-red .text-white,
+main .bg-amber .text-white,
+main .bg-cyan .text-white,
+main [class*="bg-accent"].text-white,
+main [class*="bg-green"].text-white,
+main [class*="bg-red"].text-white,
+main [class*="bg-amber"].text-white,
+main [class*="bg-cyan"].text-white,
+main [class*="from-accent"].text-white,
+main [class*="from-green"].text-white,
+main [class*="from-red"].text-white { color: #ffffff; }
+
+/* Buton içi text-white → beyaz kalsın */
+main button.bg-accent.text-white,
+main button.bg-green.text-white,
+main button.bg-red.text-white,
+main button.bg-amber.text-white,
+main a.bg-accent.text-white { color: #ffffff; }
+
 /* ── Placeholder ── */
 .placeholder-zinc-600::placeholder { color: #94a3b8 !important; }
-.placeholder\:text-zinc-600::placeholder { color: #94a3b8 !important; }
+input::placeholder { color: #94a3b8; }
 
 /* ── Input / select ── */
 input, select, textarea { color: #1e293b; }
-input::placeholder { color: #94a3b8; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
