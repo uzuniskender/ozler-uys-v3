@@ -398,14 +398,17 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                 const match = (w.malkod + ' ' + w.malad).match(/(\d{3,5})\s*[mM]{2}/)
                 return match ? match[1] + ' mm' : ''
               }
-              const olcuOpts = [...new Set(acikWOs.map(getUzunluk).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
+              const afterSiparis = filterSiparis ? acikWOs.filter(w => orders.find(o => o.id === w.orderId)?.siparisNo === filterSiparis) : acikWOs
+              const olcuOpts = [...new Set(afterSiparis.map(getUzunluk).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
               const getKalinlik = (w: typeof acikWOs[0]) => {
                 const mat = materials.find(m => m.kod === w.malkod)
                 if (mat && (mat as any).kalinlik > 0) return String((mat as any).kalinlik) + ' mm'
                 return ''
               }
-              const kalinlikOpts = [...new Set(acikWOs.map(getKalinlik).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
-              const hmOpts = [...new Set(acikWOs.flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean))]
+              const afterOlcu = filterOlcu ? afterSiparis.filter(w => getUzunluk(w) === filterOlcu) : afterSiparis
+              const kalinlikOpts = [...new Set(afterOlcu.map(getKalinlik).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
+              const afterKalinlik = filterKalinlik ? afterOlcu.filter(w => getKalinlik(w) === filterKalinlik) : afterOlcu
+              const hmOpts = [...new Set(afterKalinlik.flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean))]
               return (
                 <div className="mb-3 space-y-2">
                   <select value={filterSiparis} onChange={e => setFilterSiparis(e.target.value)}
