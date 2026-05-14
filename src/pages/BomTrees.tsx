@@ -435,6 +435,35 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
           }
         }
       }
+      // v16.82 — Otomatik kesim miktarı: üst satır kesim ise anında hesapla
+      if (mat && (updated.tip === 'Hammadde' || updated.tip === 'YarıMamul') && updated.kirno !== '1') {
+        const parts2 = (updated.kirno || '').split('.')
+        const parentKirno2 = parts2.slice(0, -1).join('.')
+        const parentRow2 = rows.find(pr => pr.kirno === parentKirno2)
+        if (parentRow2 && isKesimRow(parentRow2)) {
+          const parentMat2 = materials.find(m => m.kod === parentRow2.malkod)
+          const hmMat2 = mat
+          if (parentMat2 && hmMat2) {
+            const uB = parentMat2.boy || 0, uE = parentMat2.en || 0, uUz = parentMat2.uzunluk || 0
+            const hB = hmMat2.boy || 0, hE = hmMat2.en || 0, hUz = hmMat2.uzunluk || 0
+            let adetPer = 0
+            const urunParBoy = uUz > 0 ? uUz : Math.max(uB, uE)
+            if (hUz > 0 && urunParBoy > 0 && hUz > urunParBoy) {
+              adetPer = Math.floor(hUz / urunParBoy)
+            } else if (hE > 0 && hB > 0 && uE > 0 && uB > 0) {
+              const hmBoy = Math.max(hB, hE), hmEn = Math.min(hB, hE)
+              const urunBoy = Math.min(uB, uE), urunEn = Math.max(uB, uE)
+              adetPer = Math.max(
+                Math.floor(hmBoy / urunEn) * Math.floor(hmEn / urunBoy),
+                Math.floor(hmBoy / urunBoy) * Math.floor(hmEn / urunEn)
+              )
+            }
+            if (adetPer > 0) {
+              updated.miktar = Math.round((1 / adetPer) * 10000) / 10000
+            }
+          }
+        }
+      }
       return updated
     }))
   }

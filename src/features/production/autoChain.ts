@@ -249,10 +249,25 @@ export async function autoZincir(
   let mrpSonuc: MRPRow[] = []
   let calcId: string | null = null
   try {
+    // v16.82 — Stale store fix: MRP öncesi tedarikler DB'den taze çekiliyor.
+    // Aynı oturumda art arda 2 sipariş açılırsa 2. sipariş için acikTedPool
+    // 1. siparişin yeni tedarikini görür ve net=0 → çift tedarik önlenir.
+    let freshTedarikler: Tedarik[] = tedarikler
+    try {
+      const { data: freshTed } = await supabase.from('uys_tedarikler').select('*').eq('geldi', false)
+      if (freshTed && freshTed.length >= 0) {
+        freshTedarikler = freshTed.map((r: any): Tedarik => ({
+          id: r.id, malkod: r.malkod || '', malad: r.malad || '', miktar: r.miktar || 0,
+          birim: r.birim || 'Adet', orderId: r.order_id || '', siparisNo: r.siparis_no || '',
+          durum: r.durum || '', geldi: !!r.geldi, teslimTarihi: r.teslim_tarihi || '',
+          tarih: r.tarih || '', not: r.not_ || '', autoOlusturuldu: !!r.auto_olusturuldu,
+        }))
+      }
+    } catch { /* stale fallback */ }
     // v16.32 IE #14 Faz A Slice 3 — cache wrap. Cache HIT/MISS otomatik.
     mrpSonuc = await hesaplaMRPCached(
       { orderId },
-      () => hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, tedarikler, allCP, materials, null, [], orderId, logs)
+      () => hesaplaMRP([orderId], orders, allWOs, recipes, stokHareketler, freshTedarikler, allCP, materials, null, [], orderId, logs)
     )
     const eksikSay = mrpSonuc.filter(x => x.durum === 'eksik').length
     adimlar.push(`✅ MRP: ${mrpSonuc.length} kalem${eksikSay ? ' · ' + eksikSay + ' eksik' : ''}`)

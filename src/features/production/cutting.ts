@@ -24,10 +24,16 @@ interface KesimPlanSonuc {
 // Parça boyunu malzeme bilgisinden al
 export function getParcaBoy(malkod: string, materials: Material[]): number {
   const m = findMaterialByKod(materials, malkod)
-  if (!m) return 0
-  if (m.uzunluk > 0) return m.uzunluk // profil/boru parça uzunluğu
-  if (m.boy && m.en) return Math.min(m.boy, m.en)
-  if (m.boy) return m.boy
+  if (m) {
+    if (m.uzunluk > 0) return m.uzunluk
+    if (m.boy && m.en) return Math.min(m.boy, m.en)
+    if (m.boy) return m.boy
+  }
+  // v16.82 — Fallback: malzeme listesinde yoksa malkod/malad stringinden MM parse et
+  // Örn: "Ø60,3x3,2 - 2500MM" → 2500, "BORU 48x3 - 600MM" → 600
+  const str = malkod + ' '
+  const match = str.match(/(\\d{3,5})\\s*[mM]{2}/)
+  if (match) return parseInt(match[1], 10)
   return 0
 }
 

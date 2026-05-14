@@ -16,7 +16,9 @@ import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
 import { startFlow, advanceFlow } from '@/lib/pendingFlow'
-import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen} from '@/lib/statusUtils'
+import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen, getPlanliWoIds } from '@/lib/statusUtils'
+import { getStok } from '@/lib/hammaddeHesap'
+import { addStokHareketi } from '@/lib/stokHelper'
 import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
 
 export function Orders() {
@@ -751,8 +753,21 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
         // formatini iceriyor. Eski kod ie_no'yu IE--01 / IE--02 (bos prefix) uretiyordu.
         if (k.rcId) { const c = await buildWorkOrders(newId, etkinSiparisNo, k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
       }
+      // v16.82 MRP#19 — stoktan seçilen kalemler için stok çıkış hareketi yaz
       const stokKarsiSayi = kalemler.filter(k => k.stoktan).length
-      if (stokKarsiSayi > 0) toast.info(stokKarsiSayi + ' kalem stoktan karşılandı — WO açılmadı')
+      for (const k of kalemler) {
+        if (!k.stoktan || !k.rcId || !k.mamulKod) continue
+        const adet = typeof k.adet === 'number' ? k.adet : Number(k.adet)
+        if (adet <= 0) continue
+        await addStokHareketi({
+          malkod: k.mamulKod,
+          malad: k.mamulAd || k.mamulKod,
+          miktar: adet,
+          tip: 'cikis',
+          aciklama: `Stoktan karşılandı — ${etkinSiparisNo}`,
+        })
+      }
+      if (stokKarsiSayi > 0) toast.success(stokKarsiSayi + ' kalem stoktan karşılandı — stok çıkışı yazıldı')
       if (woTotal > 0) toast.info(woTotal + ' iş emri oluşturuldu')
     }
 
@@ -1010,11 +1025,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
           recipes={recipes as any}
           materials={materials}
           onSelect={(r) => {
-            const ymStok = Math.floor(
-              stokHareketler
-                .filter((h: any) => h.malkod === r.mamulKod)
-                .reduce((a: number, h: any) => a + (h.tip === 'giris' ? Number(h.miktar) : -Number(h.miktar)), 0)
-            )
+            const ymStok = Math.max(0, Math.floor(getStok(r.mamulKod, stokHareketler as any)))
             updateKalem(searchKalemIdx, { rcId: r.rcId, mamulKod: r.mamulKod, mamulAd: r.mamulAd, ymStok, stoktan: false })
             setSearchKalemIdx(null)
           }}
