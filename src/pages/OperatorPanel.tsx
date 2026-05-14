@@ -172,6 +172,10 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
   const { orders, workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler } = useStore()
+  // v16.82 — Operatör filtreler
+  const [filterSiparis, setFilterSiparis] = useState('')
+  const [filterOlcu, setFilterOlcu] = useState('')
+  const [filterHm, setFilterHm] = useState('')
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
 
   // Bu operatöre yönetimden gelen okunmamış mesaj sayısı
@@ -383,7 +387,50 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
               </div>
             )}
 
-            {acikWOs.filter(w => !myActiveList.some(a => a.woId === w.id)).map(w => {
+            {/* v16.82 — Filtreler: Sipariş / Ölçü / Hammadde */}
+            {(() => {
+              const siparsisOpts = [...new Set(acikWOs.map(w => orders.find(o => o.id === w.orderId)?.siparisNo).filter(Boolean))] as string[]
+              const olcuOpts = [...new Set(acikWOs.map(w => w.malkod).filter(Boolean))]
+              const hmOpts = [...new Set(acikWOs.flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean))]
+              return (
+                <div className="mb-3 space-y-2">
+                  <select value={filterSiparis} onChange={e => setFilterSiparis(e.target.value)}
+                    className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+                    <option value="">📋 Tüm Siparişler</option>
+                    {siparsisOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select value={filterOlcu} onChange={e => setFilterOlcu(e.target.value)}
+                    className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+                    <option value="">📐 Tüm Ölçüler</option>
+                    {olcuOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                  <select value={filterHm} onChange={e => setFilterHm(e.target.value)}
+                    className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+                    <option value="">🔩 Tüm Hammaddeler</option>
+                    {hmOpts.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  {(filterSiparis || filterOlcu || filterHm) && (
+                    <button onClick={() => { setFilterSiparis(''); setFilterOlcu(''); setFilterHm('') }}
+                      className="w-full py-1.5 text-xs text-amber border border-amber/30 rounded-lg bg-amber/5">
+                      ✕ Filtreyi Temizle
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
+            {acikWOs.filter(w => {
+              if (!myActiveList.some(a => a.woId === w.id)) {
+                const sipNo = orders.find(o => o.id === w.orderId)?.siparisNo || ''
+                if (filterSiparis && sipNo !== filterSiparis) return false
+                if (filterOlcu && w.malkod !== filterOlcu) return false
+                if (filterHm) {
+                  const hms = (w.hm as any[] || []).map((h: any) => h.malkod)
+                  if (!hms.includes(filterHm)) return false
+                }
+                return true
+              }
+              return false
+            }).map(w => {
               const prod = wProd(w.id)
               const pct = Math.min(100, Math.round(prod / w.hedef * 100))
               const kalan = Math.max(0, w.hedef - prod)
