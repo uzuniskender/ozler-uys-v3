@@ -140,6 +140,30 @@ export function Dashboard() {
   const { isGuest, role } = useAuth()
   const todayStr = today()
 
+  // v16.82 — Kritik Yol: açık tedarikler → malkod bazında grupla
+  const kritikMalzemeler = useMemo(() => {
+    const bekleyen = tedarikler.filter(t => !t.geldi)
+    if (!bekleyen.length) return []
+    const map = new Map<string, { malkod: string; malad: string; miktar: number; birim: string; siparisler: string[]; termin: string }>()
+    for (const t of bekleyen) {
+      const k = t.malkod || ''
+      if (!map.has(k)) map.set(k, { malkod: k, malad: (t as any).malad || k, miktar: 0, birim: (t as any).birim || 'Adet', siparisler: [], termin: (t as any).teslimTarihi || '' })
+      const g = map.get(k)!
+      g.miktar += Number(t.miktar) || 0
+      if (t.siparisNo && !g.siparisler.includes(t.siparisNo)) g.siparisler.push(t.siparisNo)
+      const tt = (t as any).teslimTarihi || ''
+      if (tt && (!g.termin || tt < g.termin)) g.termin = tt
+    }
+    return [...map.values()].sort((a, b) => {
+      const ag = !!(a.termin && a.termin < todayStr), bg = !!(b.termin && b.termin < todayStr)
+      if (ag !== bg) return ag ? -1 : 1
+      if (!a.termin && !b.termin) return b.siparisler.length - a.siparisler.length
+      if (!a.termin) return 1; if (!b.termin) return -1
+      return a.termin.localeCompare(b.termin)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tedarikler, todayStr])
+
   // ═══ Canlı sayaç — 30 sn'de bir süre güncellensin ═══
   const [nowTick, setNowTick] = useState(Date.now())
   useEffect(() => {
@@ -793,6 +817,48 @@ export function Dashboard() {
                 </div>
               ))}
               {okunmamis.length > 5 && <div className="text-[11px] text-gray-500 text-center">+{okunmamis.length - 5} mesaj daha</div>}
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {/* v16.82 — Stok Yetersizliği & Kritik Yol */}
+      {kritikMalzemeler.length > 0 && (
+        <div className="mb-6">
+          <Panel
+            title={<span className="flex items-center gap-1.5"><AlertTriangle size={13} className="text-amber-500 inline" /> Stok Yetersizliği & Kritik Yol</span>}
+            count={kritikMalzemeler.length}
+            onTitleClick={() => navigate('/procurement')}
+          >
+            <div className="divide-y divide-gray-100">
+              {kritikMalzemeler.slice(0, 8).map(g => {
+                const gecikti = !!(g.termin && g.termin < todayStr)
+                return (
+                  <div key={g.malkod} className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer" onClick={() => navigate('/procurement')}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium text-gray-900 truncate">{g.malad}</div>
+                        <div className="text-[10px] font-mono text-gray-400">{g.malkod}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-[12px] font-mono font-semibold text-gray-800">{g.miktar} {g.birim}</div>
+                        <div className={`text-[10px] ${gecikti ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{g.termin ? (gecikti ? '⚠ ' : '') + g.termin : '—'}</div>
+                      </div>
+                    </div>
+                    {g.siparisler.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {g.siparisler.slice(0, 4).map(s => <span key={s} className="text-[10px] px-1.5 py-0.5 bg-amber-50 border border-amber-200 rounded text-amber-700 font-mono">{s}</span>)}
+                        {g.siparisler.length > 4 && <span className="text-[10px] text-gray-400">+{g.siparisler.length - 4}</span>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {kritikMalzemeler.length > 8 && (
+                <div className="px-4 py-2 text-[11px] text-gray-500 text-center cursor-pointer hover:bg-gray-50" onClick={() => navigate('/procurement')}>
+                  +{kritikMalzemeler.length - 8} malzeme daha →
+                </div>
+              )}
             </div>
           </Panel>
         </div>
