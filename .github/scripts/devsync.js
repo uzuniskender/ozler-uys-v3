@@ -40,11 +40,11 @@ async function upsertFile(filePath, changedFiles) {
 
   const updatedBy = await getUpdatedBy(filePath)
 
-  if (updatedBy === 'claude') {
+  if (updatedBy==='claude') {
     if (changedFiles.includes(filePath)) {
-      console.log(`Sync (Claude commit edildi): ${filePath}`)
+      console.log('Sync: '+filePath)
     } else {
-      console.log(`Atlandı (Claude korundu): ${filePath}`)
+      console.log('Atlandi: '+filePath)
       return
     }
   }
