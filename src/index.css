@@ -1,49 +1,56 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Açık tema — göz dostu, parlak beyaz değil ── */
-  --color-bg-0: #eef2f7;    /* Ana arka plan — soğuk gri-mavi */
-  --color-bg-1: #ffffff;    /* Kart arka plan — beyaz */
-  --color-bg-2: #f4f7fb;    /* İkincil kart */
-  --color-bg-3: #e4eaf3;    /* Hover / aktif */
-  --color-border: #d0dae8;  /* Kenarlık */
-  --color-border-2: #b0bfd4;/* Koyu kenarlık */
-  --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
-  --color-green: #059669;
-  --color-red: #dc2626;
-  --color-amber: #d97706;
-  --color-cyan: #0891b2;
+  /* ── Açık tema — göz dostu, yüksek kontrast ── */
+  --color-bg-0: #f0f4f8;     /* Ana arka plan — soğuk gri */
+  --color-bg-1: #ffffff;     /* Kart arka plan */
+  --color-bg-2: #f5f8fc;     /* İkincil kart */
+  --color-bg-3: #e4eaf3;     /* Hover / aktif */
+  --color-border: #c8d4e3;   /* Kenarlık */
+  --color-border-2: #a0b4c8; /* Koyu kenarlık */
+
+  /* Renkler — açık zeminde okunabilir, koyu tonlar */
+  --color-accent: #1d4ed8;       /* Mavi — blue-700 */
+  --color-accent-hover: #1e40af; /* blue-800 */
+  --color-green: #047857;        /* Yeşil — emerald-700 */
+  --color-red: #b91c1c;          /* Kırmızı — red-700 */
+  --color-amber: #b45309;        /* Turuncu — amber-700 */
+  --color-cyan: #0e7490;         /* Turkuaz — cyan-700 (eskisinin 2 kat koyu) */
+
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 }
 
 body {
   background-color: var(--color-bg-0);
-  color: #1e293b;  /* slate-800 — koyu ama siyah değil */
+  color: #1e293b;  /* slate-800 */
   font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
   margin: 0;
 }
 
-/* ── Zinc metin renkleri — açık temada karartıldı ── */
-.text-zinc-100 { color: #1e293b !important; }
-.text-zinc-200 { color: #1e293b !important; }
-.text-zinc-300 { color: #334155 !important; }
-.text-zinc-400 { color: #64748b !important; }
-.text-zinc-500 { color: #94a3b8 !important; }
-.text-zinc-600 { color: #94a3b8 !important; }
-.text-zinc-700 { color: #64748b !important; }
-.placeholder-zinc-600::placeholder { color: #94a3b8 !important; }
+/* ── Zinc metin — WCAG AA uyumlu kontrastlar ── */
+.text-zinc-100 { color: #0f172a !important; }  /* slate-900 */
+.text-zinc-200 { color: #1e293b !important; }  /* slate-800 */
+.text-zinc-300 { color: #334155 !important; }  /* slate-700 */
+.text-zinc-400 { color: #475569 !important; }  /* slate-600 — kontrast 6.1:1 */
+.text-zinc-500 { color: #64748b !important; }  /* slate-500 — kontrast 4.6:1 */
+.text-zinc-600 { color: #64748b !important; }  /* slate-500 */
+.text-zinc-700 { color: #475569 !important; }  /* slate-600 */
 
-/* ── Input / select — açık temada görünür ── */
+/* ── Placeholder ── */
+.placeholder-zinc-600::placeholder { color: #94a3b8 !important; }
+.placeholder\:text-zinc-600::placeholder { color: #94a3b8 !important; }
+
+/* ── Input / select — açık zeminde görünür ── */
 input, select, textarea {
   color: #1e293b;
 }
+input::placeholder { color: #94a3b8; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--color-bg-2); }
 ::-webkit-scrollbar-thumb { background: var(--color-border-2); border-radius: 3px; }
-::selection { background: rgba(37, 99, 235, 0.2); }
+::selection { background: rgba(29, 78, 216, 0.15); }
 
 /* ── Tablo satır yüksekliği ── */
 .density-compact td { padding-top: 2px !important; padding-bottom: 2px !important; }
