@@ -390,8 +390,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
 
             {/* v16.82 — Filtreler: Sipariş / Ölçü / Hammadde */}
             {(() => {
-              const siparsisOpts = [...new Set(acikWOs.map(w => orders.find(o => o.id === w.orderId)?.siparisNo).filter(Boolean))] as string[]
-              // Ölçü = malzeme uzunluğu (materials tablosundan, yoksa malkod string parse)
+                  // Ölçü = malzeme uzunluğu (materials tablosundan, yoksa malkod string parse)
               const getUzunluk = (w: typeof acikWOs[0]) => {
                 const mat = materials.find(m => m.kod === w.malkod)
                 if (mat && (mat as any).uzunluk > 0) return String((mat as any).uzunluk) + ' mm'
