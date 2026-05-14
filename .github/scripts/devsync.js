@@ -1,6 +1,6 @@
 // .github/scripts/devsync.js
 // Her push'ta değişen dosyaları Supabase uys_dev_files tablosuna sync eder.
-
+// v1.1 — updated_by='claude' olan dosyalar sync'te ezilmez (çift yönlü güvenli)
 import { execSync } from 'child_process'
 import { readFileSync, existsSync, statSync } from 'fs'
 import { join } from 'path'
@@ -21,8 +21,25 @@ function shouldSync(filePath) {
   return SYNC_EXTS.some(ext => filePath.endsWith(ext))
 }
 
+// v1.1 — Supabase'deki updated_by değerini kontrol et
+async function getUpdatedBy(filePath) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/uys_dev_files?path=eq.${encodeURIComponent(filePath)}&select=updated_by`,
+    {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      }
+    }
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  return data?.[0]?.updated_by ?? null
+}
+
 async function upsertFile(filePath) {
   const fullPath = join(process.cwd(), filePath)
+
   if (!existsSync(fullPath)) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/uys_dev_files?path=eq.${encodeURIComponent(filePath)}`, {
       method: 'DELETE',
@@ -33,6 +50,13 @@ async function upsertFile(filePath) {
     })
     if (!res.ok) console.warn(`DELETE hata: ${filePath} — ${res.status}`)
     else console.log(`🗑  Silindi: ${filePath}`)
+    return
+  }
+
+  // v1.1 — Claude'un bekleyen değişikliklerini koru
+  const updatedBy = await getUpdatedBy(filePath)
+  if (updatedBy === 'claude') {
+    console.log(`⏭  Atlandı (Claude değişikliği korundu): ${filePath}`)
     return
   }
 
@@ -65,31 +89,25 @@ async function upsertFile(filePath) {
 }
 
 async function main() {
-  // İlk commit mi? (fetch-depth: 2 ile önceki commit var mı?)
   let changedFiles = []
   try {
     const diff = execSync('git diff --name-only HEAD~1 HEAD', { encoding: 'utf-8' })
     changedFiles = diff.trim().split('\n').filter(Boolean)
   } catch {
-    // İlk commit — tüm dosyaları al
     const all = execSync('git ls-files', { encoding: 'utf-8' })
     changedFiles = all.trim().split('\n').filter(Boolean)
   }
 
   const toSync = changedFiles.filter(shouldSync)
-
   if (toSync.length === 0) {
     console.log('Sync edilecek dosya yok.')
     return
   }
 
   console.log(`\n📦 ${toSync.length} dosya sync ediliyor...\n`)
-
-  // Paralel değil sıralı — rate limit önleme
   for (const f of toSync) {
     await upsertFile(f)
   }
-
   console.log(`\n✅ DevSync tamamlandı — ${toSync.length} dosya`)
 }
 
