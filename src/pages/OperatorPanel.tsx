@@ -176,6 +176,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   const [filterSiparis, setFilterSiparis] = useState('')
   const [filterOlcu, setFilterOlcu] = useState('')
   const [filterHm, setFilterHm] = useState('')
+  const [filterKalinlik, setFilterKalinlik] = useState('')
   const [entryWO, setEntryWO] = useState<{ woId: string; logId?: string } | null>(null)
 
   // Bu operatöre yönetimden gelen okunmamış mesaj sayısı
@@ -398,6 +399,12 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                 return match ? match[1] + ' mm' : ''
               }
               const olcuOpts = [...new Set(acikWOs.map(getUzunluk).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
+              const getKalinlik = (w: typeof acikWOs[0]) => {
+                const mat = materials.find(m => m.kod === w.malkod)
+                if (mat && (mat as any).kalinlik > 0) return String((mat as any).kalinlik) + ' mm'
+                return ''
+              }
+              const kalinlikOpts = [...new Set(acikWOs.map(getKalinlik).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
               const hmOpts = [...new Set(acikWOs.flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean))]
               return (
                 <div className="mb-3 space-y-2">
@@ -416,8 +423,15 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                     <option value="">🔩 Tüm Hammaddeler</option>
                     {hmOpts.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
-                  {(filterSiparis || filterOlcu || filterHm) && (
-                    <button onClick={() => { setFilterSiparis(''); setFilterOlcu(''); setFilterHm('') }}
+                  {kalinlikOpts.length > 0 && (
+                    <select value={filterKalinlik} onChange={e => setFilterKalinlik(e.target.value)}
+                      className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+                      <option value="">📏 Tüm Kalınlıklar</option>
+                      {kalinlikOpts.map(k => <option key={k} value={k}>{k}</option>)}
+                    </select>
+                  )}
+                  {(filterSiparis || filterOlcu || filterHm || filterKalinlik) && (
+                    <button onClick={() => { setFilterSiparis(''); setFilterOlcu(''); setFilterHm(''); setFilterKalinlik('') }}
                       className="w-full py-1.5 text-xs text-amber border border-amber/30 rounded-lg bg-amber/5">
                       ✕ Filtreyi Temizle
                     </button>
@@ -437,6 +451,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                 if (filterHm) {
                   const hms = (w.hm as any[] || []).map((h: any) => h.malkod)
                   if (!hms.includes(filterHm)) return false
+                }
+                if (filterKalinlik) {
+                  const mat = materials.find(m => m.kod === w.malkod)
+                  const kl = mat && (mat as any).kalinlik > 0 ? String((mat as any).kalinlik) + ' mm' : ''
+                  if (kl !== filterKalinlik) return false
                 }
                 return true
               }
