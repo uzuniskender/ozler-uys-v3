@@ -1019,11 +1019,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
                 </div>
               )}
 
-              {(() => {
-                const fieldCount = [alan.boy, alan.en, alan.cap, alan.kalinlik].filter(Boolean).length + (alan.uzunluk && !alan.sacMod ? 1 : 0) + (tip === 'Hammadde' ? 1 : 0)
-                const cols = fieldCount <= 2 ? 'grid-cols-2' : fieldCount === 3 ? 'grid-cols-3' : 'grid-cols-4'
-                return (
-              <div className={`grid ${cols} gap-2`}>
+              <div className="grid grid-cols-4 gap-2">
                 {/* boy */}
                 {alan.boy && (
                   <div className={alan.ihStandart ? 'col-span-2' : ''}>
@@ -1065,10 +1061,6 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
                   </div>
                 )}
               </div>
-
-              </div>
-                )
-              })()}
               {/* PLY uyarısı */}
               {hammaddeTipi === 'PLY' && parseFloat(en) > parseFloat(boy) && parseFloat(boy) > 0 && (
                 <div className="text-[10px] text-blue-400 mt-1">ℹ Plywood/panel malzemede yön önemlidir — giriş sıranız korunacak.</div>
