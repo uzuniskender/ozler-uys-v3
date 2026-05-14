@@ -295,7 +295,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
         {/* Header */}
         <div className="flex items-center justify-between mb-4 bg-gradient-to-r from-accent/20 to-bg-2 border border-accent/30 rounded-xl p-4">
           <div>
-            <div className="text-lg font-bold text-white">{opr.ad}</div>
+            <div className="text-lg font-bold text-zinc-900">{opr.ad}</div>
             <div className="text-xs text-zinc-400">{opr.bolum} · {today()}</div>
           </div>
           <div className="flex gap-2">
@@ -394,7 +394,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                     <span className="font-mono text-accent text-xs font-bold">{w.ieNo}</span>
                     <span className={`text-sm font-bold ${pct >= 100 ? 'text-green' : pct > 0 ? 'text-amber' : 'text-red'}`}>{pct}%</span>
                   </div>
-                  <div className="text-[15px] font-semibold text-white mb-2">{w.malad}</div>
+                  <div className="text-[15px] font-semibold text-zinc-900 mb-2">{w.malad}</div>
                   <div className="flex items-center gap-4 text-xs mb-3">
                     <span className="text-zinc-400">Hedef: <b className="text-white">{w.hedef}</b></span>
                     <span className="text-green">Yapılan: <b>{prod}</b></span>
@@ -993,7 +993,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
               </span>
             )}
           </div>
-          <div className="text-sm font-semibold text-white mt-0.5">{w.malad}</div>
+          <div className="text-sm font-semibold text-zinc-900 mt-0.5">{w.malad}</div>
           <div className="text-[11px] text-zinc-400 mt-1">Operasyon: <b>{w.opAd}</b> · Kalan: <b className="text-amber">{kalan}</b></div>
         </div>
         <div className="p-4 space-y-4">
@@ -1065,7 +1065,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
                 const v = parseInt(e.target.value) || 0
                 if (v < 0) { setQty('0'); return }
                 if (v > kalan) { setQty(String(kalan)); toast.error('Hedef kalan: ' + kalan) } else setQty(e.target.value)
-              }} placeholder={String(kalan)} className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-white focus:outline-none focus:border-green" autoFocus />
+              }} placeholder={String(kalan)} className="w-full px-3 py-3 bg-bg-2 border border-border rounded-lg text-xl text-center font-bold text-zinc-900 focus:outline-none focus:border-green" autoFocus />
             </div>
             <div>
               <label className="text-[10px] text-zinc-500 mb-1 block">Fire</label>
