@@ -682,18 +682,21 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
             if (parentRow?.malkod) parentMat = materials.find(m => m.kod === parentRow.malkod) || null
           }
         }
-        const src = curMat || parentMat
+        const isHammadde = (curRow?.tip === 'Hammadde' || curRow?.tip === 'Sarf' || !curRow?.tip)
+        // Hammadde satırı için ölçü filtresi parent'dan gelmesin — kalınlık/çap yeterli
+        const src = isHammadde ? curMat : (curMat || parentMat)
         const defaultFilter: MaterialSearchFilter = src ? {
-          boy: src.boy || undefined,
-          en: src.en || undefined,
           kalinlik: src.kalinlik || undefined,
           cap: src.cap || undefined,
           icCap: src.icCap || undefined,
+          // Hammadde ise boy/en gelmesin (kesim ölçüsü ≠ hammadde ölçüsü)
+          ...(isHammadde ? {} : { boy: src.boy || undefined, en: src.en || undefined }),
         } : {}
         return (
           <MaterialSearchModal
             materials={materials}
             defaultFilter={defaultFilter}
+            allowedTypes={curRow?.tip === 'Hammadde' ? ['Hammadde', 'YarıMamul'] : curRow?.tip === 'Sarf' ? ['Sarf'] : curRow?.tip ? [curRow.tip] : undefined}
             title="Malzeme Ara — Ölçü Filtreli"
             onSelect={(mat) => {
               onMalkodChange(searchModalIdx, mat.kod)
