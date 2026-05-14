@@ -437,7 +437,7 @@ export function WorkOrders() {
             {!isCollapsed && (
               <div className="bg-bg-2 border border-border border-t-0 rounded-b-lg overflow-hidden">
                 <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500">
-                  <th className="px-2 py-2 w-6"></th><th className="text-left px-3 py-2">İE No</th><th className="text-left px-3 py-2">Malzeme / HM</th><th className="text-left px-3 py-2">Operasyon</th><th className="text-left px-3 py-2">İstasyon</th><th className="text-right px-3 py-2">Adet</th><th className="text-left px-3 py-2">Termin</th><th className="text-right px-3 py-2 w-24">İlerleme</th><th className="text-left px-3 py-2">Durum</th><th className="px-3 py-2 w-8"></th>
+                  <th className="px-2 py-2 w-6"></th><th className="text-left px-3 py-2 w-32">İE No</th><th className="text-left px-3 py-2">Malzeme / HM</th><th className="text-left px-3 py-2 w-28">Operasyon</th><th className="text-left px-3 py-2 w-24">İstasyon</th><th className="text-right px-3 py-2 w-20">Adet</th><th className="text-left px-3 py-2 w-24">Termin</th><th className="text-right px-3 py-2 w-24">İlerleme</th><th className="text-left px-3 py-2 w-36">Durum</th><th className="px-3 py-2 w-14"></th>
                 </tr></thead><tbody>
                   {wos.map(w => {
                     const prod = wProd(w.id); const pct = wPct(w); const ord2 = orders.find(o => o.id === w.orderId)
@@ -468,7 +468,7 @@ export function WorkOrders() {
                           {stokBadgeEl(w)}
                         </td>
                         <td className="px-3 py-1.5"><span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/8 text-accent border border-accent/15">{w.opAd || '—'}</span></td>
-                        <td className="px-3 py-1.5 text-zinc-500 text-[11px]">{w.istAd || '—'}</td>
+                        <td className="px-3 py-1.5 text-zinc-500 text-[11px] w-24">{w.istAd || '—'}</td>
                         <td className="px-3 py-1.5 text-right font-mono"><b>{prod}</b><span className="text-zinc-600">/{w.hedef}</span></td><td className={`px-3 py-1.5 font-mono text-[11px] ${w.termin && w.termin < today() && pct < 100 ? "text-red font-semibold" : "text-zinc-500"}`}>{w.termin || "-"}</td>
                         <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-1.5"><div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct >= 100 ? 'bg-green' : pct >= 50 ? 'bg-amber' : pct > 0 ? 'bg-accent' : 'bg-zinc-700'}`} style={{ width: `${Math.max(2, pct)}%` }} /></div><span className={`font-mono text-[10px] ${pctColor(pct)}`}>{pct}%</span></div></td>
                         <td className="px-3 py-1.5">
