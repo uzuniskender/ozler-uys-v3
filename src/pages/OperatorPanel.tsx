@@ -171,7 +171,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
-  const { orders, workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler } = useStore()
+  const { orders, workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler, materials } = useStore()
   // v16.82 — Operatör filtreler
   const [filterSiparis, setFilterSiparis] = useState('')
   const [filterOlcu, setFilterOlcu] = useState('')
@@ -390,7 +390,14 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
             {/* v16.82 — Filtreler: Sipariş / Ölçü / Hammadde */}
             {(() => {
               const siparsisOpts = [...new Set(acikWOs.map(w => orders.find(o => o.id === w.orderId)?.siparisNo).filter(Boolean))] as string[]
-              const olcuOpts = [...new Set(acikWOs.map(w => w.malkod).filter(Boolean))]
+              // Ölçü = malzeme uzunluğu (materials tablosundan, yoksa malkod string parse)
+              const getUzunluk = (w: typeof acikWOs[0]) => {
+                const mat = materials.find(m => m.kod === w.malkod)
+                if (mat && (mat as any).uzunluk > 0) return String((mat as any).uzunluk) + ' mm'
+                const match = (w.malkod + ' ' + w.malad).match(/(\d{3,5})\s*[mM]{2}/)
+                return match ? match[1] + ' mm' : ''
+              }
+              const olcuOpts = [...new Set(acikWOs.map(getUzunluk).filter(Boolean))].sort((a,b) => parseInt(a)-parseInt(b))
               const hmOpts = [...new Set(acikWOs.flatMap(w => (w.hm as any[] || []).map((h: any) => h.malkod)).filter(Boolean))]
               return (
                 <div className="mb-3 space-y-2">
@@ -422,7 +429,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
               if (!myActiveList.some(a => a.woId === w.id)) {
                 const sipNo = orders.find(o => o.id === w.orderId)?.siparisNo || ''
                 if (filterSiparis && sipNo !== filterSiparis) return false
-                if (filterOlcu && w.malkod !== filterOlcu) return false
+                if (filterOlcu) {
+                  const mat = materials.find(m => m.kod === w.malkod)
+                  const uz = mat && (mat as any).uzunluk > 0 ? String((mat as any).uzunluk) + ' mm' : (w.malkod + ' ' + w.malad).match(/(\d{3,5})\s*[mM]{2}/)?.[1] + ' mm' || ''
+                  if (uz !== filterOlcu) return false
+                }
                 if (filterHm) {
                   const hms = (w.hm as any[] || []).map((h: any) => h.malkod)
                   if (!hms.includes(filterHm)) return false
