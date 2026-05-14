@@ -254,12 +254,12 @@ export function Warehouse() {
             <p className="text-xs text-zinc-500 mb-3">Fiziksel sayım sonuçlarını girin — sistem stoğuyla karşılaştırılır.</p>
             <div className="space-y-2">
               {filteredStok.slice(0, 30).map(s => (
-                <div key={s.malkod} className="flex items-center gap-3 text-xs">
-                  <span className="font-mono text-accent w-24">{s.malkod}</span>
-                  <span className="flex-1 text-zinc-300">{s.malad}</span>
-                  <span className="text-zinc-500 w-16 text-right">Sistem: {Math.round(s.miktar)}</span>
+                <div key={s.malkod} className="flex items-center gap-2 text-xs">
+                  <span className="font-mono text-accent w-28 shrink-0 select-all cursor-text">{s.malkod}</span>
+                  <span className="flex-1 text-zinc-700 truncate min-w-0">{s.malad}</span>
+                  <span className="text-zinc-500 shrink-0 text-[10px]">Sys:{Math.round(s.miktar)}</span>
                   <input type="number" placeholder="Sayım" data-malkod={s.malkod}
-                    className="w-20 px-2 py-1 bg-bg-3 border border-border rounded text-xs text-right focus:outline-none focus:border-accent" />
+                    className="w-20 px-2 py-1 bg-bg-3 border border-border rounded text-xs text-right focus:outline-none focus:border-accent shrink-0" />
                 </div>
               ))}
             </div>

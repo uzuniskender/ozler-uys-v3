@@ -186,7 +186,7 @@ export function Logs() {
             tip: 'stok',
             baslik,
             detay,
-            kullanici: '—',
+            kullanici: r.wo_id ? 'Üretim' : (r.aciklama||'').includes('Tedarik') ? 'Tedarik' : (r.aciklama||'').includes('Sevkiyat') ? 'Sevkiyat' : 'Manuel',
             malkod: r.malkod,
             woId: r.wo_id,
             orderId: wo?.orderId || null,
@@ -242,7 +242,7 @@ export function Logs() {
       tipler[l.tip] = (tipler[l.tip] || 0) + 1
       kullanicilar[l.kullanici] = (kullanicilar[l.kullanici] || 0) + 1
     }
-    const enAktif = Object.entries(kullanicilar).sort((a, b) => b[1] - a[1])[0]
+    const enAktif = Object.entries(kullanicilar).filter(([k]) => k && k !== '—' && k !== 'Üretim' && k !== 'Tedarik' && k !== 'Sevkiyat' && k !== 'Manuel' && k !== '?').sort((a, b) => b[1] - a[1])[0]
     return { toplam: logs.length, tipler, enAktif: enAktif ? `${enAktif[0]} (${enAktif[1]})` : '—' }
   }, [logs])
 

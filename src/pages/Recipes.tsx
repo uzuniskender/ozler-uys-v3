@@ -340,9 +340,9 @@ export function Recipes() {
                       <td className="px-4 py-2.5 text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           {satirlar.length===0 ? <span className="text-[10px] text-zinc-600">—</span>
-                          : sureDurum==='tam' ? <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold"><Clock size={9}/> Var</span>
-                          : sureDurum==='eksik' ? <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold"><Clock size={9}/> Eksik</span>
-                          : <span className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] font-semibold"><Clock size={9}/> Yok</span>}
+                          : sureDurum==='tam' ? <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px] font-semibold">✓</span>
+                          : sureDurum==='eksik' ? <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">⚠ Eksik</span>
+                          : <span className="text-zinc-400 text-[10px]">—</span>}
                           {eksikOp && <span className="px-1.5 py-0.5 bg-red/10 text-red rounded text-[10px] font-semibold">⚙ Eksik Op</span>}
                         </div>
                       </td>

@@ -487,9 +487,9 @@ export function StokLog() {
       {/* Özet şerit */}
       <div className="px-6 py-2 border-b border-border flex gap-6 text-xs text-zinc-500">
         <span><span className="text-zinc-300 font-mono">{ozet.sayi}</span> kayıt</span>
-        <span>↑ Giriş: <span className="text-green-400 font-mono">{fmtNum(ozet.giris)}</span></span>
-        <span>↓ Çıkış: <span className="text-red-400 font-mono">{fmtNum(ozet.cikis)}</span></span>
-        <span>Net: <span className={`font-mono font-semibold ${ozet.net >= 0 ? 'text-accent' : 'text-red-400'}`}>{fmtNum(ozet.net)}</span></span>
+        <span>↑ Giriş: <span className="text-green-400 font-mono">{fmtNum(ozet.giris)}</span> <span className="text-zinc-600">adet</span></span>
+        <span>↓ Çıkış: <span className="text-red-400 font-mono">{fmtNum(ozet.cikis)}</span> <span className="text-zinc-600">adet</span></span>
+        <span title="Giriş − Çıkış toplamı (bar açılışları dahil)">Net: <span className={`font-mono font-semibold ${ozet.net >= 0 ? 'text-accent' : 'text-red-400'}`}>{fmtNum(ozet.net)}</span> <span className="text-zinc-600">adet</span></span>
       </div>
 
       {/* İçerik */}
