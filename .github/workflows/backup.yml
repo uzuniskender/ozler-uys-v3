@@ -1,14 +1,17 @@
 name: Günlük Supabase Yedeği
 
-# SUPABASE_DB_URL secret'ı session pooler endpoint'i kullanmalı:
-#   postgresql://postgres.<project-ref>:<password>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+# Secret'lar (GitHub → Settings → Secrets and variables → Actions):
+#   SUPABASE_HOST     — örn. aws-0-eu-central-1.pooler.supabase.com
+#   SUPABASE_USER     — örn. postgres.<project-ref>  (pooler kullanıcı formatı)
+#   SUPABASE_PASSWORD — DB şifresi
+#   SUPABASE_DB       — örn. postgres
 #
-# GitHub Actions runner'ları IPv6 desteklemediği için direct connection
-# (db.<project-ref>.supabase.co:5432) bağlanamaz. Session pooler IPv4 sunar
-# ve uzun süreli pg_dump oturumlarını destekler. Transaction pooler (port
-# 6543) pg_dump için uygun değildir — long session destekler.
-#
-# PROD: aws-0-eu-central-1.pooler.supabase.com:5432
+# Notlar:
+# - GitHub Actions runner'ları IPv6 desteklemediğinden direct connection
+#   (db.<ref>.supabase.co:5432) çalışmaz. Session pooler (port 5432) IPv4
+#   sunar ve pg_dump için gereken uzun session'ları destekler.
+# - Transaction pooler (port 6543) pg_dump için uygun DEĞİL.
+# - pg_dump versiyonu server >= olmalı; bu yüzden postgresql-client-17 kurulur.
 
 permissions:
   contents: write
@@ -24,15 +27,21 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # pg_dump prompt'a düşmesin — PGPASSWORD tek tanımla, tüm adımlar görsün
+      PGPASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install PostgreSQL client 17
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
 
       - name: Set date variables
         run: |
@@ -43,13 +52,37 @@ jobs:
         run: mkdir -p backups/${{ env.BACKUP_DATE }}
 
       - name: Dump roles
-        run: supabase db dump --db-url "${{ secrets.SUPABASE_DB_URL }}" --role-only -f backups/${{ env.BACKUP_DATE }}/roles.sql
+        run: |
+          pg_dumpall \
+            -h "${{ secrets.SUPABASE_HOST }}" \
+            -U "${{ secrets.SUPABASE_USER }}" \
+            -p 5432 \
+            --roles-only \
+            -f backups/${{ env.BACKUP_DATE }}/roles.sql
 
       - name: Dump schema
-        run: supabase db dump --db-url "${{ secrets.SUPABASE_DB_URL }}" -f backups/${{ env.BACKUP_DATE }}/schema.sql
+        run: |
+          pg_dump \
+            -h "${{ secrets.SUPABASE_HOST }}" \
+            -U "${{ secrets.SUPABASE_USER }}" \
+            -d "${{ secrets.SUPABASE_DB }}" \
+            -p 5432 \
+            --schema-only \
+            --no-owner \
+            --no-privileges \
+            -f backups/${{ env.BACKUP_DATE }}/schema.sql
 
       - name: Dump data
-        run: supabase db dump --db-url "${{ secrets.SUPABASE_DB_URL }}" --data-only --use-copy -f backups/${{ env.BACKUP_DATE }}/data.sql
+        run: |
+          pg_dump \
+            -h "${{ secrets.SUPABASE_HOST }}" \
+            -U "${{ secrets.SUPABASE_USER }}" \
+            -d "${{ secrets.SUPABASE_DB }}" \
+            -p 5432 \
+            --data-only \
+            --no-owner \
+            --no-privileges \
+            -f backups/${{ env.BACKUP_DATE }}/data.sql
 
       - name: Check file sizes
         run: ls -lh backups/${{ env.BACKUP_DATE }}/
