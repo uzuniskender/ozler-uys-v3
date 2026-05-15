@@ -99,27 +99,6 @@ export function MRP() {
     return map
   }, [orders, workOrders])
 
-  const orderHasEksik = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const o of orders) {
-      // state terminal ise (DB trigger kesin hesaplar) — eksik yok
-      const terminalState = o.state === 'tamamlandi' || o.state === 'kapali' || o.state === 'iptal'
-        || (o.mrpDurum || '') === 'tamam'
-      if (terminalState) { map[o.id] = false; continue }
-      // Tüm WO'lar tamamlandıysa eksik yok
-      if (orderAllWosDone[o.id]) { map[o.id] = false; continue }
-      // Kilitli ise atla — zaten gizlenecek
-      if (isOrderArchived(o)) { map[o.id] = false; continue }
-      try {
-        const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id, logs)
-        map[o.id] = sonuc.some(r => r.net > 0)
-      } catch {
-        map[o.id] = false
-      }
-    }
-    return map
-  }, [orders, workOrders, orderAllWosDone, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
-
   const aktifOrders = useMemo(() => {
     return orders.filter(o => {
       // v16.71 fix2 — Flow kilitlenme önleme: aktif flow'a bağlı sipariş her zaman göster
@@ -136,6 +115,20 @@ export function MRP() {
     }).sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, workOrders, orderAllWosDone, activeFlowOrderId])
+
+  // v16.80 — Sadece aktifOrders üzerinde hesaplaMRP çalıştır; terminal/arşiv siparişler zaten dışarıda.
+  const orderHasEksik = useMemo(() => {
+    const map: Record<string, boolean> = {}
+    for (const o of aktifOrders) {
+      try {
+        const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id, logs)
+        map[o.id] = sonuc.some(r => r.net > 0)
+      } catch {
+        map[o.id] = false
+      }
+    }
+    return map
+  }, [aktifOrders, orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   // v16.71 fix2 — Arşiv = sadece terminal state (tamamlandi/kapali/iptal) + tüm WO'ları biten
   const arsivOrders = useMemo(() => {
