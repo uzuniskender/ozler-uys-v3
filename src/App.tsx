@@ -1,4 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react'
+import { useOrderStore } from "@/store"
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
