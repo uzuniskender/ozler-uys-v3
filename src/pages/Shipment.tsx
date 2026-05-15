@@ -51,22 +51,26 @@ export function Shipment() {
   async function deleteSevk(id: string) {
     if (!await showConfirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
     const silinenSevk = sevkler.find(s => s.id === id)
-    await supabase.from('uys_sevkler').delete().eq('id', id)
-    await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + id + '-%')
-    if (silinenSevk?.orderId) {
-      const ord = orders.find(o => o.id === silinenSevk.orderId)
-      if (ord) {
-        const { data: kalanSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', silinenSevk.orderId)
-        let toplamSevk = 0
-        for (const s of (kalanSevkler || [])) {
-          const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
-          toplamSevk += kk.filter(k => k.malkod === (ord as any).mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+    try {
+      await supabase.from('uys_sevkler').delete().eq('id', id)
+      await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + id + '-%')
+      if (silinenSevk?.orderId) {
+        const ord = orders.find(o => o.id === silinenSevk.orderId)
+        if (ord) {
+          const { data: kalanSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', silinenSevk.orderId)
+          let toplamSevk = 0
+          for (const s of (kalanSevkler || [])) {
+            const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
+            toplamSevk += kk.filter(k => k.malkod === (ord as any).mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
+          }
+          const yeniDurum = toplamSevk <= 0 ? 'sevk_yok' : toplamSevk >= (ord as any).adet ? 'tamamen_sevk' : 'kismi_sevk'
+          await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', silinenSevk.orderId)
         }
-        const yeniDurum = toplamSevk <= 0 ? 'sevk_yok' : toplamSevk >= (ord as any).adet ? 'tamamen_sevk' : 'kismi_sevk'
-        await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', silinenSevk.orderId)
       }
+      loadAllStores(); toast.success('Sevkiyat silindi')
+    } catch (e: any) {
+      toast.error('Silme hatası: ' + (e?.message || e))
     }
-    loadAllStores(); toast.success('Sevkiyat silindi')
   }
 
   function exportExcel() {
@@ -475,34 +479,39 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
     if (orderId && ord && mevcutSevkAdet >= ord.adet) {
       toast.error(`${ord.siparisNo} zaten tamamen sevk edilmiş. Kaydedilemez.`); return
     }
-    const sevkId = uid()
-    await supabase.from('uys_sevkler').insert({
-      id: sevkId, order_id: orderId || null, siparis_no: ord?.siparisNo || '',
-      musteri: ord?.musteri || '', tarih: tarih, kalemler: validKalemler, not_: not_,
-    })
-    if (stokCikis) {
-      // Stok kontrolü — yetersizse kaydetme
-      const stokYetersiz = validKalemler.filter(k => {
-        const mevcutStok = getStok(k.malkod, stokHareketler)
-        return mevcutStok < k.miktar
+    try {
+      const sevkId = uid()
+      await supabase.from('uys_sevkler').insert({
+        id: sevkId, order_id: orderId || null, siparis_no: ord?.siparisNo || '',
+        musteri: ord?.musteri || '', tarih: tarih, kalemler: validKalemler, not_: not_,
       })
-      if (stokYetersiz.length > 0) {
-        toast.error('Stok yetersiz: ' + stokYetersiz.map(k => `${k.malad || k.malkod} (stok: ${getStok(k.malkod, stokHareketler)}, talep: ${k.miktar})`).join(' · '))
-        setSaving(false)
-        return
+      if (stokCikis) {
+        // Stok kontrolü — yetersizse kaydetme
+        const stokYetersiz = validKalemler.filter(k => {
+          const mevcutStok = getStok(k.malkod, stokHareketler)
+          return mevcutStok < k.miktar
+        })
+        if (stokYetersiz.length > 0) {
+          toast.error('Stok yetersiz: ' + stokYetersiz.map(k => `${k.malad || k.malkod} (stok: ${getStok(k.malkod, stokHareketler)}, talep: ${k.miktar})`).join(' · '))
+          setSaving(false)
+          return
+        }
+        for (const k of validKalemler) {
+          await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevkId, tarih: tarih })
+        }
       }
-      for (const k of validKalemler) {
-        await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevkId, tarih: tarih })
+      if (orderId && ord) {
+        const yeniSevkDurum = await hesaplaSevkDurum(orderId, ord.adet, ord.mamulKod, validKalemler)
+        await supabase.from('uys_orders').update({ sevk_durum: yeniSevkDurum }).eq('id', orderId)
+        if (yeniSevkDurum === 'tamamen_sevk' && (ord as any).durum !== 'kapalı') {
+          toast.success('🎯 Sipariş tamamen sevk edildi.', { duration: 6000 })
+        }
       }
+      onSaved()
+    } catch (e: any) {
+      toast.error('Sevkiyat kaydedilemedi: ' + (e?.message || e))
+      setSaving(false)
     }
-    if (orderId && ord) {
-      const yeniSevkDurum = await hesaplaSevkDurum(orderId, ord.adet, ord.mamulKod, validKalemler)
-      await supabase.from('uys_orders').update({ sevk_durum: yeniSevkDurum }).eq('id', orderId)
-      if (yeniSevkDurum === 'tamamen_sevk' && (ord as any).durum !== 'kapalı') {
-        toast.success('🎯 Sipariş tamamen sevk edildi.', { duration: 6000 })
-      }
-    }
-    onSaved()
   }
 
   async function hesaplaSevkDurum(ordId: string, toplamAdet: number, mamulKod: string, yeniKalemler: { malkod: string; miktar: number }[]): Promise<string> {

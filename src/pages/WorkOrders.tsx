@@ -171,8 +171,12 @@ export function WorkOrders() {
     }
     if (!await showConfirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
     if (!await requirePassword('Toplu İE Silme')) return
-    for (const id of selected) { await supabase.from('uys_work_orders').delete().eq('id', id) }
-    const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE silindi`)
+    try {
+      for (const id of selected) { await supabase.from('uys_work_orders').delete().eq('id', id) }
+      const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE silindi`)
+    } catch (e: any) {
+      toast.error('Silme hatası: ' + (e?.message || e))
+    }
   }
 
   async function topluKopyala() {

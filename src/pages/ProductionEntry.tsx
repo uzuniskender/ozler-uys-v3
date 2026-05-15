@@ -397,7 +397,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     }
     // Stok kontrolü kaldırıldı — İE hedefi zaten hammadde tahsisi demek, İE oluşturma anında kontrol edildi
     setSaving(true)
-
+    try {
     const logId = uid()
     const nowTs = new Date()
     const saatStr = String(nowTs.getHours()).padStart(2, '0') + ':' + String(nowTs.getMinutes()).padStart(2, '0')
@@ -501,6 +501,11 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       await reloadTablesDispatched(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar', 'uys_kesim_planlari'])
     } catch (e) { console.error('Post-save reload:', e) }
     onSaved()
+    } catch (e: any) {
+      toast.error('Üretim girişi kaydedilemedi: ' + (e?.message || e))
+    } finally {
+      setSaving(false)
+    }
   }
 
 

@@ -103,26 +103,22 @@ export function Procurement() {
       ? 'Bu tedarik "geldi" durumda. Silinirse stok girişi de silinecek. Devam?'
       : 'Silmek istediğinize emin misiniz?'
     if (!await showConfirm(msg)) return
-    // Silinen tedarikin order_id'sini DB'den al (state kirli olabilir)
-    const { data: tedRow } = await supabase.from('uys_tedarikler').select('order_id').eq('id', id).maybeSingle()
-    const orderId = (tedRow as { order_id?: string } | null)?.order_id
-    // Geldi ise ilgili stok hareketini de sil
-    if (wasGeldi) {
-      await supabase.from('uys_stok_hareketler').delete().eq('id', tedarikStokId(id))
-    }
-    await supabase.from('uys_tedarikler').delete().eq('id', id)
-    if (orderId) {
-      await supabase.from('uys_orders').update({ mrp_durum: 'bekliyor' }).eq('id', orderId)
-    } else {
-    }
-    // v15.36.1 — Rezerve state'i tedarik silince güncelle (MRP'de tutarlı sonuç için)
     try {
-      const cpMapped = cuttingPlans.map((p: any) => ({
-        hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
-        gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
-      }))
-    } catch (e) { console.warn('[del] rezerve sync:', e) }
-    loadAllStores(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
+      // Silinen tedarikin order_id'sini DB'den al (state kirli olabilir)
+      const { data: tedRow } = await supabase.from('uys_tedarikler').select('order_id').eq('id', id).maybeSingle()
+      const orderId = (tedRow as { order_id?: string } | null)?.order_id
+      // Geldi ise ilgili stok hareketini de sil
+      if (wasGeldi) {
+        await supabase.from('uys_stok_hareketler').delete().eq('id', tedarikStokId(id))
+      }
+      await supabase.from('uys_tedarikler').delete().eq('id', id)
+      if (orderId) {
+        await supabase.from('uys_orders').update({ mrp_durum: 'bekliyor' }).eq('id', orderId)
+      }
+      loadAllStores(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
+    } catch (e: any) {
+      toast.error('Silme hatası: ' + (e?.message || e))
+    }
   }
 
   async function save(data: Record<string, unknown>, editId?: string) {
