@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
 import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores, useStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditLog } from '@/lib/audit'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -22,11 +22,18 @@ import { addStokHareketi } from '@/lib/stokHelper'
 import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
 
 export function Orders() {
-  const { orders, workOrders, logs, recipes, cuttingPlans, materials, pendingFlows, loadAll } = useStore()
+  const orders = useOrderStore(s => s.orders)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const recipes = useProductionStore(s => s.recipes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const pendingFlows = useProductionStore(s => s.pendingFlows)
+  const materials = useWarehouseStore(s => s.materials)
+  const loadAll = loadAllStores
   const { can, isGuest, user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { stokHareketler } = useStore()
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const urlFlowId = searchParams.get('flow') || ''
   const urlMrpFilter = searchParams.get('mrp') || ''  // v15.49a — Topbar MRP badge'inden ?mrp=eksik
   const urlYeni = searchParams.get('yeni') || ''       // v15.57 — WorkOrders'tan ?yeni=1 ile direk modal aç
@@ -425,7 +432,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { stokHareketler } = useStore()
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const activeFlowId = searchParams.get('flow') || ''  // Zaten bir flow içindeyse (örn. CuttingPlans'tan geri geldi)
   const { user } = useAuth()
   const [siparisNo, setSiparisNo] = useState(initial?.siparisNo || '')
@@ -1037,7 +1044,15 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 }
 
 function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; workOrders: { id: string; ieNo: string; malad: string; malkod: string; opAd: string; hedef: number }[]; logs: { woId: string; qty: number; tarih: string; fire: number; operatorlar: { ad: string }[] }[]; onClose: () => void }) {
-  const { recipes, stokHareketler, tedarikler, cuttingPlans: cp, materials: mats, orders: allOrders, workOrders: allWOs, mrpRezerve, loadAll } = useStore()
+  const recipes = useProductionStore(s => s.recipes)
+  const cp = useProductionStore(s => s.cuttingPlans)
+  const allWOs = useProductionStore(s => s.workOrders)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const mats = useWarehouseStore(s => s.materials)
+  const allOrders = useOrderStore(s => s.orders)
+  const mrpRezerve = useOrderStore(s => s.mrpRezerve)
+  const loadAll = loadAllStores
   const { can, user } = useAuth()
   const [tab, setTab] = useState<'ie' | 'mrp'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useAuthStore, useProductionStore } from '@/store'
 import { today } from '@/lib/utils'
 import { UserX, X, Clock, Calendar, Stethoscope, Coffee } from 'lucide-react'
 
@@ -18,7 +18,9 @@ import { UserX, X, Clock, Calendar, Stethoscope, Coffee } from 'lucide-react'
  * Sadece <InactiveOperatorsCard /> olarak yerleştir.
  */
 export function InactiveOperatorsCard() {
-  const { operators, logs, izinler } = useStore()
+  const operators = useAuthStore(s => s.operators)
+  const izinler = useAuthStore(s => s.izinler)
+  const logs = useProductionStore(s => s.logs)
   const [showModal, setShowModal] = useState(false)
 
   const todayStr = today()

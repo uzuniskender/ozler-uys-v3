@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useRef, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { autoChainSubBoms } from '@/features/bom/autoChainSubBoms'
 import { uid } from '@/lib/utils'
@@ -13,7 +13,12 @@ import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/Mat
 import { RecipeEditor } from './Recipes'
 
 export function BomTrees() {
-  const { bomTrees, recipes, workOrders, materials, operations, loadAll } = useStore()
+  const bomTrees = useProductionStore(s => s.bomTrees)
+  const recipes = useProductionStore(s => s.recipes)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const operations = useProductionStore(s => s.operations)
+  const materials = useWarehouseStore(s => s.materials)
+  const loadAll = loadAllStores
   const { can } = useAuth()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -342,7 +347,7 @@ export function BomTrees() {
 }
 
 function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const { materials } = useStore()
+  const materials = useWarehouseStore(s => s.materials)
   const { can } = useAuth()
   const [mamulKod, setMamulKod] = useState('')
   const [ad, setAd] = useState('')
@@ -403,7 +408,9 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => void; onSaved: () => void }) {
   const [rows, setRows] = useState(bom.rows || [])
   const [viewMode, setViewMode] = useState<'edit'|'tree'>('edit')
-  const { materials, recipes, loadAll: storeLoadAll } = useStore()
+  const materials = useWarehouseStore(s => s.materials)
+  const recipes = useProductionStore(s => s.recipes)
+  const storeLoadAll = loadAllStores
   const { can } = useAuth()
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))

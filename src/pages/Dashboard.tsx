@@ -8,7 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { isActive as isStateActive } from '@/features/order/stateMachine'
 import { showConfirm } from '@/lib/prompt'
 import { supabase } from '@/lib/supabase'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { uid, today } from '@/lib/utils'
 import { AlertTriangle, Clock, Package, MessageSquare, Truck, Cpu, Tag, CalendarX2, Bell, Database, ChevronRight, Weight, BarChart2 } from 'lucide-react'
 import { InactiveOperatorsCard } from '@/components/InactiveOperatorsCard'
@@ -132,11 +132,23 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const {
-    orders, workOrders, logs, operatorNotes, activeWork, operators,
-    fireLogs, materials, stokHareketler, tedarikler, cuttingPlans,
-    operations, sevkler, izinler, recipes, bomTrees, loadAll,
-  } = useStore()
+  const orders = useOrderStore(s => s.orders)
+  const sevkler = useOrderStore(s => s.sevkler)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const operatorNotes = useProductionStore(s => s.operatorNotes)
+  const activeWork = useProductionStore(s => s.activeWork)
+  const fireLogs = useProductionStore(s => s.fireLogs)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const operations = useProductionStore(s => s.operations)
+  const recipes = useProductionStore(s => s.recipes)
+  const bomTrees = useProductionStore(s => s.bomTrees)
+  const materials = useWarehouseStore(s => s.materials)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const operators = useAuthStore(s => s.operators)
+  const izinler = useAuthStore(s => s.izinler)
+  const loadAll = loadAllStores
   const { isGuest, role } = useAuth()
   const todayStr = today()
 

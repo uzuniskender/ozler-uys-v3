@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditWoDurum, auditLog } from '@/lib/audit'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -23,7 +23,18 @@ import { OprEntryModal } from '@/pages/OperatorPanel'
 import { startFlow } from '@/lib/pendingFlow'
 
 export function WorkOrders() {
-  const { workOrders, logs, orders, operations, operators, stokHareketler, recipes, cuttingPlans, tedarikler, materials, pendingFlows, loadAll } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const operations = useProductionStore(s => s.operations)
+  const recipes = useProductionStore(s => s.recipes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const pendingFlows = useProductionStore(s => s.pendingFlows)
+  const orders = useOrderStore(s => s.orders)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const materials = useWarehouseStore(s => s.materials)
+  const operators = useAuthStore(s => s.operators)
+  const loadAll = loadAllStores
 
   // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
   const orderHmEksikMap = useMemo(
@@ -125,7 +136,7 @@ export function WorkOrders() {
   async function topluDurumGuncelle(durum: string) {
     if (!selected.size) return
     if (durum === 'tamamlandi') {
-      const logsVar = useStore.getState().logs
+      const logsVar = useProductionStore.getState().logs
       const logSizIds = [...selected].filter(id => !logsVar.some(l => l.woId === id))
       if (logSizIds.length > 0) {
         const iezler = logSizIds.map(id => workOrders.find(w => w.id === id)?.ieNo || id).join(', ')
@@ -259,7 +270,7 @@ export function WorkOrders() {
   async function setDurum(id: string, durum: string) {
     // Tamamlandı için log zorunlu
     if (durum === 'tamamlandi') {
-      const logsVar = useStore.getState().logs
+      const logsVar = useProductionStore.getState().logs
       if (!logsVar.some(l => l.woId === id)) {
         toast.error('⛔ Üretim logu olmadan tamamlandı yapılamaz. Kısmi üretimde "Kısmi Tamam", üretim yoksa "İptal" kullanın.')
         return
@@ -530,7 +541,7 @@ export function WorkOrders() {
 }
 
 function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, loadAll, highlightLogId }: any) {
-  const { durusKodlari } = useStore()
+  const durusKodlari = useProductionStore(s => s.durusKodlari)
   const { can } = useAuth()
   const [adminEntryWO, setAdminEntryWO] = useState<string | null>(null)
   const prod = wProd(wo.id); const pct = wPct(wo); const kalan = Math.max(0, wo.hedef - prod)

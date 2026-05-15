@@ -2,13 +2,14 @@ import { useAuth } from '@/hooks/useAuth'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 
 export function DowntimeCodes() {
-  const { durusKodlari, loadAll } = useStore()
+  const durusKodlari = useProductionStore(s => s.durusKodlari)
+  const loadOwn = useProductionStore(s => s.loadOwn)
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
 
@@ -20,11 +21,11 @@ export function DowntimeCodes() {
 
   async function del(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
-    await supabase.from('uys_durus_kodlari').delete().eq('id', id); loadAll()
+    await supabase.from('uys_durus_kodlari').delete().eq('id', id); loadOwn()
   }
 
   async function add(kod: string, ad: string, kategori: string) {
-    await supabase.from('uys_durus_kodlari').insert({ id: uid(), kod, ad, kategori }); loadAll(); setShowForm(false)
+    await supabase.from('uys_durus_kodlari').insert({ id: uid(), kod, ad, kategori }); loadOwn(); setShowForm(false)
   }
 
   return (
@@ -54,7 +55,7 @@ export function DowntimeCodes() {
                 await supabase.from('uys_durus_kodlari').insert({ id: uid(), kod, ad, kategori: String(row['Kategori'] || '') })
                 count++
               }
-              loadAll(); toast.success(count + ' duruş kodu yüklendi')
+              loadOwn(); toast.success(count + ' duruş kodu yüklendi')
             }
             input.click()
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📤 Yükle</button>

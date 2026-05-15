@@ -25,7 +25,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { Search, Calendar, Filter, X, ExternalLink, RefreshCw, Activity, Package, Factory, AlertTriangle } from 'lucide-react'
 import { getDbActivityLog, type ActivityLogRow } from '@/lib/activityLog'
@@ -72,7 +72,10 @@ type DateRange = 'bugun' | '7g' | '30g' | 'ozel'
 export function Logs() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { workOrders, orders, materials, operators } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const orders = useOrderStore(s => s.orders)
+  const materials = useWarehouseStore(s => s.materials)
+  const operators = useAuthStore(s => s.operators)
 
   const [logs, setLogs] = useState<LogRow[]>([])
   const [loading, setLoading] = useState(false)

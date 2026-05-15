@@ -1,14 +1,15 @@
 import { useAuth } from '@/hooks/useAuth'
 import { showConfirm } from '@/lib/prompt'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { Search, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 export function Operations() {
-  const { operations, loadAll } = useStore()
+  const operations = useProductionStore(s => s.operations)
+  const loadOwn = useProductionStore(s => s.loadOwn)
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -23,12 +24,12 @@ export function Operations() {
   async function save(kod: string, ad: string, bolum: string, editId?: string) {
     if (editId) await supabase.from('uys_operations').update({ kod, ad, bolum }).eq('id', editId)
     else await supabase.from('uys_operations').insert({ id: uid(), kod, ad, bolum })
-    loadAll(); setShowForm(false); setEditItem(null)
+    loadOwn(); setShowForm(false); setEditItem(null)
   }
 
   async function del(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
-    await supabase.from('uys_operations').delete().eq('id', id); loadAll()
+    await supabase.from('uys_operations').delete().eq('id', id); loadOwn()
   }
 
   return (
@@ -45,7 +46,7 @@ export function Operations() {
               const sonKelime = kelimeler[kelimeler.length - 1] || o.ad
               await supabase.from('uys_operations').update({ bolum: sonKelime }).eq('id', o.id)
             }
-            loadAll(); toast.success(bos.length + ' operasyonun bölümü güncellendi (son kelime → bölüm)')
+            loadOwn(); toast.success(bos.length + ' operasyonun bölümü güncellendi (son kelime → bölüm)')
           }} className="px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20">🔄 Bölümleri Doldur</button>
           <button onClick={() => { import('xlsx').then(XLSX => {
             const rows = operations.map(o => ({ Kod: o.kod, Ad: o.ad, Bölüm: o.bolum || '' }))
@@ -83,7 +84,7 @@ export function Operations() {
 }
 
 function SimpleFormModal({ title, initial, onClose, onSave }: { title: string; initial: { id: string; kod: string; ad: string; bolum?: string } | null; onClose: () => void; onSave: (kod: string, ad: string, bolum: string, id?: string) => void }) {
-  const { operations } = useStore()
+  const operations = useProductionStore(s => s.operations)
   const { can } = useAuth()
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')

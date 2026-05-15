@@ -3,7 +3,7 @@
 // Her akış sayfasında ortak kullanılır: Orders, CuttingPlans, MRP, Procurement.
 // Flow store'dan okur; durum='aktif' değilse render etmez (tamamlanan akış banner'ı göstermez).
 
-import { useStore } from '@/store'
+import { useProductionStore } from '@/store'
 import { useNavigate } from 'react-router-dom'
 import { Check } from 'lucide-react'
 import type { FlowStep } from '@/types'
@@ -24,7 +24,7 @@ export function FlowProgress({
   current: FlowStep
   actions?: React.ReactNode
 }) {
-  const { pendingFlows } = useStore()
+  const pendingFlows = useProductionStore(s => s.pendingFlows)
   const navigate = useNavigate()
   const flow = flowId ? pendingFlows.find(f => f.id === flowId) : null
   if (!flow || flow.durum !== 'aktif') return null

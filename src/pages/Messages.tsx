@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore, useAuthStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -15,7 +15,9 @@ import {
 const isAdmin = (n: OperatorNote) => (n.opAd || '').includes('Yönetim')
 
 export function Messages() {
-  const { operatorNotes, operators, loadAll } = useStore()
+  const operatorNotes = useProductionStore(s => s.operatorNotes)
+  const operators = useAuthStore(s => s.operators)
+  const loadOwn = useProductionStore(s => s.loadOwn)
   const { can } = useAuth()
   const [selectedOprId, setSelectedOprId] = useState<string | null>(null)
   const [mesaj, setMesaj] = useState('')
@@ -123,7 +125,7 @@ export function Messages() {
     const unread = operatorNotes.filter(n => n.opId === selectedOprId && !isAdmin(n) && !n.okundu)
     if (unread.length > 0) {
       Promise.all(unread.map(n => supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)))
-        .then(() => loadAll())
+        .then(() => loadOwn())
     }
   }, [selectedOprId, operatorNotes, loadAll])
 
@@ -140,12 +142,12 @@ export function Messages() {
     setSending(false)
     if (error) { toast.error('Gönderilemedi: ' + error.message); return }
     setMesaj(''); setReplyKategori(''); setReplyOncelik('Normal')
-    loadAll()
+    loadOwn()
   }
 
   async function deleteMsg(id: string) {
     await supabase.from('uys_operator_notes').delete().eq('id', id)
-    loadAll()
+    loadOwn()
   }
 
   async function markAllRead() {
@@ -154,7 +156,7 @@ export function Messages() {
     for (const n of unread) {
       await supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)
     }
-    loadAll(); toast.success(`${unread.length} mesaj okundu işaretlendi`)
+    loadOwn(); toast.success(`${unread.length} mesaj okundu işaretlendi`)
   }
 
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)

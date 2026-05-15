@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore, useAuthStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 
 function gecenDakika(baslangic: string): number {
@@ -24,7 +24,10 @@ function durumRenk(dk: number): string {
 }
 
 export function ActiveWorkPanel() {
-  const { activeWork, workOrders, operators, loadAll } = useStore()
+  const activeWork = useProductionStore(s => s.activeWork)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const loadOwn = useProductionStore(s => s.loadOwn)
+  const operators = useAuthStore(s => s.operators)
   const [tick, setTick] = useState(0)
   const [realtime, setRealtime] = useState(true)
 
@@ -40,7 +43,7 @@ export function ActiveWorkPanel() {
     const ch = supabase
       .channel('active-work-panel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'uys_active_work' }, () => {
-        loadAll()
+        loadOwn()
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
@@ -73,7 +76,7 @@ export function ActiveWorkPanel() {
               className="accent-accent" />
             Canlı
           </label>
-          <button onClick={() => loadAll()}
+          <button onClick={() => loadOwn()}
             className="px-2 py-1 text-xs bg-bg-2 border border-border rounded text-zinc-400 hover:text-zinc-200">
             ↻ Yenile
           </button>

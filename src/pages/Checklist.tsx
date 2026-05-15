@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useAuthStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -14,7 +14,8 @@ const DURUM_RENK: Record<string, string> = { bekliyor: 'bg-zinc-600/20 text-zinc
 const DURUM_ICON: Record<string, typeof Clock> = { bekliyor: Clock, devam: AlertTriangle, tamamlandi: CheckCircle, iptal: Trash2 }
 
 export function Checklist() {
-  const { checklist, loadAll } = useStore()
+  const checklist = useAuthStore(s => s.checklist)
+  const loadOwn = useAuthStore(s => s.loadOwn)
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
@@ -38,13 +39,13 @@ export function Checklist() {
   async function deleteCL(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_checklist').delete().eq('id', id)
-    loadAll(); toast.success('Silindi')
+    loadOwn(); toast.success('Silindi')
   }
 
   async function toggleDurum(item: ChecklistItem) {
     const next = item.durum === 'bekliyor' ? 'devam' : item.durum === 'devam' ? 'tamamlandi' : 'bekliyor'
     await supabase.from('uys_checklist').update({ durum: next, tamamlanma: next === 'tamamlandi' ? today() : null }).eq('id', item.id)
-    loadAll()
+    loadOwn()
   }
 
   const gorevCount = checklist.filter(c => c.tip === 'gorev' && c.durum !== 'tamamlandi' && c.durum !== 'iptal').length
@@ -114,14 +115,14 @@ export function Checklist() {
         {!filtered.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">Kayıt yok</div>}
       </div>
 
-      {showForm && <CLFormModal initial={editItem} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAll(); toast.success(editItem ? 'Güncellendi' : 'Oluşturuldu') }} />}
-      {detailItem && <CLDetailModal item={detailItem} onClose={() => setDetailItem(null)} onUpdated={() => { setDetailItem(null); loadAll() }} />}
+      {showForm && <CLFormModal initial={editItem} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadOwn(); toast.success(editItem ? 'Güncellendi' : 'Oluşturuldu') }} />}
+      {detailItem && <CLDetailModal item={detailItem} onClose={() => setDetailItem(null)} onUpdated={() => { setDetailItem(null); loadOwn() }} />}
     </div>
   )
 }
 
 function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | null; onClose: () => void; onSaved: () => void }) {
-  const { checklist } = useStore()
+  const checklist = useAuthStore(s => s.checklist)
   const [tip, setTip] = useState<string>(initial?.tip || 'gorev')
   const [baslik, setBaslik] = useState(initial?.baslik || '')
   const [aciklama, setAciklama] = useState(initial?.aciklama || '')

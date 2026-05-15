@@ -7,7 +7,7 @@ import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel
 import { isKesimWO, getPlanliWoIds } from '@/lib/statusUtils'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useProductionStore, useAuthStore, useWarehouseStore, reloadTablesDispatched } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -15,7 +15,11 @@ import { showConfirm } from '@/lib/prompt'
 import { Search, Play, CheckCircle, ScanBarcode } from 'lucide-react'
 
 export function ProductionEntry() {
-  const { workOrders, logs, operators, operations, loadAll } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const operations = useProductionStore(s => s.operations)
+  const loadOwn = useProductionStore(s => s.loadOwn)
+  const operators = useAuthStore(s => s.operators)
   const { can } = useAuth()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -193,7 +197,7 @@ export function ProductionEntry() {
           operators={operators}
           defaultOprId={selectedOpr || undefined}
           onClose={() => setEntryWO(null)}
-          onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }}
+          onSaved={() => { setEntryWO(null); loadOwn(); toast.success('Üretim kaydedildi') }}
         />
       )}
 
@@ -202,7 +206,7 @@ export function ProductionEntry() {
           acikWOs={acikWOs}
           operators={operators}
           onClose={() => setShowToplu(false)}
-          onSaved={() => { setShowToplu(false); loadAll(); toast.success('Toplu üretim kaydedildi') }}
+          onSaved={() => { setShowToplu(false); loadOwn(); toast.success('Toplu üretim kaydedildi') }}
         />
       )}
     </div>
@@ -214,7 +218,13 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   defaultOprId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, durusKodlari, stokHareketler, recipes, materials, cuttingPlans } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const durusKodlari = useProductionStore(s => s.durusKodlari)
+  const recipes = useProductionStore(s => s.recipes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const materials = useWarehouseStore(s => s.materials)
   const { can } = useAuth()
   const w = workOrders.find(x => x.id === woId)!
   const [qty, setQty] = useState('')
@@ -445,7 +455,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     // v15.31: Bar Model tetikleyici — kesim planı satırı tamamlandıysa
     // bar_acilis + acik_bar_giris yaz. İdempotent (deterministik id).
     try {
-      const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useStore.getState()
+      const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useProductionStore.getState()
       // Freshly yazılan log store'a henüz gelmediyse hesaba katmak için manuel ekle
       const freshLogs = [...logState, { id: logId, woId, qty: q, fire: f } as any]
       const r = await barModelSync(woId, cpState, woState, freshLogs, materials)
@@ -488,7 +498,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     logAction('Üretim girişi', w.ieNo + ' — ' + (parseInt(qty) || 0) + ' adet')
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {
-      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar', 'uys_kesim_planlari'])
+      await reloadTablesDispatched(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar', 'uys_kesim_planlari'])
     } catch (e) { console.error('Post-save reload:', e) }
     onSaved()
   }
@@ -644,7 +654,11 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
   operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, recipes, materials, cuttingPlans, logs } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const recipes = useProductionStore(s => s.recipes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const logs = useProductionStore(s => s.logs)
+  const materials = useWarehouseStore(s => s.materials)
   const { can } = useAuth()
   const [rows, setRows] = useState<{ woId: string; qty: string; fire: string }[]>(
     acikWOs.slice(0, 20).map(w => ({ woId: w.id, qty: '', fire: '' }))

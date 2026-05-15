@@ -2,7 +2,7 @@ import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useAuthStore, useProductionStore, useWarehouseStore, useOrderStore, loadAllStores, reloadTablesDispatched } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -14,7 +14,10 @@ import { canProduceWO, canDurus } from '@/features/production/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
 
 export function OperatorPanel() {
-  const { operators, operations, loadAll, loading } = useStore()
+  const operators = useAuthStore(s => s.operators)
+  const loading = useAuthStore(s => s.loading)
+  const operations = useProductionStore(s => s.operations)
+  const loadAll = loadAllStores
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, signOut } = useAuth()
@@ -171,7 +174,20 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
-  const { orders, workOrders, logs, activeWork, operations, operators, durusKodlari, izinler, operatorNotes, loadAll, cuttingPlans, tedarikler, stokHareketler, materials } = useStore()
+  const orders = useOrderStore(s => s.orders)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const activeWork = useProductionStore(s => s.activeWork)
+  const operations = useProductionStore(s => s.operations)
+  const durusKodlari = useProductionStore(s => s.durusKodlari)
+  const operatorNotes = useProductionStore(s => s.operatorNotes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const materials = useWarehouseStore(s => s.materials)
+  const operators = useAuthStore(s => s.operators)
+  const izinler = useAuthStore(s => s.izinler)
+  const loadAll = loadAllStores
   // v16.82 — Operatör filtreler
   const [filterSiparis, setFilterSiparis] = useState('')
   const [filterOlcu, setFilterOlcu] = useState('')
@@ -752,7 +768,12 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   editLogId?: string
   onClose: () => void; onSaved: () => void
 }) {
-  const { workOrders, logs, recipes, stokHareketler, activeWork, materials } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const recipes = useProductionStore(s => s.recipes)
+  const activeWork = useProductionStore(s => s.activeWork)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const materials = useWarehouseStore(s => s.materials)
   const w = workOrders.find(x => x.id === woId)
   const now = new Date()
   const nowHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
@@ -1058,16 +1079,16 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     }
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {
-      await useStore.getState().reloadTables(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar'])
+      await reloadTablesDispatched(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar'])
     } catch (e) { console.error('Post-save reload:', e) }
     // v15.32: Bar Model tetikleyici — kesim planı satırı tamamlandıysa
     // bar_acilis + acik_bar_giris yaz. İdempotent (deterministik id).
     try {
-      const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useStore.getState()
+      const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useProductionStore.getState()
       const r = await barModelSync(woId, cpState, woState, logState, materials)
       if (r.barSayisi > 0) {
         // Bar kayıtları yazıldıysa açık barları tekrar yükle
-        try { await useStore.getState().reloadTables(['uys_stok_hareketler', 'uys_acik_barlar']) } catch {}
+        try { await reloadTablesDispatched(['uys_stok_hareketler', 'uys_acik_barlar']) } catch {}
       }
     } catch (err) {
       console.error('[barModel] OperatorPanel sync hatası:', err)
@@ -1217,7 +1238,8 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
 }
 
 function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onSent: () => void }) {
-  const { operatorNotes, loadAll } = useStore()
+  const operatorNotes = useProductionStore(s => s.operatorNotes)
+  const loadAll = loadAllStores
   const [mesaj, setMesaj] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')

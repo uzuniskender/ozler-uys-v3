@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
@@ -11,7 +11,16 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export function Reports() {
-  const { workOrders, logs, operators, fireLogs, orders, operations, recipes, stokHareketler, materials, loadAll } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const fireLogs = useProductionStore(s => s.fireLogs)
+  const operations = useProductionStore(s => s.operations)
+  const recipes = useProductionStore(s => s.recipes)
+  const orders = useOrderStore(s => s.orders)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const materials = useWarehouseStore(s => s.materials)
+  const operators = useAuthStore(s => s.operators)
+  const loadAll = loadAllStores
   const { can } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState('ozet')
@@ -723,7 +732,7 @@ export function Reports() {
           tuketimMap[l.malkod].toplam += l.qty
         })
         // HM tüketim from stok hareketleri
-        const { stokHareketler } = useStore.getState()
+        const { stokHareketler } = useWarehouseStore.getState()
         stokHareketler.filter(h => h.tip === 'cikis' && h.logId).forEach(h => {
           if (!tuketimMap[h.malkod]) tuketimMap[h.malkod] = { malkod: h.malkod, malad: h.malad, toplam: 0 }
           tuketimMap[h.malkod].malad = h.malad

@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { addStokHareketi } from '@/lib/stokHelper'
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showConfirm } from '@/lib/prompt'
@@ -17,7 +17,14 @@ import { advanceFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
 
 export function CuttingPlans() {
-  const { cuttingPlans, materials, workOrders, operations, recipes, logs, acikBarlar, loadAll } = useStore()
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const operations = useProductionStore(s => s.operations)
+  const recipes = useProductionStore(s => s.recipes)
+  const logs = useProductionStore(s => s.logs)
+  const acikBarlar = useProductionStore(s => s.acikBarlar)
+  const materials = useWarehouseStore(s => s.materials)
+  const loadAll = loadAllStores
   const { can, isGuest } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -82,7 +89,8 @@ export function CuttingPlans() {
   }, [activeFlowId, workOrders.length, recipes.length])
 
   async function otomatikLevhaPlan() {
-    const { workOrders: wos, materials } = useStore.getState()
+    const { workOrders: wos } = useProductionStore.getState()
+    const { materials } = useWarehouseStore.getState()
     const levhaWOs = wos.filter(w =>
       !w.bagimsiz && isWorkOrderOpen(w) &&
       Array.isArray(w.hm) && (w.hm as any[]).some((h: any) => {
@@ -483,9 +491,9 @@ export function CuttingPlans() {
         // v15.44 — Manuel plan'da da havuz önerisi tarama (otomatik plan'daki mantığın aynısı)
         if (!yeniPlanId) return
         // loadAll sonrası store güncel — store'dan plan'ı al
-        const yeniPlan = useStore.getState().cuttingPlans.find((p: any) => p.id === yeniPlanId) as any
+        const yeniPlan = useProductionStore.getState().cuttingPlans.find((p: any) => p.id === yeniPlanId) as any
         if (!yeniPlan || yeniPlan.durum !== 'bekliyor') return
-        const havuzAcik = useStore.getState().acikBarlar.filter((a: any) => isAcikBarAvailable(a) && a.hamMalkod === yeniPlan.hamMalkod)
+        const havuzAcik = useProductionStore.getState().acikBarlar.filter((a: any) => isAcikBarAvailable(a) && a.hamMalkod === yeniPlan.hamMalkod)
         if (havuzAcik.length === 0) return
         // Plandaki en küçük parça boyu (bekleyen satırların kesimleri)
         let minParcaBoy = Infinity
@@ -584,7 +592,8 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
   materials: import('@/types').Material[]; workOrders: any[]; operations: any[]; recipes: any[]; logs: any[]
   onClose: () => void; onSaved: () => void
 }) {
-  const { cuttingPlans, loadAll } = useStore()
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const loadAll = loadAllStores
   const [artikKod, setArtikKod] = useState(info.hamMalkod + '-ARTIK-' + info.fireMm)
   const [stokGirisi, setStokGirisi] = useState(true)
   const [eklenen, setEklenen] = useState<Set<string>>(new Set())
@@ -732,7 +741,10 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   workOrders: WorkOrder[]
   onClose: () => void; onSaved: (planId?: string) => void
 }) {
-  const { operations, recipes, logs, cuttingPlans } = useStore()
+  const operations = useProductionStore(s => s.operations)
+  const recipes = useProductionStore(s => s.recipes)
+  const logs = useProductionStore(s => s.logs)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
   const [hamMalkod, setHamMalkod] = useState('')
   const [seciliIEler, setSeciliIEler] = useState<Record<string, number>>({}) // woId → adet
   const [showMatSearch, setShowMatSearch] = useState(false)

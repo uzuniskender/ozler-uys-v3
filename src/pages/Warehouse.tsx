@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { buildIhtiyacMap, getStok } from '@/lib/hammaddeHesap'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showPrompt, showConfirm } from '@/lib/prompt'
@@ -14,7 +14,13 @@ import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/producti
 import { MamulCikisModal } from '@/components/MamulCikisModal'
 
 export function Warehouse() {
-  const { stokHareketler, materials, acikBarlar, orders, workOrders, cuttingPlans, loadAll } = useStore()
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const materials = useWarehouseStore(s => s.materials)
+  const loadOwn = useWarehouseStore(s => s.loadOwn)
+  const acikBarlar = useProductionStore(s => s.acikBarlar)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const orders = useOrderStore(s => s.orders)
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
@@ -74,7 +80,7 @@ export function Warehouse() {
         aciklama: 'Stok onarım — negatif düzeltme',
       })
     }
-    loadAll(); toast.success(negatifler.length + ' malzeme düzeltildi')
+    loadOwn(); toast.success(negatifler.length + ' malzeme düzeltildi')
   }
 
   // Stok Excel Import
@@ -103,7 +109,7 @@ export function Warehouse() {
         })
         count++
       }
-      loadAll(); toast.success(count + ' stok hareketi yüklendi')
+      loadOwn(); toast.success(count + ' stok hareketi yüklendi')
     }
     input.click()
   }
@@ -142,7 +148,7 @@ export function Warehouse() {
               })
               count++
             }
-            loadAll(); toast.success(count + ' stok girişi yapıldı')
+            loadOwn(); toast.success(count + ' stok girişi yapıldı')
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📦 Toplu Giriş</button>
           {can('stok_giris') && <button onClick={() => setShowGiris(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"><Plus size={13} /> Manuel Giriş/Çıkış</button>}
         </div>
@@ -235,12 +241,12 @@ export function Warehouse() {
                       const newMiktar = await showPrompt('Yeni miktar', 'Miktar', String(h.miktar))
                       if (!newMiktar) return
                       await supabase.from('uys_stok_hareketler').update({ miktar: parseFloat(newMiktar) || h.miktar }).eq('id', h.id)
-                      loadAll(); toast.success('Stok hareketi güncellendi')
+                      loadOwn(); toast.success('Stok hareketi güncellendi')
                     }} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düzenle</button>
                     <button onClick={async () => {
                       if (!await showConfirm('Bu stok hareketini silmek istediğinize emin misiniz?')) return
                       await supabase.from('uys_stok_hareketler').delete().eq('id', h.id)
-                      loadAll(); toast.success('Stok hareketi silindi')
+                      loadOwn(); toast.success('Stok hareketi silindi')
                     }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button></>}
                   </td>
                 </tr>
@@ -282,7 +288,7 @@ export function Warehouse() {
                   farklar++
                 }
               })
-              if (farklar > 0) { loadAll(); toast.success(farklar + ' fark düzeltmesi kaydedildi') }
+              if (farklar > 0) { loadOwn(); toast.success(farklar + ' fark düzeltmesi kaydedildi') }
               else toast.info('Fark bulunamadı')
             }} className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">
               Sayımı Uygula
@@ -375,7 +381,7 @@ export function Warehouse() {
             const ok = await acikBarHurdadanGeriAl(barId, currentUserId, currentUserAd)
             if (ok) {
               toast.success('Hurda geri alındı, bar açık havuza döndü')
-              loadAll()
+              loadOwn()
             } else {
               toast.error('Geri alma başarısız — konsola bak')
             }
@@ -468,7 +474,7 @@ export function Warehouse() {
             const ok = await acikBarTuketimGeriAl(barId, currentUserId, currentUserAd)
             if (ok) {
               toast.success('Tüketim geri alındı, bar açık havuza döndü')
-              loadAll()
+              loadOwn()
             } else {
               toast.error('Geri alma başarısız — konsola bak')
             }
@@ -536,7 +542,7 @@ export function Warehouse() {
           currentUserId={user?.dbId || user?.email || user?.username || ''}
           currentUserAd={user?.username || ''}
           onClose={() => setDetayHam(null)}
-          onSaved={() => { loadAll() }}
+          onSaved={() => { loadOwn() }}
         />
       )}
 
@@ -545,7 +551,7 @@ export function Warehouse() {
         <StokGirisModal
           materials={materials}
           onClose={() => setShowGiris(false)}
-          onSaved={() => { setShowGiris(false); loadAll(); toast.success('Stok hareketi kaydedildi') }}
+          onSaved={() => { setShowGiris(false); loadOwn(); toast.success('Stok hareketi kaydedildi') }}
         />
       )}
 
@@ -560,7 +566,7 @@ export function Warehouse() {
           currentUserId={user?.dbId || user?.email || user?.username || ''}
           currentUserAd={user?.username || ''}
           onClose={() => setCikisMalkod(null)}
-          onSaved={() => { setCikisMalkod(null); loadAll(); toast.success('Mamul cikis kaydedildi') }}
+          onSaved={() => { setCikisMalkod(null); loadOwn(); toast.success('Mamul cikis kaydedildi') }}
         />
       )}
     </div>

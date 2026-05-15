@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { toast } from 'sonner'
 import { Search, X, Download, RefreshCw, ChevronDown, ChevronUp, Edit2, Check, ArrowUpCircle, ArrowDownCircle, Package, Truck, Wrench, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -66,7 +66,9 @@ function getSevkNo(aciklama: string | null): string | null {
 
 /* ───────── ana bileşen ───────── */
 export function StokLog() {
-  const { workOrders, orders, materials } = useStore()
+  const workOrders = useProductionStore(s => s.workOrders)
+  const orders = useOrderStore(s => s.orders)
+  const materials = useWarehouseStore(s => s.materials)
 
   const [rows, setRows]           = useState<StokHareket[]>([])
   const [loading, setLoading]     = useState(true)

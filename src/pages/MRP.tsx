@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -16,7 +16,16 @@ import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
 
 export function MRP() {
-  const { orders, workOrders, logs, recipes, stokHareketler, tedarikler, cuttingPlans, materials, mrpRezerve, loadAll } = useStore()
+  const orders = useOrderStore(s => s.orders)
+  const mrpRezerve = useOrderStore(s => s.mrpRezerve)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const recipes = useProductionStore(s => s.recipes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const materials = useWarehouseStore(s => s.materials)
+  const loadAll = loadAllStores
   const { can } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useAuthStore, reloadTablesDispatched } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -48,7 +48,8 @@ function durumBadge(d: string) {
 }
 
 export function ProblemTakip() {
-  const { problemler, reloadTables } = useStore()
+  const problemler = useAuthStore(s => s.problemler)
+  const reloadTables = reloadTablesDispatched
   const { can, user } = useAuth()
   const [search, setSearch] = useState('')
   const [filterDurum, setFilterDurum] = useState('')

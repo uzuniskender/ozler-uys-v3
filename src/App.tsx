@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { useRealtime } from '@/hooks/useRealtime'
-import { useStore } from '@/store'
+import { loadAllStores } from '@/store'
 import { Layout } from '@/components/layout/Layout'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
@@ -53,7 +53,7 @@ const PageFallback = () => (
 
 // Admin sayfaları — auth kontrolü App seviyesinde, burada sadece rotalar
 function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
-  const { loadAll } = useStore()
+  const loadAll = loadAllStores
   useRealtime()
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -106,7 +106,7 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
 
 // Operatör sayfası — admin rotası YOK, geri tuşu engellenmiş
 function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
-  const { loadAll } = useStore()
+  const loadAll = loadAllStores
   useRealtime()
   useEffect(() => { loadAll() }, [loadAll])
 

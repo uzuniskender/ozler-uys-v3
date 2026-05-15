@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useStore, TABLE_MAP } from '@/store'
+import { TABLE_MAP, reloadTablesDispatched, loadAllStores } from '@/store'
 import { toast } from 'sonner'
 
 // Bu tarayıcı oturumunun kimliği — kendi yazdığımız değişikliğin "echo"su gelince toast gösterme
@@ -28,8 +28,8 @@ const ETIKET: Record<string, string> = {
 }
 
 export function useRealtime() {
-  const reloadTables = useStore(s => s.reloadTables)
-  const loadAll = useStore(s => s.loadAll)
+  const reloadTables = reloadTablesDispatched
+  const loadAll = loadAllStores
   const pendingRef = useRef<Set<string>>(new Set())
   const externalRef = useRef<Set<string>>(new Set())
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -85,5 +85,5 @@ export function useRealtime() {
       if (timerRef.current) clearTimeout(timerRef.current)
       supabase.removeChannel(channel)
     }
-  }, [reloadTables, loadAll])
+  }, [])
 }

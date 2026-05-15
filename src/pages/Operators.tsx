@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useAuthStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showConfirm } from '@/lib/prompt'
@@ -9,7 +9,9 @@ import { Search, Plus, UserCheck, UserX } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 
 export function Operators() {
-  const { operators, izinler, loadAll } = useStore()
+  const operators = useAuthStore(s => s.operators)
+  const izinler = useAuthStore(s => s.izinler)
+  const loadOwn = useAuthStore(s => s.loadOwn)
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [bolumFilter, setBolumFilter] = useState<Set<string>>(new Set())
@@ -36,13 +38,13 @@ export function Operators() {
 
   async function toggleAktif(id: string, aktif: boolean) {
     await supabase.from('uys_operators').update({ aktif }).eq('id', id)
-    loadAll()
+    loadOwn()
   }
 
   async function deleteOpr(id: string) {
     if (!await showConfirm('Bu operatörü silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_operators').delete().eq('id', id)
-    loadAll()
+    loadOwn()
   }
 
   async function saveOpr(data: { kod: string; ad: string; bolum: string; sifre: string }, editId?: string) {
@@ -51,7 +53,7 @@ export function Operators() {
     } else {
       await supabase.from('uys_operators').insert({ id: uid(), kod: data.kod, ad: data.ad, bolum: data.bolum, sifre: data.sifre, aktif: true })
     }
-    loadAll()
+    loadOwn()
     setShowForm(false)
     setEditOpr(null)
   }
@@ -159,11 +161,11 @@ export function Operators() {
                             <>
                               <button onClick={async () => {
                                 await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
-                                loadAll(); toast.success(iz.opAd + ' izni onaylandı')
+                                loadOwn(); toast.success(iz.opAd + ' izni onaylandı')
                               }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">✓ Onayla</button>
                               <button onClick={async () => {
                                 await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
-                                loadAll(); toast.success(iz.opAd + ' izni reddedildi')
+                                loadOwn(); toast.success(iz.opAd + ' izni reddedildi')
                               }} className="px-2 py-0.5 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">✕ Red</button>
                             </>
                           )}
@@ -176,7 +178,7 @@ export function Operators() {
                           <button onClick={async () => {
                             if (!await showConfirm('İzni silmek istediğinize emin misiniz?')) return
                             await supabase.from('uys_izinler').delete().eq('id', iz.id)
-                            loadAll(); toast.success('İzin silindi')
+                            loadOwn(); toast.success('İzin silindi')
                           }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button>
                         </div>
                       </td>
@@ -206,7 +208,7 @@ export function Operators() {
               await supabase.from('uys_izinler').insert(data)
             }
           }
-          loadAll(); setIzinForm(false)
+          loadOwn(); setIzinForm(false)
           toast.success(dataList.length > 1 ? dataList.length + ' izin oluşturuldu' : (dataList[0]._update ? 'İzin düzenlendi' : 'İzin eklendi'))
         }}
       />}

@@ -2,7 +2,7 @@ import { getStok } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -11,7 +11,13 @@ import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive } from 'lu
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 
 export function Shipment() {
-  const { sevkler, orders, workOrders, logs, materials, stokHareketler, loadAll } = useStore()
+  const sevkler = useOrderStore(s => s.sevkler)
+  const orders = useOrderStore(s => s.orders)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const materials = useWarehouseStore(s => s.materials)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const loadAll = loadAllStores
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)

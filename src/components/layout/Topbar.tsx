@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores, useStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -18,7 +18,16 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const navigate = useNavigate()
-  const { synced, loadAll, pendingFlows, workOrders, orders, cuttingPlans, tedarikler, stokHareketler, logs, bildirimler } = useStore()
+  const synced = useStore(s => s.synced)
+  const pendingFlows = useProductionStore(s => s.pendingFlows)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const logs = useProductionStore(s => s.logs)
+  const orders = useOrderStore(s => s.orders)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const bildirimler = useAuthStore(s => s.bildirimler)
+  const loadAll = loadAllStores
 
   // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
   const orderHmEksikMap = useMemo(

@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -8,7 +8,9 @@ import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil } from 'lucide-react'
 
 export function Stations() {
-  const { stations, operations, loadAll } = useStore()
+  const stations = useProductionStore(s => s.stations)
+  const operations = useProductionStore(s => s.operations)
+  const loadOwn = useProductionStore(s => s.loadOwn)
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -22,13 +24,13 @@ export function Stations() {
 
   async function del(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
-    await supabase.from('uys_stations').delete().eq('id', id); loadAll(); toast.success('İstasyon silindi')
+    await supabase.from('uys_stations').delete().eq('id', id); loadOwn(); toast.success('İstasyon silindi')
   }
 
   async function save(data: { kod: string; ad: string; opIds: string[] }, editId?: string) {
     if (editId) await supabase.from('uys_stations').update({ kod: data.kod, ad: data.ad, op_ids: data.opIds }).eq('id', editId)
     else await supabase.from('uys_stations').insert({ id: uid(), kod: data.kod, ad: data.ad, op_ids: data.opIds })
-    loadAll(); setShowForm(false); setEditItem(null); toast.success(editId ? 'Güncellendi' : 'Eklendi')
+    loadOwn(); setShowForm(false); setEditItem(null); toast.success(editId ? 'Güncellendi' : 'Eklendi')
   }
 
   return (

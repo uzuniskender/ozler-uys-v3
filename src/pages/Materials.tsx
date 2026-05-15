@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useEffect } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -178,7 +178,13 @@ function kgmLabel(hammaddeTipi: string): string {
 }
 
 export function Materials() {
-  const { materials, operations, recipes, bomTrees, workOrders, hmTipler: dbHmTipler, loadAll } = useStore()
+  const materials = useWarehouseStore(s => s.materials)
+  const dbHmTipler = useWarehouseStore(s => s.hmTipler)
+  const operations = useProductionStore(s => s.operations)
+  const recipes = useProductionStore(s => s.recipes)
+  const bomTrees = useProductionStore(s => s.bomTrees)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const loadAll = loadAllStores
   const { can, isGuest } = useAuth()
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
@@ -648,7 +654,10 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
   const [opId, setOpId] = useState(initial?.opId || '')
   const [saving, setSaving] = useState(false)
 
-  const { materials: allMaterials, bomTrees, recipes, workOrders } = useStore()
+  const allMaterials = useWarehouseStore(s => s.materials)
+  const bomTrees = useProductionStore(s => s.bomTrees)
+  const recipes = useProductionStore(s => s.recipes)
+  const workOrders = useProductionStore(s => s.workOrders)
 
   const alan = useMemo(() => getAlanConfig(hammaddeTipi), [hammaddeTipi])
 

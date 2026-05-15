@@ -3,7 +3,7 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -15,7 +15,16 @@ import { FlowProgress } from '@/components/FlowProgress'
 import { isProcurementPending } from '@/lib/statusUtils'
 
 export function Procurement() {
-  const { tedarikler, tedarikciler, orders, workOrders, recipes, stokHareketler, cuttingPlans, materials, pendingFlows, loadAll } = useStore()
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
+  const tedarikciler = useWarehouseStore(s => s.tedarikciler)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const materials = useWarehouseStore(s => s.materials)
+  const orders = useOrderStore(s => s.orders)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const recipes = useProductionStore(s => s.recipes)
+  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
+  const pendingFlows = useProductionStore(s => s.pendingFlows)
+  const loadAll = loadAllStores
   const { can } = useAuth()
   const [searchParams] = useSearchParams()
   const activeFlowId = searchParams.get('flow') || ''
@@ -167,7 +176,7 @@ export function Procurement() {
       const rows = XLSX.utils.sheet_to_json(ws) as Record<string, unknown>[]
       if (!rows.length) { toast.error('Dosya boş'); return }
       let count = 0
-      const { materials: mats } = useStore.getState()
+      const { materials: mats } = useWarehouseStore.getState()
       for (const row of rows) {
         const malkod = String(row['Malzeme Kodu'] || row['malkod'] || row['Malzeme Kod'] || '').trim(); if (!malkod) continue
         const miktar = parseFloat(String(row['Sipariş Miktarı'] || row['Miktar'] || row['miktar'] || '0')); if (!miktar) continue
@@ -319,7 +328,7 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
   const [teslim, setTeslim] = useState((initial as Record<string, unknown>)?.teslimTarihi as string || '')
   const [not_, setNot] = useState((initial as Record<string, unknown>)?.not as string || '')
   const [geldi, setGeldi] = useState(!!(initial as Record<string, unknown>)?.geldi)
-  const { materials } = useStore()
+  const materials = useWarehouseStore(s => s.materials)
   const [showMatSearch, setShowMatSearch] = useState(false)
 
   const ted = tedarikciler.find(t => t.id === tedarikcId)

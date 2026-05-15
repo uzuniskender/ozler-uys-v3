@@ -4,7 +4,7 @@
 // Test sonlandır → cascade delete ile sadece o etiketli kayıtlar silinir
 
 import { useState, useEffect } from 'react'
-import { useStore } from '@/store'
+import { useAuthStore, useProductionStore, loadAllStores } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
@@ -16,7 +16,9 @@ import {
 import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, senaryo11, senaryo12, senaryo13, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
 
 export function TestMode() {
-  const { testRuns, recipes, loadAll } = useStore()
+  const testRuns = useAuthStore(s => s.testRuns)
+  const recipes = useProductionStore(s => s.recipes)
+  const loadAll = loadAllStores
   const { can, user } = useAuth()
   const [aktifTestId, setAktifTestId] = useState<string>(getActiveTestRunId() || '')
   const [aciklama, setAciklama] = useState('')

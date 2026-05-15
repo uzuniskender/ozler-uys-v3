@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useRef, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -12,7 +12,11 @@ import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/Mat
 import { analizReceteTumSatirlar, donusturBirim } from '@/features/production/sureAnaliz'
 
 export function Recipes() {
-  const { recipes, operations, bomTrees, materials, loadAll } = useStore()
+  const recipes = useProductionStore(s => s.recipes)
+  const operations = useProductionStore(s => s.operations)
+  const bomTrees = useProductionStore(s => s.bomTrees)
+  const materials = useWarehouseStore(s => s.materials)
+  const loadAll = loadAllStores
   const { can } = useAuth()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -447,7 +451,10 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   const [rows, setRows] = useState<RecipeRow[]>(recipe.satirlar || [])
   const [ad, setAd] = useState(recipe.ad || '')
   const [rcKod, setRcKod] = useState(recipe.rcKod || '')
-  const { materials, workOrders, logs, loadAll: storeLoadAll } = useStore()
+  const materials = useWarehouseStore(s => s.materials)
+  const workOrders = useProductionStore(s => s.workOrders)
+  const logs = useProductionStore(s => s.logs)
+  const storeLoadAll = loadAllStores
   const { can } = useAuth()
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)

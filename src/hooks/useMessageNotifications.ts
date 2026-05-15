@@ -12,7 +12,7 @@
  * Ses açık/kapalı kullanıcı tercihi localStorage'da (uys_msg_sound_enabled).
  */
 import { useEffect, useRef } from 'react'
-import { useStore } from '@/store'
+import { useProductionStore } from '@/store'
 import { useAuth } from './useAuth'
 
 export const SOUND_PREF_KEY = 'uys_msg_sound_enabled'
@@ -84,7 +84,7 @@ function showNotification(title: string, body: string, acil: boolean): void {
 }
 
 export function useMessageNotifications(): void {
-  const { operatorNotes } = useStore()
+  const operatorNotes = useProductionStore(s => s.operatorNotes)
   const { user } = useAuth()
   const initialLoadRef = useRef(true)
   const seenIdsRef = useRef<Set<string>>(new Set())

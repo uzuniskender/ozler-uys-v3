@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { useStore } from '@/store'
+import { useWarehouseStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -8,7 +8,8 @@ import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
 
 export function Suppliers() {
-  const { tedarikciler, loadAll } = useStore()
+  const tedarikciler = useWarehouseStore(s => s.tedarikciler)
+  const loadOwn = useWarehouseStore(s => s.loadOwn)
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -23,14 +24,14 @@ export function Suppliers() {
   async function del(id: string) {
     if (!await showConfirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_tedarikciler').delete().eq('id', id)
-    loadAll(); toast.success('Tedarikçi silindi')
+    loadOwn(); toast.success('Tedarikçi silindi')
   }
 
   async function save(data: { kod: string; ad: string; adres: string; tel: string; email: string; not: string }, editId?: string) {
     const row = { kod: data.kod, ad: data.ad, adres: data.adres, tel: data.tel, email: data.email, not_: data.not }
     if (editId) await supabase.from('uys_tedarikciler').update(row).eq('id', editId)
     else await supabase.from('uys_tedarikciler').insert({ id: uid(), ...row })
-    loadAll(); setShowForm(false); setEditItem(null); toast.success(editId ? 'Güncellendi' : 'Eklendi')
+    loadOwn(); setShowForm(false); setEditItem(null); toast.success(editId ? 'Güncellendi' : 'Eklendi')
   }
 
   return (
