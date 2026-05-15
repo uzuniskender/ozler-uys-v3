@@ -1,22 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
-import { uid, today } from '@/lib/utils'
 import { getHelpFor } from '@/lib/helpContent'
+import { listNotes, createNote, updateNote, deleteNote as deleteNoteService } from '@/services/notesService'
+import type { EkipNot } from '@/types/ekipNot'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { HelpCircle, StickyNote, X, Trash2, Edit3, Check, Plus } from 'lucide-react'
 
-interface Note {
-  id: string
-  sayfa: string
-  baslik: string
-  icerik: string
-  yazan: string
-  etiketler: string[]
-  tarih: string
-  saat: string
-}
 
 export function HelpNotesButtons({ username }: { username: string }) {
   const [mode, setMode] = useState<null | 'help' | 'notes'>(null)
@@ -86,7 +76,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 function NotesModal({ onClose, username }: { onClose: () => void; username: string }) {
   const location = useLocation()
   const sayfa = location.pathname.split('?')[0] || '/'
-  const [notes, setNotes] = useState<Note[]>([])
+  const [notes, setNotes] = useState<EkipNot[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'sayfa' | 'all'>('sayfa')
   const [editId, setEditId] = useState<string | null>(null)
@@ -97,11 +87,8 @@ function NotesModal({ onClose, username }: { onClose: () => void; username: stri
 
   async function loadNotes() {
     setLoading(true)
-    const { data } = await supabase.from('uys_notes').select('*').order('tarih', { ascending: false })
-    setNotes((data || []).map(n => ({
-      id: n.id, sayfa: n.sayfa, baslik: n.baslik || '', icerik: n.icerik || '',
-      yazan: n.yazan || '', etiketler: n.etiketler || [], tarih: n.tarih, saat: n.saat || '',
-    })))
+    const data = await listNotes()
+    setNotes(data)
     setLoading(false)
   }
 
@@ -119,33 +106,26 @@ function NotesModal({ onClose, username }: { onClose: () => void; username: stri
 
   async function saveNote() {
     if (!editIcerik.trim()) { toast.error('İçerik boş olamaz'); return }
-    const now = new Date()
-    const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
     if (editId) {
-      await supabase.from('uys_notes').update({
-        baslik: editBaslik.trim(), icerik: editIcerik.trim(),
-      }).eq('id', editId)
+      await updateNote(editId, { baslik: editBaslik.trim(), icerik: editIcerik.trim() })
       toast.success('Not güncellendi')
     } else {
-      await supabase.from('uys_notes').insert({
-        id: uid(), sayfa, baslik: editBaslik.trim(), icerik: editIcerik.trim(),
-        yazan: username, tarih: today(), saat, etiketler: [],
-      })
+      await createNote({ sayfa, baslik: editBaslik.trim(), icerik: editIcerik.trim(), yazan: username })
       toast.success('Not eklendi')
     }
     setEditId(null); setShowNew(false); setEditBaslik(''); setEditIcerik('')
     loadNotes()
   }
 
-  async function deleteNote(id: string) {
+  async function handleDeleteNote(id: string) {
     if (!await showConfirm('Bu notu silmek istediğinize emin misiniz?')) return
-    await supabase.from('uys_notes').delete().eq('id', id)
+    await deleteNoteService(id)
     toast.success('Not silindi')
     loadNotes()
   }
 
-  function startEdit(n: Note) {
-    setEditId(n.id); setEditBaslik(n.baslik); setEditIcerik(n.icerik); setShowNew(false)
+  function startEdit(n: EkipNot) {
+    setEditId(n.id); setEditBaslik(n.baslik || ''); setEditIcerik(n.icerik); setShowNew(false)
   }
 
   function startNew() {
@@ -230,7 +210,7 @@ function NotesModal({ onClose, username }: { onClose: () => void; username: stri
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => startEdit(n)} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Edit3 size={12} /></button>
-                      <button onClick={() => deleteNote(n.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={12} /></button>
+                      <button onClick={() => handleDeleteNote(n.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={12} /></button>
                     </div>
                   </div>
                   <MarkdownRender text={n.icerik} />
