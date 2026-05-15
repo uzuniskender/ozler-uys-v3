@@ -120,7 +120,7 @@ export function useAuth() {
             persistUser(authUser)
             setUser(authUser)
           } else if (email.endsWith('@uys.local')) {
-            console.info('[v16.22] Operator Auth session aktif:', email)
+            // Operator Auth session — log üretmeden bırak
           } else {
             supabase.auth.signOut()
           }

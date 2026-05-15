@@ -1,5 +1,4 @@
 import { useEffect, lazy, Suspense } from 'react'
-import { useOrderStore } from "@/store"
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
@@ -54,9 +53,8 @@ const PageFallback = () => (
 
 // Admin sayfaları — auth kontrolü App seviyesinde, burada sadece rotalar
 function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
-  const loadAll = loadAllStores
   useRealtime()
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadAllStores() }, [])
 
   return (
     <HashRouter>
@@ -107,9 +105,8 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
 
 // Operatör sayfası — admin rotası YOK, geri tuşu engellenmiş
 function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
-  const loadAll = loadAllStores
   useRealtime()
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadAllStores() }, [])
 
   // Geri tuşunu engelle — operatör asla admin sayfasına gidemez
   useEffect(() => {
@@ -136,13 +133,7 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 }
 
 export default function App() {
-
-  console.log("🚀 APP ÇALIŞTI")
-  
   const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role, can } = useAuth()
-
- const orders = useOrderStore(s => s.orders)
- console.log("🔥 ORDERS TEST:", orders)
 
   // v15.53 Adım 4 — Admin login olunca otomatik günlük yedek (fire-and-forget)
   // Idempotent: günde defalarca tetiklenebilir, ensureDailyAutoBackup içeride
@@ -153,9 +144,7 @@ export default function App() {
     if (!can('backup_create')) return
     const alanKisi = session.username || session.email || (session as any).dbId || 'system'
     ensureDailyAutoBackup(alanKisi).then(r => {
-      if (r.ok) console.log('[v15.53] Otomatik günlük yedek alındı (eski silinen: %s)', r.deletedOld)
-      else if (r.skipped) console.log('[v15.53] Otomatik yedek bugün için zaten alınmış')
-      else if (r.error) console.warn('[v15.53] Otomatik yedek alınamadı:', r.error)
+      if (r.error) console.warn('[v15.53] Otomatik yedek alınamadı:', r.error)
     })
   }, [session?.dbId, session?.email, session?.username])
 

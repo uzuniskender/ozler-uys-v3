@@ -55,7 +55,18 @@ interface ClaimArgs {
   deviceLabel: string
 }
 
+// Aynı (user, session, cihaz) için tekrar UPDATE atmayı önler — strict-mode çift mount
+// veya useEffect deps re-tetiklemelerinde gereksiz network/realtime gürültüsünü kesiyor.
+let _lastClaim: ClaimArgs | null = null
+
 export async function claimSession({ userType, userId, sessionId, deviceLabel }: ClaimArgs): Promise<{ ok: boolean; error?: string }> {
+  if (_lastClaim
+    && _lastClaim.userType === userType
+    && _lastClaim.userId === userId
+    && _lastClaim.sessionId === sessionId
+    && _lastClaim.deviceLabel === deviceLabel) {
+    return { ok: true }
+  }
   const table = TABLE_BY_TYPE[userType]
   try {
     const { error } = await supabase
@@ -70,7 +81,7 @@ export async function claimSession({ userType, userId, sessionId, deviceLabel }:
       console.warn('[sessionGuard] claim failed:', error.message)
       return { ok: false, error: error.message }
     }
-    console.info('[sessionGuard] claim OK:', userType, userId, sessionId.slice(0, 8))
+    _lastClaim = { userType, userId, sessionId, deviceLabel }
     return { ok: true }
   } catch (e: any) {
     console.warn('[sessionGuard] claim exception:', e?.message)
@@ -81,6 +92,9 @@ export async function claimSession({ userType, userId, sessionId, deviceLabel }:
 export async function releaseSession(args: { userType: UserType; userId: string; sessionId: string }): Promise<void> {
   const { userType, userId, sessionId } = args
   const table = TABLE_BY_TYPE[userType]
+  if (_lastClaim?.sessionId === sessionId && _lastClaim?.userId === userId) {
+    _lastClaim = null
+  }
   try {
     await supabase
       .from(table)
@@ -180,9 +194,7 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
         }
       )
       .subscribe((status: string) => {
-        if (status === 'SUBSCRIBED') {
-          console.info('[sessionGuard] subscribed:', channelName)
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           console.warn('[sessionGuard] subscription status:', status, '(polling devam)')
         }
       })
@@ -192,7 +204,6 @@ export function subscribeSessionChanges({ userType, userId, currentSessionId, on
   }
 
   // 2) Polling fallback — Realtime başarısız olsa bile çalışır
-  console.info('[sessionGuard] polling started (10 sn)')
   _sgPollTimer = setInterval(async () => {
     if (triggered) return
     const result = await pollOnce(userType, userId)
