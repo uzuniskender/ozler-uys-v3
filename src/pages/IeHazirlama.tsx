@@ -3,7 +3,7 @@
 // v16.84 — İş Emri Hazırlama (Rapido BOM bazlı)
 
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, fetchAll } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -280,9 +280,10 @@ export function IeHazirlama() {
   const [detayAcik, setDetayAcik] = useState(false)
 
   useEffect(() => {
-    supabase.from('uys_rapido_bom').select('*').eq('aktif', true).then(({ data, error }) => {
+    // fetchAll: uys_rapido_bom 1000+ satır içerir, default cap'i aşar
+    fetchAll<BomSatir>('uys_rapido_bom').then(({ data, error }) => {
       if (error) toast.error('BOM yüklenemedi: ' + error.message)
-      else setBom((data || []) as BomSatir[])
+      else setBom(data.filter(b => b.aktif))
       setBomLoading(false)
     })
   }, [])
