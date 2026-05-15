@@ -101,14 +101,86 @@
 - `force: true` gereken 3 buton: `Topbar.tsx:252`, `ActiveWorkPanel.tsx:79`, `DataManagement.tsx:~1216`
 - Backup/Logs/StokLog refresh butonları store cache kullanmıyor (doğrudan DB sorgusu) → etkilenmiyor
 
+### 15 Mayıs 2026 — Oturum Devam Raporu (Faz 2)
+
+Bu bölüm önceki oturum özetinin bıraktığı yerden itibaren yapılan çalışmaları kapsar.
+
+#### Servis migrasyonları (devam)
+
+| Commit | Değişiklik | Satır farkı |
+|--------|-----------|-------------|
+| `d20e6c1` | `OperatorPanel.tsx` → `izinlerService` (5 inline: onaylaIzin × 2, reddetIzin × 2, createIzin) | +13 / -10 |
+| `4c9fc77` | `MRP.tsx` → `acikBildirimVarMi` + `createBildirim`; `MamulCikisModal.tsx` → `createBildirim` (loop) | +9 / -16 |
+
+#### loadAll alias temizliği (`ed99229`)
+
+`const loadAll = loadAllStores` satırları her bileşenin/hook'un tepesinden kaldırıldı; call site'lar doğrudan `loadAllStores()` çağrısına dönüştürüldü.
+
+**17 dosya, 26 alias satırı silindi:**
+
+| Dosya | Alias sayısı | Özel durum |
+|-------|-------------|-----------|
+| `DataManagement.tsx` | 6 | `store = { ..., loadAll: loadAllStores }` — `store.loadAll()` çağrıları korundu |
+| `OperatorPanel.tsx` | 3 | — |
+| `CuttingPlans.tsx` | 2 | — |
+| `Orders.tsx` | 2 | `TamZincirButton` prop imzasından `loadAll` kaldırıldı |
+| `WorkOrders.tsx` | 1 | `WODetailModal` destructuring'den `loadAll` kaldırıldı |
+| `Topbar.tsx`, `useRealtime.ts`, `testRunner.ts`, `BomTrees.tsx`, `Dashboard.tsx`, `Materials.tsx`, `MRP.tsx`, `Procurement.tsx`, `Recipes.tsx`, `Reports.tsx`, `Shipment.tsx`, `TestMode.tsx` | 1'er | — |
+
+#### Bugün değişen dosyalar (tüm oturum — `ade44f1`..`ed99229`)
+
+33 dosya, 477 ekleme / 293 silme:
+
+```
+src/components/HelpNotesButtons.tsx      — notesService migration
+src/components/MamulCikisModal.tsx       — bildirimlerService migration
+src/components/layout/Topbar.tsx         — bildirimlerService + Rules of Hooks fix + alias temizliği
+src/hooks/useRealtime.ts                 — alias temizliği
+src/lib/queryCache.ts                    — yeni: TTL gate (30 sn isFresh)
+src/lib/testRunner.ts                    — alias temizliği
+src/pages/ActiveWorkPanel.tsx            — slice migration leftover
+src/pages/BomTrees.tsx                   — alias temizliği
+src/pages/CuttingPlans.tsx               — alias temizliği
+src/pages/Dashboard.tsx                  — alias temizliği
+src/pages/DataManagement.tsx             — alias temizliği (6 alias, store nesnesi)
+src/pages/MRP.tsx                        — bildirimlerService migration + alias temizliği
+src/pages/Materials.tsx                  — alias temizliği
+src/pages/Messages.tsx                   — slice migration leftover
+src/pages/OperatorPanel.tsx              — izinlerService migration + alias temizliği
+src/pages/Operators.tsx                  — izinlerService migration
+src/pages/Orders.tsx                     — alias temizliği + TamZincirButton imzası
+src/pages/Procurement.tsx                — alias temizliği
+src/pages/Recipes.tsx                    — alias temizliği
+src/pages/Reports.tsx                    — alias temizliği
+src/pages/Shipment.tsx                   — alias temizliği
+src/pages/Suppliers.tsx                  — tedarikciService migration
+src/pages/TestMode.tsx                   — alias temizliği
+src/pages/WorkOrders.tsx                 — alias temizliği + WODetailModal imzası
+src/services/acikBarlarService.ts        — updateHamMalkodKaskat eklendi
+src/services/izinlerService.ts           — updateIzin eklendi
+src/store/loadAllStores.ts               — in-flight dedup (_inflight)
+src/store/use{Order,Production,Warehouse,Auth}Store.ts — queryCache TTL gate
+src/types/izin.ts                        — IzinUpdate tipi genişletildi
+docs/DEVAM_NOTU.md                       — bu notlar
+```
+
+#### Çözülen sorunlar
+
+- **GitHub Actions build patlaması** — `store/index.ts` composite shim ezilmişti; restore + `loadAllStores.ts` stub düzeltildi + `src/app.tsx` case-duplikası kaldırıldı
+- **DevSync crash** — `Topbar.tsx`'de `&&` kısa-devre Rules of Hooks ihlali; 4 bağımsız `const` + sonra boolean birleştirme
+- **useStore shim** — tüm harici tüketiciler slice hook'larına geçirildi (`grep useStore src/` → 0 sonuç)
+- **Inline Supabase** — `uys_izinler`, `uys_bildirimler`, `uys_tedarikciler`, `uys_notes` tabloları için servis katmanı; 7 sayfada toplam 20+ inline çağrı kaldırıldı
+- **loadAll alias şişkinliği** — 17 dosyada tekrarlayan tek satır alias kaldırıldı; codebase `loadAllStores` doğrudan referans ediyor
+
 ## Sıradaki görevler
 
 1. Refresh butonlarına `force: true` ekle (onay bekleniyor):
-   - `Topbar.tsx:252` → `loadAllStores({ force: true })`
-   - `ActiveWorkPanel.tsx:79` → `loadOwn({ force: true })`
-   - `DataManagement.tsx:~1216` → `loadAll({ force: true })`
+   - `Topbar.tsx` (satır ~251) → `loadAllStores({ force: true })`
+   - `ActiveWorkPanel.tsx` (satır ~79) → `loadOwn({ force: true })`
+   - `DataManagement.tsx` → `store.loadAll({ force: true })` (store nesnesi `loadAll: loadAllStores` olduğu için doğrudan geçilebilir)
 2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
-3. ~~Service katmanı Faz 3~~ — **tamamlandı** (6 sayfa, 2 servis genişlemesi)
+3. ~~Service katmanı Faz 3~~ — **tamamlandı** (7 sayfa, 2 servis genişlemesi)
+4. ~~loadAll alias temizliği~~ — **tamamlandı** (`ed99229`)
 
 ---
 
