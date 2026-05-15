@@ -29,3 +29,6 @@ test-results/
 uys_backup_*.json
 
 uys_backup_*.json
+
+# Claude Code lokal ayarlar
+.claude/settings.local.json
