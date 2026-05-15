@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { z } from 'zod'
 import { useState, useMemo } from 'react'
 import { useAuthStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -227,6 +228,13 @@ export function Operators() {
   )
 }
 
+const operatorSchema = z.object({
+  kod: z.string().min(1, 'Sicil no zorunludur').max(20, 'Sicil no en fazla 20 karakter').regex(/^\S+$/, 'Sicil no boşluk içeremez'),
+  ad: z.string().min(2, 'Ad soyad en az 2 karakter').max(100, 'Ad soyad en fazla 100 karakter'),
+  bolum: z.string().min(1, 'Bölüm zorunludur').max(50, 'Bölüm en fazla 50 karakter'),
+  sifre: z.string().min(4, 'Şifre en az 4 karakter olmalıdır').max(50, 'Şifre en fazla 50 karakter'),
+})
+
 function OprFormModal({ initial, bolumler, onClose, onSave }: {
   initial: { id: string; kod: string; ad: string; bolum: string; sifre: string; bolumler?: string[] } | null
   bolumler: string[]; onClose: () => void
@@ -236,23 +244,48 @@ function OprFormModal({ initial, bolumler, onClose, onSave }: {
   const [ad, setAd] = useState(initial?.ad || '')
   const [bolum, setBolum] = useState(initial?.bolum || '')
   const [sifre, setSifre] = useState(initial?.sifre || '123456')
-  // v16.85 — ek bölümler
   const [ekBolumler, setEkBolumler] = useState<string[]>(initial?.bolumler || [])
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
+  function handleSave() {
+    const result = operatorSchema.safeParse({ kod, ad, bolum, sifre })
+    if (!result.success) {
+      const errs: Record<string, string> = {}
+      result.error.issues.forEach(i => { const k = String(i.path[0]); if (!errs[k]) errs[k] = i.message })
+      setErrors(errs)
+      return
+    }
+    setErrors({})
+    onSave({ kod, ad, bolum, sifre, bolumler: ekBolumler.length ? ekBolumler : undefined }, initial?.id)
+  }
+
+  const inp = 'w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Operatör Düzenle' : 'Yeni Operatör'}</h2>
         <div className="space-y-3">
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Sicil No</label>
-          <input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Ad Soyad</label>
-          <input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Bölüm</label>
-          <input list="bolum-list" value={bolum} onChange={e => setBolum(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
-          <datalist id="bolum-list">{bolumler.map(b => <option key={b} value={b} />)}</datalist></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Şifre</label>
-          <input value={sifre} onChange={e => setSifre(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Sicil No</label>
+            <input value={kod} onChange={e => setKod(e.target.value)} maxLength={20} className={inp} />
+            {errors.kod && <p className="text-[10px] text-red mt-0.5">{errors.kod}</p>}
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Ad Soyad</label>
+            <input value={ad} onChange={e => setAd(e.target.value)} maxLength={100} className={inp} />
+            {errors.ad && <p className="text-[10px] text-red mt-0.5">{errors.ad}</p>}
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Bölüm</label>
+            <input list="bolum-list" value={bolum} onChange={e => setBolum(e.target.value)} maxLength={50} className={inp} />
+            <datalist id="bolum-list">{bolumler.map(b => <option key={b} value={b} />)}</datalist>
+            {errors.bolum && <p className="text-[10px] text-red mt-0.5">{errors.bolum}</p>}
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Şifre</label>
+            <input value={sifre} onChange={e => setSifre(e.target.value)} maxLength={50} className={inp} />
+            {errors.sifre && <p className="text-[10px] text-red mt-0.5">{errors.sifre}</p>}
+          </div>
           <div>
             <label className="text-[11px] text-zinc-500 mb-1 block">Ek Bölümler <span className="text-zinc-600">(birden fazla bölümde çalışıyorsa)</span></label>
             <div className="bg-bg-2 border border-border rounded-lg p-2 max-h-32 overflow-y-auto space-y-0.5">
@@ -270,7 +303,7 @@ function OprFormModal({ initial, bolumler, onClose, onSave }: {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
-          <button onClick={() => onSave({ kod, ad, bolum, sifre, bolumler: ekBolumler.length ? ekBolumler : undefined }, initial?.id)} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
         </div>
       </div>
     </div>

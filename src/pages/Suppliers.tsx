@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { z } from 'zod'
 import { useState, useMemo } from 'react'
 import { useWarehouseStore } from '@/store'
 import { deleteTedarikci, createTedarikci, updateTedarikci } from '@/services/tedarikciService'
@@ -79,6 +80,19 @@ export function Suppliers() {
   )
 }
 
+const tedarikciSchema = z.object({
+  kod: z.string().max(20, 'Kod en fazla 20 karakter'),
+  ad: z.string().min(1, 'Firma adı zorunludur').max(100, 'Firma adı en fazla 100 karakter'),
+  tel: z.string().max(20, 'Telefon en fazla 20 karakter').refine(
+    v => !v || /^[0-9\s+\-()]+$/.test(v), 'Geçersiz telefon formatı (sadece rakam ve +-()'
+  ),
+  email: z.string().max(100, 'Email en fazla 100 karakter').refine(
+    v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Geçersiz email adresi'
+  ),
+  adres: z.string().max(200, 'Adres en fazla 200 karakter'),
+  not: z.string().max(500, 'Not en fazla 500 karakter'),
+})
+
 function SupplierFormModal({ initial, onClose, onSave }: {
   initial: { id: string; kod: string; ad: string; adres: string; tel: string; email: string; not: string } | null
   onClose: () => void; onSave: (data: { kod: string; ad: string; adres: string; tel: string; email: string; not: string }, editId?: string) => void
@@ -89,24 +103,62 @@ function SupplierFormModal({ initial, onClose, onSave }: {
   const [tel, setTel] = useState(initial?.tel || '')
   const [email, setEmail] = useState(initial?.email || '')
   const [not_, setNot] = useState(initial?.not || '')
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
+  function handleSave() {
+    const result = tedarikciSchema.safeParse({ kod, ad, adres, tel, email, not: not_ })
+    if (!result.success) {
+      const errs: Record<string, string> = {}
+      result.error.issues.forEach(i => { const k = String(i.path[0]); if (!errs[k]) errs[k] = i.message })
+      setErrors(errs)
+      return
+    }
+    setErrors({})
+    onSave({ kod, ad, adres, tel, email, not: not_ }, initial?.id)
+  }
+
+  const inp = 'w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">{initial ? 'Tedarikçi Düzenle' : 'Yeni Tedarikçi'}</h2>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Kod</label><input value={kod} onChange={e => setKod(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
-            <div><label className="text-[11px] text-zinc-500 mb-1 block">Telefon</label><input value={tel} onChange={e => setTel(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Kod</label>
+              <input value={kod} onChange={e => setKod(e.target.value)} maxLength={20} className={inp} autoFocus />
+              {errors.kod && <p className="text-[10px] text-red mt-0.5">{errors.kod}</p>}
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Telefon</label>
+              <input value={tel} onChange={e => setTel(e.target.value)} maxLength={20} className={inp} />
+              {errors.tel && <p className="text-[10px] text-red mt-0.5">{errors.tel}</p>}
+            </div>
           </div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Firma Adı *</label><input value={ad} onChange={e => setAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Email</label><input value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Adres</label><input value={adres} onChange={e => setAdres(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-          <div><label className="text-[11px] text-zinc-500 mb-1 block">Not</label><input value={not_} onChange={e => setNot(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Firma Adı *</label>
+            <input value={ad} onChange={e => setAd(e.target.value)} maxLength={100} className={inp} />
+            {errors.ad && <p className="text-[10px] text-red mt-0.5">{errors.ad}</p>}
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} maxLength={100} className={inp} />
+            {errors.email && <p className="text-[10px] text-red mt-0.5">{errors.email}</p>}
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Adres</label>
+            <input value={adres} onChange={e => setAdres(e.target.value)} maxLength={200} className={inp} />
+            {errors.adres && <p className="text-[10px] text-red mt-0.5">{errors.adres}</p>}
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Not</label>
+            <input value={not_} onChange={e => setNot(e.target.value)} maxLength={500} className={inp} />
+            {errors.not && <p className="text-[10px] text-red mt-0.5">{errors.not}</p>}
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-          <button onClick={async () => { if (!ad.trim()) { return }; onSave({ kod, ad, adres, tel, email, not: not_ }, initial?.id) }} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
         </div>
       </div>
     </div>
