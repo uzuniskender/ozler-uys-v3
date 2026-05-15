@@ -3,4 +3,4 @@
 
 // ═══ STORE EXPORTS ═══
 export * from "./loadAllStores"
-export * from "./tableMap"
+export * from "./tables"
