@@ -53,6 +53,13 @@ const STORE_WHITELIST = new Set([
   'uys_test_runs',           // Test runs — TestMode.tsx kendi fetch ediyor.
   'uys_session_memory',      // v16.72 — Claude session memory. Oturum başında doğrudan supabase ile okunur, global state'e girmez.
   'uys_dev_files',           // v16.72 — DevSync repo dosyaları. DevSync.tsx kendi fetch ediyor, store'a girmez.
+
+  // v16.83 — İE Hazırlama modülü (IeHazirlama.tsx kendi sorguları)
+  'uys_rapido_bom',              // v16.83 — Statik BOM verisi; IeHazirlama.tsx fetch eder, global state gereksiz.
+  'uys_ie_hazirlama',           // v16.83 — İE başlıkları; IeHazirlama.tsx kendi yönetiyor.
+  'uys_ie_hazirlama_kalemler',  // v16.83 — İE kalemleri; IeHazirlama.tsx kendi yönetiyor.
+  'uys_ie_hazirlama_log',       // v16.83 — İE audit log; Tip C, store'a girmez.
+  'uys_ie_log',                 // v16.83 — İE event log; Tip C, store'a girmez.
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
@@ -71,6 +78,13 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_audit_log',                // v16.51 — Audit log. Backup'a girmez (audit kayıtları restore edilemez).
   'uys_session_memory',           // v16.72 — Claude session memory. Runtime state, backup gerekmez; Claude her oturumda yeniden yazar.
   'uys_dev_files',                // v16.72 — DevSync repo dosyaları. Repo'dan yeniden çekilebilir, backup gereksiz.
+
+  // v16.83 — İE Hazırlama modülü
+  'uys_rapido_bom',              // v16.83 — BOM; Excel'den yeniden yüklenebilir, backup gereksiz.
+  'uys_ie_hazirlama',           // v16.83 — İE başlıkları; IeHazirlama.tsx kendi yönetiyor (store bağımsız).
+  'uys_ie_hazirlama_kalemler',  // v16.83 — İE kalemleri; IeHazirlama.tsx kendi yönetiyor.
+  'uys_ie_hazirlama_log',       // v16.83 — İE audit log; restore edilemez, backup dışı.
+  'uys_ie_log',                 // v16.83 — İE event log; restore edilemez, backup dışı.
 ])
 
 // ═══════════════════════════════════════════════════════════════
