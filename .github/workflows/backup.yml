@@ -1,5 +1,15 @@
 name: Günlük Supabase Yedeği
 
+# SUPABASE_DB_URL secret'ı session pooler endpoint'i kullanmalı:
+#   postgresql://postgres.<project-ref>:<password>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+#
+# GitHub Actions runner'ları IPv6 desteklemediği için direct connection
+# (db.<project-ref>.supabase.co:5432) bağlanamaz. Session pooler IPv4 sunar
+# ve uzun süreli pg_dump oturumlarını destekler. Transaction pooler (port
+# 6543) pg_dump için uygun değildir — long session destekler.
+#
+# PROD: aws-0-eu-central-1.pooler.supabase.com:5432
+
 permissions:
   contents: write
 
