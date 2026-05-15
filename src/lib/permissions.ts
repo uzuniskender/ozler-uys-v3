@@ -4,8 +4,23 @@ export type UserRole = AdminRole | 'guest' | 'operator'
 
 // Modül seviyesinde override — store loadAll'dan set edilir
 let _overrides: Record<string, AdminRole[]> | null = null
-export function setYetkiOverrides(o: Record<string, AdminRole[]> | null) { _overrides = o }
+// F-1: Override yüklenene kadar deny-by-default (race condition guard)
+let _overridesLoaded = false
+export function setYetkiOverrides(o: Record<string, AdminRole[]> | null) { _overrides = o; _overridesLoaded = true }
 export function getYetkiOverrides() { return _overrides }
+
+// F-3: Override'a bakılmaksızın her zaman sadece admin erişebilir
+const HARDCODED_ADMIN_ONLY = new Set([
+  'data_reset',
+  'data_pass',
+  'backup_restore',
+  'backup_delete',
+  'manuel_mudahale_log_view',
+  'audit_log_goruntule',
+])
+
+// F-2: Sadece admin'in görebileceği sayfalar (Sidebar adminOnly: true ile aynı hiza)
+const PAGE_ADMIN_ONLY = new Set(['test', 'dev-sync'])
 
 export const ACTION_GROUPS: { group: string; actions: { key: string; label: string }[] }[] = [
   { group: 'Siparişler', actions: [
@@ -200,17 +215,24 @@ export const OPERATOR_ACTIONS = new Set<string>([
 
 export function can(role: UserRole, action: string): boolean {
   if (role === 'admin') return true
+  // F-3: Kritik aksiyonlar — override'a bakılmaz, her zaman admin-only
+  if (HARDCODED_ADMIN_ONLY.has(action)) return false
   // v15.52a — Operatör için ayrı izin domeni
   if (role === 'operator') return OPERATOR_ACTIONS.has(action)
   if (role === 'guest') return false
+  // F-1: Override henüz yüklenmediyse deny (yükleme penceresi race condition)
+  if (!_overridesLoaded) return false
   const map = _overrides && Object.keys(_overrides).length > 0 ? _overrides : DEFAULTS
   const allowed = map[action]
   if (!allowed) return false
   return allowed.includes(role as AdminRole)
 }
 
-export function canViewPage(role: UserRole, _page: string): boolean {
+export function canViewPage(role: UserRole, page: string): boolean {
   if (role === 'admin') return true
   if (role === 'guest' || role === 'operator') return false
+  // F-2: Admin-only sayfalar (leading slash normalize et)
+  const key = page.replace(/^\//, '')
+  if (PAGE_ADMIN_ONLY.has(key)) return false
   return true
 }
