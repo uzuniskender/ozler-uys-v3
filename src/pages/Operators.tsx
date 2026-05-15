@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { useAuthStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+import { onaylaIzin, reddetIzin, deleteIzin, updateIzin, createIzin } from '@/services/izinlerService'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Plus, UserCheck, UserX } from 'lucide-react'
@@ -161,12 +162,12 @@ export function Operators() {
                           {iz.durum === 'bekliyor' && iz.olusturan === 'operator' && (
                             <>
                               <button onClick={async () => {
-                                await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
-                                loadOwn(); toast.success(iz.opAd + ' izni onaylandı')
+                                try { await onaylaIzin(iz.id, 'Admin'); loadOwn(); toast.success(iz.opAd + ' izni onaylandı') }
+                                catch { toast.error('Onaylanamadı') }
                               }} className="px-2 py-0.5 bg-green/10 text-green rounded text-[10px] hover:bg-green/20">✓ Onayla</button>
                               <button onClick={async () => {
-                                await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: 'Admin', onay_tarihi: today() }).eq('id', iz.id)
-                                loadOwn(); toast.success(iz.opAd + ' izni reddedildi')
+                                try { await reddetIzin(iz.id, 'Admin'); loadOwn(); toast.success(iz.opAd + ' izni reddedildi') }
+                                catch { toast.error('Reddedilemedi') }
                               }} className="px-2 py-0.5 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">✕ Red</button>
                             </>
                           )}
@@ -178,8 +179,8 @@ export function Operators() {
                           )}
                           <button onClick={async () => {
                             if (!await showConfirm('İzni silmek istediğinize emin misiniz?')) return
-                            await supabase.from('uys_izinler').delete().eq('id', iz.id)
-                            loadOwn(); toast.success('İzin silindi')
+                            try { await deleteIzin(iz.id); loadOwn(); toast.success('İzin silindi') }
+                            catch { toast.error('Silinemedi') }
                           }} className="text-zinc-600 hover:text-red text-[10px]">Sil</button>
                         </div>
                       </td>
@@ -198,19 +199,26 @@ export function Operators() {
         toplu={izinForm === 'toplu'}
         onClose={() => setIzinForm(false)}
         onSave={async (dataList) => {
-          for (const data of dataList) {
-            if (data._update) {
-              await supabase.from('uys_izinler').update({
-                baslangic: data.baslangic, bitis: data.bitis, tip: data.tip,
-                saat_baslangic: data.saat_baslangic, saat_bitis: data.saat_bitis,
-                not_: data.not_, durum: data.olusturan === 'operator' ? 'duzenlendi' : data.durum,
-              }).eq('id', data.id)
-            } else {
-              await supabase.from('uys_izinler').insert(data)
+          try {
+            for (const data of dataList) {
+              if (data._update) {
+                await updateIzin(data.id, {
+                  baslangic: data.baslangic, bitis: data.bitis, tip: data.tip,
+                  saatBaslangic: data.saat_baslangic, saatBitis: data.saat_bitis,
+                  not: data.not_, durum: data.olusturan === 'operator' ? 'duzenlendi' : data.durum,
+                })
+              } else {
+                await createIzin({
+                  id: data.id, opId: data.op_id, opAd: data.op_ad,
+                  baslangic: data.baslangic, bitis: data.bitis, tip: data.tip,
+                  saatBaslangic: data.saat_baslangic, saatBitis: data.saat_bitis,
+                  not: data.not_, olusturan: data.olusturan,
+                })
+              }
             }
-          }
-          loadOwn(); setIzinForm(false)
-          toast.success(dataList.length > 1 ? dataList.length + ' izin oluşturuldu' : (dataList[0]._update ? 'İzin düzenlendi' : 'İzin eklendi'))
+            loadOwn(); setIzinForm(false)
+            toast.success(dataList.length > 1 ? dataList.length + ' izin oluşturuldu' : (dataList[0]._update ? 'İzin düzenlendi' : 'İzin eklendi'))
+          } catch { toast.error('Kaydedilemedi') }
         }}
       />}
 
