@@ -5,60 +5,30 @@
 --   - Yazma  : sadece admin ve planlama (uys_kullanicilar.rol)
 --
 -- Mimari notlar:
---   UYS'de roller uygulama seviyesinde (uys_kullanicilar.rol text alanı),
---   Postgres rolleri DEĞİL. app_current_role() SECURITY DEFINER function
---   aracılığıyla RLS policy bu app-role'ünü auth.uid()'den çözer.
---
--- ⚠️ KRITIK UYARI — custom DB login path kullanıcıları:
---   useAuth.ts'de kullanıcı adı/şifre ile login olan (Supabase Auth oturumu
---   AÇMAYAN) planlama/depocu/uretim_sor kullanıcıları bu RLS sonrası
---   uys_orders'a erişemez. Bu kullanıcılar Supabase Auth'a göç edilmeden
---   PROD'a uygulanmamalı.
+--   current_user_role() SECURITY DEFINER fonksiyonu (v16.87a ile LOWER() eklendi)
+--   auth.uid() → uys_kullanicilar.rol çözümlemesi yapar.
+--   app_current_role() v16.88'de kaldırıldı, current_user_role() ile birleştirildi.
 --
 -- Uygulama sırası (CLAUDE.md):
---   1. TEST (cowgxwmhlogmswatbltz Frankfurt) — bu migration ile
---   2. PROD (lmhcobrgrnvtprvmcito)             — ayrı onayla
+--   1. TEST (cowgxwmhlogmswatbltz Frankfurt) — uygulandı
+--   2. PROD (lmhcobrgrnvtprvmcito)           — v16.88 ile uygulandı
 --
--- Idempotent: CREATE OR REPLACE FUNCTION, DROP POLICY IF EXISTS.
+-- TEST  applied: 2026-05-15
+-- PROD  applied: 2026-05-16 (v16.88 üzerinden — app_current_role yerine current_user_role)
 
--- 1) SECURITY DEFINER function: aktif kullanıcının uygulama rolünü döner
-CREATE OR REPLACE FUNCTION public.app_current_role() RETURNS text
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-  SELECT rol::text
-    FROM public.uys_kullanicilar
-   WHERE auth_user_id = auth.uid()
-   LIMIT 1
-$$;
-
-REVOKE ALL ON FUNCTION public.app_current_role() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.app_current_role() TO anon, authenticated;
-
-COMMENT ON FUNCTION public.app_current_role() IS
-  'RLS policy''leri için: oturum açan kullanıcının uys_kullanicilar.rol değerini döner. NULL → kullanıcı uys_kullanicilar tablosunda bulunamadı veya auth.uid() yok.';
-
--- 2) uys_orders üzerinde RLS aktif et + eski allow_all policy'sini kaldır
 ALTER TABLE public.uys_orders ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS allow_all ON public.uys_orders;
-DROP POLICY IF EXISTS "allow_all" ON public.uys_orders;
+DROP POLICY IF EXISTS allow_all    ON public.uys_orders;
+DROP POLICY IF EXISTS "allow_all"  ON public.uys_orders;
+DROP POLICY IF EXISTS orders_read  ON public.uys_orders;
+DROP POLICY IF EXISTS orders_write ON public.uys_orders;
 
--- 3) Read policy — authenticated tüm kullanıcılar
-DROP POLICY IF EXISTS orders_read ON public.uys_orders;
+-- Okuma: tüm authenticated kullanıcılar
 CREATE POLICY orders_read ON public.uys_orders
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING (true);
 
--- 4) Write policy — sadece admin + planlama
--- FOR ALL covers SELECT/INSERT/UPDATE/DELETE; SELECT için orders_read OR
--- birleşimi ile authenticated kullanıcı yine SELECT yapabilir. Yazma
--- operasyonları için app_current_role() kontrolü uygulanır.
-DROP POLICY IF EXISTS orders_write ON public.uys_orders;
+-- Yazma: admin + planlama (current_user_role v16.87a ile LOWER+aktif içeriyor)
 CREATE POLICY orders_write ON public.uys_orders
-  FOR ALL
-  TO authenticated
-  USING (public.app_current_role() IN ('admin','planlama'))
-  WITH CHECK (public.app_current_role() IN ('admin','planlama'));
+  FOR ALL TO authenticated
+  USING      (public.current_user_role() IN ('admin', 'planlama'))
+  WITH CHECK (public.current_user_role() IN ('admin', 'planlama'));
