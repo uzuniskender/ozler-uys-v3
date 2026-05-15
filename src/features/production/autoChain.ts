@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { supabase, fetchAll } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
@@ -33,7 +33,8 @@ export async function buildWorkOrders(
   }
 
   const kirnoMap: Record<string, RecipeRow> = {}
-  satirlar.forEach(s => { kirnoMap[s.kirno || ''] = s })
+  // kirno null/boş olan satirlar '' anahtarına çakışır; sadece gerçek kirno'lu satirlar eklenir.
+  satirlar.forEach(s => { if (s.kirno) kirnoMap[s.kirno] = s })
 
   // v15.87 — siraBaslangic safety: caller verdiyse kullan, AMA DB'de daha buyuk
   // sira varsa onu tercih et. Boylece caller stale state ile gelse bile (realtime
@@ -90,7 +91,8 @@ export async function buildWorkOrders(
 
   if (workOrders.length) {
     for (let i = 0; i < workOrders.length; i += 50) {
-      await supabase.from('uys_work_orders').upsert(workOrders.slice(i, i + 50), { onConflict: 'id' })
+      const { error } = await supabase.from('uys_work_orders').upsert(workOrders.slice(i, i + 50), { onConflict: 'id' })
+      if (error) throw error
     }
     // Op adlarını doldur
     const opIds = [...new Set(workOrders.map(w => w.op_id as string).filter(Boolean))]
@@ -155,8 +157,8 @@ export async function autoZincir(
   adimlar.push(`✅ ${woCount} iş emri oluşturuldu`)
   onProgress?.(adimlar)
 
-  // Re-fetch work orders (just created)
-  const { data: freshWOs } = await supabase.from('uys_work_orders').select('*')
+  // Re-fetch work orders (just created) — fetchAll: 1000 satır cap'i aşabilir
+  const { data: freshWOs } = await fetchAll<any>('uys_work_orders')
   const allWOs: WorkOrder[] = freshWOs?.map((r: any) => ({
     id: r.id, orderId: r.order_id, rcId: r.rc_id, sira: r.sira || 0, kirno: r.kirno,
     opId: r.op_id, opKod: r.op_kod, opAd: r.op_ad, istId: r.ist_id, istKod: r.ist_kod, istAd: r.ist_ad,
@@ -322,7 +324,7 @@ export async function autoZincir(
     const filteredRows = mrpSonuc.filter(r => {
       if (r.net <= 0) return false
       const xTermin = r.termin || ''
-      const mevcutTed = tedarikler.find(t =>
+      const mevcutTed = freshTedarikler.find(t =>
         t.malkod === r.malkod
         && t.orderId === orderId
         && (t.teslimTarihi || '') === xTermin
