@@ -145,6 +145,13 @@ async function exportExcel(
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
 
+  const bilgiRows = [
+    { Alan: 'Sipariş No', Değer: baslik.siparis_no },
+    { Alan: 'Müşteri', Değer: baslik.musteri || '' },
+    { Alan: 'Teslim Tarihi', Değer: baslik.teslim_tarihi || '' },
+  ]
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bilgiRows), 'Sipariş Bilgileri')
+
   const hmRows = hmIhtiyac.map(h => ({
     'Hammadde Kodu': h.hammadde_kodu,
     'Hammadde Adı': h.hammadde_adi,
