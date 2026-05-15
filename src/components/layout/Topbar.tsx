@@ -248,7 +248,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
         <span className="text-zinc-500">{synced ? 'Bağlı' : 'Çevrimdışı'}</span>
       </div>
 
-      <button onClick={() => loadAllStores()} className="text-zinc-500 hover:text-zinc-300" title="Yenile"><RefreshCw size={14} /></button>
+      <button onClick={() => loadAllStores({ force: true })} className="text-zinc-500 hover:text-zinc-300" title="Yenile"><RefreshCw size={14} /></button>
       <HelpNotesButtons username={user?.username || 'anonim'} />
       <button onClick={() => setShowPassModal(true)} className="text-zinc-500 hover:text-amber" title="Şifre Değiştir"><Key size={14} /></button>
       <button onClick={onSignOut} className="text-zinc-500 hover:text-red" title="Çıkış"><LogOut size={14} /></button>

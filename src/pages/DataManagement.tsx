@@ -1212,7 +1212,7 @@ export function DataManagement() {
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-xl font-semibold">Veri Yönetimi</h1></div>
         <div className="flex gap-2">
-          <button onClick={() => store.loadAll()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><RefreshCw size={13} /> Yenile</button>
+          <button onClick={() => store.loadAll({ force: true })} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><RefreshCw size={13} /> Yenile</button>
           {can('data_export') && <button onClick={() => {
             import('xlsx').then(XLSX => {
               const wb = XLSX.utils.book_new()

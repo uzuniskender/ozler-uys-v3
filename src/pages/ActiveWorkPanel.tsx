@@ -76,7 +76,7 @@ export function ActiveWorkPanel() {
               className="accent-accent" />
             Canlı
           </label>
-          <button onClick={() => loadOwn()}
+          <button onClick={() => loadOwn({ force: true })}
             className="px-2 py-1 text-xs bg-bg-2 border border-border rounded text-zinc-400 hover:text-zinc-200">
             ↻ Yenile
           </button>
