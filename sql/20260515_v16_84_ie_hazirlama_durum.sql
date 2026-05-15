@@ -1,6 +1,6 @@
 -- v16.84 — İş Emri Hazırlama durum geçişleri (2026-05-15)
 -- TEST: cowgxwmhlogmswatbltz ✅ 2026-05-15
--- PROD: lmhcobrgrnvtprvmcito ⬜
+-- PROD: lmhcobrgrnvtprvmcito ✅ 2026-05-15
 
 ALTER TABLE uys_ie_hazirlama
   ADD COLUMN IF NOT EXISTS iptal_neden   TEXT,

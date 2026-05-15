@@ -174,13 +174,11 @@ docs/DEVAM_NOTU.md                       — bu notlar
 
 ## Sıradaki görevler
 
-1. Refresh butonlarına `force: true` ekle (onay bekleniyor):
-   - `Topbar.tsx` (satır ~251) → `loadAllStores({ force: true })`
-   - `ActiveWorkPanel.tsx` (satır ~79) → `loadOwn({ force: true })`
-   - `DataManagement.tsx` → `store.loadAll({ force: true })` (store nesnesi `loadAll: loadAllStores` olduğu için doğrudan geçilebilir)
+1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
 2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
 3. ~~Service katmanı Faz 3~~ — **tamamlandı** (7 sayfa, 2 servis genişlemesi)
 4. ~~loadAll alias temizliği~~ — **tamamlandı** (`ed99229`)
+5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST'e migration uygulandı, PROD onay bekliyor
 
 ---
 
