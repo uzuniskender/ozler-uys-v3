@@ -50,6 +50,29 @@
 - `chatService.ts` — zaten servis konumunda, ayrı stil
 - Sayfa içi inline query'ler — organik göç; yeni kodda servis-first
 
+---
+
+### 15 Mayıs 2026 — Service Katmanı Faz 3 (sayfa migrasyonları)
+
+**Servis genişlemesi**
+- `izinlerService.updateIzin` eklendi (`62b6e9e`)
+- `acikBarlarService.updateHamMalkodKaskat` eklendi (`62b6e9e`)
+
+**Sayfa migrasyonları** (inline Supabase → servis)
+- `HelpNotesButtons.tsx` → `notesService` (`8b079b1`)
+- `Topbar.tsx` → `bildirimlerService` (`28a059d`)
+- `OperatorPanel.tsx` → `izinlerService` — 4 çağrı: izin onayla/reddet/sil + toplu (`d20e6c1`)
+- `MRP.tsx` + `MamulCikisModal.tsx` → `bildirimlerService` (`4c9fc77`)
+- `Suppliers.tsx` → `tedarikciService` — 3 çağrı: delete/update/create + try/catch (`ea7a9f7`)
+- `Operators.tsx` → `izinlerService` — 5 çağrı: onayla/reddet/sil/update/create + try/catch (`baa01c4`)
+
+**Slice migration artıkları**
+- `ActiveWorkPanel.tsx`, `Messages.tsx` — kalan `useStore` shim referansları temizlendi
+
+**Diğer**
+- `queryCache.ts` + `loadOwn` TTL gate (30 sn) — tekrar yüklemeyi önler (`3d1c242`)
+- `IeHazirlama.tsx` + `20260515_v16_83_ie_hazirlama.sql` — v16.83 yeni özellik (`a83611b`)
+
 ## Güvenlik oturumu tamamlananlar
 
 - uys_dev_files + uys_session_memory → RLS aktif, sadece uzuniskender@gmail.com erişebilir
@@ -85,7 +108,7 @@
    - `ActiveWorkPanel.tsx:79` → `loadOwn({ force: true })`
    - `DataManagement.tsx:~1216` → `loadAll({ force: true })`
 2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
-3. Service katmanı Faz 3 (isteğe bağlı): sayfaların inline query'lerini servise taşıma — önce OperatorPanel izin, sonra Suppliers tedarikçi. Her biri ayrı onay ile.
+3. ~~Service katmanı Faz 3~~ — **tamamlandı** (6 sayfa, 2 servis genişlemesi)
 
 ---
 
