@@ -10,7 +10,7 @@ import { wrap } from '@/services/_base/errors'
 import { applyIlikeArama, norm } from '@/services/_base/query'
 import { uid, today } from '@/lib/utils'
 import type { Izin } from '@/types'
-import type { IzinInsert, IzinDurum } from '@/types/izin'
+import type { IzinInsert, IzinUpdate, IzinDurum } from '@/types/izin'
 
 const TABLO = 'uys_izinler'
 
@@ -101,6 +101,28 @@ export async function createIzin(payload: IzinInsert): Promise<Izin> {
 
   wrap(error, { table: TABLO, op: 'insert' })
   return toIzin(data as Record<string, unknown>)
+}
+
+/**
+ * Mevcut izni düzenle (tarih, tip, saat, not, durum).
+ * Operators.tsx IzinFormModal onSave/_update dalını sarar.
+ * Yalnızca verilen alanlar güncellenir.
+ */
+export async function updateIzin(id: string, payload: IzinUpdate): Promise<void> {
+  const updateData: Record<string, unknown> = {}
+  if (payload.baslangic !== undefined) updateData.baslangic = payload.baslangic
+  if (payload.bitis !== undefined) updateData.bitis = payload.bitis
+  if (payload.tip !== undefined) updateData.tip = payload.tip
+  if (payload.saatBaslangic !== undefined) updateData.saat_baslangic = norm.optStr(payload.saatBaslangic)
+  if (payload.saatBitis !== undefined) updateData.saat_bitis = norm.optStr(payload.saatBitis)
+  if (payload.not !== undefined) updateData.not_ = norm.optStr(payload.not)
+  if (payload.durum !== undefined) updateData.durum = payload.durum
+
+  const { error } = await supabase
+    .from(TABLO)
+    .update(updateData)
+    .eq('id', id)
+  wrap(error, { table: TABLO, op: 'update' })
 }
 
 /** İzni onayla. OperatorPanel'deki inline update'i sarar. */

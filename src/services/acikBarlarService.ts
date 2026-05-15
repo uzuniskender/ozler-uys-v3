@@ -71,6 +71,35 @@ export async function getAcikBar(id: string): Promise<AcikBar | null> {
   return data ? toAcikBar(data as Record<string, unknown>) : null
 }
 
+export interface HamMalkodKaskatPayload {
+  /** Yeni ham malzeme kodu. Verilmezse kod değişmez. */
+  yeniKod?: string
+  /** Yeni ham malzeme adı. Verilmezse ad değişmez. */
+  yeniAd?: string
+}
+
+/**
+ * Ham malzeme kodu veya adı değiştiğinde açık barlardaki referansı güncelle.
+ * Materials.tsx'teki inline cascade update'i sarar.
+ * `yeniKod` ve `yeniAd` ikisi de verilmezse no-op.
+ */
+export async function updateHamMalkodKaskat(
+  eskiKod: string,
+  payload: HamMalkodKaskatPayload,
+  opts: { sadeceAcik?: boolean } = {},
+): Promise<void> {
+  const updates: Record<string, unknown> = {}
+  if (payload.yeniKod !== undefined) updates.ham_malkod = payload.yeniKod
+  if (payload.yeniAd !== undefined) updates.ham_malad = payload.yeniAd
+  if (Object.keys(updates).length === 0) return
+
+  let q = supabase.from(TABLO).update(updates).eq('ham_malkod', eskiKod)
+  if (opts.sadeceAcik) q = q.eq('durum', 'acik')
+
+  const { error } = await q
+  wrap(error, { table: TABLO, op: 'update' })
+}
+
 export interface HurdaPayload {
   sebep?: string | null
   kullaniciId?: string | null
