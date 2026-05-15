@@ -9,6 +9,8 @@ import { uid, today, pctColor } from '@/lib/utils'
 import { toast } from 'sonner'
 import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-react'
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
+import { createIzin, onaylaIzin, reddetIzin } from '@/services/izinlerService'
+import type { IzinTip } from '@/types/izin'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { canProduceWO, canDurus } from '@/features/production/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
@@ -616,11 +618,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                       {iz.not && <div className="text-[10px] text-zinc-500 mb-2">Not: {iz.not}</div>}
                       <div className="flex gap-2">
                         <button onClick={async () => {
-                          await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          await onaylaIzin(iz.id, opr.ad)
                           loadAll(); toast.success('İzin onaylandı')
                         }} className="flex-1 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-[11px] font-bold">✓ Onayla</button>
                         <button onClick={async () => {
-                          await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          await reddetIzin(iz.id, opr.ad)
                           loadAll(); toast.success('İzin reddedildi')
                         }} className="flex-1 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-[11px] font-bold">✕ Reddet</button>
                       </div>
@@ -641,11 +643,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                       </div>
                       <div className="flex gap-2">
                         <button onClick={async () => {
-                          await supabase.from('uys_izinler').update({ durum: 'onaylandi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          await onaylaIzin(iz.id, opr.ad)
                           loadAll(); toast.success('Düzenlenen izin onaylandı')
                         }} className="flex-1 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-[11px] font-bold">✓ Onayla</button>
                         <button onClick={async () => {
-                          await supabase.from('uys_izinler').update({ durum: 'reddedildi', onaylayan: opr.ad, onay_tarihi: today() }).eq('id', iz.id)
+                          await reddetIzin(iz.id, opr.ad)
                           loadAll(); toast.success('Düzenlenen izin reddedildi')
                         }} className="flex-1 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-[11px] font-bold">✕ Reddet</button>
                       </div>
@@ -1434,12 +1436,13 @@ function IzinTalepForm({ oprId, oprAd, onSaved }: { oprId: string; oprAd: string
           onClick={async () => {
             if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
             setSaving(true)
-            await supabase.from('uys_izinler').insert({
-              id: uid(), op_id: oprId, op_ad: oprAd,
-              baslangic, bitis: bitis || baslangic, tip,
-              durum: 'bekliyor', olusturan: 'operator',
-              saat_baslangic: saatlik ? saatBas : '', saat_bitis: saatlik ? saatBit : '',
-              onaylayan: '', onay_tarihi: '', not_: not_,
+            await createIzin({
+              opId: oprId, opAd: oprAd,
+              baslangic, bitis,
+              tip: tip as IzinTip,
+              saatBaslangic: saatlik ? saatBas : null,
+              saatBitis: saatlik ? saatBit : null,
+              not: not_ || null,
             })
             setSaving(false)
             setNot(''); onSaved()
