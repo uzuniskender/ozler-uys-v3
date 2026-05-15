@@ -1,5 +1,7 @@
+import { z } from 'zod'
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
+import { auditUretimLog } from '@/lib/audit'
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/lib/activityLog'
 import { stokTuketimIsle } from '@/features/production/stokTuketim'
@@ -213,6 +215,37 @@ export function ProductionEntry() {
   )
 }
 
+// ─── Form validation ──────────────────────────────────────────
+function zAdet(label: string) {
+  return z.string()
+    .transform(v => (v.trim() === '' ? 0 : parseInt(v, 10)))
+    .pipe(
+      z.number()
+        .int(`${label} tam sayı olmalı`)
+        .min(0, `${label} negatif olamaz`)
+        .max(100_000, `${label} değeri çok büyük`)
+    )
+}
+
+const zTarih = z
+  .string()
+  .min(1, 'Tarih boş olamaz')
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Geçersiz tarih formatı')
+  .refine(v => !isNaN(new Date(v).getTime()), 'Geçersiz tarih değeri')
+
+const EntryFormSchema = z.object({
+  qty:   zAdet('Üretim adedi'),
+  fire:  zAdet('Fire'),
+  tarih: zTarih,
+  not:   z.string().max(500, 'Not en fazla 500 karakter olabilir'),
+})
+
+const TopluRowSchema = z.object({
+  qty:  zAdet('Üretim adedi'),
+  fire: zAdet('Fire'),
+})
+// ──────────────────────────────────────────────────────────────
+
 function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   woId: string; operators: { id: string; ad: string; bolum: string; aktif?: boolean }[]
   defaultOprId?: string
@@ -356,11 +389,14 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   }
 
   async function save() {
-    const q = parseInt(qty) || 0
-    const f = parseInt(fire) || 0
+    const parseResult = EntryFormSchema.safeParse({ qty, fire, tarih, not })
+    if (!parseResult.success) {
+      toast.error(parseResult.error.issues[0]?.message || 'Form hatası')
+      return
+    }
+    const { qty: q, fire: f } = parseResult.data
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
-    if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Miktar, fire veya duruş girmelisiniz'); return }
-    if (q < 0 || f < 0) { toast.error('Negatif değer girilemez'); return }
+    if (q === 0 && f === 0 && !hasDurus) { toast.error('Miktar, fire veya duruş girmelisiniz'); return }
 
     // v15.55 — Kesim planı zorunluluğu (HARD BLOCK)
     // Kesim opsiyonlu WO için aktif bir kesim planına atanmamışsa üretim girişi yapılamaz.
@@ -677,6 +713,8 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
   }
 
   async function save() {
+    const tarihResult = zTarih.safeParse(tarih)
+    if (!tarihResult.success) { toast.error(tarihResult.error.issues[0]?.message || 'Geçersiz tarih'); return }
     const validRows = rows.filter(r => parseInt(r.qty) > 0)
     if (!validRows.length) { toast.error('En az bir satıra miktar girin'); return }
     setSaving(true)
@@ -691,10 +729,15 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
 
     let kesimPlaniAtlananSay = 0
     for (const r of validRows) {
-      const q = parseInt(r.qty) || 0
-      const f = parseInt(r.fire) || 0
+      const rowResult = TopluRowSchema.safeParse({ qty: r.qty, fire: r.fire })
+      if (!rowResult.success) {
+        toast.error(`${acikWOs.find(w => w.id === r.woId)?.ieNo || r.woId}: ${rowResult.error.issues[0]?.message || 'Geçersiz değer'}`)
+        continue
+      }
+      const q = rowResult.data.qty
+      const f = rowResult.data.fire
       const wo = acikWOs.find(w => w.id === r.woId)
-      if (!wo || (q <= 0 && f <= 0)) continue
+      if (!wo || (q === 0 && f === 0)) continue
 
       // v15.55 — Kesim planı zorunluluğu (HARD BLOCK her satır için)
       if (isKesimWO(wo) && !planliWoIds.has(r.woId)) {
