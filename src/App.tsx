@@ -138,6 +138,9 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 export default function App() {
   const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role, can } = useAuth()
 
+ const orders = useOrderStore(s => s.orders)
+ console.log("ORDERS TEST:", orders)
+
   // v15.53 Adım 4 — Admin login olunca otomatik günlük yedek (fire-and-forget)
   // Idempotent: günde defalarca tetiklenebilir, ensureDailyAutoBackup içeride
   // 'bugün için yedek var mı?' kontrolü yapar. Sahaya etki: ilk login sonrası
