@@ -26,9 +26,12 @@ export async function stokTuketimIsle(
 
   const rows: Record<string, unknown>[] = []
 
-  if (wo.hm?.length && wo.hedef) {
-    // wo.hm'den hesapla
+  if (wo.hm?.length && wo.hedef && wo.hedef > 0) {
+    // wo.hm'den hesapla — hedef > 0 garantili (division by zero ve negatif değer guard)
     for (const h of wo.hm) {
+      // D-3: malkod boş satırlar atılır — aksi halde uys_stok_hareketler'a malkod=''
+      // insert edilir ve sonraki rezerv delete loop'u hatalı eşleşme yapabilir.
+      if (!h.malkod) continue
       // v15.31 — bar modeline giren malzemeler atlanır (barModel'e bırakılır)
       if (materials && isBarMaterialByKod(h.malkod, materials)) continue
 
@@ -49,8 +52,10 @@ export async function stokTuketimIsle(
     if (rc?.satirlar?.length) {
       const hmRows = rc.satirlar.filter(s => s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul')
       for (const s of hmRows) {
+        // D-3: malkod boş satırlar atılır
+        if (!s.malkod) continue
         // v15.31 — bar modeline giren malzemeler atlanır
-        if (materials && isBarMaterialByKod(s.malkod || '', materials)) continue
+        if (materials && isBarMaterialByKod(s.malkod, materials)) continue
 
         const consume = Math.round((s.miktar || 0) * (wo.mpm || 1) * qty * 100) / 100
         if (consume <= 0) continue
@@ -71,13 +76,20 @@ export async function stokTuketimIsle(
     // v16.70 — Üretim girişinde bu WO'nun siparişine ait rezervleri sil
     // Her tüketilen malkod için aynı order_id'ye bağlı rezerv kaldırılır
     if (wo.orderId) {
-      const tuketilenMalkodlar = rows.map(r => r.malkod as string)
+      // D-3: boş malkod'ları ele — eq('malkod', '') yanlış eşleşmesin
+      const tuketilenMalkodlar = rows
+        .map(r => r.malkod as string)
+        .filter(m => !!m)
       for (const malkod of tuketilenMalkodlar) {
-        await supabase.from('uys_stok_hareketler')
+        // D-2: rezerv silme hata kontrolü — sessizce yutmayı bırakıp logla
+        const { error: rezervSilHata } = await supabase.from('uys_stok_hareketler')
           .delete()
           .eq('tip', 'rezerv')
           .eq('rezerv_order_id', wo.orderId)
           .eq('malkod', malkod)
+        if (rezervSilHata) {
+          console.warn('[stokTuketim] rezerv silme hata:', malkod, rezervSilHata.message)
+        }
       }
     }
   }
