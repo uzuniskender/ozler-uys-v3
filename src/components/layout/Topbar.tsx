@@ -18,10 +18,11 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const navigate = useNavigate()
-  const synced = useOrderStore(s => s.synced)
-    && useProductionStore(s => s.synced)
-    && useWarehouseStore(s => s.synced)
-    && useAuthStore(s => s.synced)
+  const oSynced = useOrderStore(s => s.synced)
+  const pSynced = useProductionStore(s => s.synced)
+  const wSynced = useWarehouseStore(s => s.synced)
+  const aSynced = useAuthStore(s => s.synced)
+  const synced = oSynced && pSynced && wSynced && aSynced
   const pendingFlows = useProductionStore(s => s.pendingFlows)
   const workOrders = useProductionStore(s => s.workOrders)
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)
