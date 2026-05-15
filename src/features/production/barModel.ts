@@ -82,13 +82,16 @@ function satirTamamlandiMi(
   logs: ProductionLog[]
 ): boolean {
   if (!satir.kesimler?.length) return false
+  let aktifWoVar = false
   for (const k of satir.kesimler) {
     const wo = workOrders.find(w => w.id === k.woId)
     if (!wo) return false  // WO silinmişse satırı tamamlanmış sayma
     if (wo.durum === 'iptal') continue  // iptal edilmişse skip
+    aktifWoVar = true
     const prod = logs.filter(l => l.woId === wo.id).reduce((a, l) => a + (l.qty || 0), 0)
     if (prod < (wo.hedef || 0)) return false
   }
+  if (!aktifWoVar) return false  // B-1: tüm WO'lar iptal/silinmiş — bar açma
   return true
 }
 
@@ -138,7 +141,7 @@ export async function barModelSync(
       if (!satir.id) continue
       if (!satirTamamlandiMi(satir, workOrders, logs)) continue
 
-      const hamAdet = satir.hamAdet || 0
+      const hamAdet = Math.min(satir.hamAdet || 0, 500)  // B-2: üst limit
       if (hamAdet <= 0) continue
 
       // v15.35 — Havuz barı satırı mı?

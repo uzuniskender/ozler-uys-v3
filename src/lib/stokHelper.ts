@@ -19,6 +19,8 @@ export interface StokHareketiParams {
 }
 
 export async function addStokHareketi(p: StokHareketiParams): Promise<{ error: any }> {
+  if (!p.malkod?.trim()) return { error: new Error('addStokHareketi: malkod boş') }
+  if (!p.miktar || !isFinite(p.miktar) || p.miktar <= 0) return { error: new Error('addStokHareketi: geçersiz miktar') }
   const { error } = await supabase.from('uys_stok_hareketler').insert({
     id: uid(),
     tarih: p.tarih || today(),
@@ -35,21 +37,26 @@ export async function addStokHareketi(p: StokHareketiParams): Promise<{ error: a
 
 export async function addStokHareketiToplu(list: StokHareketiParams[]): Promise<{ error: any }> {
   if (!list.length) return { error: null }
-  const rows = list.map(p => ({
-    id: uid(),
-    tarih: p.tarih || today(),
-    malkod: p.malkod,
-    malad: p.malad,
-    miktar: p.miktar,
-    tip: p.tip,
-    aciklama: p.aciklama || '',
-    wo_id: p.woId || null,
-    log_id: p.logId || null,
-  }))
-  // 100'erli batch
+  if (list.some(p => !p.malkod?.trim())) return { error: new Error('addStokHareketiToplu: malkod boş kayıt var') }  // C-1
+  const rows = list
+    .filter(p => isFinite(p.miktar) && p.miktar > 0)
+    .map(p => ({
+      id: uid(),
+      tarih: p.tarih || today(),
+      malkod: p.malkod,
+      malad: p.malad,
+      miktar: p.miktar,
+      tip: p.tip,
+      aciklama: p.aciklama || '',
+      wo_id: p.woId || null,
+      log_id: p.logId || null,
+    }))
+  if (!rows.length) return { error: null }
+  // C-2: tüm batch hataları biriktirilir, ilk hatada kesilmez
+  const hatalar: any[] = []
   for (let i = 0; i < rows.length; i += 100) {
     const { error } = await supabase.from('uys_stok_hareketler').insert(rows.slice(i, i + 100))
-    if (error) return { error }
+    if (error) hatalar.push(error)
   }
-  return { error: null }
+  return { error: hatalar.length ? hatalar : null }
 }
