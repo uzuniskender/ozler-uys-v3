@@ -5,6 +5,7 @@ import type {
 } from '@/types'
 import { entriesFor } from './tables'
 import { isFresh, markFresh } from '@/lib/queryCache'
+import { setYetkiOverrides, type AdminRole } from '@/lib/permissions'
 
 export interface AuthStore {
   operators: Operator[]
@@ -63,6 +64,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         }
       })
       updates.yetkiMap = await fetchYetkiMap()
+      setYetkiOverrides(updates.yetkiMap as Record<string, AdminRole[]>)
       if (ok > 0) markFresh(CACHE_KEY)
       set({ ...updates, loading: false, synced: ok > 0 })
     } catch (e) {
@@ -87,6 +89,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   reloadYetki: async () => {
     const map = await fetchYetkiMap()
+    setYetkiOverrides(map as Record<string, AdminRole[]>)
     set({ yetkiMap: map })
   },
 }))

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, setGuestMode } from '@/lib/supabase'
 import { can as canCheck, type UserRole } from '@/lib/permissions'
 import { claimSession, releaseSession, subscribeSessionChanges, generateSessionId, getDeviceLabel, type UserType } from '@/lib/sessionGuard'
+import { useAuthStore } from '@/store/useAuthStore'
 
 interface AuthUser {
   role: UserRole
@@ -327,8 +328,9 @@ let _sgOwner: string | null = null
     setUser(authUser)
   }
 
+  const yetkiMap = useAuthStore(s => s.yetkiMap)
   const role = (user?.role || 'guest') as UserRole
-  const can = useCallback((action: string) => canCheck(role, action), [role])
+  const can = useCallback((action: string) => canCheck(role, action), [role, yetkiMap])
   const isAdminLevel = role === 'admin' || role === 'uretim_sor' || role === 'planlama' || role === 'depocu'
 
   return {
