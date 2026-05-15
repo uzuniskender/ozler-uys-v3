@@ -17,7 +17,6 @@ export function Shipment() {
   const logs = useProductionStore(s => s.logs)
   const materials = useWarehouseStore(s => s.materials)
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
-  const loadAll = loadAllStores
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -67,7 +66,7 @@ export function Shipment() {
         await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', silinenSevk.orderId)
       }
     }
-    loadAll(); toast.success('Sevkiyat silindi')
+    loadAllStores(); toast.success('Sevkiyat silindi')
   }
 
   function exportExcel() {
@@ -230,7 +229,7 @@ export function Shipment() {
           orders={orders}
           materials={materials}
           onClose={() => setEditId(null)}
-          onSaved={() => { setEditId(null); loadAll(); toast.success('Sevkiyat güncellendi') }}
+          onSaved={() => { setEditId(null); loadAllStores(); toast.success('Sevkiyat güncellendi') }}
         />
       )}
 
@@ -243,7 +242,7 @@ export function Shipment() {
           logs={logs}
           materials={materials}
           onClose={() => setShowForm(false)}
-          onSaved={() => { setShowForm(false); loadAll(); toast.success('Sevkiyat oluşturuldu') }}
+          onSaved={() => { setShowForm(false); loadAllStores(); toast.success('Sevkiyat oluşturuldu') }}
         />
       )}
     </div>

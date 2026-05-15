@@ -18,7 +18,6 @@ export function BomTrees() {
   const workOrders = useProductionStore(s => s.workOrders)
   const operations = useProductionStore(s => s.operations)
   const materials = useWarehouseStore(s => s.materials)
-  const loadAll = loadAllStores
   const { can } = useAuth()
   const [selected, setSelected] = useState<BomTree | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -74,13 +73,13 @@ export function BomTrees() {
     const count = checkedIds.size
     if (!await showConfirm(`${count} ürün ağacını silmek istediğinize emin misiniz?`)) return
     for (const id of checkedIds) { await supabase.from('uys_bom_trees').delete().eq('id', id) }
-    setCheckedIds(new Set()); loadAll(); toast.success(count + ' ürün ağacı silindi')
+    setCheckedIds(new Set()); loadAllStores(); toast.success(count + ' ürün ağacı silindi')
   }
 
   async function deleteBom(id: string) {
     if (!await showConfirm('Bu ürün ağacını silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_bom_trees').delete().eq('id', id)
-    loadAll(); toast.success('Ürün ağacı silindi')
+    loadAllStores(); toast.success('Ürün ağacı silindi')
   }
 
   async function copyBom(bt: BomTree) {
@@ -96,7 +95,7 @@ export function BomTrees() {
       id: uid(), mamul_kod: newMamulKod, mamul_ad: newAd,
       ad: newAd, rows: newRows,
     })
-    loadAll(); toast.success('Ürün ağacı kopyalandı')
+    loadAllStores(); toast.success('Ürün ağacı kopyalandı')
   }
 
   async function renameBom(bt: BomTree) {
@@ -135,7 +134,7 @@ export function BomTrees() {
       woCount++
     }
 
-    loadAll()
+    loadAllStores()
     const toplam = linkedRecipes.length + woCount
     toast.success(`Ad güncellendi${toplam > 0 ? ` · ${linkedRecipes.length} reçete + ${woCount} iş emri güncellendi` : ''}`)
   }
@@ -187,7 +186,7 @@ export function BomTrees() {
           yeni++
         }
       }
-      loadAll(); toast.success(`${yeni} yeni · ${guncellenen} güncellendi`)
+      loadAllStores(); toast.success(`${yeni} yeni · ${guncellenen} güncellendi`)
     })
   }
 
@@ -210,7 +209,7 @@ export function BomTrees() {
         id: yeniRecId, rc_kod: 'RC-' + bt.mamulKod, ad: bt.ad || bt.mamulAd,
         bom_id: bt.id, mamul_kod: bt.mamulKod, mamul_ad: bt.mamulAd || bt.ad, satirlar,
       })
-      await loadAll()
+      await loadAllStores()
       toast.success(`"${bt.mamulKod}" reçetesi oluşturuldu — ${satirlar.length} satır`)
       // Auto-open editor so user can fill operations + times
       const yeniRec: Recipe = {
@@ -254,7 +253,7 @@ export function BomTrees() {
     silinen = mevcutSatirlar.length - (yeniSatirlar.length - eklenen)
 
     await supabase.from('uys_recipes').update({ satirlar: yeniSatirlar, bom_id: bt.id }).eq('id', existing.id)
-    await loadAll()
+    await loadAllStores()
 
     const parts = [
       eklenen > 0 && `+${eklenen} eklendi`,
@@ -316,7 +315,7 @@ export function BomTrees() {
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
                   const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', bt.mamulKod)
-                  if (yeni && yeni.trim() !== bt.mamulKod) { await supabase.from('uys_bom_trees').update({ mamul_kod: yeni.trim() }).eq('id', bt.id); loadAll(); toast.success('Kod güncellendi') }
+                  if (yeni && yeni.trim() !== bt.mamulKod) { await supabase.from('uys_bom_trees').update({ mamul_kod: yeni.trim() }).eq('id', bt.id); loadAllStores(); toast.success('Kod güncellendi') }
                 }}>{bt.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameBom(bt)}>{bt.ad || bt.mamulAd} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-right font-mono">
@@ -339,9 +338,9 @@ export function BomTrees() {
           </tbody></table>
         ) : <div className="p-8 text-center text-zinc-600 text-sm">{search ? 'Aramayla eşleşen ürün ağacı yok' : 'Henüz ürün ağacı yok'}</div>}
       </div>
-      {selected && <BomEditor bom={selected} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Ürün ağacı güncellendi') }} />}
-      {showNew && <NewBomModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Ürün ağacı oluşturuldu') }} />}
-      {editingRecipe && <RecipeEditor recipe={editingRecipe} operations={operations} onClose={() => setEditingRecipe(null)} onSaved={() => { setEditingRecipe(null); loadAll(); toast.success('Reçete güncellendi') }} />}
+      {selected && <BomEditor bom={selected} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAllStores(); toast.success('Ürün ağacı güncellendi') }} />}
+      {showNew && <NewBomModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAllStores(); toast.success('Ürün ağacı oluşturuldu') }} />}
+      {editingRecipe && <RecipeEditor recipe={editingRecipe} operations={operations} onClose={() => setEditingRecipe(null)} onSaved={() => { setEditingRecipe(null); loadAllStores(); toast.success('Reçete güncellendi') }} />}
     </div>
   )
 }

@@ -148,7 +148,6 @@ export function Dashboard() {
   const tedarikler = useWarehouseStore(s => s.tedarikler)
   const operators = useAuthStore(s => s.operators)
   const izinler = useAuthStore(s => s.izinler)
-  const loadAll = loadAllStores
   const { isGuest, role } = useAuth()
   const todayStr = today()
 
@@ -382,7 +381,7 @@ export function Dashboard() {
       })
       count++
     }
-    loadAll(); toast.success(count + ' tedarik önerisi oluşturuldu')
+    loadAllStores(); toast.success(count + ' tedarik önerisi oluşturuldu')
   }
 
   return (

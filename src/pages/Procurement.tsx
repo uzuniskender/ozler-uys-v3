@@ -24,7 +24,6 @@ export function Procurement() {
   const recipes = useProductionStore(s => s.recipes)
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)
   const pendingFlows = useProductionStore(s => s.pendingFlows)
-  const loadAll = loadAllStores
   const { can } = useAuth()
   const [searchParams] = useSearchParams()
   const activeFlowId = searchParams.get('flow') || ''
@@ -57,7 +56,7 @@ export function Procurement() {
     const ted = tedarikler.find(t => t.id === id)
     if (!ted) return
     await markTedarikGeldi(ted)
-    loadAll(); toast.success('Tedarik geldi + stok girişi yapıldı: ' + ted.malkod + ' × ' + ted.miktar)
+    loadAllStores(); toast.success('Tedarik geldi + stok girişi yapıldı: ' + ted.malkod + ' × ' + ted.miktar)
   }
 
   async function markGelmedi(id: string) {
@@ -65,7 +64,7 @@ export function Procurement() {
     if (!ted) return
     if (!await showConfirm(`"${ted.malkod}" tedariki bekliyor durumuna dönecek, stok girişi silinecek. Devam?`)) return
     await markTedarikGelmedi(id)
-    loadAll(); toast.success('Tedarik bekliyor durumuna alındı, stok girişi silindi')
+    loadAllStores(); toast.success('Tedarik bekliyor durumuna alındı, stok girişi silindi')
   }
 
   async function markGeldiBulk() {
@@ -77,7 +76,7 @@ export function Procurement() {
       await markTedarikGeldi(ted)
     }
     setSelectedIds(new Set())
-    loadAll(); toast.success(`${bekleyenler.length} tedarik geldi + stok girişi yapıldı`)
+    loadAllStores(); toast.success(`${bekleyenler.length} tedarik geldi + stok girişi yapıldı`)
   }
 
   function toggleSelect(id: string) {
@@ -123,7 +122,7 @@ export function Procurement() {
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
       }))
     } catch (e) { console.warn('[del] rezerve sync:', e) }
-    loadAll(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
+    loadAllStores(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
   }
 
   async function save(data: Record<string, unknown>, editId?: string) {
@@ -152,7 +151,7 @@ export function Procurement() {
       await markTedarikGelmedi(editId)
     }
 
-    loadAll(); setShowForm(false); setEditItem(null)
+    loadAllStores(); setShowForm(false); setEditItem(null)
     toast.success(editId ? 'Güncellendi' : 'Eklendi')
   }
 
@@ -191,7 +190,7 @@ export function Procurement() {
         })
         count++
       }
-      loadAll(); toast.success(count + ' tedarik yüklendi')
+      loadAllStores(); toast.success(count + ' tedarik yüklendi')
     }
     input.click()
   }

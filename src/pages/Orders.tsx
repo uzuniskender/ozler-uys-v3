@@ -29,7 +29,6 @@ export function Orders() {
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)
   const pendingFlows = useProductionStore(s => s.pendingFlows)
   const materials = useWarehouseStore(s => s.materials)
-  const loadAll = loadAllStores
   const { can, isGuest, user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -122,7 +121,7 @@ export function Orders() {
     }
 
     setSelIds(new Set())
-    await loadAll()
+    await loadAllStores()
     await triggerRezerveSync()
     toast.success(`${basariSayac} sipariş silindi${iptalSayac ? ` · ${iptalSayac} iptal` : ''}${hataSayac ? ` · ${hataSayac} hata` : ''}`)
   }
@@ -217,7 +216,7 @@ export function Orders() {
       mamul_kod: o.mamulKod, mamul_ad: o.mamulAd, adet: o.adet, recete_id: o.receteId,
       urunler: o.urunler || [], mrp_durum: 'bekliyor', olusturma: today(),
     })
-    if (!error) { loadAll(); toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA') }
+    if (!error) { loadAllStores(); toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA') }
   }
   async function deleteOrder(id: string) {
     const order = orders.find(o => o.id === id)
@@ -242,7 +241,7 @@ export function Orders() {
     if (!result.ok) { toast.error('Silme hatası: ' + (result.hata || 'bilinmeyen')); return }
 
     logAction('Sipariş silindi', id)
-    await loadAll()
+    await loadAllStores()
     await triggerRezerveSync()
 
     const o = result.ozet!
@@ -278,7 +277,7 @@ export function Orders() {
       await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
       // Rezerve kayıtları yaz
     }
-    loadAll()
+    loadAllStores()
     await triggerRezerveSync()
     toast.success(`${hedefOrders.length} sipariş için MRP tamamlandı — ${count} tedarik oluşturuldu`)
   }
@@ -295,7 +294,7 @@ export function Orders() {
     const order = orders.find(o => o.id === orderId)
     if (!order) return
     await supabase.from('uys_orders').update({ oncelik: (order.oncelik || 0) + delta }).eq('id', orderId)
-    loadAll()
+    loadAllStores()
   }
 
   function exportExcel() {
@@ -404,7 +403,7 @@ export function Orders() {
                         ekVeri: { siparis_no: o.siparisNo } })
                       // Sipariş kapatıldı — rezerveleri serbest bırak
                       if (yeniDurum === 'kapalı') await rezerveSil(o.id)
-                      loadAll(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))
+                      loadAllStores(); toast.success(o.siparisNo + (yeniDurum === 'kapalı' ? ' kapatıldı' : ' açıldı'))
                       await triggerRezerveSync()
                     }} className={`p-1 ${o.durum === 'kapalı' ? 'text-green hover:text-green' : 'text-zinc-500 hover:text-amber'}`} title={o.durum === 'kapalı' ? 'Aç' : 'Kapat'}>
                       {o.durum === 'kapalı' ? '🔓' : '🔒'}
@@ -417,8 +416,8 @@ export function Orders() {
           </tbody></table>
         ) : <div className="p-8 text-center text-zinc-600 text-sm">{search ? 'Arama sonucu bulunamadı' : 'Henüz sipariş yok'}</div>}
       </div>
-      {showForm && <OrderFormModal initial={editOrder} recipes={recipes} materials={materials} onClose={() => { setShowForm(false); setEditOrder(null) }} onSaved={async () => { setShowForm(false); setEditOrder(null); loadAll(); toast.success(editOrder ? 'Güncellendi' : 'Oluşturuldu'); await triggerRezerveSync() }} />}
-      {showBulkImport && <BulkOrderImportModal existingOrders={orders} recipes={recipes} onClose={() => setShowBulkImport(false)} onComplete={async () => { setShowBulkImport(false); loadAll(); await triggerRezerveSync() }} />}
+      {showForm && <OrderFormModal initial={editOrder} recipes={recipes} materials={materials} onClose={() => { setShowForm(false); setEditOrder(null) }} onSaved={async () => { setShowForm(false); setEditOrder(null); loadAllStores(); toast.success(editOrder ? 'Güncellendi' : 'Oluşturuldu'); await triggerRezerveSync() }} />}
+      {showBulkImport && <BulkOrderImportModal existingOrders={orders} recipes={recipes} onClose={() => setShowBulkImport(false)} onComplete={async () => { setShowBulkImport(false); loadAllStores(); await triggerRezerveSync() }} />}
       {selectedOrder && <OrderDetailModal order={selectedOrder} workOrders={workOrders.filter(w => w.orderId === selectedOrder.id)} logs={logs} onClose={() => setSelectedOrder(null)} />}
     </div>
   )
@@ -1054,7 +1053,6 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   const mats = useWarehouseStore(s => s.materials)
   const allOrders = useOrderStore(s => s.orders)
   const mrpRezerve = useOrderStore(s => s.mrpRezerve)
-  const loadAll = loadAllStores
   const { can, user } = useAuth()
   const [tab, setTab] = useState<'ie' | 'mrp'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
@@ -1140,7 +1138,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
       console.warn('[v15.67 runMRP] Tedarik düzeltme hatası:', e)
     }
 
-    loadAll()
+    loadAllStores()
     await triggerRezerveSync()
 
     // Toast mesajı duruma göre (eski: hep "X malzeme hesaplandı"; yeni: kullanıcı net bilgilendirilir)
@@ -1168,7 +1166,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
       mrpCalculationId: lastCalcId || undefined,
       auto: true,
     })
-    if (count > 0) { loadAll(); toast.success(count + ' tedarik kaydı oluşturuldu'); await triggerRezerveSync() }
+    if (count > 0) { loadAllStores(); toast.success(count + ' tedarik kaydı oluşturuldu'); await triggerRezerveSync() }
     else toast.info('Tüm ihtiyaçlar karşılanmış')
   }
 
@@ -1181,7 +1179,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     for (const k of liste) {
       if (k.rcId) { const c = await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes, k.termin, total); total += c }
     }
-    loadAll(); toast.success(total + ' İE yeniden oluşturuldu')
+    loadAllStores(); toast.success(total + ' İE yeniden oluşturuldu')
   }
 
   async function eksikIETamamla() {
@@ -1195,7 +1193,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     if (!eksikSatirlar.length) { toast.info('Eksik İE yok — tüm bileşenler mevcut'); return }
     const adet = kalemler[0]?.adet || order.adet
     const count = await buildWorkOrders(order.id, order.siparisNo, rcId, adet, fullRecipes, kalemler[0]?.termin || order.termin)
-    loadAll(); toast.success(count + ' eksik İE oluşturuldu')
+    loadAllStores(); toast.success(count + ' eksik İE oluşturuldu')
   }
 
   return (
@@ -1272,7 +1270,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
           <span className="flex-1" />
           {(kalemler.some(k => k.rcId) || order.receteId) && <button onClick={yenidenCalistir} className="px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">⛓ Yeniden Çalıştır</button>}
           {!cokKalem && order.receteId && <button onClick={eksikIETamamla} className="px-3 py-1.5 bg-green/10 text-green rounded-lg text-xs hover:bg-green/20">+ Eksik İE Tamamla</button>}
-          {(kalemler.some(k => k.rcId) || order.receteId) && <TamZincirButton order={order} workOrders={workOrders} loadAll={loadAll} onClose={onClose} />}
+          {(kalemler.some(k => k.rcId) || order.receteId) && <TamZincirButton order={order} workOrders={workOrders} onClose={onClose} />}
         </div>
 
         {tab === 'ie' && (
@@ -1339,7 +1337,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                         <td className="px-3 py-1.5">{r.net > 0 && can('mrp_supply') && <button onClick={async () => {
                           await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id, not_: 'MRP', auto_olusturuldu: false, mrp_calculation_id: lastCalcId })
                           await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', order.id)
-                          loadAll(); toast.success(r.malkod + ' tedarik oluşturuldu')
+                          loadAllStores(); toast.success(r.malkod + ' tedarik oluşturuldu')
                           await triggerRezerveSync()
                         }} className="text-amber text-[10px] hover:underline">+ Tedarik</button>}</td>
                       </tr>
@@ -1370,7 +1368,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   )
 }
 
-function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order; workOrders: any[]; loadAll: () => void; onClose: () => void }) {
+function TamZincirButton({ order, workOrders, onClose }: { order: Order; workOrders: any[]; onClose: () => void }) {
   // v15.51 — Faz 4: RBAC + concurrent lock + hesaplayan + hata sonrası kapatma butonu
   const { can, user } = useAuth()
   const [running, setRunning] = useState(false)
@@ -1418,7 +1416,7 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
         (steps) => setAdimlar([...steps])
       )
       setSonuc(result)
-      loadAll()
+      loadAllStores()
     } catch (e: any) {
       setAdimlar(prev => [...prev, '❌ Hata: ' + e.message])
       // v15.51 — Hata catch'inde boş sonuç struct'ı setlenir → "Kapat" butonu görünür hale gelir

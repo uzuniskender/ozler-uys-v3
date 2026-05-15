@@ -39,8 +39,7 @@ export function DataManagement() {
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const synced = useOrderStore(s => s.synced) && useProductionStore(s => s.synced)
     && useWarehouseStore(s => s.synced) && useAuthStore(s => s.synced)
-  const loadAll = loadAllStores
-  const store = { materials, stokHareketler, synced, loadAll }
+  const store = { materials, stokHareketler, synced, loadAll: loadAllStores }
   const { can } = useAuth()
 
   // ═══ SAĞLIK RAPORU STATE ═══
@@ -1059,7 +1058,7 @@ export function DataManagement() {
       } else {
         toast.success(`Kontrol #${kontrolNo}: ${sonuc}`)
       }
-      await loadAll()
+      await loadAllStores()
       // Raporu yeniden çalıştır
       await saglikRaporuCalistir()
     } catch (e: any) {
@@ -1432,7 +1431,6 @@ function SifirlamaSecimli() {
   const w = useWarehouseStore()
   const a = useAuthStore()
   const store = { ...o, ...p, ...w, ...a }
-  const loadAll = loadAllStores
   const [siliniyor, setSiliniyor] = useState(false)
   const [acik, setAcik] = useState<string | null>(null)
   // Her tablo için seçili ID'ler
@@ -1534,7 +1532,7 @@ function SifirlamaSecimli() {
       }
       deleted += ids.size
     }
-    setSeciliIds({}); setSiliniyor(false); loadAll()
+    setSeciliIds({}); setSiliniyor(false); loadAllStores()
     toast.success(deleted + ' kayıt silindi (bağlılar dahil)')
   }
 
@@ -1605,7 +1603,6 @@ function TestModuPanel() {
   const w = useWarehouseStore()
   const a = useAuthStore()
   const store = { ...o, ...p, ...w, ...a }
-  const loadAll = loadAllStores
   const [siliniyor, setSiliniyor] = useState(false)
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
   const snapshotRaw = localStorage.getItem('uys_test_snapshot')
@@ -1648,7 +1645,7 @@ function TestModuPanel() {
 
   async function deleteTestData() {
     // Store'u tazele (güncel ID'leri görmek için)
-    await loadAll()
+    await loadAllStores()
     // Kısa gecikme — store güncellensin
     await new Promise(r => setTimeout(r, 500))
 
@@ -1708,7 +1705,7 @@ function TestModuPanel() {
     localStorage.removeItem('uys_test_snapshot_time')
     localStorage.setItem('uys_test_mode', 'false')
     setSiliniyor(false)
-    loadAll()
+    loadAllStores()
     toast.success(`✓ ${deleted} test kaydı silindi`)
     window.location.reload()
   }
@@ -1787,7 +1784,6 @@ const ROL_COLORS: Record<string, string> = { admin: 'text-red', uretim_sor: 'tex
 
 function KullaniciPanel() {
   const kullanicilar = useAuthStore(s => s.kullanicilar)
-  const loadAll = loadAllStores
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<any>(null)
   const [ad, setAd] = useState('')
@@ -1814,18 +1810,18 @@ function KullaniciPanel() {
       })
       toast.success('Kullanıcı eklendi')
     }
-    setShowForm(false); loadAll()
+    setShowForm(false); loadAllStores()
   }
 
   async function toggleAktif(k: any) {
     await supabase.from('uys_kullanicilar').update({ aktif: !k.aktif }).eq('id', k.id)
-    loadAll(); toast.success(k.ad + (k.aktif ? ' devre dışı bırakıldı' : ' aktifleştirildi'))
+    loadAllStores(); toast.success(k.ad + (k.aktif ? ' devre dışı bırakıldı' : ' aktifleştirildi'))
   }
 
   async function deleteUser(k: any) {
     if (!await showConfirm(`"${k.ad}" kullanıcısını silmek istediğinize emin misiniz?`)) return
     await supabase.from('uys_kullanicilar').delete().eq('id', k.id)
-    loadAll(); toast.success('Kullanıcı silindi')
+    loadAllStores(); toast.success('Kullanıcı silindi')
   }
 
   return (
@@ -1910,7 +1906,6 @@ function KullaniciPanel() {
 // ═══ YETKİ MATRİSİ EDİTÖRÜ ═══
 function YetkiPanel() {
   const yetkiMap = useAuthStore(s => s.yetkiMap)
-  const loadAll = loadAllStores
   const [localMap, setLocalMap] = useState<Record<string, AdminRole[]>>({})
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -1941,7 +1936,7 @@ function YetkiPanel() {
     await supabase.from('uys_yetki_ayarlari').upsert({
       id: 'rbac', data: localMap, updated_at: new Date().toISOString(),
     }, { onConflict: 'id' })
-    await loadAll()
+    await loadAllStores()
     setSaving(false)
     setDirty(false)
     toast.success('Yetki matrisi kaydedildi')
@@ -1951,7 +1946,7 @@ function YetkiPanel() {
     if (!await showConfirm('Tüm yetkileri varsayılana döndürmek istediğinize emin misiniz?')) return
     await supabase.from('uys_yetki_ayarlari').delete().eq('id', 'rbac')
     setLocalMap({ ...DEFAULTS })
-    await loadAll()
+    await loadAllStores()
     setDirty(false)
     toast.success('Varsayılan yetkiler yüklendi')
   }
@@ -2013,7 +2008,6 @@ function YetkiPanel() {
 // ═══ HAMMADDE TİPLERİ PANELİ ═══
 function HmTipleriPanel() {
   const hmTipler = useWarehouseStore(s => s.hmTipler)
-  const loadAll = loadAllStores
   const [yeniKod, setYeniKod] = useState('')
   const [yeniAd, setYeniAd] = useState('')
   const [saving, setSaving] = useState(false)
@@ -2031,20 +2025,20 @@ function HmTipleriPanel() {
       id: uid(), kod, ad, aciklama: '', sira: maxSira + 1, olusturma: today()
     })
     setYeniKod(''); setYeniAd(''); setSaving(false)
-    loadAll(); toast.success(`${kod} eklendi`)
+    loadAllStores(); toast.success(`${kod} eklendi`)
   }
 
   async function duzenle(t: { id: string; kod: string; ad: string }) {
     const yeniAd = await showPrompt('HM Tipi Adı', 'Görünen ad', t.ad)
     if (yeniAd == null) return
     await supabase.from('uys_hm_tipleri').update({ ad: yeniAd.trim() || t.kod }).eq('id', t.id)
-    loadAll(); toast.success('Güncellendi')
+    loadAllStores(); toast.success('Güncellendi')
   }
 
   async function sil(t: { id: string; kod: string }) {
     if (!await showConfirm(`"${t.kod}" HM tipini silmek istediğinize emin misiniz? Bu tipte malzemeler varsa bağlantı kalır ama seçim listesinden kaybolur.`)) return
     await supabase.from('uys_hm_tipleri').delete().eq('id', t.id)
-    loadAll(); toast.success('Silindi')
+    loadAllStores(); toast.success('Silindi')
   }
 
   async function yukari(t: { id: string; sira: number; kod: string }) {
@@ -2052,7 +2046,7 @@ function HmTipleriPanel() {
     if (!prev) return
     await supabase.from('uys_hm_tipleri').update({ sira: prev.sira }).eq('id', t.id)
     await supabase.from('uys_hm_tipleri').update({ sira: t.sira }).eq('id', prev.id)
-    loadAll()
+    loadAllStores()
   }
 
   async function asagi(t: { id: string; sira: number; kod: string }) {
@@ -2060,7 +2054,7 @@ function HmTipleriPanel() {
     if (!next) return
     await supabase.from('uys_hm_tipleri').update({ sira: next.sira }).eq('id', t.id)
     await supabase.from('uys_hm_tipleri').update({ sira: t.sira }).eq('id', next.id)
-    loadAll()
+    loadAllStores()
   }
 
   return (

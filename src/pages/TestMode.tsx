@@ -18,7 +18,6 @@ import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, s
 export function TestMode() {
   const testRuns = useAuthStore(s => s.testRuns)
   const recipes = useProductionStore(s => s.recipes)
-  const loadAll = loadAllStores
   const { can, user } = useAuth()
   const [aktifTestId, setAktifTestId] = useState<string>(getActiveTestRunId() || '')
   const [aciklama, setAciklama] = useState('')
@@ -68,7 +67,7 @@ export function TestMode() {
       if (!tr) { toast.error('Test başlatılamadı'); return }
       setAktifTestId(tr.id)
       setAciklama('')
-      await loadAll()
+      await loadAllStores()
       toast.success(`Test modu AÇIK — ${tr.id}`, { duration: 5000 })
     } finally {
       setLoading(false)
@@ -92,7 +91,7 @@ export function TestMode() {
       if (!r.ok) { toast.error('Sonlandırma kısmen başarısız'); return }
       const toplam = Object.values(r.silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
       setAktifTestId('')
-      await loadAll()
+      await loadAllStores()
       toast.success(`Test tamamlandı · ${toplam} kayıt silindi`, { duration: 7000 })
     } finally {
       setLoading(false)
@@ -112,7 +111,7 @@ export function TestMode() {
     try {
       await cancelTestRun(aktifTestId)
       setAktifTestId('')
-      await loadAll()
+      await loadAllStores()
       toast.info('Test iptal edildi (kayıtlar silinmedi)')
     } finally {
       setLoading(false)
@@ -129,7 +128,7 @@ export function TestMode() {
     try {
       const silinen = await cascadeDeleteTestRun(testId)
       const toplam = Object.values(silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
-      await loadAll()
+      await loadAllStores()
       toast.success(`${toplam} kayıt silindi`)
     } finally {
       setLoading(false)
@@ -191,7 +190,7 @@ export function TestMode() {
         const silinen = await cascadeDeleteTestRun(`${aktifTestId}_${suffix}`)
         toplam += Object.values(silinen).reduce((a, b) => a + (b > 0 ? b : 0), 0)
       }
-      await loadAll()
+      await loadAllStores()
       toast.success(`Ara temizlik: ${toplam} kayıt silindi (parent açık)`)
     } finally {
       setLoading(false)
@@ -232,7 +231,7 @@ export function TestMode() {
         tumRaporlar.push(rapor)
         setSonRapor(rapor)
         await cascadeDeleteTestRun(`${aktifTestId}_s${num}`)
-        await loadAll()
+        await loadAllStores()
         if (num < 13) await new Promise(r => setTimeout(r, 500))
       } catch (e: any) {
         toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)

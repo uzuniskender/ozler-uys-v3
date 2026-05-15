@@ -19,7 +19,6 @@ export function OperatorPanel() {
   const operators = useAuthStore(s => s.operators)
   const loading = useAuthStore(s => s.loading)
   const operations = useProductionStore(s => s.operations)
-  const loadAll = loadAllStores
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, signOut } = useAuth()
@@ -34,7 +33,7 @@ export function OperatorPanel() {
   const [tab, setTab] = useState<'isler'|'mesaj'|'ozet'|'izin'>('isler')
 
   // Veri yükle
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => { loadAllStores() }, [])
 
   // Dashboard'dan oprId ile gelince auto-login (sadece admin)
   useEffect(() => {
@@ -190,7 +189,6 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   const materials = useWarehouseStore(s => s.materials)
   const operators = useAuthStore(s => s.operators)
   const izinler = useAuthStore(s => s.izinler)
-  const loadAll = loadAllStores
   // v16.82 — Operatör filtreler
   const [filterSiparis, setFilterSiparis] = useState('')
   const [filterOlcu, setFilterOlcu] = useState('')
@@ -296,7 +294,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
       wo_ad: w.malad, baslangic: saat, tarih: today(),
     })
     if (error) { toast.error('İşe başlatılamadı: ' + error.message); return }
-    loadAll(); toast.success('İş başlatıldı: ' + w.ieNo + ' (' + saat + ')')
+    loadAllStores(); toast.success('İş başlatıldı: ' + w.ieNo + ' (' + saat + ')')
   }
 
   async function stopWork(activeId?: string) {
@@ -307,7 +305,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     const stopSaat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
     try { localStorage.setItem('uys_lastStop_' + oprId, JSON.stringify({ tarih: today(), saat: stopSaat })) } catch {}
     await supabase.from('uys_active_work').delete().eq('id', target.id)
-    loadAll(); toast.success('İş durduruldu')
+    loadAllStores(); toast.success('İş durduruldu')
   }
 
   function wProd(woId: string) { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
@@ -387,7 +385,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                           <input type="time" defaultValue={a.baslangic || ''} onBlur={async (e) => {
                             if (e.target.value && e.target.value !== a.baslangic) {
                               await supabase.from('uys_active_work').update({ baslangic: e.target.value }).eq('id', a.id)
-                              loadAll(); toast.success('Başlangıç saati güncellendi: ' + e.target.value)
+                              loadAllStores(); toast.success('Başlangıç saati güncellendi: ' + e.target.value)
                             }
                           }} className="px-1 py-0.5 bg-bg-3 border border-border rounded text-[10px] text-zinc-200 focus:outline-none focus:border-accent w-20" />
                         </div>
@@ -599,7 +597,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
           return (
             <div className="space-y-3">
               {/* İzin Talep Formu */}
-              <IzinTalepForm oprId={oprId} oprAd={opr.ad} onSaved={() => { loadAll(); toast.success('İzin talebi gönderildi — onay bekleniyor') }} />
+              <IzinTalepForm oprId={oprId} oprAd={opr.ad} onSaved={() => { loadAllStores(); toast.success('İzin talebi gönderildi — onay bekleniyor') }} />
 
               {/* Admin tarafından oluşturulan — operatör onayı bekleyen */}
               {adminOlusturan.length > 0 && (
@@ -619,11 +617,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                       <div className="flex gap-2">
                         <button onClick={async () => {
                           await onaylaIzin(iz.id, opr.ad)
-                          loadAll(); toast.success('İzin onaylandı')
+                          loadAllStores(); toast.success('İzin onaylandı')
                         }} className="flex-1 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-[11px] font-bold">✓ Onayla</button>
                         <button onClick={async () => {
                           await reddetIzin(iz.id, opr.ad)
-                          loadAll(); toast.success('İzin reddedildi')
+                          loadAllStores(); toast.success('İzin reddedildi')
                         }} className="flex-1 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-[11px] font-bold">✕ Reddet</button>
                       </div>
                     </div>
@@ -644,11 +642,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                       <div className="flex gap-2">
                         <button onClick={async () => {
                           await onaylaIzin(iz.id, opr.ad)
-                          loadAll(); toast.success('Düzenlenen izin onaylandı')
+                          loadAllStores(); toast.success('Düzenlenen izin onaylandı')
                         }} className="flex-1 py-1.5 bg-green/10 border border-green/20 text-green rounded-lg text-[11px] font-bold">✓ Onayla</button>
                         <button onClick={async () => {
                           await reddetIzin(iz.id, opr.ad)
-                          loadAll(); toast.success('Düzenlenen izin reddedildi')
+                          loadAllStores(); toast.success('Düzenlenen izin reddedildi')
                         }} className="flex-1 py-1.5 bg-red/10 border border-red/20 text-red rounded-lg text-[11px] font-bold">✕ Reddet</button>
                       </div>
                     </div>
@@ -755,7 +753,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
         {/* Üretim Kayıt Modal */}
         {entryWO && <OprEntryModal woId={entryWO.woId} editLogId={entryWO.logId} oprId={oprId} oprAd={opr.ad} allOperators={operators} durusKodlari={durusKodlari}
           onClose={() => setEntryWO(null)}
-          onSaved={() => { setEntryWO(null); loadAll(); toast.success('Üretim kaydedildi') }} />}
+          onSaved={() => { setEntryWO(null); loadAllStores(); toast.success('Üretim kaydedildi') }} />}
       </div>
     </div>
   )
@@ -1241,7 +1239,6 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
 
 function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onSent: () => void }) {
   const operatorNotes = useProductionStore(s => s.operatorNotes)
-  const loadAll = loadAllStores
   const [mesaj, setMesaj] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
@@ -1259,7 +1256,7 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
     if (unreadFromAdmin.length === 0) return
     Promise.all(unreadFromAdmin.map(n =>
       supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)
-    )).then(() => loadAll())
+    )).then(() => loadAllStores())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oprId])
 
@@ -1274,18 +1271,18 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
     })
     if (error) { toast.error('Mesaj gönderilemedi: ' + error.message); return }
     setMesaj(''); setKategori(''); setOncelik('Normal')
-    loadAll(); onSent()
+    loadAllStores(); onSent()
   }
 
   async function saveEdit(id: string) {
     if (!editText.trim()) return
     await supabase.from('uys_operator_notes').update({ mesaj: editText.trim() }).eq('id', id)
-    setEditId(null); setEditText(''); loadAll(); toast.success('Mesaj güncellendi')
+    setEditId(null); setEditText(''); loadAllStores(); toast.success('Mesaj güncellendi')
   }
 
   async function deleteMsg(id: string) {
     await supabase.from('uys_operator_notes').delete().eq('id', id)
-    loadAll(); toast.success('Mesaj silindi')
+    loadAllStores(); toast.success('Mesaj silindi')
   }
 
   return (

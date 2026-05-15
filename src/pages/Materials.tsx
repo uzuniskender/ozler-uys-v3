@@ -184,7 +184,6 @@ export function Materials() {
   const recipes = useProductionStore(s => s.recipes)
   const bomTrees = useProductionStore(s => s.bomTrees)
   const workOrders = useProductionStore(s => s.workOrders)
-  const loadAll = loadAllStores
   const { can, isGuest } = useAuth()
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
@@ -267,7 +266,7 @@ export function Materials() {
   async function deleteMat(id: string) {
     if (!await showConfirm('Bu malzemeyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_malzemeler').delete().eq('id', id)
-    loadAll(); toast.success('Malzeme silindi')
+    loadAllStores(); toast.success('Malzeme silindi')
   }
 
   async function renameMaterial(m: Material, yeniAd: string) {
@@ -316,7 +315,7 @@ export function Materials() {
         woCount++
       }
     }
-    loadAll()
+    loadAllStores()
     const extras = [bomCount && `${bomCount} ürün ağacı`, rcCount && `${rcCount} reçete`, woCount && `${woCount} iş emri`].filter(Boolean).join(' + ')
     toast.success(`Ad güncellendi${extras ? ' · ' + extras + ' güncellendi' : ''}`)
   }
@@ -370,7 +369,7 @@ export function Materials() {
         woCount++
       }
     }
-    loadAll()
+    loadAllStores()
     const extras = [bomCount && `${bomCount} ürün ağacı`, rcCount && `${rcCount} reçete`, woCount && `${woCount} iş emri`].filter(Boolean).join(' + ')
     toast.success(`Kod güncellendi${extras ? ' · ' + extras + ' güncellendi' : ''}`)
   }
@@ -459,7 +458,7 @@ export function Materials() {
           else created++
         }
       }
-      loadAll()
+      loadAllStores()
       const cascadeInfo = (cascadeBom || cascadeRc || cascadeWo) ? ` · Bağlı: ${cascadeBom} BOM, ${cascadeRc} reçete, ${cascadeWo} İE` : ''
       toast.success(`${created} yeni · ${updated} güncellendi${cascadeInfo}` + (errors > 0 ? ` · ${errors} hata` : ''))
     }
@@ -586,7 +585,7 @@ export function Materials() {
                         const newId = uid()
                         const row = { id: newId, kod: m.kod + '-KOPYA', ad: m.ad + ' (Kopya)', tip: m.tip, hammadde_tipi: m.hammaddeTipi, malzeme_cinsi: m.malzemeCinsi || null, birim: m.birim, boy: m.boy, en: m.en, kalinlik: m.kalinlik, uzunluk: m.uzunluk, cap: m.cap, min_stok: m.minStok, op_id: m.opId || null, op_kod: m.opKod || null }
                         await supabase.from('uys_malzemeler').insert(row)
-                        loadAll(); toast.success('Malzeme kopyalandı')
+                        loadAllStores(); toast.success('Malzeme kopyalandı')
                       }} className="p-0.5 text-zinc-600 hover:text-amber" title="Kopyala"><Copy size={11} /></button>}
                       {can('mat_edit') && <button onClick={async () => { setEditItem(m); setShowForm(true) }} className="p-0.5 text-zinc-600 hover:text-accent"><Pencil size={11} /></button>}
                       {can('mat_delete') && <button onClick={() => deleteMat(m.id)} className="p-0.5 text-zinc-600 hover:text-red"><Trash2 size={11} /></button>}
@@ -599,7 +598,7 @@ export function Materials() {
           {filtered.length > 300 && <div className="p-2 text-center text-zinc-600 text-[10px]">+{filtered.length - 300} daha</div>}
         </div>
       </div>
-      {showForm && <MatFormModal initial={editItem} operations={operations} tipler={tipler} hmTipler={hmTipler} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAll(); toast.success(editItem ? 'Güncellendi' : 'Eklendi') }} />}
+      {showForm && <MatFormModal initial={editItem} operations={operations} tipler={tipler} hmTipler={hmTipler} onClose={() => { setShowForm(false); setEditItem(null) }} onSaved={() => { setShowForm(false); setEditItem(null); loadAllStores(); toast.success(editItem ? 'Güncellendi' : 'Eklendi') }} />}
     </div>
   )
 }

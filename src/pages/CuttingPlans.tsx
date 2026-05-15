@@ -24,7 +24,6 @@ export function CuttingPlans() {
   const logs = useProductionStore(s => s.logs)
   const acikBarlar = useProductionStore(s => s.acikBarlar)
   const materials = useWarehouseStore(s => s.materials)
-  const loadAll = loadAllStores
   const { can, isGuest } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -67,7 +66,7 @@ export function CuttingPlans() {
         const planlar = kesimPlanOlustur(workOrders, operations as any, recipes, materials, logsSimple, cpMapped as any)
         if (planlar.length) {
           await kesimPlanlariKaydet(planlar as any)
-          await loadAll()
+          await loadAllStores()
           // v15.36.2 — Progress bar'ı "Kesim ✓" yap ve MRP'ye yönlendir
           await advanceFlow(activeFlowId, 'mrp')
           toast.success(`${planlar.length} kesim planı hazır — MRP'ye yönlendiriliyor`, { duration: 2500 })
@@ -149,19 +148,19 @@ export function CuttingPlans() {
       })
       olusturulan++
     }
-    await loadAll()
+    await loadAllStores()
     toast.success(`${olusturulan} levha kesim planı oluşturuldu — %${Math.round((levhaGruplari.size > 0 ? 1 : 0) * 100)} verimlilik`)
   }
 
   async function deletePlan(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_kesim_planlari').delete().eq('id', id)
-    loadAll(); toast.success('Kesim planı silindi')
+    loadAllStores(); toast.success('Kesim planı silindi')
   }
 
   async function updateDurum(id: string, durum: string) {
     await supabase.from('uys_kesim_planlari').update({ durum }).eq('id', id)
-    loadAll(); toast.success('Durum güncellendi')
+    loadAllStores(); toast.success('Durum güncellendi')
   }
 
   // v16.54 — Kesim planı birleştirme
@@ -194,7 +193,7 @@ export function CuttingPlans() {
       await supabase.from('uys_kesim_planlari').delete().eq('id', id)
     }
     setSeciliPlanlar(new Set())
-    await loadAll()
+    await loadAllStores()
     toast.success(`${planlar.length} plan birleştirildi → ${yeniGerekliAdet} bar`)
   }
 
@@ -221,7 +220,7 @@ export function CuttingPlans() {
     for (const a of artiklar) {
       await addStokHareketi({ malkod: hamMalkod, malad: hamMalad + ' (Artık)', miktar: 1, tip: 'giris', aciklama: 'Levha artığı — ' + a.en + 'x' + a.boy + 'mm (' + Math.round(a.en * a.boy / 10000) + ' dm2)', logId: 'levha-artik-' + planId })
     }
-    loadAll()
+    loadAllStores()
     toast.success(artiklar.length + ' artık levha stoka eklendi (' + hamMalkod + ')')
   }
 
@@ -377,7 +376,7 @@ export function CuttingPlans() {
                   const gercekDurum = allDone ? 'tamamlandi' : someDone ? 'kismi' : 'bekliyor'
                   // Auto-update if status is wrong
                   if (gercekDurum === 'tamamlandi' && p.durum !== 'tamamlandi') {
-                    supabase.from('uys_kesim_planlari').update({ durum: 'tamamlandi' }).eq('id', p.id).then(() => loadAll())
+                    supabase.from('uys_kesim_planlari').update({ durum: 'tamamlandi' }).eq('id', p.id).then(() => loadAllStores())
                   }
                   return (
                     <React.Fragment key={p.id}>
@@ -486,7 +485,7 @@ export function CuttingPlans() {
 
       {showCreate && <KesimOlusturModal materials={materials} workOrders={workOrders} onClose={() => setShowCreate(false)} onSaved={async (yeniPlanId?: string) => {
         setShowCreate(false)
-        await loadAll()
+        await loadAllStores()
         toast.success('Kesim planı oluşturuldu')
         // v15.44 — Manuel plan'da da havuz önerisi tarama (otomatik plan'daki mantığın aynısı)
         if (!yeniPlanId) return
@@ -509,7 +508,7 @@ export function CuttingPlans() {
         const uygunBar = havuzAcik.some((a: any) => (a.uzunlukMm || 0) >= minParcaBoy)
         if (uygunBar) setHavuzOneriQueue([yeniPlanId])
       }} />}
-      {artikInfo && <ArtikOneriModal info={artikInfo} materials={materials} workOrders={workOrders} operations={operations} recipes={recipes} logs={logs} onClose={() => setArtikInfo(null)} onSaved={() => { setArtikInfo(null); loadAll() }} />}
+      {artikInfo && <ArtikOneriModal info={artikInfo} materials={materials} workOrders={workOrders} operations={operations} recipes={recipes} logs={logs} onClose={() => setArtikInfo(null)} onSaved={() => { setArtikInfo(null); loadAllStores() }} />}
       {showOtoOnay && otoSonuc && (
         <OtoPlanSonucModal
           sonuc={otoSonuc}
@@ -526,7 +525,7 @@ export function CuttingPlans() {
             const parcalar = [yeniSayi > 0 && `${yeniSayi} yeni plan`, birlestirilen > 0 && `${birlestirilen} plana İE eklendi`].filter(Boolean).join(' · ')
             setShowOtoOnay(false)
             setOtoSonuc(null)
-            loadAll()
+            loadAllStores()
             toast.success(parcalar || 'Değişiklik yok')
             // Havuz önerisi tarama (mevcut akış)
             const havuzlulanmisPlanIds: string[] = []
@@ -578,7 +577,7 @@ export function CuttingPlans() {
             materials={materials}
             logs={logs}
             onClose={() => setHavuzOneriQueue(q => q.slice(1))}
-            onSaved={() => { loadAll(); setHavuzOneriQueue(q => q.slice(1)) }}
+            onSaved={() => { loadAllStores(); setHavuzOneriQueue(q => q.slice(1)) }}
           />
         )
       })()}
@@ -593,7 +592,6 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
   onClose: () => void; onSaved: () => void
 }) {
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)
-  const loadAll = loadAllStores
   const [artikKod, setArtikKod] = useState(info.hamMalkod + '-ARTIK-' + info.fireMm)
   const [stokGirisi, setStokGirisi] = useState(true)
   const [eklenen, setEklenen] = useState<Set<string>>(new Set())
@@ -653,7 +651,7 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
 
     await supabase.from('uys_kesim_planlari').update({ satirlar: yeniSatirlar }).eq('id', info.planId)
     setEklenen(prev => new Set(prev).add(w.id))
-    loadAll()
+    loadAllStores()
     toast.success(`${w.ieNo} plana eklendi — ${sigacak} adet × ${w.parcaBoy}mm`)
   }
 

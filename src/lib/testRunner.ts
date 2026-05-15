@@ -157,7 +157,6 @@ function adimSkip(state: RunnerState, name: string, neden: string, ctx: RunnerCo
 }
 
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-const loadAll = loadAllStores
 
 function finalize(state: RunnerState, senaryo: string, t0: number): SenaryoRapor {
   const fail = state.adimlar.filter(a => a.durum === 'FAIL').length
@@ -223,7 +222,7 @@ async function _createOrder(state: RunnerState, ctx: RunnerContext, baslik: stri
 
   const woCount = await buildWorkOrders(orderId, siparisNo, rc.id, ctx.adet, store.recipes, today(), 0)
   state.ozet.olusanIE += woCount
-  await loadAll()
+  await loadAllStores()
 
   const fresh = getStores()
   const createdIEs = fresh.workOrders.filter(w => w.orderId === orderId)
@@ -263,7 +262,7 @@ async function _createWO(state: RunnerState, ctx: RunnerContext): Promise<string
   if (error) throw new Error('İE insert: ' + error.message)
   state.ieIds.push(id)
   state.ozet.olusanIE++
-  await loadAll()
+  await loadAllStores()
   return id
 }
 
@@ -288,7 +287,7 @@ async function _createCuttingPlans(state: RunnerState): Promise<{ yeni: number; 
     else { yeni++; state.kesimPlanIds.push(p.id) }
   }
   state.ozet.olusanKesimPlan += yeni
-  await loadAll()
+  await loadAllStores()
   return { yeni, guncellenen: guncel }
 }
 
@@ -327,7 +326,7 @@ async function _runMRPAndCreateTedarik(state: RunnerState): Promise<{ mrpKalem: 
     state.ozet.olusanTedarik++
     yeniTedarik++
   }
-  await loadAll()
+  await loadAllStores()
   return { mrpKalem: result.length, eksik: eksikler.length, tedarik: yeniTedarik }
 }
 
@@ -343,7 +342,7 @@ async function _teslimAl(state: RunnerState): Promise<number> {
     state.ozet.stokGiris++
     state.ozet.stokHareket++
   }
-  await loadAll()
+  await loadAllStores()
   return count
 }
 
@@ -387,7 +386,7 @@ async function _uretimGirisi(state: RunnerState, miktar: number): Promise<number
       state.ozet.stokHareket++
     }
   }
-  await loadAll()
+  await loadAllStores()
   return state.ozet.uretimLog
 }
 
@@ -403,7 +402,7 @@ async function _silTumTedarikler(state: RunnerState): Promise<number> {
   if (state.orderId) {
     await supabase.from('uys_orders').update({ mrp_durum: 'bekliyor' }).eq('id', state.orderId)
   }
-  await loadAll()
+  await loadAllStores()
   return sil
 }
 
@@ -429,7 +428,7 @@ async function runWithIsolation<T extends SenaryoRapor>(
   } finally {
     // Her durumda parent id'ye dön (senaryo bitince)
     tempSetActiveTestRunId(parentId)
-    await loadAll()
+    await loadAllStores()
   }
 }
 
@@ -764,7 +763,7 @@ async function _uretimGirisiFire(
     state.ozet.fireLog++
   }
 
-  await loadAll()
+  await loadAllStores()
   return { logId: lId, fireLogId }
 }
 
@@ -781,7 +780,7 @@ async function _fireTelafiOlustur(state: RunnerState, fireLogId: string): Promis
 
   state.ozet.telafiIE++
   state.ieIds.push(telafi.woId)  // v15.37.1 FIX: fireTelafiIeOlustur {woId, ieNo} döner, .id değil
-  await loadAll()
+  await loadAllStores()
   return telafi.woId
 }
 
@@ -1273,7 +1272,7 @@ export async function senaryo8(ctx: RunnerContext): Promise<SenaryoRapor> {
         store.workOrders,
         store.materials as any,
       )
-      await loadAll()
+      await loadAllStores()
       state.ozet.telafiIE += akis.acilenWoIds.length
       // state.ieIds'e telafi WO'ları ekle (cleanup için cascade yakalar zaten ama ozet için)
       for (const wid of akis.acilenWoIds) state.ieIds.push(wid)
@@ -1923,7 +1922,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
       const { error } = await supabase.from('uys_work_orders')
         .update({ durum: 'tamamlandi' }).eq('id', manualWoId)
       if (error) throw new Error('WO update: ' + error.message)
-      await loadAll()
+      await loadAllStores()
 
       const store2 = getStores()
       const cpMapped = store2.cuttingPlans.map((p: any) => ({

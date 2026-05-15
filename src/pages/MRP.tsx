@@ -26,7 +26,6 @@ export function MRP() {
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const tedarikler = useWarehouseStore(s => s.tedarikler)
   const materials = useWarehouseStore(s => s.materials)
-  const loadAll = loadAllStores
   const { can } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

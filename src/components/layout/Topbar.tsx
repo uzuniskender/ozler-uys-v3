@@ -31,7 +31,6 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const tedarikler = useWarehouseStore(s => s.tedarikler)
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const bildirimler = useAuthStore(s => s.bildirimler)
-  const loadAll = loadAllStores
 
   // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
   const orderHmEksikMap = useMemo(
@@ -235,7 +234,7 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
           <BildirimPanel
             bildirimler={okunmamisBildirimler}
             onClose={() => setShowBildirimPanel(false)}
-            onAction={() => loadAll()}
+            onAction={() => loadAllStores()}
           />
         )}
       </div>
@@ -249,14 +248,14 @@ export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
         <span className="text-zinc-500">{synced ? 'Bağlı' : 'Çevrimdışı'}</span>
       </div>
 
-      <button onClick={() => loadAll()} className="text-zinc-500 hover:text-zinc-300" title="Yenile"><RefreshCw size={14} /></button>
+      <button onClick={() => loadAllStores()} className="text-zinc-500 hover:text-zinc-300" title="Yenile"><RefreshCw size={14} /></button>
       <HelpNotesButtons username={user?.username || 'anonim'} />
       <button onClick={() => setShowPassModal(true)} className="text-zinc-500 hover:text-amber" title="Şifre Değiştir"><Key size={14} /></button>
       <button onClick={onSignOut} className="text-zinc-500 hover:text-red" title="Çıkış"><LogOut size={14} /></button>
     </header>
 
     {showPassModal && <PassModal onClose={() => setShowPassModal(false)} />}
-    {showFlowModal && <FlowModal flows={activeFlows} onClose={() => setShowFlowModal(false)} onAction={() => { loadAll(); setShowFlowModal(false) }} />}
+    {showFlowModal && <FlowModal flows={activeFlows} onClose={() => setShowFlowModal(false)} onAction={() => { loadAllStores(); setShowFlowModal(false) }} />}
     </>
   )
 }

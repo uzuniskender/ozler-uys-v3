@@ -20,7 +20,6 @@ export function Reports() {
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const materials = useWarehouseStore(s => s.materials)
   const operators = useAuthStore(s => s.operators)
-  const loadAll = loadAllStores
   const { can } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState('ozet')
@@ -473,7 +472,7 @@ export function Reports() {
                       if (sonuc.basarili > 0) toast.success(`${sonuc.basarili} fire için telafi açıldı (alt basamaklar dahil)`)
                       if (sonuc.hata > 0) toast.error(`${sonuc.hata} hata — konsol kontrol et`)
                       if (sonuc.hatalar.length) console.warn('Fire telafi hataları:', sonuc.hatalar)
-                      loadAll()
+                      loadAllStores()
                     }}
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-amber/10 border border-amber/25 text-amber rounded text-[11px] hover:bg-amber/20 disabled:opacity-40"
                   >
@@ -516,7 +515,7 @@ export function Reports() {
                                   const wo = workOrders.find(w => w.id === f.woId)
                                   if (!wo) { toast.error('Orijinal İE bulunamadı'); return }
                                   const r = await fireTelafiIeOlustur(f, wo)
-                                  if (r) { toast.success(`Telafi İE oluşturuldu: ${r.ieNo}`); loadAll() }
+                                  if (r) { toast.success(`Telafi İE oluşturuldu: ${r.ieNo}`); loadAllStores() }
                                   else toast.error('Oluşturulamadı')
                                 }}
                                 className="px-1.5 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20"

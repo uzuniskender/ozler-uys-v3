@@ -16,7 +16,6 @@ export function Recipes() {
   const operations = useProductionStore(s => s.operations)
   const bomTrees = useProductionStore(s => s.bomTrees)
   const materials = useWarehouseStore(s => s.materials)
-  const loadAll = loadAllStores
   const { can } = useAuth()
   const [selected, setSelected] = useState<Recipe | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -91,7 +90,7 @@ export function Recipes() {
     if (!checkedIds.size) return
     if (!await showConfirm(`${checkedIds.size} reçeteyi silmek istediğinize emin misiniz?`)) return
     for (const id of checkedIds) { await supabase.from('uys_recipes').delete().eq('id', id) }
-    setCheckedIds(new Set()); loadAll(); toast.success(checkedIds.size + ' reçete silindi')
+    setCheckedIds(new Set()); loadAllStores(); toast.success(checkedIds.size + ' reçete silindi')
   }
 
   function exportRecipes() {
@@ -137,14 +136,14 @@ export function Recipes() {
           yeni++
         }
       }
-      loadAll(); toast.success(`${yeni} yeni · ${guncellenen} güncellendi`)
+      loadAllStores(); toast.success(`${yeni} yeni · ${guncellenen} güncellendi`)
     })
   }
 
   async function deleteRecipe(id: string) {
     if (!await showConfirm('Bu reçeteyi silmek istediğinize emin misiniz?')) return
     await supabase.from('uys_recipes').delete().eq('id', id)
-    loadAll(); toast.success('Reçete silindi')
+    loadAllStores(); toast.success('Reçete silindi')
   }
 
   async function copyRecipe(r: Recipe) {
@@ -154,14 +153,14 @@ export function Recipes() {
       mamul_kod: r.mamulKod + '-KOPYA', mamul_ad: (r.mamulAd || r.ad) + ' (Kopya)',
       bom_id: null, satirlar: newSatirlar,
     })
-    loadAll(); toast.success('Reçete kopyalandı')
+    loadAllStores(); toast.success('Reçete kopyalandı')
   }
 
   async function renameRecipe(r: Recipe) {
     const yeniAd = await showPrompt('Yeni reçete adı', 'Reçete adı', r.ad)
     if (!yeniAd || yeniAd.trim() === r.ad) return
     await supabase.from('uys_recipes').update({ ad: yeniAd.trim() }).eq('id', r.id)
-    loadAll(); toast.success('Reçete adı güncellendi')
+    loadAllStores(); toast.success('Reçete adı güncellendi')
   }
 
   // BOM'dan Reçete Oluştur — tüm ürün ağaçlarını reçeteye dönüştür
@@ -189,7 +188,7 @@ export function Recipes() {
       })
       count++
     }
-    loadAll(); toast.success(`${count} reçete oluşturuldu (Ürün Ağaçlarından)`)
+    loadAllStores(); toast.success(`${count} reçete oluşturuldu (Ürün Ağaçlarından)`)
   }
 
   return (
@@ -327,7 +326,7 @@ export function Recipes() {
                       </td>
                       <td className="px-4 py-2.5 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
                         const yeni = await showPrompt('Reçete kodu değiştir', 'Yeni kod', r.rcKod)
-                        if (yeni && yeni.trim() !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Kod güncellendi') }
+                        if (yeni && yeni.trim() !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: yeni.trim() }).eq('id', r.id); loadAllStores(); toast.success('Kod güncellendi') }
                       }}>
                         {r.rcKod || '—'} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
                       </td>
@@ -336,7 +335,7 @@ export function Recipes() {
                       </td>
                       <td className="px-4 py-2.5 font-mono text-zinc-500 cursor-pointer hover:text-accent group" onClick={async () => {
                         const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', r.mamulKod)
-                        if (yeni && yeni.trim() !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: yeni.trim() }).eq('id', r.id); loadAll(); toast.success('Mamul kodu güncellendi') }
+                        if (yeni && yeni.trim() !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: yeni.trim() }).eq('id', r.id); loadAllStores(); toast.success('Mamul kodu güncellendi') }
                       }}>
                         {r.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
                       </td>
@@ -401,8 +400,8 @@ export function Recipes() {
           </div>
         )}
       </div>
-      {selected && <RecipeEditor recipe={selected} operations={operations} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAll(); toast.success('Reçete güncellendi') }} />}
-      {showNew && <NewRecipeModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAll(); toast.success('Reçete oluşturuldu') }} />}
+      {selected && <RecipeEditor recipe={selected} operations={operations} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAllStores(); toast.success('Reçete güncellendi') }} />}
+      {showNew && <NewRecipeModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAllStores(); toast.success('Reçete oluşturuldu') }} />}
     </div>
   )
 }

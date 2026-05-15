@@ -34,7 +34,6 @@ export function WorkOrders() {
   const tedarikler = useWarehouseStore(s => s.tedarikler)
   const materials = useWarehouseStore(s => s.materials)
   const operators = useAuthStore(s => s.operators)
-  const loadAll = loadAllStores
 
   // v16.05 — #20: Sipariş-bütünü hammadde rekabeti için orderHmEksikMap
   const orderHmEksikMap = useMemo(
@@ -152,7 +151,7 @@ export function WorkOrders() {
       if (wo) auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
         siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
     }
-    const cnt = selected.size; setSelected(new Set()); loadAll(); toast.success(`${cnt} İE güncellendi`)
+    const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE güncellendi`)
   }
 
   async function topluSil() {
@@ -173,7 +172,7 @@ export function WorkOrders() {
     if (!await showConfirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
     if (!await requirePassword('Toplu İE Silme')) return
     for (const id of selected) { await supabase.from('uys_work_orders').delete().eq('id', id) }
-    const cnt = selected.size; setSelected(new Set()); loadAll(); toast.success(`${cnt} İE silindi`)
+    const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE silindi`)
   }
 
   async function topluKopyala() {
@@ -196,7 +195,7 @@ export function WorkOrders() {
       })
       cnt++
     }
-    setSelected(new Set()); loadAll(); toast.success(`${cnt} İE kopyalandı`)
+    setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE kopyalandı`)
   }
 
   function wProd(woId: string): number { return logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0) }
@@ -293,13 +292,13 @@ export function WorkOrders() {
         toast.info('Ters stok hareketi yazıldı')
       }
       await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden }).eq('id', id)
-      loadAll(); toast.success(wo.ieNo + ' iptal edildi'); return
+      loadAllStores(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
     const eskiDurum = wo.durum || 'bekliyor'
     await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
     auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
       siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
-    loadAll(); toast.success(wo.ieNo + ' → ' + durum)
+    loadAllStores(); toast.success(wo.ieNo + ' → ' + durum)
   }
 
   async function deleteWO(id: string) {
@@ -310,7 +309,7 @@ export function WorkOrders() {
     if (!await showConfirm(wo.ieNo + ' silinecek.')) return
     if (!await requirePassword("İE Silme")) return
     await supabase.from('uys_work_orders').delete().eq('id', id)
-    loadAll(); toast.success(wo.ieNo + ' silindi')
+    loadAllStores(); toast.success(wo.ieNo + ' silindi')
   }
 
   async function updateHedef(id: string) {
@@ -319,7 +318,7 @@ export function WorkOrders() {
     if (!val) return
     const hedef = parseInt(val); if (isNaN(hedef) || hedef < 0) return
     await supabase.from('uys_work_orders').update({ hedef }).eq('id', id)
-    loadAll(); toast.success('Hedef güncellendi: ' + hedef)
+    loadAllStores(); toast.success('Hedef güncellendi: ' + hedef)
   }
 
   function exportExcel() {
@@ -372,7 +371,7 @@ export function WorkOrders() {
               const yeniDurum = pct >= 100 ? 'tamamlandi' : pr > 0 ? 'uretimde' : 'bekliyor'
               if (w.durum !== yeniDurum) { await supabase.from('uys_work_orders').update({ durum: yeniDurum }).eq('id', w.id); count++ }
             }
-            if (count > 0) { loadAll(); toast.success(count + ' İE durumu güncellendi') } else toast.info('Tüm durumlar güncel')
+            if (count > 0) { loadAllStores(); toast.success(count + ' İE durumu güncellendi') } else toast.info('Tüm durumlar güncel')
           }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">🔄 Durumları Güncelle</button>
           {can('wo_add') && <button onClick={handleYeniSiparis} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold" title="Yeni iş emri Siparişler sayfasından eklenir"><Plus size={13} /> Yeni İş Emri</button>}
         </div>
@@ -525,14 +524,14 @@ export function WorkOrders() {
       })}
       {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
 
-      {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAll} />}
+      {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAllStores} />}
       {/* v15.57 — NewIEModal render kaldırıldı (madde 1: Yeni İE butonu Sipariş üzerinden) */}
 
       {/* v15.64 (madde 17) — Yarım kalan akış karar modalı */}
       {flowDecisionOpen && myActiveFlow && (
         <ActiveFlowDecisionModal
           flow={myActiveFlow}
-          onResolved={() => { setFlowDecisionOpen(false); loadAll(); navigate('/orders?yeni=1') }}
+          onResolved={() => { setFlowDecisionOpen(false); loadAllStores(); navigate('/orders?yeni=1') }}
           onClose={() => setFlowDecisionOpen(false)}
         />
       )}
@@ -540,7 +539,7 @@ export function WorkOrders() {
   )
 }
 
-function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, loadAll, highlightLogId }: any) {
+function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingPlans, stokHareketler, tedarikler, wProd, wPct, getStokDurum, setDurum, deleteWO, updateHedef, highlightLogId }: any) {
   const durusKodlari = useProductionStore(s => s.durusKodlari)
   const { can } = useAuth()
   const [adminEntryWO, setAdminEntryWO] = useState<string | null>(null)
@@ -618,7 +617,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
     } else {
       toast.success('Log güncellendi')
     }
-    loadAll()
+    loadAllStores()
   }
 
   async function deleteLog(l: any) {
@@ -628,7 +627,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
     await supabase.from('uys_logs').delete().eq('id', l.id)
     await supabase.from('uys_stok_hareketler').delete().eq('log_id', l.id)
     await supabase.from('uys_fire_logs').delete().eq('log_id', l.id)
-    loadAll(); toast.success('Log, stok hareketleri ve fire kayıtları silindi')
+    loadAllStores(); toast.success('Log, stok hareketleri ve fire kayıtları silindi')
   }
   const ord = orders.find((o: any) => o.id === wo.orderId)
   const woLogs = logs.filter((l: any) => l.woId === wo.id).sort((a: any, b: any) => (b.tarih || '').localeCompare(a.tarih || ''))
@@ -667,7 +666,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
 
         <div className="mb-4 flex items-center gap-2 text-xs">
           <span className="text-zinc-500">Atanan Operatör:</span>
-          <select value={wo.operatorId || ''} onChange={async e => { const opId = e.target.value || null; const op = operators.find((o: any) => o.id === opId); await supabase.from('uys_work_orders').update({ operator_id: opId }).eq('id', wo.id); loadAll(); toast.success(op ? op.ad + ' atandı' : 'Operatör kaldırıldı') }} className="px-2 py-1 bg-bg-2 border border-border rounded text-xs text-zinc-200">
+          <select value={wo.operatorId || ''} onChange={async e => { const opId = e.target.value || null; const op = operators.find((o: any) => o.id === opId); await supabase.from('uys_work_orders').update({ operator_id: opId }).eq('id', wo.id); loadAllStores(); toast.success(op ? op.ad + ' atandı' : 'Operatör kaldırıldı') }} className="px-2 py-1 bg-bg-2 border border-border rounded text-xs text-zinc-200">
             <option value="">— Atanmadı —</option>
             {operators.filter((o: any) => o.aktif !== false).sort((a: any, b: any) => a.ad.localeCompare(b.ad, 'tr')).map((o: any) => <option key={o.id} value={o.id}>{o.ad} ({o.bolum})</option>)}
           </select>
@@ -735,7 +734,7 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
         ) : <div className="text-zinc-600 text-xs p-3 mb-4">Kayıt yok</div>}
         <div className="flex justify-end"><button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">Kapat</button></div>
         {adminEntryWO && <OprEntryModal woId={adminEntryWO} oprId="admin" oprAd="Admin" allOperators={operators} durusKodlari={durusKodlari}
-          onClose={() => setAdminEntryWO(null)} onSaved={() => { setAdminEntryWO(null); loadAll(); toast.success('Üretim kaydı eklendi') }} />}
+          onClose={() => setAdminEntryWO(null)} onSaved={() => { setAdminEntryWO(null); loadAllStores(); toast.success('Üretim kaydı eklendi') }} />}
       </div>
     </div>
   )

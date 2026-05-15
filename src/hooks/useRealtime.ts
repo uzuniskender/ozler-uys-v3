@@ -29,7 +29,6 @@ const ETIKET: Record<string, string> = {
 
 export function useRealtime() {
   const reloadTables = reloadTablesDispatched
-  const loadAll = loadAllStores
   const pendingRef = useRef<Set<string>>(new Set())
   const externalRef = useRef<Set<string>>(new Set())
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -60,7 +59,7 @@ export function useRealtime() {
 
             // uys_yetki_ayarlari özel — yetkiMap için tam loadAll gerekli
             if (tablolar.includes('uys_yetki_ayarlari')) {
-              await loadAll()
+              await loadAllStores()
             } else {
               await reloadTables(tablolar)
             }
