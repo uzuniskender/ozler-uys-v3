@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 15 Mayıs 2026
-**Versiyon:** v16.76
+**Versiyon:** v16.85
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -183,13 +183,87 @@ docs/DEVAM_NOTU.md                       — bu notlar
 | `7ffc483` | mrp.ts case-insensitive eşleşme; Dashboard.tsx logByWoId O(1) map + aktifOrders/acikWOs useMemo |
 | `df31b1f` | MRP.tsx — orderHasEksik sadece aktifOrders üzerinde döner (terminal/arşiv için senkron hesap kaldırıldı) |
 
+### 15 Mayıs 2026 — Form Validation, Backup, Rollback, Bug Fix Round
+
+#### Form validation — Zod adoption (15 sayfa)
+
+Zod (^4.4.3) dependency'ye eklendi; client-side validation şemaları kritik form modal'larında devreye girdi. Inline `if (!x.trim())` pattern'i yerine `safeParse + toast.error(issues[0].message)` kullanılıyor.
+
+**Kapsanan formlar:**
+- `Procurement.tsx` (`TedarikFormModal`) — miktar finite + positive, teslim tarihi >= bugün
+- Diğer 14 sayfada kademeli geçiş (Materials, Operators, Suppliers, Orders, Recipes, BomTrees, Stations, Operations, HmTipleri, Checklist, IeHazirlama, Login, Topbar PassModal, Procurement)
+
+**Pattern:**
+```ts
+const schema = z.object({...})
+const parsed = schema.safeParse({...})
+if (!parsed.success) { toast.error(parsed.error.issues[0]?.message); return }
+```
+
+Şemalar şimdilik kullanıcı dosyalarının içinde inline; ileride yeniden kullanım gerekirse `src/lib/schemas/` altına çıkar.
+
+#### Backup sistemi — 2 katmanlı, GitHub Actions çalışıyor
+
+**Katman 1 — In-app JSON snapshot (mevcut):**
+- `src/lib/backup.ts` + `src/pages/Backup.tsx` + `BackupRestoreModal.tsx`
+- `uys_yedekler` tablosuna 28 tablo paralel okunarak `veri` jsonb sütununa yazılır
+- Tetik: manuel (`/backup` Şimdi Yedekle) veya otomatik (admin login → `ensureDailyAutoBackup`, idempotent)
+- 30 günden eski **otomatik** yedekler `cleanOldBackups(30)` ile silinir; manuel yedekler kalıcı
+
+**Katman 2 — GitHub Actions cron (yeni: çalışıyor):**
+- `backup.yml` `.github/workflows/` altına taşındı — daha önce repo kökündeydi, hiç tetiklenmiyordu
+- `SUPABASE_DB_URL` tek-string secret yerine 4 ayrı: `SUPABASE_HOST`, `SUPABASE_USER`, `SUPABASE_PASSWORD`, `SUPABASE_DB`
+- `supabase db dump` CLI bağımlılığı kaldırıldı, vanilla `pg_dump` kullanılıyor
+- `postgresql-client-17` PGDG repo'sundan kuruluyor (server >= versiyon zorunluluğu)
+- Session pooler endpoint (`aws-0-eu-central-1.pooler.supabase.com:5432`) — direct connection IPv6 GitHub Actions'ta çalışmıyor
+- `pg_dumpall --roles-only` kaldırıldı (pooler multi-db connection desteklemiyor)
+- Her UTC 03:00 (TR 06:00) `backups/<tarih>/schema.sql + data.sql` repo'ya commit ediliyor
+- **İlk başarılı yedek:** `73c4ce1 Yedek 2026-05-15 (18:59 UTC)`
+
+#### Rollback scriptleri (5 migration)
+
+`sql/rollback/` klasörü oluşturuldu — son 5 migration'ın tersini yapan idempotent DROP/ALTER scriptleri:
+
+| Migration | Rollback işlemi |
+|---|---|
+| `20260515_v16_85_operator_bolumler.sql` | `DROP COLUMN bolumler` |
+| `20260515_v16_84_ie_hazirlama_durum.sql` | 5 kolon DROP (iptal/tamamlandi) |
+| `20260515_v16_84_dev_files_committed_hash.sql` | `DROP COLUMN committed_hash` |
+| `20260515_v16_83_ie_hazirlama.sql` | 5 tablo DROP CASCADE (child→parent) |
+| `20260513_v16_79_malzeme_cinsi.sql` | `DROP COLUMN malzeme_cinsi` + yorumlu HM tipleri DELETE |
+
+Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → TEST → backup → PROD onayı). v16.79 HM tipleri DELETE komutu kapalı/yorumlu — operatör elle açmalı.
+
+#### 23 bug fix kategorize
+
+| Modül | Düzeltme |
+|---|---|
+| **mrp** | `.miktar || 1` → `.miktar ?? 1` (7 yer) — 0 değerinin meşru olduğu durumda hayalet enflasyon giderildi |
+| **stok** | `stokTuketim.ts` D-1/D-2/D-3: division-by-zero guard, rezerv silme hata kontrolü, malkod boş guard |
+| **permissions** | RBAC kontrol path'lerinde edge case fix'leri |
+| **autoChain** | `fetchAll` ile 1000 satır cap'i kaldırıldı, `freshTedarikler` refresh, upsert hata kontrolü |
+| **barModel** | Bar açma/tüketme edge case'leri |
+| **dashboard** | G-3: `backupDays` NaN guard (geçersiz tarih → -1 fallback) + `backupWarn`'da negatif kapsanır |
+| **reports** | G-5 `toplamUretim`/`bugunUretim` useMemo + G-6 `opData` O(n²)→O(n) (logs woId Map) + G-7 OEE `quality` `Math.max(0, ...)` |
+
+**Önceki raporlara göre yapılan ek temizlikler:**
+- `App.tsx` — gereksiz `useOrderStore` subscription + debug log'ları kaldırıldı
+- `sessionGuard.ts` — `claimSession` aynı veri tekrar UPDATE'i `_lastClaim` memo ile engellendi
+- `useAuth.ts` — gereksiz `console.info` temizlik
+- `Reports.tsx` quality negatif → 0 sıkıştırma
+- `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
+
 ## Sıradaki görevler
 
 1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
 2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
 3. ~~Service katmanı Faz 3~~ — **tamamlandı** (7 sayfa, 2 servis genişlemesi)
 4. ~~loadAll alias temizliği~~ — **tamamlandı** (`ed99229`)
-5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST'e migration uygulandı, PROD onay bekliyor
+5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
+6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
+7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
+8. Zod adoption diğer 26 form modal'a yayılması (15/41 tamam) — Faz 2: high-risk listede kalan (Operators sicil/şifre policy, WorkOrders inline edit'ler, IeHazirlama UYS sipariş no format)
+9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
 
 ---
 
