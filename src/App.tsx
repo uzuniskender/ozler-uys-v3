@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
@@ -7,42 +7,49 @@ import { useStore } from '@/store'
 import { Layout } from '@/components/layout/Layout'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
-import { Orders } from '@/pages/Orders'
-import { WorkOrders } from '@/pages/WorkOrders'
-import { ProductionEntry } from '@/pages/ProductionEntry'
-import { CuttingPlans } from '@/pages/CuttingPlans'
-import { MRP } from '@/pages/MRP'
-import { Warehouse } from '@/pages/Warehouse'
-import { Shipment } from '@/pages/Shipment'
-import { BomTrees } from '@/pages/BomTrees'
-import { Recipes } from '@/pages/Recipes'
-import { Materials } from '@/pages/Materials'
-import { Operations } from '@/pages/Operations'
-import { Stations } from '@/pages/Stations'
-import { Operators } from '@/pages/Operators'
-import { Suppliers } from '@/pages/Suppliers'
-import { DowntimeCodes } from '@/pages/DowntimeCodes'
-import { Reports } from '@/pages/Reports'
-import { HammaddeRapor } from '@/pages/HammaddeRapor'
-import { TestPanel } from '@/pages/TestPanel'
-import { Logs } from '@/pages/Logs'
-import { DataManagement } from '@/pages/DataManagement'
-import { TestMode } from '@/pages/TestMode'
-import { Procurement } from '@/pages/Procurement'
-import { OperatorPanel } from '@/pages/OperatorPanel'
-import { Checklist } from '@/pages/Checklist'
-import { Messages } from '@/pages/Messages'
-import { ProblemTakip } from '@/pages/ProblemTakip'
-import Chat from '@/pages/Chat'
-import { HmTipleri } from '@/pages/HmTipleri'
-import { Backup } from '@/pages/Backup'
-import { StokLog } from '@/pages/StokLog'
-import { DevSync } from '@/pages/DevSync'
-import { ActiveWorkPanel } from '@/pages/ActiveWorkPanel'
-import { IeHazirlama } from '@/pages/IeHazirlama'
 import { ensureDailyAutoBackup } from '@/lib/backup'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
+
+const Orders = lazy(() => import('@/pages/Orders').then(m => ({ default: m.Orders })))
+const WorkOrders = lazy(() => import('@/pages/WorkOrders').then(m => ({ default: m.WorkOrders })))
+const ProductionEntry = lazy(() => import('@/pages/ProductionEntry').then(m => ({ default: m.ProductionEntry })))
+const CuttingPlans = lazy(() => import('@/pages/CuttingPlans').then(m => ({ default: m.CuttingPlans })))
+const MRP = lazy(() => import('@/pages/MRP').then(m => ({ default: m.MRP })))
+const Warehouse = lazy(() => import('@/pages/Warehouse').then(m => ({ default: m.Warehouse })))
+const Shipment = lazy(() => import('@/pages/Shipment').then(m => ({ default: m.Shipment })))
+const BomTrees = lazy(() => import('@/pages/BomTrees').then(m => ({ default: m.BomTrees })))
+const Recipes = lazy(() => import('@/pages/Recipes').then(m => ({ default: m.Recipes })))
+const Materials = lazy(() => import('@/pages/Materials').then(m => ({ default: m.Materials })))
+const Operations = lazy(() => import('@/pages/Operations').then(m => ({ default: m.Operations })))
+const Stations = lazy(() => import('@/pages/Stations').then(m => ({ default: m.Stations })))
+const Operators = lazy(() => import('@/pages/Operators').then(m => ({ default: m.Operators })))
+const Suppliers = lazy(() => import('@/pages/Suppliers').then(m => ({ default: m.Suppliers })))
+const DowntimeCodes = lazy(() => import('@/pages/DowntimeCodes').then(m => ({ default: m.DowntimeCodes })))
+const Reports = lazy(() => import('@/pages/Reports').then(m => ({ default: m.Reports })))
+const HammaddeRapor = lazy(() => import('@/pages/HammaddeRapor').then(m => ({ default: m.HammaddeRapor })))
+const TestPanel = lazy(() => import('@/pages/TestPanel').then(m => ({ default: m.TestPanel })))
+const Logs = lazy(() => import('@/pages/Logs').then(m => ({ default: m.Logs })))
+const DataManagement = lazy(() => import('@/pages/DataManagement').then(m => ({ default: m.DataManagement })))
+const TestMode = lazy(() => import('@/pages/TestMode').then(m => ({ default: m.TestMode })))
+const Procurement = lazy(() => import('@/pages/Procurement').then(m => ({ default: m.Procurement })))
+const OperatorPanel = lazy(() => import('@/pages/OperatorPanel').then(m => ({ default: m.OperatorPanel })))
+const Checklist = lazy(() => import('@/pages/Checklist').then(m => ({ default: m.Checklist })))
+const Messages = lazy(() => import('@/pages/Messages').then(m => ({ default: m.Messages })))
+const ProblemTakip = lazy(() => import('@/pages/ProblemTakip').then(m => ({ default: m.ProblemTakip })))
+const Chat = lazy(() => import('@/pages/Chat'))
+const HmTipleri = lazy(() => import('@/pages/HmTipleri').then(m => ({ default: m.HmTipleri })))
+const Backup = lazy(() => import('@/pages/Backup').then(m => ({ default: m.Backup })))
+const StokLog = lazy(() => import('@/pages/StokLog').then(m => ({ default: m.StokLog })))
+const DevSync = lazy(() => import('@/pages/DevSync').then(m => ({ default: m.DevSync })))
+const ActiveWorkPanel = lazy(() => import('@/pages/ActiveWorkPanel').then(m => ({ default: m.ActiveWorkPanel })))
+const IeHazirlama = lazy(() => import('@/pages/IeHazirlama').then(m => ({ default: m.IeHazirlama })))
+
+const PageFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-bg-0">
+    <div className="text-zinc-500 text-sm">Yükleniyor...</div>
+  </div>
+)
 
 // Admin sayfaları — auth kontrolü App seviyesinde, burada sadece rotalar
 function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
@@ -52,45 +59,47 @@ function AdminRoutes({ onSignOut }: { onSignOut: () => void }) {
 
   return (
     <HashRouter>
-      <Routes>
-        <Route path="/operator" element={<OperatorPanel />} />
-        <Route element={<Layout onSignOut={onSignOut} />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/work-orders" element={<WorkOrders />} />
-          <Route path="/production" element={<ProductionEntry />} />
-          <Route path="/cutting" element={<CuttingPlans />} />
-          <Route path="/mrp" element={<MRP />} />
-          <Route path="/warehouse" element={<Warehouse />} />
-          <Route path="/shipment" element={<Shipment />} />
-          <Route path="/bom" element={<BomTrees />} />
-          <Route path="/recipes" element={<Recipes />} />
-          <Route path="/materials" element={<Materials />} />
-          <Route path="/operations" element={<Operations />} />
-          <Route path="/stations" element={<Stations />} />
-          <Route path="/operators" element={<Operators />} />
-          <Route path="/suppliers" element={<Suppliers />} />
-          <Route path="/downtime-codes" element={<DowntimeCodes />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/hammadde-rapor" element={<HammaddeRapor />} />
-          <Route path="/test" element={<TestPanel />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/test-mode" element={<TestMode />} />
-          <Route path="/data" element={<DataManagement />} />
-          <Route path="/procurement" element={<Procurement />} />
-          <Route path="/checklist" element={<Checklist />} />
-          <Route path="/messages" element={<Messages />} />
-          <Route path="/problem-takip" element={<ProblemTakip />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/hm-tipleri" element={<HmTipleri />} />
-          <Route path="/backup" element={<Backup />} />
-          <Route path="/stok-log" element={<StokLog />} />
-          <Route path="/active-work" element={<ActiveWorkPanel />} />
-          <Route path="/ie-hazirlama" element={<IeHazirlama />} />
-          <Route path="/dev-sync" element={<DevSync />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/operator" element={<OperatorPanel />} />
+          <Route element={<Layout onSignOut={onSignOut} />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/work-orders" element={<WorkOrders />} />
+            <Route path="/production" element={<ProductionEntry />} />
+            <Route path="/cutting" element={<CuttingPlans />} />
+            <Route path="/mrp" element={<MRP />} />
+            <Route path="/warehouse" element={<Warehouse />} />
+            <Route path="/shipment" element={<Shipment />} />
+            <Route path="/bom" element={<BomTrees />} />
+            <Route path="/recipes" element={<Recipes />} />
+            <Route path="/materials" element={<Materials />} />
+            <Route path="/operations" element={<Operations />} />
+            <Route path="/stations" element={<Stations />} />
+            <Route path="/operators" element={<Operators />} />
+            <Route path="/suppliers" element={<Suppliers />} />
+            <Route path="/downtime-codes" element={<DowntimeCodes />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/hammadde-rapor" element={<HammaddeRapor />} />
+            <Route path="/test" element={<TestPanel />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/test-mode" element={<TestMode />} />
+            <Route path="/data" element={<DataManagement />} />
+            <Route path="/procurement" element={<Procurement />} />
+            <Route path="/checklist" element={<Checklist />} />
+            <Route path="/messages" element={<Messages />} />
+            <Route path="/problem-takip" element={<ProblemTakip />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/hm-tipleri" element={<HmTipleri />} />
+            <Route path="/backup" element={<Backup />} />
+            <Route path="/stok-log" element={<StokLog />} />
+            <Route path="/active-work" element={<ActiveWorkPanel />} />
+            <Route path="/ie-hazirlama" element={<IeHazirlama />} />
+            <Route path="/dev-sync" element={<DevSync />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </HashRouter>
   )
 }
@@ -116,9 +125,11 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 
   return (
     <HashRouter>
-      <Routes>
-        <Route path="*" element={<OperatorPanel />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="*" element={<OperatorPanel />} />
+        </Routes>
+      </Suspense>
     </HashRouter>
   )
 }
