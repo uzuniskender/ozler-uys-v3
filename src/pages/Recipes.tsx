@@ -6,6 +6,7 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
+import { newRecipeSchema, recipeEditSchema, recipeRowSchema } from '@/lib/validations/recipeSchemas'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock, BookOpen } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
@@ -413,7 +414,8 @@ function NewRecipeModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   const [mamulAd, setMamulAd] = useState('')
 
   async function save() {
-    if (!ad.trim()) { toast.error('Reçete adı zorunlu'); return }
+    const check = newRecipeSchema.safeParse({ ad: ad.trim(), mamulKod: mamulKod.trim() })
+    if (!check.success) { toast.error(check.error.issues[0].message); return }
     await supabase.from('uys_recipes').insert({
       id: uid(), rc_kod: rcKod.trim(), ad: ad.trim(), mamul_kod: mamulKod.trim(), mamul_ad: mamulAd.trim(),
       satirlar: [{ id: uid(), kirno: '1', malkod: mamulKod.trim(), malad: mamulAd.trim() || ad.trim(), tip: 'Mamul', miktar: 1, birim: 'Adet', opId: null, istId: null, hazirlikSure: 0, islemSure: 0 }],
@@ -671,7 +673,15 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   }
 
   async function save() {
-    if (!ad.trim()) { toast.error('Reçete adı zorunlu'); return }
+    const adCheck = recipeEditSchema.safeParse({ ad: ad.trim() })
+    if (!adCheck.success) { toast.error(adCheck.error.issues[0].message); return }
+    for (const r of rows) {
+      const rowCheck = recipeRowSchema.safeParse({ malkod: r.malkod || '', miktar: r.miktar })
+      if (!rowCheck.success) {
+        toast.error(`Satır ${r.kirno}: ${rowCheck.error.issues[0].message}`)
+        return
+      }
+    }
     await supabase.from('uys_recipes').update({ satirlar: rows, ad: ad.trim(), rc_kod: rcKod.trim() }).eq('id', recipe.id)
     onSaved()
   }

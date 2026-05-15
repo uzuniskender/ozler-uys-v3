@@ -8,6 +8,7 @@ import { showConfirm, showPrompt } from '@/lib/prompt'
 import { Download, Plus, Pencil, Trash2, Upload, Copy } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import type { Material } from '@/types'
+import { materialFormSchema } from '@/lib/validations/materialSchema'
 
 // ─── Malzeme cinsi → yoğunluk (g/cm³) ───
 const MALZEME_CINSLERI: { label: string; yogunluk: number }[] = [
@@ -714,14 +715,24 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
   }
 
   async function save() {
-    if (!kod.trim() || !ad.trim()) { toast.error('Kod ve Ad zorunlu'); return }
+    const boyNum = parseFloat(boy) || 0
+    const enNum = parseFloat(en) || 0
+    const check = materialFormSchema.safeParse({
+      kod: kod.trim(), ad: ad.trim(),
+      boy: boyNum, en: enNum,
+      kalinlik: parseFloat(kalinlik) || 0,
+      uzunluk: parseFloat(uzunluk) || 0,
+      cap: parseFloat(cap) || 0,
+      minStok: parseFloat(minStok) || 0,
+    })
+    if (!check.success) { toast.error(check.error.issues[0].message); return }
     setSaving(true)
     const op = operations.find(o => o.id === opId)
-    let boyNum = parseFloat(boy) || 0
-    let enNum = parseFloat(en) || 0
+    let finalBoyNum = boyNum
+    let finalEnNum = enNum
     const isPly = (hammaddeTipi || '').toUpperCase() === 'PLY'
-    if (!isPly && enNum > boyNum && boyNum > 0) {
-      [boyNum, enNum] = [enNum, boyNum]
+    if (!isPly && finalEnNum > finalBoyNum && finalBoyNum > 0) {
+      ;[finalBoyNum, finalEnNum] = [finalEnNum, finalBoyNum]
       toast.info('Uzun kenar / Kısa kenar otomatik düzeltildi')
     }
     const row: Record<string, unknown> = {
@@ -729,7 +740,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
       hammadde_tipi: (tip === 'Hammadde' || tip === 'YarıMamul') ? (hammaddeTipi || '').toLocaleUpperCase('tr-TR') : '',
       malzeme_cinsi: malzemeCinsi || null,
       birim,
-      boy: boyNum, en: enNum,
+      boy: finalBoyNum, en: finalEnNum,
       kalinlik: parseFloat(kalinlik) || 0,
       uzunluk: parseFloat(uzunluk) || 0,
       cap: parseFloat(cap) || 0,
