@@ -47,11 +47,12 @@ export function Operators() {
     loadOwn()
   }
 
-  async function saveOpr(data: { kod: string; ad: string; bolum: string; sifre: string }, editId?: string) {
+  async function saveOpr(data: { kod: string; ad: string; bolum: string; sifre: string; bolumler?: string[] }, editId?: string) {
+    const bolumlerDb = data.bolumler && data.bolumler.length > 1 ? data.bolumler : null
     if (editId) {
-      await supabase.from('uys_operators').update({ kod: data.kod, ad: data.ad, bolum: data.bolum, sifre: data.sifre }).eq('id', editId)
+      await supabase.from('uys_operators').update({ kod: data.kod, ad: data.ad, bolum: data.bolum, sifre: data.sifre, bolumler: bolumlerDb }).eq('id', editId)
     } else {
-      await supabase.from('uys_operators').insert({ id: uid(), kod: data.kod, ad: data.ad, bolum: data.bolum, sifre: data.sifre, aktif: true })
+      await supabase.from('uys_operators').insert({ id: uid(), kod: data.kod, ad: data.ad, bolum: data.bolum, sifre: data.sifre, aktif: true, bolumler: bolumlerDb })
     }
     loadOwn()
     setShowForm(false)
@@ -219,14 +220,16 @@ export function Operators() {
 }
 
 function OprFormModal({ initial, bolumler, onClose, onSave }: {
-  initial: { id: string; kod: string; ad: string; bolum: string; sifre: string } | null
+  initial: { id: string; kod: string; ad: string; bolum: string; sifre: string; bolumler?: string[] } | null
   bolumler: string[]; onClose: () => void
-  onSave: (data: { kod: string; ad: string; bolum: string; sifre: string }, editId?: string) => void
+  onSave: (data: { kod: string; ad: string; bolum: string; sifre: string; bolumler?: string[] }, editId?: string) => void
 }) {
   const [kod, setKod] = useState(initial?.kod || '')
   const [ad, setAd] = useState(initial?.ad || '')
   const [bolum, setBolum] = useState(initial?.bolum || '')
   const [sifre, setSifre] = useState(initial?.sifre || '123456')
+  // v16.85 — ek bölümler
+  const [ekBolumler, setEkBolumler] = useState<string[]>(initial?.bolumler || [])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -242,10 +245,24 @@ function OprFormModal({ initial, bolumler, onClose, onSave }: {
           <datalist id="bolum-list">{bolumler.map(b => <option key={b} value={b} />)}</datalist></div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Şifre</label>
           <input value={sifre} onChange={e => setSifre(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Ek Bölümler <span className="text-zinc-600">(birden fazla bölümde çalışıyorsa)</span></label>
+            <div className="bg-bg-2 border border-border rounded-lg p-2 max-h-32 overflow-y-auto space-y-0.5">
+              {bolumler.map(b => (
+                <label key={b} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer hover:bg-bg-3/50 rounded px-1">
+                  <input type="checkbox" checked={ekBolumler.includes(b)} onChange={e => {
+                    setEkBolumler(prev => e.target.checked ? [...prev.filter(x => x !== b), b] : prev.filter(x => x !== b))
+                  }} className="rounded accent-accent" />
+                  <span className={b === bolum ? 'text-accent font-semibold' : 'text-zinc-300'}>{b}{b === bolum ? ' (ana)' : ''}</span>
+                </label>
+              ))}
+            </div>
+            {ekBolumler.length > 0 && <div className="text-[10px] text-accent mt-1">{ekBolumler.join(' + ')}</div>}
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
-          <button onClick={() => onSave({ kod, ad, bolum, sifre }, initial?.id)} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+          <button onClick={() => onSave({ kod, ad, bolum, sifre, bolumler: ekBolumler.length ? ekBolumler : undefined }, initial?.id)} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
         </div>
       </div>
     </div>

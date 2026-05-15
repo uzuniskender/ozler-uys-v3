@@ -67,9 +67,10 @@ export function OperatorPanel() {
     ...operators.map(o => o.bolum).filter(Boolean),
   ])].sort((a, b) => a.localeCompare(b, 'tr'))
 
-  // Seçili bölümdeki operatörler
+  // Seçili bölümdeki operatörler — v16.85 bolumler array destegi
   const bolumOperatorleri = operators.filter(o => {
     if (!bolum) return true
+    if ((o as any).bolumler?.length) return (o as any).bolumler.some((b: string) => b.toUpperCase() === bolum.toUpperCase())
     return (o.bolum || '').toUpperCase() === bolum.toUpperCase() || !o.bolum
   }).filter(o => o.aktif !== false).sort((a, b) => a.ad.localeCompare(b.ad, 'tr'))
 
@@ -171,7 +172,7 @@ export function OperatorPanel() {
 }
 
 function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
-  oprId: string; opr: { id: string; ad: string; bolum: string }
+  oprId: string; opr: { id: string; ad: string; bolum: string; bolumler?: string[] }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
 }) {
   const orders = useOrderStore(s => s.orders)
@@ -201,12 +202,11 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   ).length
 
   const acikWOs = useMemo(() => {
-    const bolumUpper = (opr.bolum || '').trim().toUpperCase()
+    // v16.85 — bolumler array varsa tüm bölümleri kullan
+    const myBolumler = (opr.bolumler?.length ? opr.bolumler : [opr.bolum])
+      .map(b => (b || '').trim().toUpperCase()).filter(Boolean)
+    const bolumUpper = myBolumler[0] || ''  // geriye uyum
 
-    // v15.79 (İş Emri #13 madde 8+9) — Operatöre sadece Üretilebilir + Üretimde göster.
-    // Plan Bekliyor olanlar (kesim plan eksik / tedarik açılmamış / yolda) listede GÖRÜNMEZ.
-    // Eski filtre: durum !== iptal/tamamlandi/beklemede (3 DB durumu yetiyor değildi)
-    // Yeni filtre: getEffectiveStatus(w).status === 'Uretilebilir' || 'uretimde'
     function isOperatable(w: typeof workOrders[number]): boolean {
       if (w.hedef <= 0) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
@@ -215,26 +215,26 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
       return eff.status === 'Uretilebilir' || eff.status === 'uretimde'
     }
 
-    if (!bolumUpper) {
-      // Bölüm yoksa tüm açık + üretilebilir İE'leri göster
+    if (!myBolumler.length) {
       return workOrders.filter(isOperatable)
     }
 
-    // v2 mantığı: operasyonların BÖLÜM alanı ile eşleştir
+    // v16.85: tüm myBolumler için operasyon eşleştir
     const myOpIds: string[] = []
-    operations.forEach(o => {
-      const oBolum = (o.bolum || '').trim().toUpperCase()
-      const oAd = (o.ad || '').trim().toUpperCase()
-      if ((oBolum && oBolum === bolumUpper) || oAd === bolumUpper || oAd.includes(bolumUpper) || bolumUpper.includes(oAd)) {
-        if (!myOpIds.includes(o.id)) myOpIds.push(o.id)
-      }
+    myBolumler.forEach(bUp => {
+      operations.forEach(o => {
+        const oBolum = (o.bolum || '').trim().toUpperCase()
+        const oAd = (o.ad || '').trim().toUpperCase()
+        if ((oBolum && oBolum === bUp) || oAd === bUp || oAd.includes(bUp) || bUp.includes(oAd)) {
+          if (!myOpIds.includes(o.id)) myOpIds.push(o.id)
+        }
+      })
     })
 
     if (!myOpIds.length) {
-      // Eşleşme bulunamadı — opAd içerik araması yap (fallback)
       workOrders.forEach(w => {
         const opAd = (w.opAd || '').trim().toUpperCase()
-        if (opAd === bolumUpper || opAd.includes(bolumUpper) || bolumUpper.includes(opAd)) {
+        if (myBolumler.some(b => opAd === b || opAd.includes(b) || b.includes(opAd))) {
           if (w.opId && !myOpIds.includes(w.opId)) myOpIds.push(w.opId)
         }
       })
