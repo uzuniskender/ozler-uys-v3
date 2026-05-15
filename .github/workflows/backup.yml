@@ -51,14 +51,12 @@ jobs:
       - name: Create backup directory
         run: mkdir -p backups/${{ env.BACKUP_DATE }}
 
-      - name: Dump roles
-        run: |
-          pg_dumpall \
-            -h "${{ secrets.SUPABASE_HOST }}" \
-            -U "${{ secrets.SUPABASE_USER }}" \
-            -p 5432 \
-            --roles-only \
-            -f backups/${{ env.BACKUP_DATE }}/roles.sql
+      # NOT: pg_dumpall --roles-only kaldırıldı — Supabase session pooler
+      # pg_dumpall'ı desteklemiyor (multi-db connection gerektirir).
+      # Role bilgileri zaten Supabase Auth tarafından yönetiliyor, kullanıcı
+      # tablolarımız (uys_kullanicilar) public schema'da olduğu için data
+      # dump'ında dahil. Restore için role recreation gerekirse Supabase
+      # Studio üzerinden manuel yapılmalı.
 
       - name: Dump schema
         run: |
