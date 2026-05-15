@@ -12,6 +12,24 @@
 - v16.75 — MRP badge sadece gerçek eksik sayar (isOrderMrpPending false positive giderildi)
 - v16.76 — Production build console ve debugger drop (vite.config.ts esbuild.drop)
 
+### 15 Mayıs 2026 — Render Optimizasyonu & Hooks Düzeltmesi
+
+**Lazy loading (route-level code splitting)**
+- `App.tsx` — admin/operator sayfaları `React.lazy` + `Suspense` ile sarıldı; bundle boyutu düştü
+- `loadAllStores.ts` — uygulama bootstrap'i ayrı modüle çıkarıldı (`sessionGuard.ts` ile birlikte)
+
+**Store slice hooks (4 hook)**
+- `b96b831` — `useStore` composite shim kaldırıldı; 5 dosya doğrudan slice hook'larına (`useStokStore`, `useOrderStore`, …) geçirildi
+- `useAuth.ts` ve ilgili dosyalar slice hook kullanımı ile yeniden yazıldı
+
+**Render optimizasyonu**
+- `App.tsx` / `sessionGuard.ts` — gereksiz yeniden-render'ı kesen memo/callback düzenlemeleri
+
+**Hooks crash fix**
+- `ade44f1` — Topbar `syncedHesap` hesabı: koşullu `useEffect` çağrısı (Rules of Hooks ihlali) düzeltildi
+
+---
+
 ### 15 Mayıs 2026 — API Abstraction / Service Katmanı
 
 **Faz 1 — Scaffold** (`src/services/_base/`)
