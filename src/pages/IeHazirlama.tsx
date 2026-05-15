@@ -309,6 +309,7 @@ export function IeHazirlama() {
   const [iptalNeden, setIptalNeden] = useState('')
   const [islemYapiliyor, setIslemYapiliyor] = useState(false)
   const [bomDuzenleSatir, setBomDuzenleSatir] = useState<BomSatir | null>(null)
+  const [bomUrunModalOpen, setBomUrunModalOpen] = useState(false)
   // Geçmiş — filtre + pagination
   const PAGE_SIZE = 30
   const [filterSiparisNo, setFilterSiparisNo] = useState('')
@@ -657,8 +658,25 @@ export function IeHazirlama() {
           <button onClick={() => setTab('gecmis')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${tab === 'gecmis' ? 'bg-accent text-white' : 'bg-bg-2 border border-border text-zinc-400 hover:text-white'}`}>
             <History size={13} /> Geçmiş
           </button>
+          <button onClick={() => setBomUrunModalOpen(true)} disabled={bomLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-bg-2 border border-border text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed">
+            🔧 BOM Düzenle
+          </button>
         </div>
       </div>
+
+      {bomUrunModalOpen && (
+        <BomUrunDuzenleModal
+          bom={bom}
+          onClose={() => setBomUrunModalOpen(false)}
+          onSaved={(updated) => {
+            setBom(prev => prev.map(b => {
+              const u = updated.find(x => x.id === b.id)
+              return u || b
+            }))
+          }}
+        />
+      )}
 
       {/* ─── YENİ HAZIRLA ─── */}
       {tab === 'yeni' && (
@@ -1200,6 +1218,184 @@ function BomDuzenleModal({ satir, onClose, onSaved }: {
           <button onClick={handleSave} disabled={saving || !birimAdet || parseInt(birimAdet) <= 0}
             className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold disabled:opacity-40">
             <Check size={13} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BOM Ürün Düzenle (Çoklu Satır) ──────────────────────────
+// Bir ürünün tüm BOM satırlarını listeler; üç sayısal alan inline edit.
+// Kaydet → yalnızca değişen satırlar UPDATE; parent bom state'i patch ile yansıtılır.
+function BomUrunDuzenleModal({ bom, onClose, onSaved }: {
+  bom: BomSatir[]
+  onClose: () => void
+  onSaved: (updated: BomSatir[]) => void
+}) {
+  const [arama, setArama] = useState('')
+  const [secilenUrun, setSecilenUrun] = useState('')
+  const [rows, setRows] = useState<BomSatir[]>([])
+  const [saving, setSaving] = useState(false)
+
+  const urunler = useMemo(() => {
+    const m = new Map<string, { kodu: string; adi: string }>()
+    for (const b of bom) {
+      if (!m.has(b.urun_kodu)) m.set(b.urun_kodu, { kodu: b.urun_kodu, adi: b.urun_adi })
+    }
+    return [...m.values()].sort((a, b) => a.adi.localeCompare(b.adi, 'tr'))
+  }, [bom])
+
+  const filtreli = useMemo(() => {
+    if (!arama || secilenUrun) return []
+    const q = arama.toLowerCase()
+    return urunler.filter(u => u.kodu.toLowerCase().includes(q) || u.adi.toLowerCase().includes(q))
+  }, [urunler, arama, secilenUrun])
+
+  function urunSec(kodu: string, adi: string) {
+    setSecilenUrun(kodu)
+    setArama(kodu + ' — ' + adi)
+    setRows(bom.filter(b => b.urun_kodu === kodu).map(b => ({ ...b })))
+  }
+
+  function alanGuncelle(idx: number, alan: 'birim_adet' | 'kesim_olc_mm' | 'hm_uzunluk_mm', deger: string) {
+    const sayi = parseFloat(deger)
+    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [alan]: isNaN(sayi) ? 0 : sayi } : r))
+  }
+
+  const degisenler = useMemo(() => {
+    if (!secilenUrun) return []
+    const original = bom.filter(b => b.urun_kodu === secilenUrun)
+    return rows.filter(r => {
+      const o = original.find(x => x.id === r.id)
+      if (!o) return false
+      return o.birim_adet !== r.birim_adet || o.kesim_olc_mm !== r.kesim_olc_mm || o.hm_uzunluk_mm !== r.hm_uzunluk_mm
+    })
+  }, [rows, bom, secilenUrun])
+
+  const gecersizSatir = rows.some(r => r.birim_adet <= 0 || r.kesim_olc_mm < 0 || r.hm_uzunluk_mm < 0)
+
+  async function kaydet() {
+    if (gecersizSatir) {
+      toast.error("Geçersiz değer: '1 HM'den Adet' > 0, diğerleri ≥ 0 olmalı")
+      return
+    }
+    if (degisenler.length === 0) {
+      toast.info('Değişiklik yok')
+      return
+    }
+    setSaving(true)
+    try {
+      const guncelleme = new Date().toISOString()
+      const results = await Promise.all(degisenler.map(r =>
+        supabase.from('uys_rapido_bom')
+          .update({ birim_adet: r.birim_adet, kesim_olc_mm: r.kesim_olc_mm, hm_uzunluk_mm: r.hm_uzunluk_mm, guncelleme })
+          .eq('id', r.id)
+      ))
+      const hatalar = results.filter(r => r.error)
+      if (hatalar.length > 0) {
+        toast.error(`${hatalar.length} satır kaydedilemedi: ` + (hatalar[0].error?.message || ''))
+        return
+      }
+      onSaved(degisenler)
+      toast.success(`${degisenler.length} satır güncellendi`)
+      onClose()
+    } catch (e: any) {
+      toast.error('Kayıt hatası: ' + (e?.message || e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-lg font-semibold">🔧 BOM Düzenle — Ürün bazında</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+        </div>
+
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+          <div className="relative">
+            <input
+              value={arama}
+              onChange={e => { setArama(e.target.value); setSecilenUrun(''); setRows([]) }}
+              placeholder={`Ürün kodu / adı ara (${urunler.length} ürün)...`}
+              className="w-full px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+            />
+            {filtreli.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-bg-1 border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                {filtreli.slice(0, 40).map(u => (
+                  <button key={u.kodu}
+                    onClick={() => urunSec(u.kodu, u.adi)}
+                    className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-bg-2 border-b border-border/30 last:border-0">
+                    <span className="font-mono text-accent text-[11px]">{u.kodu}</span>
+                    <span className="ml-2 text-zinc-400">{u.adi}</span>
+                  </button>
+                ))}
+                {filtreli.length > 40 && <div className="px-3 py-1.5 text-[10px] text-zinc-600">+{filtreli.length - 40} daha...</div>}
+              </div>
+            )}
+          </div>
+
+          {secilenUrun && rows.length > 0 && (
+            <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 border-b border-border bg-bg-3/50 flex items-center justify-between">
+                <div className="text-xs font-semibold text-zinc-300">{rows.length} satır</div>
+                <div className="text-[10px] text-zinc-500">{degisenler.length} değişiklik bekliyor</div>
+              </div>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-border text-zinc-500">
+                    <th className="text-left px-3 py-2">HM Kodu</th>
+                    <th className="text-left px-3 py-2">HM Adı</th>
+                    <th className="text-left px-3 py-2">İstasyon</th>
+                    <th className="text-right px-3 py-2">Kesim (mm)</th>
+                    <th className="text-right px-3 py-2">1 HM'den Adet</th>
+                    <th className="text-right px-3 py-2">HM Uzunluk (mm)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, idx) => {
+                    const gecersiz = r.birim_adet <= 0
+                    return (
+                      <tr key={r.id} className={`border-b border-border/30 ${gecersiz ? 'bg-red/10' : ''}`}>
+                        <td className="px-3 py-1.5 font-mono text-accent text-[10px]">{r.hammadde_kodu}</td>
+                        <td className="px-3 py-1.5 text-zinc-400">{r.hammadde_adi}</td>
+                        <td className="px-3 py-1.5 text-zinc-500 text-[10px]">{r.is_istasyonu}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          <input type="number" min={0} step="0.01" value={r.kesim_olc_mm}
+                            onChange={e => alanGuncelle(idx, 'kesim_olc_mm', e.target.value)}
+                            className="w-24 px-2 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-200 text-right font-mono focus:outline-none focus:border-accent" />
+                        </td>
+                        <td className="px-3 py-1.5 text-right">
+                          <input type="number" min={0.01} step="0.01" value={r.birim_adet}
+                            onChange={e => alanGuncelle(idx, 'birim_adet', e.target.value)}
+                            className={`w-20 px-2 py-1 bg-bg-3 border rounded text-[10px] text-right font-mono focus:outline-none ${gecersiz ? 'border-red text-red' : 'border-border text-zinc-200 focus:border-accent'}`} />
+                        </td>
+                        <td className="px-3 py-1.5 text-right">
+                          <input type="number" min={0} step="1" value={r.hm_uzunluk_mm}
+                            onChange={e => alanGuncelle(idx, 'hm_uzunluk_mm', e.target.value)}
+                            className="w-24 px-2 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-200 text-right font-mono focus:outline-none focus:border-accent" />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {secilenUrun && rows.length === 0 && (
+            <div className="p-4 text-center text-xs text-zinc-500">Bu ürün için BOM satırı yok.</div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 p-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-300 hover:text-white">İptal</button>
+          <button onClick={kaydet} disabled={saving || gecersizSatir || degisenler.length === 0}
+            className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+            {saving ? 'Kaydediliyor...' : `Kaydet${degisenler.length > 0 ? ` (${degisenler.length})` : ''}`}
           </button>
         </div>
       </div>
