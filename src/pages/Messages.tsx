@@ -127,7 +127,7 @@ export function Messages() {
       Promise.all(unread.map(n => supabase.from('uys_operator_notes').update({ okundu: true }).eq('id', n.id)))
         .then(() => loadOwn())
     }
-  }, [selectedOprId, operatorNotes, loadAll])
+  }, [selectedOprId, operatorNotes, loadOwn])
 
   async function send() {
     if (!mesaj.trim() || !selectedOprId || sending) return
