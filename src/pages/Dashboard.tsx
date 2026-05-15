@@ -191,25 +191,38 @@ export function Dashboard() {
       .gte('tarih', from30Str).then(({ data }) => setHmRows((data || []) as any))
   }, [])
 
-  // ═══ TEMEL HESAPLAMALAR (eskiyle birebir aynı) ═══
-  const aktifOrders = orders.filter(o => {
-    if (!isStateActive((o as any).state)) return false  // kapali + iptal → dışla (state tek kaynak)
-    if ((o as any).sevkDurum === 'tamamen_sevk') return false  // D1: tamamen sevk edilenler aktif listede görünmesin
+  // ═══ TEMEL HESAPLAMALAR ═══
+
+  // G-1/G-2: logs → woId bazında Map; her logs.filter(woId) O(n) → O(1)
+  const logByWoId = useMemo(() => {
+    const map = new Map<string, typeof logs>()
+    for (const l of logs) {
+      const arr = map.get(l.woId)
+      if (arr) arr.push(l)
+      else map.set(l.woId, [l])
+    }
+    return map
+  }, [logs])
+
+  const aktifOrders = useMemo(() => orders.filter(o => {
+    if (!isStateActive((o as any).state)) return false
+    if ((o as any).sevkDurum === 'tamamen_sevk') return false
     const wos = workOrders.filter(w => w.orderId === o.id)
     const totalProd = wos.reduce((s, w) => {
-      const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+      const prod = (logByWoId.get(w.id) || []).reduce((a, l) => a + l.qty, 0)
       return s + (w.hedef > 0 ? Math.min(100, prod / w.hedef * 100) : 0)
     }, 0)
     const avgPct = wos.length ? totalProd / wos.length : 0
     return avgPct < 100
-  })
+  }), [orders, workOrders, logByWoId])
 
   const terminGecen = aktifOrders.filter(o => o.termin && o.termin < todayStr && (o as any).sevkDurum !== 'tamamen_sevk')
-  const acikWOs = workOrders.filter(w => {
+
+  const acikWOs = useMemo(() => workOrders.filter(w => {
     if (!isWorkOrderOpen(w)) return false
-    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    const prod = (logByWoId.get(w.id) || []).reduce((a, l) => a + l.qty, 0)
     return w.hedef > 0 && prod < w.hedef
-  })
+  }), [workOrders, logByWoId])
 
   const bugunFire = fireLogs.filter(f => f.tarih === todayStr)
   const toplamFire = bugunFire.reduce((a, f) => a + f.qty, 0)
@@ -220,7 +233,7 @@ export function Dashboard() {
   const gercekAktif = activeWork.filter(a => {
     const wo = workOrders.find(w => w.id === a.woId)
     if (!wo || wo.hedef <= 0) return false
-    const prod = logs.filter(l => l.woId === a.woId).reduce((s, l) => s + l.qty, 0)
+    const prod = (logByWoId.get(a.woId) || []).reduce((s, l) => s + l.qty, 0)
     return prod < wo.hedef
   })
 
@@ -266,7 +279,7 @@ export function Dashboard() {
   const planliWoIds = new Set(cuttingPlans.flatMap(p => (p.satirlar || []).flatMap((s: { kesimler?: { woId?: string }[] }) => (s.kesimler || []).map((k) => k.woId))))
   const kesimEksik = workOrders.filter(w => {
     if (!isWorkOrderOpen(w)) return false
-    const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    const prod = (logByWoId.get(w.id) || []).reduce((a, l) => a + l.qty, 0)
     if (prod >= w.hedef) return false
     if (planliWoIds.has(w.id)) return false
     return kesimOps.some(k => (w.opAd || '').toUpperCase().includes(k))
@@ -303,7 +316,7 @@ export function Dashboard() {
   const aktifKartlar = useMemo(() => {
     return gercekAktif.map(a => {
       const wo = workOrders.find(w => w.id === a.woId)
-      const prod = wo ? logs.filter(l => l.woId === wo.id).reduce((s, l) => s + l.qty, 0) : 0
+      const prod = wo ? (logByWoId.get(wo.id) || []).reduce((s, l) => s + l.qty, 0) : 0
       const hedef = wo?.hedef || 0
       const pct = hedef > 0 ? Math.min(100, Math.round(prod / hedef * 100)) : 0
       let dk = 0
@@ -314,7 +327,7 @@ export function Dashboard() {
       const saat = Math.floor(dk / 60)
       const mins = dk % 60
       const sureLabel = saat > 0 ? `${saat}s ${mins}dk` : `${mins}dk`
-      const oprLogs = logs.filter(l => l.woId === a.woId)
+      const oprLogs = logByWoId.get(a.woId) || []
       let sonLogDk = -1
       for (const l of oprLogs) {
         for (const o of (l.operatorlar || [])) {

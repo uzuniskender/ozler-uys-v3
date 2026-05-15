@@ -347,7 +347,7 @@ export function hesaplaMRP(
     if (!secilenOrdIds && ordIds !== null) return false  // genel mod değil
     if (!isWorkOrderOpen(w) || w.durum === 'kismi_tamam') return false
     if (!w.hm || !(w.hm as any[]).length) return false
-    const rc = recipes.find(r => r.mamulKod === w.malkod)
+    const rc = recipes.find(r => r.mamulKod?.toLowerCase().trim() === w.malkod?.toLowerCase().trim())
     if (!rc) return true  // Reçetesi yok → hm'den hesapla (PLY gibi)
     // v16.71 — Kesim WO + kesim planına dahil değilse → hm'den hesapla.
     // BOM YM stokunu görüp netAdet=0 yapabilir; kesim planı olmayan WO
@@ -376,7 +376,7 @@ export function hesaplaMRP(
     for (const hm of (w.hm as any[])) {
       const hmkod: string = hm.malkod || ''; if (!hmkod) continue
       const hmMiktar: number = hm.miktarTotal || hm.miktar || 0; if (!hmMiktar) continue
-      const hmM = materials.find(m => m.kod === hmkod)
+      const hmM = materials.find(m => m.kod?.toLowerCase().trim() === hmkod.toLowerCase().trim())
       if (!hmM || hmM.tip === 'YarıMamul') continue  // YM değil, hammadde/sarf olmalı
       // BOM patlamasından bu hammadde zaten geldiyse ekleme
       const key = hmkod.trim().toLowerCase() + '__' + wTermin
@@ -405,7 +405,7 @@ export function hesaplaMRP(
   dbg('[MRP DEBUG] Kapsam filtre:', { ordIds, toplamCuttingPlan: cuttingPlans.length, secilenWoIds: secilenWoIds ? [...secilenWoIds] : null })
   cuttingPlans.filter(p => p.durum !== 'tamamlandi').forEach(p => {
     const hmk = p.hamMalkod; if (!hmk) return
-    const hmM = materials.find(m => m.kod === hmk)
+    const hmM = materials.find(m => m.kod?.toLowerCase().trim() === hmk.toLowerCase().trim())
     // YarıMamul ise atla — tedarik edilmez
     if (hmM?.tip === 'YarıMamul') return
     // v16.02 — LEVHA (yüzey kesim) için override yapma. boykesimOptimum 1D bin-packing
