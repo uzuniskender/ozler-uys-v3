@@ -67,7 +67,7 @@ function bomPatlaNet(
   const sonuc: Record<string, { malkod: string; malad: string; tip: string; birim: string; miktar: number }> = {}
 
   // Bu mamul kodunun reçetesini bul
-  const rc = recipes.find(r => r.mamulKod === mamulKod)
+  const rc = recipes.find(r => r.mamulKod?.toLowerCase().trim() === mamulKod?.toLowerCase().trim())
   if (!rc?.satirlar?.length) {
     // DEBUG: Derinlik 0'da bu kola girmemeli eğer reçete varsa
     if (derinlik === 0) dbg(`[MRP DEBUG] ${mamulKod} için RECETE BULUNAMADI, üst reçetelerden HM toplanıyor! rc=`, rc)
@@ -94,9 +94,9 @@ function bomPatlaNet(
         for (let i = ymDepth; i < parcalar.length - 1; i++) {
           const ebk = parcalar.slice(0, i + 1).join('.')
           const eb = kirnoMap[ebk]
-          if (eb?.tip === 'YarıMamul') ebCarpan *= (eb.miktar || 1)
+          if (eb?.tip === 'YarıMamul') ebCarpan *= (eb.miktar ?? 1)
         }
-        const tm = (s.miktar || 1) * ebCarpan * netAdet
+        const tm = (s.miktar ?? 1) * ebCarpan * netAdet
         if (!sonuc[hmalkod]) sonuc[hmalkod] = { malkod: hmalkod, malad: s.malad || '', tip: s.tip || 'Hammadde', birim: s.birim || 'Adet', miktar: 0 }
         sonuc[hmalkod].miktar += tm
       })
@@ -110,9 +110,9 @@ function bomPatlaNet(
         for (let i = ymDepth; i < parcalar.length - 1; i++) {
           const ebk = parcalar.slice(0, i + 1).join('.')
           const eb = kirnoMap[ebk]
-          if (eb?.tip === 'YarıMamul') ebCarpan *= (eb.miktar || 1)
+          if (eb?.tip === 'YarıMamul') ebCarpan *= (eb.miktar ?? 1)
         }
-        const ymIht = (s.miktar || 1) * ebCarpan * netAdet
+        const ymIht = (s.miktar ?? 1) * ebCarpan * netAdet
         const ymSt = Math.floor(getStok(ymalkod, stokHareketler))
         const ymIhtNet = Math.max(0, ymIht - ymSt)
         if (ymIhtNet > 0) {
@@ -137,7 +137,7 @@ function bomPatlaNet(
     satirlar.forEach(s => {
       const malkod = s.malkod || ''; if (!malkod) return
       const tip = s.tip || 'Hammadde'
-      const miktar = (s.miktar || 1) * netAdet
+      const miktar = (s.miktar ?? 1) * netAdet
       if (tip === 'YarıMamul' && !ziyaret[malkod]) {
         const z2 = { ...ziyaret, [malkod]: true }
         const alt = bomPatlaNet(malkod, miktar, derinlik + 1, z2, recipes, stokHareketler, materials)
@@ -174,7 +174,7 @@ function bomPatlaNet(
         const altSatir = kirnoMap[altKirno]
         if (!altSatir) continue
         const ustNet = netIhtiyac[ustKirno] !== undefined ? netIhtiyac[ustKirno] : netAdet
-        const brutIht = ustNet * (altSatir.miktar || 1)
+        const brutIht = ustNet * (altSatir.miktar ?? 1)
         if (altSatir.tip === 'YarıMamul') {
           const ymSt = Math.floor(getStok(altSatir.malkod || '', stokHareketler))
           netIhtiyac[altKirno] = Math.max(0, brutIht - ymSt)
@@ -183,7 +183,7 @@ function bomPatlaNet(
         }
       }
 
-      const hmNet = netIhtiyac[sk] !== undefined ? netIhtiyac[sk] : (s.miktar || 1) * netAdet
+      const hmNet = netIhtiyac[sk] !== undefined ? netIhtiyac[sk] : (s.miktar ?? 1) * netAdet
       if (hmNet <= 0) return
       if (!sonuc[malkod]) sonuc[malkod] = { malkod, malad: s.malad || '', tip: s.tip || 'Hammadde', birim: s.birim || 'Adet', miktar: 0 }
       sonuc[malkod].miktar += hmNet
