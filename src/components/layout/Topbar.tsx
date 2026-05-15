@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
 import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { okunduIsaretle, topluOkunduIsaretle } from '@/services/bildirimlerService'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
 import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
@@ -387,13 +387,13 @@ function BildirimPanel({ bildirimler, onClose, onAction }: {
   onAction: () => void
 }) {
   async function isaretleOkundu(id: string) {
-    await supabase.from('uys_bildirimler').update({ okundu: true, okundu_tarih: new Date().toISOString() }).eq('id', id)
+    await okunduIsaretle(id)
     onAction()
   }
   async function hepsiniOkunduIsaretle() {
     const ids = bildirimler.map(b => b.id)
     if (!ids.length) return
-    await supabase.from('uys_bildirimler').update({ okundu: true, okundu_tarih: new Date().toISOString() }).in('id', ids)
+    await topluOkunduIsaretle(ids)
     onAction()
     toast.success(`${ids.length} bildirim okundu isaretlendi`)
   }
