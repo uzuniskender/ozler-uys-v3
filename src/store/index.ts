@@ -1,366 +1,524 @@
-import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
-import type {
-  Order, WorkOrder, ProductionLog, Material, Operation,
-  Station, Operator, Recipe, BomTree, StokHareket,
-  CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
-  Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem,
-  HmTip, TestRun, Problem, Kullanici, AcikBar, Izin, Bildirim, PendingFlow
-} from '@/types'
+// ═══ CORE TYPES ═══
 
-// ═══ DB → JS MAPPERS ═══
-const M = {
-  order: (r: Record<string, unknown>): Order => ({
-    id: r.id as string, siparisNo: (r.siparis_no || '') as string, musteri: (r.musteri || '') as string,
-    tarih: (r.tarih || '') as string, termin: (r.termin || '') as string, not: (r.not_ || '') as string,
-    urunler: (r.urunler || []) as Order['urunler'], mamulKod: (r.mamul_kod || '') as string,
-    mamulAd: (r.mamul_ad || '') as string, adet: (r.adet as number) || 1,
-    receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
-    durum: (r.durum || '') as string, oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
-    state: (r.state || 'yeni') as Order['state'],
-    sevkDurum: (r.sevk_durum || '') as string,
-  }),
-  wo: (r: Record<string, unknown>): WorkOrder => {
-    const malkod = (r.malkod || '') as string
-    const rawHm = (r.hm || []) as WorkOrder['hm']
-    const hm = malkod ? rawHm.filter(h => h.malkod !== malkod) : rawHm
-    return {
-      id: r.id as string, orderId: (r.order_id || '') as string, rcId: (r.rc_id || '') as string,
-      sira: (r.sira as number) || 0, kirno: (r.kirno || '') as string,
-      opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string, opAd: (r.op_ad || '') as string,
-      istId: (r.ist_id || '') as string, istKod: (r.ist_kod || '') as string, istAd: (r.ist_ad || '') as string,
-      malkod, malad: (r.malad || '') as string,
-      hedef: (r.hedef as number) || 0, mpm: (r.mpm as number) || 1,
-      hm, ieNo: (r.ie_no || '') as string,
-      whAlloc: (r.wh_alloc as number) || 0, hazirlikSure: (r.hazirlik_sure as number) || 0,
-      islemSure: (r.islem_sure as number) || 0, durum: (r.durum || '') as string,
-      bagimsiz: !!r.bagimsiz, siparisDisi: !!r.siparis_disi,
-      mamulKod: (r.mamul_kod || '') as string, mamulAd: (r.mamul_ad || '') as string,
-      mamulAuto: !!r.mamul_auto, operatorId: (r.operator_id || null) as string | null,
-      not: (r.not_ || '') as string, olusturma: (r.olusturma || '') as string, termin: (r.termin || '') as string,
-    }
-  },
-  log: (r: Record<string, unknown>): ProductionLog => ({
-    id: r.id as string, woId: (r.wo_id || '') as string, tarih: (r.tarih || '') as string,
-    saat: (r.saat || '') as string,
-    qty: (r.qty as number) || 0, fire: (r.fire as number) || 0,
-    operatorlar: (r.operatorlar || []) as ProductionLog['operatorlar'],
-    duruslar: (r.duruslar || []) as ProductionLog['duruslar'],
-    not: (r.not_ || '') as string, malkod: (r.malkod || '') as string,
-    ieNo: (r.ie_no || '') as string, operatorId: (r.operator_id || null) as string | null,
-    vardiya: (r.vardiya || '') as string,
-  }),
-  material: (r: Record<string, unknown>): Material => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    tip: (r.tip || '') as string, hammaddeTipi: (r.hammadde_tipi || '') as string, birim: (r.birim || 'Adet') as string,
-    boy: (r.boy as number) || 0, en: (r.en as number) || 0, kalinlik: (r.kalinlik as number) || 0,
-    uzunluk: (r.uzunluk as number) || 0, cap: (r.cap as number) || 0, icCap: (r.ic_cap as number) || 0, minStok: (r.min_stok as number) || 0,
-    opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string,
-    revizyon: (r.revizyon as number) || 0, revizyonTarihi: (r.revizyon_tarihi || '') as string,
-    oncekiId: (r.onceki_id || '') as string, aktif: r.aktif !== false,
-    birimKgMetre: (r.birim_kg_metre as number | null) ?? undefined,
-  }),
-  operation: (r: Record<string, unknown>): Operation => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    bolum: (r.bolum || '') as string,
-  }),
-  station: (r: Record<string, unknown>): Station => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    opIds: (r.op_ids || []) as string[],
-    durum: (r.durum || '') as string, arizaNot: (r.ariza_not || '') as string,
-  }),
-  operator: (r: Record<string, unknown>): Operator => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    bolum: (r.bolum || '') as string,
-    bolumler: (r.bolumler || null) as string[] | undefined,
-    aktif: r.aktif !== false, sifre: (r.sifre || '') as string,
-    durum: (r.durum || '') as string,
-  }),
-  recipe: (r: Record<string, unknown>): Recipe => ({
-    id: r.id as string, rcKod: (r.rc_kod || '') as string, ad: (r.ad || '') as string,
-    bomId: (r.bom_id || '') as string, mamulKod: (r.mamul_kod || '') as string,
-    mamulAd: (r.mamul_ad || '') as string, satirlar: (r.satirlar || []) as Recipe['satirlar'],
-  }),
-  bomTree: (r: Record<string, unknown>): BomTree => ({
-    id: r.id as string, mamulKod: (r.mamul_kod || '') as string,
-    mamulAd: (r.mamul_ad || '') as string, ad: (r.ad || '') as string,
-    rows: (r.rows || []) as BomTree['rows'],
-  }),
-  stokHareket: (r: Record<string, unknown>): StokHareket => ({
-    id: r.id as string, tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string,
-    malad: (r.malad || '') as string, miktar: (r.miktar as number) || 0,
-    tip: (r.tip || 'giris') as 'giris' | 'cikis',
-    logId: (r.log_id || '') as string, woId: (r.wo_id || '') as string,
-    aciklama: (r.aciklama || '') as string,
-    rezervOrderId: (r.rezerv_order_id || null) as string | null,
-  }),
-  cuttingPlan: (r: Record<string, unknown>): CuttingPlan => ({
-    id: r.id as string, hamMalkod: (r.ham_malkod || '') as string, hamMalad: (r.ham_malad || '') as string,
-    hamBoy: (r.ham_boy as number) || 0, hamEn: (r.ham_en as number) || 0,
-    kesimTip: (r.kesim_tip || '') as string, durum: (r.durum || 'bekliyor') as string,
-    satirlar: (r.satirlar || []) as CuttingPlan['satirlar'], tarih: (r.tarih || '') as string,
-    gerekliAdet: (r.gerekli_adet as number) || 0,
-  }),
-  tedarik: (r: Record<string, unknown>): Tedarik => ({
-    id: r.id as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    miktar: (r.miktar as number) || 0, birim: (r.birim || 'Adet') as string,
-    orderId: (r.order_id || '') as string, siparisNo: (r.siparis_no || '') as string,
-    durum: (r.durum || '') as string, geldi: !!r.geldi,
-    teslimTarihi: (r.teslim_tarihi || '') as string, tedarikcId: (r.tedarikci_id || '') as string,
-    tedarikcAd: (r.tedarikci_ad || '') as string, not: (r.not_ || '') as string,
-    tarih: (r.tarih || '') as string,
-  }),
-  mrpRezerve: (r: Record<string, unknown>): MrpRezerve => ({
-    id: r.id as string, orderId: (r.order_id || '') as string,
-    malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    miktar: (r.miktar as number) || 0, birim: (r.birim || 'Adet') as string,
-    mrpRunId: (r.mrp_run_id || '') as string, tarih: (r.tarih || '') as string,
-  }),
-  tedarikci: (r: Record<string, unknown>): Tedarikci => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    adres: (r.adres || '') as string, tel: (r.tel || '') as string,
-    email: (r.email || '') as string, not: (r.not_ || '') as string,
-  }),
-  durusKodu: (r: Record<string, unknown>): DurusKodu => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    kategori: (r.kategori || '') as string,
-  }),
-  customer: (r: Record<string, unknown>): Customer => ({
-    id: r.id as string, ad: (r.ad || '') as string, kod: (r.kod || '') as string,
-  }),
-  sevk: (r: Record<string, unknown>): Sevk => ({
-    id: r.id as string, orderId: (r.order_id || '') as string, siparisNo: (r.siparis_no || '') as string,
-    musteri: (r.musteri || '') as string, tarih: (r.tarih || '') as string,
-    kalemler: (r.kalemler || []) as Sevk['kalemler'], not: (r.not_ || '') as string,
-    sevkNo: (r.sevk_no || '') as string,
-    tip: (r.tip || '') as string,
-    musteriKod: (r.musteri_kod || '') as string,
-    tasiyici: (r.tasiyici || '') as string,
-    plaka: (r.plaka || '') as string,
-    olusturan: (r.olusturan || '') as string,
-  }),
-  operatorNote: (r: Record<string, unknown>): OperatorNote => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    tarih: (r.tarih || '') as string, saat: (r.saat || '') as string,
-    mesaj: (r.mesaj || '') as string, okundu: !!r.okundu,
-    cevap: (r.cevap || '') as string, cevaplayan: (r.cevaplayan || '') as string,
-    cevapTarih: (r.cevap_tarih || '') as string,
-    kategori: (r.kategori || undefined) as OperatorNote['kategori'],
-    oncelik: (r.oncelik || 'Normal') as OperatorNote['oncelik'],
-  }),
-  activeWork: (r: Record<string, unknown>): ActiveWork => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    woId: (r.wo_id || '') as string, woAd: (r.wo_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, tarih: (r.tarih || '') as string,
-  }),
-  fireLog: (r: Record<string, unknown>): FireLog => ({
-    id: r.id as string, logId: (r.log_id || '') as string, woId: (r.wo_id || '') as string,
-    tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
-    operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
-    telafiWoId: (r.telafi_wo_id || undefined) as string | undefined,
-    tip: (r.tip || undefined) as FireLog['tip'],
-    uzunlukMm: (r.uzunluk_mm as number) || undefined,
-  }),
-  checklist: (r: Record<string, unknown>): ChecklistItem => ({
-    id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],
-    baslik: (r.baslik || '') as string, aciklama: (r.aciklama || '') as string,
-    atanan: (r.atanan || '') as string, oncelik: (r.oncelik || 'normal') as ChecklistItem['oncelik'],
-    durum: (r.durum || 'bekliyor') as ChecklistItem['durum'], tarih: (r.tarih || '') as string,
-    termin: (r.termin || '') as string, kategori: (r.kategori || '') as string,
-    resimler: (r.resimler || []) as ChecklistItem['resimler'],
-    tamamlanma: (r.tamamlanma || '') as string, olusturan: (r.olusturan || '') as string,
-    notlar: (r.notlar || '') as string,
-  }),
-  hmTip: (r: Record<string, unknown>): HmTip => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    aciklama: (r.aciklama || '') as string, sira: (r.sira as number) || 0,
-    olusturma: (r.olusturma || '') as string,
-  }),
-  testRun: (r: Record<string, unknown>): TestRun => ({
-    id: r.id as string, baslangic: (r.baslangic || '') as string,
-    bitis: (r.bitis || '') as string, durum: (r.durum || 'aktif') as TestRun['durum'],
-    userId: (r.user_id || '') as string, userAd: (r.user_ad || '') as string,
-    aciklama: (r.aciklama || '') as string,
-    temizlenenKayitSayisi: (r.temizlenen_kayit_sayisi || {}) as Record<string, number>,
-    not: (r.not_ || '') as string,
-  }),
-  problem: (r: Record<string, unknown>): Problem => ({
-    id: r.id as string, problem: (r.problem || '') as string,
-    termin: (r.termin || '') as string, sorumlu: (r.sorumlu || '') as string,
-    durum: (r.durum || 'Açık') as string, yapilanlar: (r.yapilanlar || '') as string,
-    notlar: (r.notlar || '') as string, olusturan: (r.olusturan || '') as string,
-    olusturma: (r.olusturma || '') as string, sonDegistiren: (r.son_degistiren || '') as string,
-    sonDegistirme: (r.son_degistirme || '') as string, kapatmaTarihi: (r.kapatma_tarihi || '') as string,
-  }),
-  kullanici: (r: Record<string, unknown>): Kullanici => ({
-    id: r.id as string, ad: (r.ad || '') as string,
-    kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
-    rol: (r.rol || 'depocu') as Kullanici['rol'], aktif: !!r.aktif,
-  }),
-  acikBar: (r: Record<string, unknown>): AcikBar => ({
-    id: r.id as string, hamMalkod: (r.ham_malkod || '') as string, hamMalad: (r.ham_malad || '') as string,
-    uzunlukMm: (r.uzunluk_mm as number) || 0, kaynakPlanId: (r.kaynak_plan_id || '') as string,
-    kaynakSatirId: (r.kaynak_satir_id || '') as string, barIndex: (r.bar_index as number) || 0,
-    olusmaTarihi: (r.olusmaTarihi || r.olusma_tarihi || '') as string,
-    durum: (r.durum || 'acik') as AcikBar['durum'],
-    tuketimLogId: (r.tuketim_log_id || '') as string, tuketimTarihi: (r.tuketim_tarihi || '') as string,
-    not: (r.not_ || '') as string,
-    hurdaTarihi: (r.hurda_tarihi || undefined) as string | undefined,
-    hurdaSebep: (r.hurda_sebep || undefined) as string | undefined,
-    hurdaKullaniciId: (r.hurda_kullanici_id || undefined) as string | undefined,
-    hurdaKullaniciAd: (r.hurda_kullanici_ad || undefined) as string | undefined,
-  }),
-  izin: (r: Record<string, unknown>): Izin => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, bitis: (r.bitis || '') as string,
-    tip: (r.tip || '') as string, durum: (r.durum || '') as string,
-    saatBaslangic: (r.saat_baslangic || '') as string, saatBitis: (r.saat_bitis || '') as string,
-    onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
-    not: (r.not_ || '') as string, olusturan: (r.olusturan || '') as string,
-  }),
-  bildirim: (r: Record<string, unknown>): Bildirim => ({
-    id: r.id as string, tip: (r.tip || 'sari') as Bildirim['tip'],
-    kategori: (r.kategori || '') as string, baslik: (r.baslik || '') as string,
-    mesaj: (r.mesaj || '') as string, hedefKullaniciId: (r.hedef_kullanici_id || '') as string,
-    refId: (r.ref_id || '') as string, refTip: (r.ref_tip || '') as string,
-    okundu: !!r.okundu, okunduTarih: (r.okundu_tarih || '') as string,
-    olusturma: (r.olusturma || '') as string, olusturan: (r.olusturan || '') as string,
-  }),
-  pendingFlow: (r: Record<string, unknown>): PendingFlow => ({
-    id: r.id as string, flowType: (r.flow_type || '') as PendingFlow['flowType'],
-    currentStep: (r.current_step || '') as PendingFlow['currentStep'],
-    stateData: (r.state_data || {}) as PendingFlow['stateData'],
-    userId: (r.user_id || '') as string, userAd: (r.user_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, sonAktivite: (r.son_aktivite || '') as string,
-    durum: (r.durum || 'aktif') as PendingFlow['durum'],
-    not: (r.not_ || '') as string,
-  }),
+// IE #14 Faz B (v16.33): otomatik hesaplanan siparis state.
+// DB'de order_state ENUM, compute_order_state() fonksiyonu ile guncellenir.
+// 10 state — terminal'ler: kapali, iptal.
+// Manuel UPDATE yapmayin; trigger zincirinden geliyor.
+export type OrderState =
+  | 'yeni'
+  | 'recete_yok'
+  | 'plan_bekliyor'
+  | 'tedarik_bekliyor'
+  | 'uretilebilir'
+  | 'uretiliyor'
+  | 'tamamlandi'
+  | 'kapanma_bekliyor'
+  | 'kapali'
+  | 'iptal'
+
+export interface Order {
+  id: string
+  siparisNo: string
+  musteri: string
+  tarih: string
+  termin: string
+  not: string
+  urunler: OrderItem[]
+  mamulKod: string
+  mamulAd: string
+  adet: number
+  receteId: string
+  mrpDurum: string
+  durum: string
+  sevkDurum: string
+  oncelik: number
+  olusturma: string
+  // IE #14 Faz B (v16.33): DB-trigger ile otomatik hesaplanir.
+  // Gecis donemi: durum/sevkDurum/mrpDurum kolonlari hala UI'de kullanilabilir;
+  // state Slice 3'te rozet kaynagi olarak gelir.
+  state: OrderState
 }
 
-interface UYSStore {
-  orders: Order[]; workOrders: WorkOrder[]; logs: ProductionLog[]
-  materials: Material[]; operations: Operation[]; stations: Station[]
-  operators: Operator[]; recipes: Recipe[]; bomTrees: BomTree[]
-  stokHareketler: StokHareket[]; cuttingPlans: CuttingPlan[]
-  tedarikler: Tedarik[]; tedarikciler: Tedarikci[]; durusKodlari: DurusKodu[]; mrpRezerve: MrpRezerve[]
-  customers: Customer[]; sevkler: Sevk[]; operatorNotes: OperatorNote[]
-  activeWork: ActiveWork[]; fireLogs: FireLog[]; checklist: ChecklistItem[]
-  acikBarlar: AcikBar[]
-  izinler: Izin[]; bildirimler: Bildirim[]; pendingFlows: PendingFlow[]
-  hmTipler: HmTip[]; testRuns: TestRun[]; problemler: Problem[]; kullanicilar: Kullanici[]
-  yetkiMap: Record<string, string[]>
-  loading: boolean; synced: boolean
-  loadAll: () => Promise<void>
-  setOrders: (orders: Order[]) => void
-  setWorkOrders: (wos: WorkOrder[]) => void
-  reloadTables: (tables: string[]) => Promise<void>
+export interface OrderItem {
+  rcId: string
+  mamulKod: string
+  mamulAd: string
+  adet: number
+  termin: string
+  not?: string
+  stoktan?: boolean   // true → WO açılmaz, YM stoktan karşılanır
 }
 
-export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<string, unknown>) => unknown }> = [
-  { key: 'orders', table: 'uys_orders', mapper: M.order },
-  { key: 'workOrders', table: 'uys_work_orders', mapper: M.wo },
-  { key: 'logs', table: 'uys_logs', mapper: M.log },
-  { key: 'materials', table: 'uys_malzemeler', mapper: M.material },
-  { key: 'operations', table: 'uys_operations', mapper: M.operation },
-  { key: 'stations', table: 'uys_stations', mapper: M.station },
-  { key: 'operators', table: 'uys_operators', mapper: M.operator },
-  { key: 'recipes', table: 'uys_recipes', mapper: M.recipe },
-  { key: 'bomTrees', table: 'uys_bom_trees', mapper: M.bomTree },
-  { key: 'stokHareketler', table: 'uys_stok_hareketler', mapper: M.stokHareket },
-  { key: 'cuttingPlans', table: 'uys_kesim_planlari', mapper: M.cuttingPlan },
-  { key: 'tedarikler', table: 'uys_tedarikler', mapper: M.tedarik },
-  { key: 'mrpRezerve', table: 'uys_mrp_rezerve', mapper: M.mrpRezerve },
-  { key: 'tedarikciler', table: 'uys_tedarikciler', mapper: M.tedarikci },
-  { key: 'durusKodlari', table: 'uys_durus_kodlari', mapper: M.durusKodu },
-  { key: 'customers', table: 'uys_customers', mapper: M.customer },
-  { key: 'sevkler', table: 'uys_sevkler', mapper: M.sevk },
-  { key: 'operatorNotes', table: 'uys_operator_notes', mapper: M.operatorNote },
-  { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
-  { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
-  { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
-  { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
-  { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
-  { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
-  { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
-  { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
-  { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
-  { key: 'bildirimler', table: 'uys_bildirimler', mapper: M.bildirim },
-  { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
-]
+export interface WorkOrder {
+  id: string
+  orderId: string
+  rcId: string
+  sira: number
+  kirno: string
+  opId: string
+  opKod: string
+  opAd: string
+  istId: string
+  istKod: string
+  istAd: string
+  malkod: string
+  malad: string
+  hedef: number
+  mpm: number
+  hm: HammaddeItem[]
+  ieNo: string
+  whAlloc: number
+  hazirlikSure: number
+  islemSure: number
+  durum: string
+  bagimsiz: boolean
+  siparisDisi: boolean
+  termin: string
+  mamulKod: string
+  mamulAd: string
+  mamulAuto: boolean
+  operatorId: string | null
+  not: string
+  olusturma: string
+}
 
-export const useStore = create<UYSStore>((set) => ({
-  orders: [], workOrders: [], logs: [], materials: [], operations: [],
-  stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
-  cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
-  acikBarlar: [],
-  izinler: [], bildirimler: [], pendingFlows: [],
-  hmTipler: [], testRuns: [], problemler: [], kullanicilar: [], yetkiMap: {},
-  loading: true, synced: false,
+export interface HammaddeItem {
+  malkod: string
+  malad: string
+  miktarTotal: number
+}
 
-  loadAll: async () => {
-    set({ loading: true })
-    try {
-      const results = await Promise.all(TABLE_MAP.map(t => supabase.from(t.table).select('*')))
-      const updates: Partial<UYSStore> = {}
-      let ok = 0
-      results.forEach((res, i) => {
-        const t = TABLE_MAP[i]
-        if (!res.error && res.data) {
-          (updates as Record<string, unknown>)[t.key] = res.data.map(r => t.mapper(r as Record<string, unknown>))
-          ok++
-        }
-      })
-      // stokHareketler sayfalama — varsayılan limit (1000) aşılabilir (v16.53 fix)
-      {
-        const PAGE = 1000
-        let sayfa = 0, tumSH: StokHareket[] = []
-        while (true) {
-          const { data, error } = await supabase
-            .from('uys_stok_hareketler')
-            .select('*')
-            .range(sayfa * PAGE, (sayfa + 1) * PAGE - 1)
-          if (error || !data || data.length === 0) break
-          tumSH = [...tumSH, ...data.map(r => M.stokHareket(r as Record<string, unknown>))]
-          if (data.length < PAGE) break
-          sayfa++
-        }
-        if (tumSH.length > 0) updates.stokHareketler = tumSH
-      }
-      // yetkiMap — ayrı yükle (uys_yetki_ayarlari: aksiyon + roller kolonları)
-      const { data: yetkiData } = await supabase.from('uys_yetki_ayarlari').select('*')
-      if (yetkiData) {
-        const yetkiMap: Record<string, string[]> = {}
-        yetkiData.forEach((r: Record<string, unknown>) => {
-          if (r.aksiyon) yetkiMap[r.aksiyon as string] = (r.roller || []) as string[]
-        })
-        updates.yetkiMap = yetkiMap
-      }
-      if (ok >= 5) {
-        set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
-        console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)
-      } else {
-        set({ loading: false, synced: false })
-      }
-    } catch (e) {
-      console.error('loadAll:', e)
-      set({ loading: false, synced: false })
-    }
-  },
-  setOrders: (orders) => set({ orders }),
-  setWorkOrders: (workOrders) => set({ workOrders }),
-  reloadTables: async (tables: string[]) => {
-    const hedefler = TABLE_MAP.filter(t => tables.includes(t.table))
-    if (hedefler.length === 0) return
-    const results = await Promise.all(hedefler.map(t => supabase.from(t.table).select('*')))
-    const updates: Partial<UYSStore> = {}
-    results.forEach((res, i) => {
-      const t = hedefler[i]
-      if (!res.error && res.data) {
-        (updates as Record<string, unknown>)[t.key] = res.data.map(r => t.mapper(r as Record<string, unknown>))
-      }
-    })
-    set(updates as Partial<UYSStore>)
-  },
-}))
+export interface ProductionLog {
+  id: string
+  woId: string
+  tarih: string
+  saat: string
+  qty: number
+  fire: number
+  operatorlar: LogOperator[]
+  duruslar: LogDurus[]
+  not: string
+  malkod: string
+  ieNo: string
+  operatorId: string | null
+  vardiya: string
+}
+
+export interface LogOperator {
+  id: string
+  ad: string
+  bas: string
+  bit: string
+}
+
+export interface LogDurus {
+  sebep: string
+  bas: string
+  bit: string
+  not: string
+}
+
+export interface Material {
+  id: string
+  kod: string
+  ad: string
+  tip: string
+  hammaddeTipi: string
+  birim: string
+  boy: number
+  en: number
+  kalinlik: number
+  uzunluk: number
+  cap: number
+  icCap: number
+  minStok: number
+  opId: string
+  opKod: string
+  revizyon: number
+  revizyonTarihi: string
+  oncekiId: string
+  aktif: boolean
+  birimKgMetre?: number  // v16.78 — birim_kg_metre (kg/m)
+}
+
+export interface HmTip {
+  id: string
+  kod: string
+  ad: string
+  aciklama: string
+  sira: number
+  olusturma: string
+}
+
+export interface Operation {
+  id: string
+  kod: string
+  ad: string
+  bolum?: string
+}
+
+export interface Station {
+  id: string
+  kod: string
+  ad: string
+  opIds: string[]
+  durum: string
+  arizaNot: string
+}
+
+export interface Operator {
+  id: string
+  kod: string
+  ad: string
+  bolum: string
+  bolumler?: string[]   // v16.85 — birden fazla bölüm atanabilir
+  aktif: boolean
+  sifre: string
+  durum: string
+}
+
+export interface Recipe {
+  id: string
+  rcKod: string
+  ad: string
+  bomId: string
+  mamulKod: string
+  mamulAd: string
+  satirlar: RecipeRow[]
+}
+
+export interface RecipeRow {
+  id: string
+  kirno: string
+  malkod: string
+  malad: string
+  tip: string
+  miktar: number
+  birim: string
+  opId: string
+  istId: string
+  hazirlikSure: number
+  islemSure: number
+  sureBirim?: string // 'dk' | 'sn'
+}
+
+export interface BomTree {
+  id: string
+  mamulKod: string
+  mamulAd: string
+  ad: string
+  rows: BomRow[]
+}
+
+export interface BomRow {
+  id: string
+  kirno: string
+  malkod: string
+  malad: string
+  tip: string
+  miktar: number
+  birim: string
+}
+
+export interface StokHareket {
+  id: string
+  tarih: string
+  malkod: string
+  malad: string
+  miktar: number
+  tip: 'giris' | 'cikis' | 'bar_acilis'
+  logId: string
+  woId: string
+  aciklama: string
+  rezervOrderId?: string | null
+}
+
+export interface CuttingPlan {
+  id: string
+  hamMalkod: string
+  hamMalad: string
+  hamBoy: number
+  hamEn: number
+  kesimTip: string
+  durum: string
+  satirlar: CuttingRow[]
+  tarih: string
+  gerekliAdet: number
+}
+
+export interface CuttingRow {
+  id: string
+  hamAdet: number
+  fireMm: number
+  kesimler: CuttingItem[]
+  durum: string
+  havuzBarId?: string   // v15.35 — havuz barı kullanılıyorsa dolu
+}
+
+export interface CuttingItem {
+  woId: string
+  ieNo: string
+  malkod: string
+  malad: string
+  parcaBoy: number
+  parcaEn: number
+  adet: number
+  tamamlandi: number
+}
+
+export interface Tedarik {
+  id: string
+  malkod: string
+  malad: string
+  miktar: number
+  birim: string
+  orderId: string
+  siparisNo: string
+  durum: string
+  geldi: boolean
+  teslimTarihi: string
+  tedarikcId: string
+  tedarikcAd: string
+  not: string
+  tarih: string
+}
+
+export interface MrpRezerve {
+  id: string
+  orderId: string
+  malkod: string
+  malad: string
+  miktar: number
+  birim: string
+  mrpRunId: string
+  tarih: string
+}
+export interface Tedarikci {
+  id: string
+  kod: string
+  ad: string
+  adres: string
+  tel: string
+  email: string
+  not: string
+}
+
+export interface DurusKodu {
+  id: string
+  kod: string
+  ad: string
+  kategori: string
+}
+
+export interface Customer {
+  id: string
+  ad: string
+  kod: string
+}
+
+export interface Sevk {
+  id: string
+  orderId: string
+  siparisNo: string
+  musteri: string
+  tarih: string
+  kalemler: SevkKalem[]
+  not: string
+  // v16.30a — DB'de var olan ek alanlar (mapper'a + PDF'e)
+  sevkNo?: string
+  tip?: string // 'siparis' | 'iade' | 'numune' vb (DB'de tip kolonu)
+  musteriKod?: string
+  tasiyici?: string
+  plaka?: string
+  olusturan?: string
+}
+
+export interface SevkKalem {
+  malkod: string
+  malad: string
+  miktar: number
+  birim?: string // v16.30a — PDF Birim sütunu için
+}
+
+export interface OperatorNote {
+  id: string
+  opId: string
+  opAd: string
+  tarih: string
+  saat: string
+  mesaj: string
+  okundu: boolean
+  cevap?: string
+  cevaplayan?: string
+  cevapTarih?: string
+  kategori?: OperatorNoteKategori
+  oncelik?: OperatorNoteOncelik
+}
+
+export type OperatorNoteKategori = 'Stok' | 'Arıza' | 'Malzeme' | 'Talep' | 'Diğer'
+export type OperatorNoteOncelik = 'Normal' | 'Acil'
+
+export const OPERATOR_NOTE_KATEGORILER: OperatorNoteKategori[] = ['Stok', 'Arıza', 'Malzeme', 'Talep', 'Diğer']
+
+export interface ActiveWork {
+  id: string
+  opId: string
+  opAd: string
+  woId: string
+  woAd: string
+  baslangic: string
+  tarih: string
+}
+
+export interface FireLog {
+  id: string
+  logId: string
+  woId: string
+  tarih: string
+  malkod: string
+  malad: string
+  qty: number
+  ieNo: string
+  opAd: string
+  operatorlar: LogOperator[]
+  not: string
+  telafiWoId?: string
+  // v15.34.3 — parça fire'ı ('parca') ile bar hurda ('bar_hurda') ayrımı
+  tip?: 'parca' | 'bar_hurda'
+  uzunlukMm?: number  // sadece tip='bar_hurda' için dolu
+}
+
+export interface ChecklistItem {
+  id: string
+  tip: 'gorev' | 'istek'
+  baslik: string
+  aciklama: string
+  atanan: string
+  oncelik: 'dusuk' | 'normal' | 'yuksek' | 'acil'
+  durum: 'bekliyor' | 'devam' | 'tamamlandi' | 'iptal'
+  tarih: string
+  termin: string
+  kategori: string
+  resimler: { url: string; ad: string; tarih: string }[]
+  tamamlanma: string
+  olusturan: string
+  notlar: string
+}
+
+export interface Izin {
+  id: string
+  opId: string
+  opAd: string
+  baslangic: string
+  bitis: string
+  tip: string
+  durum: string
+  saatBaslangic: string
+  saatBitis: string
+  onaylayan: string
+  onayTarihi: string
+  not: string
+  olusturan: string
+}
+
+export interface Kullanici {
+  id: string
+  ad: string
+  kullaniciAd: string
+  sifre: string
+  rol: 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
+  aktif: boolean
+}
+
+// v15.31 — Bar Model: açık bar havuzu
+// v15.34 — hurda alanları
+export interface AcikBar {
+  id: string
+  hamMalkod: string          // kaynak ham malzeme (BORU 6000 MM vs.)
+  hamMalad: string
+  uzunlukMm: number          // kalan uzunluk
+  kaynakPlanId: string       // uys_kesim_planlari.id
+  kaynakSatirId: string      // plan satir.id
+  barIndex: number           // satırdaki bar sırası (hamAdet>1 için)
+  olusmaTarihi: string
+  durum: 'acik' | 'tuketildi' | 'hurda'
+  tuketimLogId: string       // tüketildiyse hangi log
+  tuketimTarihi: string
+  not: string
+  // v15.34 — Hurda işareti
+  hurdaTarihi?: string
+  hurdaSebep?: string
+  hurdaKullaniciId?: string
+  hurdaKullaniciAd?: string
+}
+
+export interface Problem {
+  id: string
+  problem: string          // Problem tanımı (zorunlu)
+  termin: string           // ISO date 'YYYY-MM-DD' (opsiyonel)
+  sorumlu: string          // Ad Soyad (metin)
+  durum: string            // 'Açık' | 'Devam' | 'Kapandı'
+  yapilanlar: string       // Aksiyon tarihçesi (stamp'lı append)
+  notlar: string           // Ek notlar (opsiyonel)
+  olusturan: string
+  olusturma: string        // ISO datetime
+  sonDegistiren: string
+  sonDegistirme: string    // ISO datetime
+  kapatmaTarihi: string    // ISO date
+}
+
+// v15.36 — Yarım İş Takibi
+export type FlowType = 'siparis' | 'manuel_ie' | 'ym_ie'
+export type FlowStep = 'siparis' | 'kesim' | 'mrp' | 'tedarik' | 'tamamlandi' | 'iptal'
+export type FlowDurum = 'aktif' | 'tamamlandi' | 'iptal'
+
+export interface PendingFlow {
+  id: string
+  flowType: FlowType
+  currentStep: FlowStep
+  stateData: {
+    orderId?: string
+    siparisNo?: string
+    ieIds?: string[]
+    mrpSonuc?: { malkod: string; net: number }[]
+    tedarikIds?: string[]
+    baslik?: string   // UI'da gösterilecek kısa açıklama
+  }
+  userId: string
+  userAd: string
+  baslangic: string
+  sonAktivite: string
+  durum: FlowDurum
+  not: string
+}
+
+// v15.37 — Test Modu
+export type TestRunDurum = 'aktif' | 'tamamlandi' | 'iptal'
+
+export interface TestRun {
+  id: string                  // TEST_YYYYMMDD_NN
+  baslangic: string
+  bitis: string
+  durum: TestRunDurum
+  userId: string
+  userAd: string
+  aciklama: string
+  temizlenenKayitSayisi: Record<string, number>
+  not: string
+}
+
+// v15.90 — Madde 15 P1: Bildirim merkezi
+export interface Bildirim {
+  id: string
+  tip: 'sari' | 'kirmizi'
+  kategori: string
+  baslik: string
+  mesaj: string
+  hedefKullaniciId: string
+  refId: string
+  refTip: string
+  okundu: boolean
+  okunduTarih: string
+  olusturma: string
+  olusturan: string
+}

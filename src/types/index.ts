@@ -138,8 +138,7 @@ export interface Material {
   revizyonTarihi: string
   oncekiId: string
   aktif: boolean
-  birimKgMetre?: number  // v16.78
-  malzemeCinsi?: string   // v16.79
+  birimKgMetre?: number  // v16.78 — birim_kg_metre (kg/m)
 }
 
 export interface HmTip {
@@ -172,6 +171,7 @@ export interface Operator {
   kod: string
   ad: string
   bolum: string
+  bolumler?: string[]   // v16.85 — birden fazla bölüm atanabilir
   aktif: boolean
   sifre: string
   durum: string
@@ -428,8 +428,6 @@ export interface Kullanici {
   sifre: string
   rol: 'admin' | 'uretim_sor' | 'planlama' | 'depocu'
   aktif: boolean
-  birimKgMetre?: number  // v16.78
-  malzemeCinsi?: string   // v16.79
 }
 
 // v15.31 — Bar Model: açık bar havuzu
