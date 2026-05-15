@@ -47,7 +47,7 @@ export function ActiveWorkPanel() {
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [realtime, loadAll])
+  }, [realtime, loadOwn])
 
   // activeWork → WO detay birleştir
   const rows = (activeWork || []).map(aw => {
