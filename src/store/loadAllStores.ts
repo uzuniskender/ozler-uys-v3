@@ -1,21 +1,19 @@
-import { useOrderStore } from "./useOrderStore"
-import { useProductionStore } from "./useProductionStore"
-import { useWarehouseStore } from "./useWarehouseStore"
+import { useOrderStore } from './useOrderStore'
+import { useProductionStore } from './useProductionStore'
+import { useWarehouseStore } from './useWarehouseStore'
+import { useAuthStore } from './useAuthStore'
 
-export const loadAllStores = async () => {
-  try {
-    // örnek: store'ları tetikle
-    const orderStore = useOrderStore.getState()
-    const productionStore = useProductionStore.getState()
-    const warehouseStore = useWarehouseStore.getState()
-
-    // Eğer içinde fetch fonksiyonları varsa burada çağır
-    // await orderStore.load?.()
-    // await productionStore.load?.()
-    // await warehouseStore.load?.()
-
-    console.log("Tüm store'lar yüklendi")
-  } catch (err) {
-    console.error("Store yükleme hatası:", err)
-  }
+export async function loadAllStores(): Promise<void> {
+  await Promise.all([
+    useOrderStore.getState().loadOwn(),
+    useProductionStore.getState().loadOwn(),
+    useWarehouseStore.getState().loadOwn(),
+    useAuthStore.getState().loadOwn(),
+  ])
+  const o = useOrderStore.getState()
+  const p = useProductionStore.getState()
+  const w = useWarehouseStore.getState()
+  const a = useAuthStore.getState()
+  const synced = o.synced && p.synced && w.synced && a.synced
+  console.log(`✅ Tüm store'lar yüklendi · synced=${synced}`)
 }
