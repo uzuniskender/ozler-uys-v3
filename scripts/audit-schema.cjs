@@ -120,14 +120,29 @@ function readDataManagementTables() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// KOD — store/index.ts'deki TABLE_MAP
+// KOD — store/tables.ts'deki TABLE_MAP (v17.x: slice'lara bölündü)
 // ═══════════════════════════════════════════════════════════════
 function readStoreTables() {
-  const content = fs.readFileSync(path.join(ROOT, 'src/store/index.ts'), 'utf-8')
-  const start = content.indexOf('export const TABLE_MAP')
-  if (start < 0) return new Set()
-  const end = content.indexOf(']', start)
-  const slice = content.slice(start, end)
+  // v17.x öncesi src/store/index.ts'de tutulurdu; artık tables.ts'de.
+  // Geriye dönük: önce tables.ts, yoksa index.ts'e bak.
+  const tablesPath = path.join(ROOT, 'src/store/tables.ts')
+  const indexPath = path.join(ROOT, 'src/store/index.ts')
+  const file = fs.existsSync(tablesPath) ? tablesPath : indexPath
+  const content = fs.readFileSync(file, 'utf-8')
+  // TABLE_MAP = [ ... ] array literal'ini yakala (TableEntry[] tip annotation'ı atla)
+  const match = content.match(/TABLE_MAP[^=]*=\s*\[/)
+  if (!match || match.index === undefined) return new Set()
+  // match[0] sonundaki [ — gerçek array literal'in açılışı
+  const openBracket = match.index + match[0].length - 1
+  // Eşleşen kapanış parantezini bul (iç içe diziler için sayaçlı)
+  let depth = 0
+  let end = -1
+  for (let i = openBracket; i < content.length; i++) {
+    if (content[i] === '[') depth++
+    else if (content[i] === ']') { depth--; if (depth === 0) { end = i; break } }
+  }
+  if (end < 0) return new Set()
+  const slice = content.slice(openBracket, end)
   const tables = new Set()
   const matches = slice.matchAll(/table:\s*['"]([a-z_]+)['"]/g)
   for (const m of matches) tables.add(m[1])

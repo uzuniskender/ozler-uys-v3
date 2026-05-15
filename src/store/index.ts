@@ -1,5 +1,3 @@
-import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
 import type {
   Order, WorkOrder, ProductionLog, Material, Operation,
   Station, Operator, Recipe, BomTree, StokHareket,
@@ -7,237 +5,57 @@ import type {
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem,
   HmTip, TestRun, Problem, Kullanici, AcikBar, Izin, Bildirim, PendingFlow
 } from '@/types'
+import { useOrderStore } from './useOrderStore'
+import { useProductionStore } from './useProductionStore'
+import { useWarehouseStore } from './useWarehouseStore'
+import { useAuthStore } from './useAuthStore'
+import { TABLE_MAP, type StoreName } from './tables'
 
-// ═══ DB → JS MAPPERS ═══
-const M = {
-  order: (r: Record<string, unknown>): Order => ({
-    id: r.id as string, siparisNo: (r.siparis_no || '') as string, musteri: (r.musteri || '') as string,
-    tarih: (r.tarih || '') as string, termin: (r.termin || '') as string, not: (r.not_ || '') as string,
-    urunler: (r.urunler || []) as Order['urunler'], mamulKod: (r.mamul_kod || '') as string,
-    mamulAd: (r.mamul_ad || '') as string, adet: (r.adet as number) || 1,
-    receteId: (r.recete_id || '') as string, mrpDurum: (r.mrp_durum || 'bekliyor') as string,
-    durum: (r.durum || '') as string, oncelik: (r.oncelik as number) || 0, olusturma: (r.olusturma || '') as string,
-    state: (r.state || 'yeni') as Order['state'],
-    sevkDurum: (r.sevk_durum || '') as string,
-  }),
-  wo: (r: Record<string, unknown>): WorkOrder => {
-    const malkod = (r.malkod || '') as string
-    const rawHm = (r.hm || []) as WorkOrder['hm']
-    const hm = malkod ? rawHm.filter(h => h.malkod !== malkod) : rawHm
-    return {
-      id: r.id as string, orderId: (r.order_id || '') as string, rcId: (r.rc_id || '') as string,
-      sira: (r.sira as number) || 0, kirno: (r.kirno || '') as string,
-      opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string, opAd: (r.op_ad || '') as string,
-      istId: (r.ist_id || '') as string, istKod: (r.ist_kod || '') as string, istAd: (r.ist_ad || '') as string,
-      malkod, malad: (r.malad || '') as string,
-      hedef: (r.hedef as number) || 0, mpm: (r.mpm as number) || 1,
-      hm, ieNo: (r.ie_no || '') as string,
-      whAlloc: (r.wh_alloc as number) || 0, hazirlikSure: (r.hazirlik_sure as number) || 0,
-      islemSure: (r.islem_sure as number) || 0, durum: (r.durum || '') as string,
-      bagimsiz: !!r.bagimsiz, siparisDisi: !!r.siparis_disi,
-      mamulKod: (r.mamul_kod || '') as string, mamulAd: (r.mamul_ad || '') as string,
-      mamulAuto: !!r.mamul_auto, operatorId: (r.operator_id || null) as string | null,
-      not: (r.not_ || '') as string, olusturma: (r.olusturma || '') as string, termin: (r.termin || '') as string,
-    }
-  },
-  log: (r: Record<string, unknown>): ProductionLog => ({
-    id: r.id as string, woId: (r.wo_id || '') as string, tarih: (r.tarih || '') as string,
-    saat: (r.saat || '') as string,
-    qty: (r.qty as number) || 0, fire: (r.fire as number) || 0,
-    operatorlar: (r.operatorlar || []) as ProductionLog['operatorlar'],
-    duruslar: (r.duruslar || []) as ProductionLog['duruslar'],
-    not: (r.not_ || '') as string, malkod: (r.malkod || '') as string,
-    ieNo: (r.ie_no || '') as string, operatorId: (r.operator_id || null) as string | null,
-    vardiya: (r.vardiya || '') as string,
-  }),
-  material: (r: Record<string, unknown>): Material => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    tip: (r.tip || '') as string, hammaddeTipi: (r.hammadde_tipi || '') as string, birim: (r.birim || 'Adet') as string,
-    boy: (r.boy as number) || 0, en: (r.en as number) || 0, kalinlik: (r.kalinlik as number) || 0,
-    uzunluk: (r.uzunluk as number) || 0, cap: (r.cap as number) || 0, icCap: (r.ic_cap as number) || 0, minStok: (r.min_stok as number) || 0,
-    opId: (r.op_id || '') as string, opKod: (r.op_kod || '') as string,
-    revizyon: (r.revizyon as number) || 0, revizyonTarihi: (r.revizyon_tarihi || '') as string,
-    oncekiId: (r.onceki_id || '') as string, aktif: r.aktif !== false,
-    malzemeCinsi: r.malzeme_cinsi as string | undefined,
-    birimKgMetre: (r.birim_kg_metre as number | null) ?? undefined,
-  }),
-  operation: (r: Record<string, unknown>): Operation => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    bolum: (r.bolum || '') as string,
-  }),
-  station: (r: Record<string, unknown>): Station => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    opIds: (r.op_ids || []) as string[],
-    durum: (r.durum || '') as string, arizaNot: (r.ariza_not || '') as string,
-  }),
-  operator: (r: Record<string, unknown>): Operator => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    bolum: (r.bolum || '') as string, aktif: r.aktif !== false, sifre: (r.sifre || '') as string,
-    durum: (r.durum || '') as string,
-  }),
-  recipe: (r: Record<string, unknown>): Recipe => ({
-    id: r.id as string, rcKod: (r.rc_kod || '') as string, ad: (r.ad || '') as string,
-    bomId: (r.bom_id || '') as string, mamulKod: (r.mamul_kod || '') as string,
-    mamulAd: (r.mamul_ad || '') as string, satirlar: (r.satirlar || []) as Recipe['satirlar'],
-  }),
-  bomTree: (r: Record<string, unknown>): BomTree => ({
-    id: r.id as string, mamulKod: (r.mamul_kod || '') as string,
-    mamulAd: (r.mamul_ad || '') as string, ad: (r.ad || '') as string,
-    rows: (r.rows || []) as BomTree['rows'],
-  }),
-  stokHareket: (r: Record<string, unknown>): StokHareket => ({
-    id: r.id as string, tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string,
-    malad: (r.malad || '') as string, miktar: (r.miktar as number) || 0,
-    tip: (r.tip || 'giris') as 'giris' | 'cikis',
-    logId: (r.log_id || '') as string, woId: (r.wo_id || '') as string,
-    aciklama: (r.aciklama || '') as string,
-    rezervOrderId: (r.rezerv_order_id || null) as string | null,
-  }),
-  cuttingPlan: (r: Record<string, unknown>): CuttingPlan => ({
-    id: r.id as string, hamMalkod: (r.ham_malkod || '') as string, hamMalad: (r.ham_malad || '') as string,
-    hamBoy: (r.ham_boy as number) || 0, hamEn: (r.ham_en as number) || 0,
-    kesimTip: (r.kesim_tip || '') as string, durum: (r.durum || 'bekliyor') as string,
-    satirlar: (r.satirlar || []) as CuttingPlan['satirlar'], tarih: (r.tarih || '') as string,
-    gerekliAdet: (r.gerekli_adet as number) || 0,
-  }),
-  tedarik: (r: Record<string, unknown>): Tedarik => ({
-    id: r.id as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    miktar: (r.miktar as number) || 0, birim: (r.birim || 'Adet') as string,
-    orderId: (r.order_id || '') as string, siparisNo: (r.siparis_no || '') as string,
-    durum: (r.durum || '') as string, geldi: !!r.geldi,
-    teslimTarihi: (r.teslim_tarihi || '') as string, tedarikcId: (r.tedarikci_id || '') as string,
-    tedarikcAd: (r.tedarikci_ad || '') as string, not: (r.not_ || '') as string,
-    tarih: (r.tarih || '') as string,
-  }),
-  mrpRezerve: (r: Record<string, unknown>): MrpRezerve => ({
-    id: r.id as string, orderId: (r.order_id || '') as string,
-    malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    miktar: (r.miktar as number) || 0, birim: (r.birim || 'Adet') as string,
-    mrpRunId: (r.mrp_run_id || '') as string, tarih: (r.tarih || '') as string,
-  }),
-  tedarikci: (r: Record<string, unknown>): Tedarikci => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    adres: (r.adres || '') as string, tel: (r.tel || '') as string,
-    email: (r.email || '') as string, not: (r.not_ || '') as string,
-  }),
-  durusKodu: (r: Record<string, unknown>): DurusKodu => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    kategori: (r.kategori || '') as string,
-  }),
-  customer: (r: Record<string, unknown>): Customer => ({
-    id: r.id as string, ad: (r.ad || '') as string, kod: (r.kod || '') as string,
-  }),
-  sevk: (r: Record<string, unknown>): Sevk => ({
-    id: r.id as string, orderId: (r.order_id || '') as string, siparisNo: (r.siparis_no || '') as string,
-    musteri: (r.musteri || '') as string, tarih: (r.tarih || '') as string,
-    kalemler: (r.kalemler || []) as Sevk['kalemler'], not: (r.not_ || '') as string,
-    sevkNo: (r.sevk_no || '') as string,
-    tip: (r.tip || '') as string,
-    musteriKod: (r.musteri_kod || '') as string,
-    tasiyici: (r.tasiyici || '') as string,
-    plaka: (r.plaka || '') as string,
-    olusturan: (r.olusturan || '') as string,
-  }),
-  operatorNote: (r: Record<string, unknown>): OperatorNote => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    tarih: (r.tarih || '') as string, saat: (r.saat || '') as string,
-    mesaj: (r.mesaj || '') as string, okundu: !!r.okundu,
-    cevap: (r.cevap || '') as string, cevaplayan: (r.cevaplayan || '') as string,
-    cevapTarih: (r.cevap_tarih || '') as string,
-    kategori: (r.kategori || undefined) as OperatorNote['kategori'],
-    oncelik: (r.oncelik || 'Normal') as OperatorNote['oncelik'],
-  }),
-  activeWork: (r: Record<string, unknown>): ActiveWork => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    woId: (r.wo_id || '') as string, woAd: (r.wo_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, tarih: (r.tarih || '') as string,
-  }),
-  fireLog: (r: Record<string, unknown>): FireLog => ({
-    id: r.id as string, logId: (r.log_id || '') as string, woId: (r.wo_id || '') as string,
-    tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string, malad: (r.malad || '') as string,
-    qty: (r.qty as number) || 0, ieNo: (r.ie_no || '') as string, opAd: (r.op_ad || '') as string,
-    operatorlar: (r.operatorlar || []) as FireLog['operatorlar'], not: (r.not_ || '') as string,
-    telafiWoId: (r.telafi_wo_id || undefined) as string | undefined,
-    tip: (r.tip || undefined) as FireLog['tip'],
-    uzunlukMm: (r.uzunluk_mm as number) || undefined,
-  }),
-  checklist: (r: Record<string, unknown>): ChecklistItem => ({
-    id: r.id as string, tip: (r.tip || 'gorev') as ChecklistItem['tip'],
-    baslik: (r.baslik || '') as string, aciklama: (r.aciklama || '') as string,
-    atanan: (r.atanan || '') as string, oncelik: (r.oncelik || 'normal') as ChecklistItem['oncelik'],
-    durum: (r.durum || 'bekliyor') as ChecklistItem['durum'], tarih: (r.tarih || '') as string,
-    termin: (r.termin || '') as string, kategori: (r.kategori || '') as string,
-    resimler: (r.resimler || []) as ChecklistItem['resimler'],
-    tamamlanma: (r.tamamlanma || '') as string, olusturan: (r.olusturan || '') as string,
-    notlar: (r.notlar || '') as string,
-  }),
-  hmTip: (r: Record<string, unknown>): HmTip => ({
-    id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
-    aciklama: (r.aciklama || '') as string, sira: (r.sira as number) || 0,
-    olusturma: (r.olusturma || '') as string,
-  }),
-  testRun: (r: Record<string, unknown>): TestRun => ({
-    id: r.id as string, baslangic: (r.baslangic || '') as string,
-    bitis: (r.bitis || '') as string, durum: (r.durum || 'aktif') as TestRun['durum'],
-    userId: (r.user_id || '') as string, userAd: (r.user_ad || '') as string,
-    aciklama: (r.aciklama || '') as string,
-    temizlenenKayitSayisi: (r.temizlenen_kayit_sayisi || {}) as Record<string, number>,
-    not: (r.not_ || '') as string,
-  }),
-  problem: (r: Record<string, unknown>): Problem => ({
-    id: r.id as string, problem: (r.problem || '') as string,
-    termin: (r.termin || '') as string, sorumlu: (r.sorumlu || '') as string,
-    durum: (r.durum || 'Açık') as string, yapilanlar: (r.yapilanlar || '') as string,
-    notlar: (r.notlar || '') as string, olusturan: (r.olusturan || '') as string,
-    olusturma: (r.olusturma || '') as string, sonDegistiren: (r.son_degistiren || '') as string,
-    sonDegistirme: (r.son_degistirme || '') as string, kapatmaTarihi: (r.kapatma_tarihi || '') as string,
-  }),
-  kullanici: (r: Record<string, unknown>): Kullanici => ({
-    id: r.id as string, ad: (r.ad || '') as string,
-    kullaniciAd: (r.kullanici_ad || '') as string, sifre: (r.sifre || '') as string,
-    rol: (r.rol || 'depocu') as Kullanici['rol'], aktif: !!r.aktif,
-  }),
-  acikBar: (r: Record<string, unknown>): AcikBar => ({
-    id: r.id as string, hamMalkod: (r.ham_malkod || '') as string, hamMalad: (r.ham_malad || '') as string,
-    uzunlukMm: (r.uzunluk_mm as number) || 0, kaynakPlanId: (r.kaynak_plan_id || '') as string,
-    kaynakSatirId: (r.kaynak_satir_id || '') as string, barIndex: (r.bar_index as number) || 0,
-    olusmaTarihi: (r.olusmaTarihi || r.olusma_tarihi || '') as string,
-    durum: (r.durum || 'acik') as AcikBar['durum'],
-    tuketimLogId: (r.tuketim_log_id || '') as string, tuketimTarihi: (r.tuketim_tarihi || '') as string,
-    not: (r.not_ || '') as string,
-    hurdaTarihi: (r.hurda_tarihi || undefined) as string | undefined,
-    hurdaSebep: (r.hurda_sebep || undefined) as string | undefined,
-    hurdaKullaniciId: (r.hurda_kullanici_id || undefined) as string | undefined,
-    hurdaKullaniciAd: (r.hurda_kullanici_ad || undefined) as string | undefined,
-  }),
-  izin: (r: Record<string, unknown>): Izin => ({
-    id: r.id as string, opId: (r.op_id || '') as string, opAd: (r.op_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, bitis: (r.bitis || '') as string,
-    tip: (r.tip || '') as string, durum: (r.durum || '') as string,
-    saatBaslangic: (r.saat_baslangic || '') as string, saatBitis: (r.saat_bitis || '') as string,
-    onaylayan: (r.onaylayan || '') as string, onayTarihi: (r.onay_tarihi || '') as string,
-    not: (r.not_ || '') as string, olusturan: (r.olusturan || '') as string,
-  }),
-  bildirim: (r: Record<string, unknown>): Bildirim => ({
-    id: r.id as string, tip: (r.tip || 'sari') as Bildirim['tip'],
-    kategori: (r.kategori || '') as string, baslik: (r.baslik || '') as string,
-    mesaj: (r.mesaj || '') as string, hedefKullaniciId: (r.hedef_kullanici_id || '') as string,
-    refId: (r.ref_id || '') as string, refTip: (r.ref_tip || '') as string,
-    okundu: !!r.okundu, okunduTarih: (r.okundu_tarih || '') as string,
-    olusturma: (r.olusturma || '') as string, olusturan: (r.olusturan || '') as string,
-  }),
-  pendingFlow: (r: Record<string, unknown>): PendingFlow => ({
-    id: r.id as string, flowType: (r.flow_type || '') as PendingFlow['flowType'],
-    currentStep: (r.current_step || '') as PendingFlow['currentStep'],
-    stateData: (r.state_data || {}) as PendingFlow['stateData'],
-    userId: (r.user_id || '') as string, userAd: (r.user_ad || '') as string,
-    baslangic: (r.baslangic || '') as string, sonAktivite: (r.son_aktivite || '') as string,
-    durum: (r.durum || 'aktif') as PendingFlow['durum'],
-    not: (r.not_ || '') as string,
-  }),
+// Slice store'lar + registry — yeni kod doğrudan bunları kullanmalı.
+export { useOrderStore } from './useOrderStore'
+export { useProductionStore } from './useProductionStore'
+export { useWarehouseStore } from './useWarehouseStore'
+export { useAuthStore } from './useAuthStore'
+export { TABLE_MAP } from './tables'
+export type { StoreName, TableEntry } from './tables'
+export { M } from './mappers'
+
+// ═══ ORCHESTRATOR ═══
+// 4 slice'ı paralel yükler. App.tsx ve useRealtime.ts bunu çağırır.
+export async function loadAllStores(): Promise<void> {
+  await Promise.all([
+    useOrderStore.getState().loadOwn(),
+    useProductionStore.getState().loadOwn(),
+    useWarehouseStore.getState().loadOwn(),
+    useAuthStore.getState().loadOwn(),
+  ])
+  const o = useOrderStore.getState()
+  const p = useProductionStore.getState()
+  const w = useWarehouseStore.getState()
+  const a = useAuthStore.getState()
+  const synced = o.synced && p.synced && w.synced && a.synced
+  console.log(`✅ Tüm store'lar yüklendi · synced=${synced}`)
 }
 
-interface UYSStore {
+// Realtime dispatcher — tabloları sahibi olan store'a yönlendirir.
+export async function reloadTablesDispatched(tables: string[]): Promise<void> {
+  const byStore: Record<StoreName, string[]> = { order: [], production: [], warehouse: [], auth: [] }
+  for (const t of tables) {
+    const e = TABLE_MAP.find(x => x.table === t)
+    if (e) byStore[e.store].push(t)
+  }
+  const tasks: Promise<void>[] = []
+  if (byStore.order.length) tasks.push(useOrderStore.getState().reloadOwn(byStore.order))
+  if (byStore.production.length) tasks.push(useProductionStore.getState().reloadOwn(byStore.production))
+  if (byStore.warehouse.length) tasks.push(useWarehouseStore.getState().reloadOwn(byStore.warehouse))
+  if (byStore.auth.length) tasks.push(useAuthStore.getState().reloadOwn(byStore.auth))
+  await Promise.all(tasks)
+}
+
+// ═══ ESKİ API: COMPOSITE SHIM ═══
+// 38 consumer dosyayı kırmamak için useStore eski API'yi taklit eder.
+// Geçiş aşamalı — consumer'lar zamanla doğrudan slice hook'larına geçecek.
+export interface UYSStore {
   orders: Order[]; workOrders: WorkOrder[]; logs: ProductionLog[]
   materials: Material[]; operations: Operation[]; stations: Station[]
   operators: Operator[]; recipes: Recipe[]; bomTrees: BomTree[]
@@ -256,110 +74,51 @@ interface UYSStore {
   reloadTables: (tables: string[]) => Promise<void>
 }
 
-export const TABLE_MAP: Array<{ key: keyof UYSStore; table: string; mapper: (r: Record<string, unknown>) => unknown }> = [
-  { key: 'orders', table: 'uys_orders', mapper: M.order },
-  { key: 'workOrders', table: 'uys_work_orders', mapper: M.wo },
-  { key: 'logs', table: 'uys_logs', mapper: M.log },
-  { key: 'materials', table: 'uys_malzemeler', mapper: M.material },
-  { key: 'operations', table: 'uys_operations', mapper: M.operation },
-  { key: 'stations', table: 'uys_stations', mapper: M.station },
-  { key: 'operators', table: 'uys_operators', mapper: M.operator },
-  { key: 'recipes', table: 'uys_recipes', mapper: M.recipe },
-  { key: 'bomTrees', table: 'uys_bom_trees', mapper: M.bomTree },
-  { key: 'stokHareketler', table: 'uys_stok_hareketler', mapper: M.stokHareket },
-  { key: 'cuttingPlans', table: 'uys_kesim_planlari', mapper: M.cuttingPlan },
-  { key: 'tedarikler', table: 'uys_tedarikler', mapper: M.tedarik },
-  { key: 'mrpRezerve', table: 'uys_mrp_rezerve', mapper: M.mrpRezerve },
-  { key: 'tedarikciler', table: 'uys_tedarikciler', mapper: M.tedarikci },
-  { key: 'durusKodlari', table: 'uys_durus_kodlari', mapper: M.durusKodu },
-  { key: 'customers', table: 'uys_customers', mapper: M.customer },
-  { key: 'sevkler', table: 'uys_sevkler', mapper: M.sevk },
-  { key: 'operatorNotes', table: 'uys_operator_notes', mapper: M.operatorNote },
-  { key: 'activeWork', table: 'uys_active_work', mapper: M.activeWork },
-  { key: 'acikBarlar', table: 'uys_acik_barlar', mapper: M.acikBar },
-  { key: 'fireLogs', table: 'uys_fire_logs', mapper: M.fireLog },
-  { key: 'checklist', table: 'uys_checklist', mapper: M.checklist },
-  { key: 'hmTipler', table: 'uys_hm_tipleri', mapper: M.hmTip },
-  { key: 'testRuns', table: 'uys_test_runs', mapper: M.testRun },
-  { key: 'problemler', table: 'pt_problemler', mapper: M.problem },
-  { key: 'kullanicilar', table: 'uys_kullanicilar', mapper: M.kullanici },
-  { key: 'izinler', table: 'uys_izinler', mapper: M.izin },
-  { key: 'bildirimler', table: 'uys_bildirimler', mapper: M.bildirim },
-  { key: 'pendingFlows', table: 'uys_pending_flows', mapper: M.pendingFlow },
-]
+function mergedState(
+  o: ReturnType<typeof useOrderStore.getState>,
+  p: ReturnType<typeof useProductionStore.getState>,
+  w: ReturnType<typeof useWarehouseStore.getState>,
+  a: ReturnType<typeof useAuthStore.getState>
+): UYSStore {
+  return {
+    orders: o.orders, customers: o.customers, sevkler: o.sevkler, mrpRezerve: o.mrpRezerve,
+    workOrders: p.workOrders, logs: p.logs, recipes: p.recipes, bomTrees: p.bomTrees,
+    operations: p.operations, stations: p.stations, cuttingPlans: p.cuttingPlans,
+    fireLogs: p.fireLogs, acikBarlar: p.acikBarlar, activeWork: p.activeWork,
+    durusKodlari: p.durusKodlari, pendingFlows: p.pendingFlows, operatorNotes: p.operatorNotes,
+    materials: w.materials, stokHareketler: w.stokHareketler, tedarikler: w.tedarikler,
+    tedarikciler: w.tedarikciler, hmTipler: w.hmTipler,
+    operators: a.operators, kullanicilar: a.kullanicilar, izinler: a.izinler,
+    bildirimler: a.bildirimler, checklist: a.checklist, testRuns: a.testRuns,
+    problemler: a.problemler, yetkiMap: a.yetkiMap,
+    loading: o.loading || p.loading || w.loading || a.loading,
+    synced: o.synced && p.synced && w.synced && a.synced,
+    loadAll: loadAllStores,
+    setOrders: o.setOrders,
+    setWorkOrders: p.setWorkOrders,
+    reloadTables: reloadTablesDispatched,
+  }
+}
 
-export const useStore = create<UYSStore>((set) => ({
-  orders: [], workOrders: [], logs: [], materials: [], operations: [],
-  stations: [], operators: [], recipes: [], bomTrees: [], stokHareketler: [],
-  cuttingPlans: [], tedarikler: [], mrpRezerve: [], tedarikciler: [], durusKodlari: [],
-  customers: [], sevkler: [], operatorNotes: [], activeWork: [], fireLogs: [], checklist: [],
-  acikBarlar: [],
-  izinler: [], bildirimler: [], pendingFlows: [],
-  hmTipler: [], testRuns: [], problemler: [], kullanicilar: [], yetkiMap: {},
-  loading: true, synced: false,
+function useStoreImpl<T>(selector?: (s: UYSStore) => T): T | UYSStore {
+  const o = useOrderStore()
+  const p = useProductionStore()
+  const w = useWarehouseStore()
+  const a = useAuthStore()
+  const merged = mergedState(o, p, w, a)
+  return selector ? selector(merged) : merged
+}
 
-  loadAll: async () => {
-    set({ loading: true })
-    try {
-      const results = await Promise.all(TABLE_MAP.map(t => supabase.from(t.table).select('*')))
-      const updates: Partial<UYSStore> = {}
-      let ok = 0
-      results.forEach((res, i) => {
-        const t = TABLE_MAP[i]
-        if (!res.error && res.data) {
-          (updates as Record<string, unknown>)[t.key] = res.data.map(r => t.mapper(r as Record<string, unknown>))
-          ok++
-        }
-      })
-      // stokHareketler sayfalama — varsayılan limit (1000) aşılabilir (v16.53 fix)
-      {
-        const PAGE = 1000
-        let sayfa = 0, tumSH: StokHareket[] = []
-        while (true) {
-          const { data, error } = await supabase
-            .from('uys_stok_hareketler')
-            .select('*')
-            .range(sayfa * PAGE, (sayfa + 1) * PAGE - 1)
-          if (error || !data || data.length === 0) break
-          tumSH = [...tumSH, ...data.map(r => M.stokHareket(r as Record<string, unknown>))]
-          if (data.length < PAGE) break
-          sayfa++
-        }
-        if (tumSH.length > 0) updates.stokHareketler = tumSH
-      }
-      // yetkiMap — ayrı yükle (uys_yetki_ayarlari: aksiyon + roller kolonları)
-      const { data: yetkiData } = await supabase.from('uys_yetki_ayarlari').select('*')
-      if (yetkiData) {
-        const yetkiMap: Record<string, string[]> = {}
-        yetkiData.forEach((r: Record<string, unknown>) => {
-          if (r.aksiyon) yetkiMap[r.aksiyon as string] = (r.roller || []) as string[]
-        })
-        updates.yetkiMap = yetkiMap
-      }
-      if (ok >= 5) {
-        set({ ...updates, loading: false, synced: true } as Partial<UYSStore>)
-        console.log(`✅ ${ok}/${TABLE_MAP.length} tablo yüklendi`)
-      } else {
-        set({ loading: false, synced: false })
-      }
-    } catch (e) {
-      console.error('loadAll:', e)
-      set({ loading: false, synced: false })
-    }
-  },
-  setOrders: (orders) => set({ orders }),
-  setWorkOrders: (workOrders) => set({ workOrders }),
-  reloadTables: async (tables: string[]) => {
-    const hedefler = TABLE_MAP.filter(t => tables.includes(t.table))
-    if (hedefler.length === 0) return
-    const results = await Promise.all(hedefler.map(t => supabase.from(t.table).select('*')))
-    const updates: Partial<UYSStore> = {}
-    results.forEach((res, i) => {
-      const t = hedefler[i]
-      if (!res.error && res.data) {
-        (updates as Record<string, unknown>)[t.key] = res.data.map(r => t.mapper(r as Record<string, unknown>))
-      }
-    })
-    set(updates as Partial<UYSStore>)
-  },
-}))
+;(useStoreImpl as unknown as { getState: () => UYSStore }).getState = () =>
+  mergedState(
+    useOrderStore.getState(),
+    useProductionStore.getState(),
+    useWarehouseStore.getState(),
+    useAuthStore.getState()
+  )
+
+export const useStore = useStoreImpl as {
+  (): UYSStore
+  <T>(selector: (s: UYSStore) => T): T
+  getState: () => UYSStore
+}
