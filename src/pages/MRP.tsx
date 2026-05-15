@@ -14,6 +14,7 @@ import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/productio
 import { isOrderArchived , isWorkOrderOpen} from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
+import { createBildirim, acikBildirimVarMi } from '@/services/bildirimlerService'
 
 export function MRP() {
   const orders = useOrderStore(s => s.orders)
@@ -496,22 +497,14 @@ export function MRP() {
           const ord = orders.find(o => o.id === oid)
           if (!ord) continue
           // Aynı sipariş için açık (okunmamış) "mrp_eksik" bildirimi var mı?
-          const { data: mevcut } = await supabase
-            .from('uys_bildirimler')
-            .select('id')
-            .eq('kategori', 'mrp_eksik')
-            .eq('ref_id', oid)
-            .eq('okundu', false)
-            .limit(1)
-          if (mevcut && mevcut.length > 0) continue
-          await supabase.from('uys_bildirimler').insert({
-            id: uid(),
+          if (await acikBildirimVarMi('mrp_eksik', oid)) continue
+          await createBildirim({
             tip: 'sari',
             kategori: 'mrp_eksik',
             baslik: `MRP eksik — ${ord.siparisNo}`,
             mesaj: `${ord.musteri || ''} · ${eksikler.length} malzeme eksik (toplam net: ${eksikler.reduce((a, r) => a + r.net, 0)})`,
-            ref_id: oid,
-            ref_tip: 'order',
+            refId: oid,
+            refTip: 'order',
             olusturan: 'sistem',
           })
         }

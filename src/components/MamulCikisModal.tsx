@@ -11,6 +11,7 @@ import { useState, useMemo } from 'react'
 import { X, AlertTriangle, Lock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+import { createBildirim } from '@/services/bildirimlerService'
 import { hesaplaMamulRezervDurum } from '@/features/production/mamulRezerv'
 import type { StokHareket } from '@/types'
 
@@ -153,14 +154,13 @@ export function MamulCikisModal({
 
       // Bildirim olustur (kirmizi - rezerv ihlali)
       for (const t of tahsis) {
-        await supabase.from('uys_bildirimler').insert({
-          id: uid(),
+        await createBildirim({
           tip: 'kirmizi',
           kategori: 'rezerv_ihlali',
           baslik: 'Rezerv ihlali',
           mesaj: `${t.siparisNo} (${t.musteri}) icin rezerv ${malad} - ${t.cek} adet manuel cekildi. Sebep: ${sebep}`,
-          ref_id: t.orderId,
-          ref_tip: 'order',
+          refId: t.orderId,
+          refTip: 'order',
           olusturan: currentUserAd,
         })
       }
