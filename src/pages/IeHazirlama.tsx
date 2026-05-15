@@ -7,7 +7,7 @@ import { supabase, fetchAll } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight, Check, X } from 'lucide-react'
 
 // ─── Tipler ───────────────────────────────────────────────────
 interface BomSatir {
@@ -63,6 +63,11 @@ interface IeBaslik {
   ie_verildi_at: string | null
   ie_verildi_by: string | null
   olusturma: string | null
+  iptal_neden: string | null
+  iptal_at: string | null
+  iptal_by: string | null
+  tamamlandi_at: string | null
+  tamamlandi_by: string | null
 }
 
 interface IeKalem {
@@ -75,6 +80,9 @@ interface IeKalem {
   uys_siparis_no: string | null
   siparis_acildi: boolean | null
   siparis_acildi_at: string | null
+  iptal_neden: string | null
+  iptal_at: string | null
+  iptal_by: string | null
 }
 
 // ─── Hesaplama ────────────────────────────────────────────────
@@ -278,6 +286,10 @@ export function IeHazirlama() {
   const [secilenIe, setSecilenIe] = useState<IeBaslik | null>(null)
   const [secilenKalemler, setSecilenKalemler] = useState<IeKalem[]>([])
   const [detayAcik, setDetayAcik] = useState(false)
+  const [iptalModalAcik, setIptalModalAcik] = useState(false)
+  const [iptalHedef, setIptalHedef] = useState<IeBaslik | null>(null)
+  const [iptalNeden, setIptalNeden] = useState('')
+  const [islemYapiliyor, setIslemYapiliyor] = useState(false)
   // Geçmiş — filtre + pagination
   const PAGE_SIZE = 30
   const [filterSiparisNo, setFilterSiparisNo] = useState('')
@@ -418,13 +430,133 @@ export function IeHazirlama() {
     setSecilenKalemler((data || []) as IeKalem[])
   }
 
+  // Audit log helper — uys_ie_hazirlama_log'a kayıt atar.
+  // Fire-and-forget: hata olursa toast ile uyarır, ana akışı bozmaz.
+  async function logIeOlay(args: {
+    ieId: string
+    kalemId: string
+    tip: 'siparis_acildi_toggle' | 'uys_siparis_no_set'
+    aciklama: string
+    siparisNo: string
+    urunKodu: string
+  }) {
+    const now = new Date()
+    const kullanici = user?.username || user?.email || 'sistem'
+    try {
+      const { error } = await supabase.from('uys_ie_hazirlama_log').insert({
+        id: uid(),
+        ie_id: args.ieId,
+        kalem_id: args.kalemId,
+        tip: args.tip,
+        aciklama: args.aciklama,
+        siparis_no: args.siparisNo,
+        urun_kodu: args.urunKodu,
+        kullanici,
+        tarih: now.toISOString().slice(0, 10),
+        saat: now.toTimeString().slice(0, 8),
+      })
+      if (error) toast.warning('Log yazılamadı: ' + error.message)
+    } catch (e: any) {
+      toast.warning('Log exception: ' + (e?.message || e))
+    }
+  }
+
+  async function tamamlandiYap(ie: IeBaslik) {
+    setIslemYapiliyor(true)
+    try {
+      const now = new Date().toISOString()
+      const kullanici = user?.username || user?.email || 'sistem'
+      const { error: e1 } = await supabase.from('uys_ie_hazirlama')
+        .update({ durum: 'tamamlandi', tamamlandi_at: now, tamamlandi_by: kullanici })
+        .eq('id', ie.id)
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('uys_ie_hazirlama_kalemler')
+        .update({ durum: 'tamamlandi' })
+        .eq('ie_id', ie.id)
+        .eq('durum', 'verildi')
+      if (e2) throw e2
+      await supabase.from('uys_ie_log').insert({
+        id: uid(), ie_id: ie.id, event: 'ie_tamamlandi',
+        aciklama: 'İş emri tamamlandı olarak işaretlendi',
+        kullanici, tarih: now,
+      })
+      setGecmis(prev => prev.map(g => g.id === ie.id ? { ...g, durum: 'tamamlandi', tamamlandi_at: now, tamamlandi_by: kullanici } : g))
+      toast.success('İş emri tamamlandı ✓')
+    } catch (e: any) {
+      toast.error('Hata: ' + (e.message || e))
+    } finally {
+      setIslemYapiliyor(false)
+    }
+  }
+
+  async function iptalYap(ie: IeBaslik, neden: string) {
+    if (!neden.trim()) return toast.error('İptal nedeni zorunlu')
+    setIslemYapiliyor(true)
+    try {
+      const now = new Date().toISOString()
+      const kullanici = user?.username || user?.email || 'sistem'
+      const { error: e1 } = await supabase.from('uys_ie_hazirlama')
+        .update({ durum: 'iptal', iptal_neden: neden.trim(), iptal_at: now, iptal_by: kullanici })
+        .eq('id', ie.id)
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('uys_ie_hazirlama_kalemler')
+        .update({ durum: 'iptal', iptal_neden: neden.trim(), iptal_at: now, iptal_by: kullanici })
+        .eq('ie_id', ie.id)
+      if (e2) throw e2
+      await supabase.from('uys_ie_log').insert({
+        id: uid(), ie_id: ie.id, event: 'ie_iptal',
+        aciklama: `İptal: ${neden.trim()}`,
+        kullanici, tarih: now,
+      })
+      setGecmis(prev => prev.map(g => g.id === ie.id ? { ...g, durum: 'iptal', iptal_neden: neden.trim(), iptal_at: now, iptal_by: kullanici } : g))
+      setIptalModalAcik(false)
+      setIptalHedef(null)
+      setIptalNeden('')
+      toast.success('İş emri iptal edildi')
+    } catch (e: any) {
+      toast.error('Hata: ' + (e.message || e))
+    } finally {
+      setIslemYapiliyor(false)
+    }
+  }
+
   async function toggleSiparisAcildi(kalem: IeKalem) {
     const newVal = !kalem.siparis_acildi
     await supabase.from('uys_ie_hazirlama_kalemler').update({
       siparis_acildi: newVal, siparis_acildi_at: newVal ? new Date().toISOString() : null,
     }).eq('id', kalem.id)
     setSecilenKalemler(prev => prev.map(k => k.id === kalem.id ? { ...k, siparis_acildi: newVal } : k))
+    await logIeOlay({
+      ieId: kalem.ie_id,
+      kalemId: kalem.id,
+      tip: 'siparis_acildi_toggle',
+      aciklama: newVal ? 'UYS sipariş açıldı olarak işaretlendi' : 'UYS sipariş açıldı geri alındı',
+      siparisNo: secilenIe?.siparis_no || '',
+      urunKodu: kalem.urun_kodu,
+    })
     toast.success(newVal ? 'UYS sipariş açıldı ✓' : 'Geri alındı')
+  }
+
+  async function kaydetUysSiparisNo(kalem: IeKalem, yeniNo: string) {
+    const eski = kalem.uys_siparis_no || ''
+    const yeni = yeniNo.trim()
+    if (eski === yeni) return
+    const { error } = await supabase.from('uys_ie_hazirlama_kalemler')
+      .update({ uys_siparis_no: yeni || null })
+      .eq('id', kalem.id)
+    if (error) { toast.error('Kayıt hatası: ' + error.message); return }
+    setSecilenKalemler(prev => prev.map(k => k.id === kalem.id ? { ...k, uys_siparis_no: yeni || null } : k))
+    await logIeOlay({
+      ieId: kalem.ie_id,
+      kalemId: kalem.id,
+      tip: 'uys_siparis_no_set',
+      aciklama: eski
+        ? `UYS Sipariş No güncellendi: "${eski}" → "${yeni || '∅'}"`
+        : `UYS Sipariş No atandı: "${yeni}"`,
+      siparisNo: secilenIe?.siparis_no || '',
+      urunKodu: kalem.urun_kodu,
+    })
+    toast.success(yeni ? 'UYS Sipariş No kaydedildi' : 'UYS Sipariş No temizlendi')
   }
 
   const detayKalemler = useMemo(() =>
@@ -619,6 +751,7 @@ export function IeHazirlama() {
                   <th className="text-left px-3 py-2">Durum</th>
                   <th className="text-left px-3 py-2">Oluşturan</th>
                   <th className="text-left px-3 py-2">Tarih</th>
+                  <th className="text-left px-3 py-2">İşlem</th>
                   <th className="px-3 py-2 w-8"></th>
                 </tr></thead>
                 <tbody>
@@ -628,12 +761,39 @@ export function IeHazirlama() {
                       <td className="px-3 py-2 text-zinc-300">{ie.musteri || '—'}</td>
                       <td className="px-3 py-2 text-zinc-500 font-mono">{ie.teslim_tarihi || '—'}</td>
                       <td className="px-3 py-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${ie.durum === 'verildi' ? 'bg-green/15 text-green' : 'bg-amber/15 text-amber'}`}>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                          ie.durum === 'verildi'    ? 'bg-green/15 text-green' :
+                          ie.durum === 'tamamlandi' ? 'bg-blue/15 text-blue' :
+                          ie.durum === 'iptal'      ? 'bg-red/15 text-red' :
+                          'bg-amber/15 text-amber'
+                        }`}>
                           {ie.durum || 'taslak'}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-zinc-500">{ie.olusturan || '—'}</td>
                       <td className="px-3 py-2 text-zinc-500 font-mono">{ie.olusturma || '—'}</td>
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        {ie.durum === 'verildi' && (
+                          <div className="flex gap-1">
+                            <button
+                              disabled={islemYapiliyor}
+                              onClick={() => tamamlandiYap(ie)}
+                              title="Tamamlandı olarak işaretle"
+                              className="flex items-center gap-1 px-2 py-1 bg-blue/15 text-blue hover:bg-blue/30 rounded text-[10px] font-semibold disabled:opacity-40"
+                            >
+                              <Check size={10} /> Tamam
+                            </button>
+                            <button
+                              disabled={islemYapiliyor}
+                              onClick={() => { setIptalHedef(ie); setIptalNeden(''); setIptalModalAcik(true) }}
+                              title="İptal et"
+                              className="flex items-center gap-1 px-2 py-1 bg-red/15 text-red hover:bg-red/30 rounded text-[10px] font-semibold disabled:opacity-40"
+                            >
+                              <X size={10} /> İptal
+                            </button>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-zinc-600"><ChevronRight size={13} /></td>
                     </tr>
                   ))}
@@ -653,6 +813,34 @@ export function IeHazirlama() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* İptal modal */}
+          {iptalModalAcik && iptalHedef && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setIptalModalAcik(false)}>
+              <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <h2 className="text-base font-semibold mb-1">İş Emri İptal</h2>
+                <p className="text-xs text-zinc-500 mb-4 font-mono">{iptalHedef.siparis_no}</p>
+                <label className="text-[10px] text-zinc-500 font-mono block mb-1">İPTAL NEDENİ *</label>
+                <textarea
+                  value={iptalNeden}
+                  onChange={e => setIptalNeden(e.target.value)}
+                  rows={3}
+                  placeholder="İptal nedenini yazın..."
+                  className="w-full px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent resize-none"
+                />
+                <div className="flex gap-2 justify-end mt-4">
+                  <button onClick={() => setIptalModalAcik(false)} className="px-4 py-2 bg-bg-3 text-zinc-400 hover:text-white rounded-lg text-xs">Vazgeç</button>
+                  <button
+                    disabled={islemYapiliyor || !iptalNeden.trim()}
+                    onClick={() => iptalYap(iptalHedef, iptalNeden)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-red/80 hover:bg-red text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <X size={12} /> {islemYapiliyor ? 'İptal ediliyor...' : 'İptal Et'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -676,6 +864,15 @@ export function IeHazirlama() {
                   </div>
                 </div>
 
+                {secilenIe.durum === 'iptal' && secilenIe.iptal_neden && (
+                  <div className="mb-4 px-4 py-2.5 bg-red/10 border border-red/20 rounded-lg">
+                    <p className="text-xs text-red font-semibold">İptal Nedeni: {secilenIe.iptal_neden}</p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      {secilenIe.iptal_by} · {secilenIe.iptal_at ? new Date(secilenIe.iptal_at).toLocaleString('tr-TR') : ''}
+                    </p>
+                  </div>
+                )}
+
                 <div className="mb-4">
                   <h3 className="text-sm font-semibold mb-2">Ürün Kalemleri</h3>
                   <table className="w-full text-xs">
@@ -697,7 +894,16 @@ export function IeHazirlama() {
                               {k.siparis_acildi ? <CheckSquare size={14} /> : <Square size={14} />}
                             </button>
                           </td>
-                          <td className="px-3 py-1.5 text-zinc-500 font-mono text-[10px]">{k.uys_siparis_no || '—'}</td>
+                          <td className="px-3 py-1.5">
+                            <input
+                              type="text"
+                              defaultValue={k.uys_siparis_no || ''}
+                              onBlur={e => kaydetUysSiparisNo(k, e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                              placeholder="—"
+                              className="w-32 px-2 py-1 bg-bg-3 border border-border rounded text-[10px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>
