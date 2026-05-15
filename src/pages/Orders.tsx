@@ -20,6 +20,7 @@ import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen, getPlanliWoIds } from 
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
+import { z } from 'zod'
 
 export function Orders() {
   const orders = useOrderStore(s => s.orders)
@@ -423,6 +424,17 @@ export function Orders() {
   )
 }
 
+const _kalemSaveSchema = z.object({
+  rcId: z.string().min(1, 'Ürün/reçete seçilmedi'),
+  adet: z.number().int('Tam sayı girin').min(1, 'Adet en az 1 olmalı'),
+  termin: z.string().min(1, 'Termin zorunlu (FIFO sıralaması için)'),
+})
+
+const _orderHeaderSchema = z.object({
+  siparisNo: z.string().min(1).max(100, 'Sipariş No en fazla 100 karakter olabilir'),
+  musteri: z.string().min(1, 'Müşteri zorunlu').max(200, 'Müşteri adı çok uzun'),
+})
+
 // ═══ OrderFormModal — Çoklu ürün kalemi destekli ═══
 function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
   initial: Order | null
@@ -571,6 +583,9 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     }
 
     if (!etkinSiparisNo) { setError('Sipariş No zorunlu (veya "Sipariş bağlı değil" tikini açın)'); return }
+    if (!isStokIE && !etkinMusteri) { setError('Müşteri zorunlu'); return }
+    const _hdr = _orderHeaderSchema.safeParse({ siparisNo: etkinSiparisNo, musteri: isStokIE ? 'STOK' : etkinMusteri })
+    if (!_hdr.success) { setError(_hdr.error.issues[0].message); return }
     if (!kalemler.length) { setError('En az bir ürün kalemi olmalı'); return }
 
     // v15.91 — Madde 15 ek koruma: yeni sipariş açarken (initial yok) ayni siparis_no
@@ -597,18 +612,11 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
 
     for (let i = 0; i < kalemler.length; i++) {
       const k = kalemler[i]
-      if (!k.rcId) { setError(`${i + 1}. kalem için ürün / reçete seçilmedi`); return }
-      // v15.82 — Termin her durumda zorunlu (Senaryo 12 FIFO için).
-      // Stok modunda (Müşteri yok tiki) bile termin gerek — manuel İE'ler
-      // diğer siparişlerle aynı FIFO kuralında yarışır.
-      // Saha modeli (28 Nis 2026, saha_model_28nis2026.md Senaryo 12.3):
-      //   "Manuel iş emrine de termin girerek çelişki biter."
-      if (!k.termin) { setError(`${i + 1}. kalem termini boş (FIFO sıralaması için zorunlu)`); return }
-      // v16.43 — adet boş ('') veya geçersiz ise açıkça uyar
       if (k.adet === '' || k.adet === null || k.adet === undefined) {
         setError(`${i + 1}. kalem adedi boş — bir adet yazın`); return
       }
-      if (typeof k.adet !== 'number' || k.adet < 1) { setError(`${i + 1}. kalem adedi 1'den küçük`); return }
+      const _kr = _kalemSaveSchema.safeParse({ rcId: k.rcId, adet: k.adet, termin: k.termin })
+      if (!_kr.success) { setError(`${i + 1}. kalem: ${_kr.error.issues[0].message}`); return }
       // v15.36 — Sıkı reçete kontrolü: reçete gerçekten var ve satırlı mı?
       const rc = recipes.find(r => r.id === k.rcId)
       if (!rc) { setError(`${i + 1}. kalem: "${k.mamulAd || k.mamulKod}" için reçete bulunamadı — silinmiş olabilir`); return }

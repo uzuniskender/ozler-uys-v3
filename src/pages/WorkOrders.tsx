@@ -21,6 +21,14 @@ import { canDeleteWO } from '@/features/production/validations'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
 import { startFlow } from '@/lib/pendingFlow'
+import { z } from 'zod'
+
+const _hedefSchema = z.coerce.number().int('Tam sayı girin').min(0, 'Sıfır veya pozitif sayı girin').max(999999, 'Hedef çok büyük')
+
+const _logEditSchema = z.object({
+  qty: z.coerce.number().int('Tam sayı girin').min(0, 'Sıfır veya pozitif olmalı'),
+  fire: z.coerce.number().int('Tam sayı girin').min(0, 'Sıfır veya pozitif olmalı'),
+}).refine(d => d.qty > 0 || d.fire > 0, { message: 'Adet veya fire en az biri >0 olmalı' })
 
 export function WorkOrders() {
   const workOrders = useProductionStore(s => s.workOrders)
@@ -320,7 +328,9 @@ export function WorkOrders() {
     const wo = workOrders.find(w => w.id === id)
     const val = await showPrompt('Yeni hedef adet', 'Hedef', String(wo?.hedef || 0))
     if (!val) return
-    const hedef = parseInt(val); if (isNaN(hedef) || hedef < 0) return
+    const _h = _hedefSchema.safeParse(val)
+    if (!_h.success) { toast.error(_h.error.issues[0].message); return }
+    const hedef = _h.data
     await supabase.from('uys_work_orders').update({ hedef }).eq('id', id)
     loadAllStores(); toast.success('Hedef güncellendi: ' + hedef)
   }
@@ -566,9 +576,9 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
       { label: 'Fire', key: 'fire', defaultValue: String(l.fire || 0), type: 'number' },
     ])
     if (!result) return
-    const yeniQty = parseInt(result.qty) || 0
-    const yeniFire = parseInt(result.fire) || 0
-    if (yeniQty <= 0 && yeniFire <= 0) { toast.error('Adet veya fire girin (en az biri >0 olmalı)'); return }
+    const _lr = _logEditSchema.safeParse({ qty: result.qty, fire: result.fire })
+    if (!_lr.success) { toast.error(_lr.error.issues[0].message); return }
+    const { qty: yeniQty, fire: yeniFire } = _lr.data
 
     const delta = yeniQty - (l.qty || 0)
     const rc = wo.rcId ? recipes.find((r: any) => r.id === wo.rcId) : recipes.find((r: any) => r.mamulKod === wo.mamulKod)
