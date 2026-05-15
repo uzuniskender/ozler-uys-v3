@@ -8,6 +8,15 @@ import { useAuth } from '@/hooks/useAuth'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight, Check, X, Pencil, LayoutGrid, AlertTriangle } from 'lucide-react'
+import { z } from 'zod'
+
+const _birimAdetSchema = z.coerce.number().int('Tam sayı girin').min(1, 'En az 1 olmalı')
+
+const _bomUrunSatirSchema = z.object({
+  birim_adet: z.number().gt(0, "'1 HM'den Adet' sıfırdan büyük olmalı"),
+  kesim_olc_mm: z.number().min(0, 'Kesim ölçüsü ≥ 0 olmalı'),
+  hm_uzunluk_mm: z.number().min(0, 'HM uzunluk ≥ 0 olmalı'),
+})
 
 // ─── Tipler ───────────────────────────────────────────────────
 interface BomSatir {
@@ -1179,8 +1188,9 @@ function BomDuzenleModal({ satir, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
-    const val = parseInt(birimAdet)
-    if (!val || val <= 0) return toast.error('Geçerli bir sayı girin')
+    const _r = _birimAdetSchema.safeParse(birimAdet)
+    if (!_r.success) return toast.error(_r.error.issues[0].message)
+    const val = _r.data
     setSaving(true)
     const { error } = await supabase.from('uys_rapido_bom').update({ birim_adet: val }).eq('id', satir.id)
     if (error) { toast.error('Kayıt hatası: ' + error.message); setSaving(false); return }
@@ -1260,7 +1270,9 @@ function BomUrunDuzenleModal({ bom, onClose, onSaved }: {
 
   function alanGuncelle(idx: number, alan: 'birim_adet' | 'kesim_olc_mm' | 'hm_uzunluk_mm', deger: string) {
     const sayi = parseFloat(deger)
-    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [alan]: isNaN(sayi) ? 0 : sayi } : r))
+    const val = isNaN(sayi) ? 0 : sayi
+    const clamped = (alan === 'kesim_olc_mm' || alan === 'hm_uzunluk_mm') ? Math.max(0, val) : val
+    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [alan]: clamped } : r))
   }
 
   const degisenler = useMemo(() => {
@@ -1276,8 +1288,10 @@ function BomUrunDuzenleModal({ bom, onClose, onSaved }: {
   const gecersizSatir = rows.some(r => r.birim_adet <= 0 || r.kesim_olc_mm < 0 || r.hm_uzunluk_mm < 0)
 
   async function kaydet() {
-    if (gecersizSatir) {
-      toast.error("Geçersiz değer: '1 HM'den Adet' > 0, diğerleri ≥ 0 olmalı")
+    const ilkHatalı = rows.find(r => !_bomUrunSatirSchema.safeParse({ birim_adet: r.birim_adet, kesim_olc_mm: r.kesim_olc_mm, hm_uzunluk_mm: r.hm_uzunluk_mm }).success)
+    if (ilkHatalı) {
+      const _c = _bomUrunSatirSchema.safeParse({ birim_adet: ilkHatalı.birim_adet, kesim_olc_mm: ilkHatalı.kesim_olc_mm, hm_uzunluk_mm: ilkHatalı.hm_uzunluk_mm })
+      toast.error((!_c.success && _c.error.issues[0].message) || 'Geçersiz satır değeri')
       return
     }
     if (degisenler.length === 0) {

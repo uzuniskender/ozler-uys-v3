@@ -11,6 +11,12 @@ import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-rea
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
 import { RecipeEditor } from './Recipes'
+import { z } from 'zod'
+
+const _newBomSchema = z.object({
+  mamulKod: z.string().min(1, 'Mamul Kodu zorunlu'),
+  ad: z.string().min(1, 'Ürün adı zorunlu').max(200, 'Ürün adı çok uzun'),
+})
 
 export function BomTrees() {
   const bomTrees = useProductionStore(s => s.bomTrees)
@@ -361,11 +367,13 @@ function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
 
   async function save() {
-    if (!ad.trim()) { toast.error('Ürün adı zorunlu'); return }
-    const mat = materials.find(m => m.kod === mamulKod.trim())
-    const kokTip = mat?.tip || 'Mamul'  // Malzeme kartından tip al, yoksa Mamul
+    const _r = _newBomSchema.safeParse({ mamulKod: mamulKod.trim(), ad: ad.trim() })
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
+    const { mamulKod: mk, ad: etkinAd } = _r.data
+    const mat = materials.find(m => m.kod === mk)
+    const kokTip = mat?.tip || 'Mamul'
     const kokBirim = mat?.birim || 'Adet'
-    await supabase.from('uys_bom_trees').insert({ id: uid(), mamul_kod: mamulKod.trim(), mamul_ad: ad.trim(), ad: ad.trim(), rows: [{ id: uid(), kirno: '1', malkod: mamulKod.trim(), malad: ad.trim(), tip: kokTip, miktar: 1, birim: kokBirim }] })
+    await supabase.from('uys_bom_trees').insert({ id: uid(), mamul_kod: mk, mamul_ad: etkinAd, ad: etkinAd, rows: [{ id: uid(), kirno: '1', malkod: mk, malad: etkinAd, tip: kokTip, miktar: 1, birim: kokBirim }] })
     onSaved()
   }
   return (
