@@ -278,6 +278,14 @@ export function IeHazirlama() {
   const [secilenIe, setSecilenIe] = useState<IeBaslik | null>(null)
   const [secilenKalemler, setSecilenKalemler] = useState<IeKalem[]>([])
   const [detayAcik, setDetayAcik] = useState(false)
+  // Geçmiş — filtre + pagination
+  const PAGE_SIZE = 30
+  const [filterSiparisNo, setFilterSiparisNo] = useState('')
+  const [filterMusteri, setFilterMusteri] = useState('')
+  const [filterBasTarih, setFilterBasTarih] = useState('')
+  const [filterBitisTarih, setFilterBitisTarih] = useState('')
+  const [gecmisPage, setGecmisPage] = useState(1)
+  const [gecmisTotal, setGecmisTotal] = useState(0)
 
   useEffect(() => {
     // fetchAll: uys_rapido_bom 1000+ satır içerir, default cap'i aşar
@@ -305,15 +313,47 @@ export function IeHazirlama() {
   const hmIhtiyac = useMemo(() => hesaplaHmIhtiyac(kalemler, bom), [kalemler, bom])
   const istasyonlar = useMemo(() => hesaplaIstasyonIe(kalemler, bom), [kalemler, bom])
 
+  async function loadGecmis(
+    page: number,
+    ov: { siparisNo?: string; musteri?: string; bas?: string; bitis?: string } = {}
+  ) {
+    setGecmisLoading(true)
+    const sNo   = ov.siparisNo  ?? filterSiparisNo
+    const mstr  = ov.musteri    ?? filterMusteri
+    const bas   = ov.bas        ?? filterBasTarih
+    const bitis = ov.bitis      ?? filterBitisTarih
+    const from  = (page - 1) * PAGE_SIZE
+    const to    = from + PAGE_SIZE - 1
+
+    let q = supabase
+      .from('uys_ie_hazirlama')
+      .select('*', { count: 'exact' })
+      .order('olusturma', { ascending: false })
+      .range(from, to)
+
+    if (sNo.trim())   q = q.ilike('siparis_no', `%${sNo.trim()}%`)
+    if (mstr.trim())  q = q.ilike('musteri',    `%${mstr.trim()}%`)
+    if (bas)          q = q.gte('olusturma', bas)
+    if (bitis)        q = q.lte('olusturma', bitis)
+
+    const { data, error, count } = await q
+    if (error) toast.error('Geçmiş yüklenemedi')
+    else { setGecmis((data || []) as IeBaslik[]); setGecmisTotal(count || 0) }
+    setGecmisLoading(false)
+  }
+
+  function goPage(p: number) { setGecmisPage(p); loadGecmis(p) }
+  function araGecmis() { setGecmisPage(1); loadGecmis(1) }
+  function resetFilters() {
+    setFilterSiparisNo(''); setFilterMusteri(''); setFilterBasTarih(''); setFilterBitisTarih('')
+    setGecmisPage(1)
+    loadGecmis(1, { siparisNo: '', musteri: '', bas: '', bitis: '' })
+  }
+
   useEffect(() => {
     if (tab !== 'gecmis') return
-    setGecmisLoading(true)
-    supabase.from('uys_ie_hazirlama').select('*').order('olusturma', { ascending: false }).limit(200)
-      .then(({ data, error }) => {
-        if (error) toast.error('Geçmiş yüklenemedi')
-        else setGecmis((data || []) as IeBaslik[])
-        setGecmisLoading(false)
-      })
+    setGecmisPage(1)
+    loadGecmis(1, { siparisNo: '', musteri: '', bas: '', bitis: '' })
   }, [tab])
 
   function kalemEkle() {
@@ -532,6 +572,39 @@ export function IeHazirlama() {
       {/* ─── GEÇMİŞ ─── */}
       {tab === 'gecmis' && (
         <div>
+          {/* Filtre bar */}
+          <div className="flex flex-wrap items-end gap-2 mb-3 p-3 bg-bg-2 border border-border rounded-xl">
+            <div>
+              <label className="text-[10px] text-zinc-500 block mb-1">Sipariş No</label>
+              <input value={filterSiparisNo} onChange={e => setFilterSiparisNo(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && araGecmis()}
+                placeholder="OZD2026..." className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 w-36 focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-[10px] text-zinc-500 block mb-1">Müşteri</label>
+              <input value={filterMusteri} onChange={e => setFilterMusteri(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && araGecmis()}
+                placeholder="Müşteri adı..." className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 w-40 focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-[10px] text-zinc-500 block mb-1">Tarih (başlangıç)</label>
+              <input type="date" value={filterBasTarih} onChange={e => setFilterBasTarih(e.target.value)}
+                className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-[10px] text-zinc-500 block mb-1">Tarih (bitiş)</label>
+              <input type="date" value={filterBitisTarih} onChange={e => setFilterBitisTarih(e.target.value)}
+                className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
+            </div>
+            <button onClick={araGecmis}
+              className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded text-xs font-semibold">Ara</button>
+            <button onClick={resetFilters}
+              className="px-3 py-1.5 bg-bg-3 text-zinc-400 hover:text-white rounded text-xs">Sıfırla</button>
+            {gecmisTotal > 0 && (
+              <span className="text-[10px] text-zinc-600 ml-auto self-end pb-1">{gecmisTotal} kayıt</span>
+            )}
+          </div>
+
           {gecmisLoading ? (
             <div className="text-zinc-600 text-xs text-center py-8">Yükleniyor...</div>
           ) : gecmis.length === 0 ? (
@@ -566,6 +639,20 @@ export function IeHazirlama() {
                   ))}
                 </tbody>
               </table>
+              {/* Pagination */}
+              {gecmisTotal > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border">
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    Sayfa {gecmisPage} / {Math.ceil(gecmisTotal / PAGE_SIZE)}
+                  </span>
+                  <div className="flex gap-1">
+                    <button onClick={() => goPage(gecmisPage - 1)} disabled={gecmisPage <= 1}
+                      className="px-2.5 py-1 bg-bg-3 rounded text-xs text-zinc-400 hover:text-white disabled:opacity-30">‹ Önceki</button>
+                    <button onClick={() => goPage(gecmisPage + 1)} disabled={gecmisPage >= Math.ceil(gecmisTotal / PAGE_SIZE)}
+                      className="px-2.5 py-1 bg-bg-3 rounded text-xs text-zinc-400 hover:text-white disabled:opacity-30">Sonraki ›</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
