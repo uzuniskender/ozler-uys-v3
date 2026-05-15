@@ -2,7 +2,7 @@
 -- TEST: cowgxwmhlogmswatbltz ✅ 2026-05-15
 -- PROD: lmhcobrgrnvtprvmcito ✅ 2026-05-15
 
-ALTER TABLE uys_ie_hazirlama
+ALTER TABLE public.uys_ie_hazirlama
   ADD COLUMN IF NOT EXISTS iptal_neden   TEXT,
   ADD COLUMN IF NOT EXISTS iptal_at      TEXT,
   ADD COLUMN IF NOT EXISTS iptal_by      TEXT,
