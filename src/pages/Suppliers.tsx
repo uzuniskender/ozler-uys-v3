@@ -1,8 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useWarehouseStore } from '@/store'
-import { supabase } from '@/lib/supabase'
-import { uid } from '@/lib/utils'
+import { deleteTedarikci, createTedarikci, updateTedarikci } from '@/services/tedarikciService'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
@@ -23,15 +22,19 @@ export function Suppliers() {
 
   async function del(id: string) {
     if (!await showConfirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')) return
-    await supabase.from('uys_tedarikciler').delete().eq('id', id)
-    loadOwn(); toast.success('Tedarikçi silindi')
+    try {
+      await deleteTedarikci(id)
+      loadOwn(); toast.success('Tedarikçi silindi')
+    } catch { toast.error('Silinemedi') }
   }
 
   async function save(data: { kod: string; ad: string; adres: string; tel: string; email: string; not: string }, editId?: string) {
-    const row = { kod: data.kod, ad: data.ad, adres: data.adres, tel: data.tel, email: data.email, not_: data.not }
-    if (editId) await supabase.from('uys_tedarikciler').update(row).eq('id', editId)
-    else await supabase.from('uys_tedarikciler').insert({ id: uid(), ...row })
-    loadOwn(); setShowForm(false); setEditItem(null); toast.success(editId ? 'Güncellendi' : 'Eklendi')
+    try {
+      if (editId) await updateTedarikci(editId, data)
+      else await createTedarikci(data)
+      loadOwn(); setShowForm(false); setEditItem(null)
+      toast.success(editId ? 'Güncellendi' : 'Eklendi')
+    } catch { toast.error('Kaydedilemedi') }
   }
 
   return (
