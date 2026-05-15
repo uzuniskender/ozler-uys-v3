@@ -293,8 +293,12 @@ export function Dashboard() {
   })
 
   const lastBackup = typeof localStorage !== 'undefined' ? localStorage.getItem('uys_last_backup') : null
-  const backupDays = lastBackup ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000) : -1
-  const backupWarn = !lastBackup || backupDays >= 7
+  const backupDays = (() => {
+    if (!lastBackup) return -1
+    const t = new Date(lastBackup).getTime()
+    return isNaN(t) ? -1 : Math.floor((Date.now() - t) / 86400000)
+  })()
+  const backupWarn = !lastBackup || backupDays < 0 || backupDays >= 7
 
   const siparisCount = aktifOrders.length
   const recetesizCount = orders.filter(o => !o.receteId && aktifOrders.some(a => a.id === o.id)).length

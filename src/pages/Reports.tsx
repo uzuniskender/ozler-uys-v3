@@ -54,9 +54,9 @@ export function Reports() {
   const parcaFireLogs = useMemo(() => fireLogs.filter(f => f.tip !== 'bar_hurda'), [fireLogs])
   const barHurdaLogs = useMemo(() => fireLogs.filter(f => f.tip === 'bar_hurda'), [fireLogs])
 
-  const toplamUretim = logs.reduce((a, l) => a + l.qty, 0)
+  const toplamUretim = useMemo(() => logs.reduce((a, l) => a + l.qty, 0), [logs])
   const toplamFire = parcaFireLogs.reduce((a, f) => a + f.qty, 0)
-  const bugunUretim = logs.filter(l => l.tarih === todayStr).reduce((a, l) => a + l.qty, 0)
+  const bugunUretim = useMemo(() => logs.filter(l => l.tarih === todayStr).reduce((a, l) => a + l.qty, 0), [logs, todayStr])
   const bugunFire = parcaFireLogs.filter(f => f.tarih === todayStr).reduce((a, f) => a + f.qty, 0)
 
   // Son 14 gün günlük üretim
@@ -67,14 +67,18 @@ export function Reports() {
     return Object.values(map).sort((a, b) => a.tarih.localeCompare(b.tarih)).slice(-14)
   }, [logs, parcaFireLogs])
 
-  // Operasyon bazlı
+  // Operasyon bazlı — logs'u woId → toplam qty Map'ine indirgeyerek O(n²) → O(n)
   const opData = useMemo(() => {
+    const uretimByWo = new Map<string, number>()
+    for (const l of logs) {
+      uretimByWo.set(l.woId, (uretimByWo.get(l.woId) ?? 0) + l.qty)
+    }
     const map: Record<string, { op: string; hedef: number; uretim: number; woCount: number }> = {}
     workOrders.forEach(w => {
       const k = w.opAd || 'Tanımsız'
       if (!map[k]) map[k] = { op: k, hedef: 0, uretim: 0, woCount: 0 }
       map[k].hedef += w.hedef; map[k].woCount++
-      map[k].uretim += logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+      map[k].uretim += uretimByWo.get(w.id) ?? 0
     })
     return Object.values(map).sort((a, b) => b.hedef - a.hedef)
   }, [workOrders, logs])
@@ -613,7 +617,7 @@ export function Reports() {
       {tab === 'oee' && (() => {
         const oeeData = opData.map(d => {
           const perf = d.hedef > 0 ? Math.round(d.uretim / d.hedef * 100) : 0
-          const quality = d.uretim > 0 ? Math.round((d.uretim - (parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0))) / d.uretim * 100) : 100
+          const quality = d.uretim > 0 ? Math.max(0, Math.round((d.uretim - (parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0))) / d.uretim * 100)) : 100
           const oee = Math.round(perf * quality / 100)
           return { ...d, perf, quality, oee }
         })
