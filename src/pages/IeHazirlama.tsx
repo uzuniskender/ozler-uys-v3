@@ -329,6 +329,11 @@ export function IeHazirlama() {
     setSecilenUrun(''); setSipAdet(1); setUrunArama('')
   }
 
+  function formSifirla() {
+    setSiparisNo(''); setMusteri(''); setSiparisTarihi(today()); setTeslimTarihi('')
+    setKalemler([]); setSecilenUrun(''); setSipAdet(1); setUrunArama('')
+  }
+
   async function kaydetVeVer() {
     if (!siparisNo.trim()) return toast.error('Sipariş No zorunlu')
     if (kalemler.length === 0) return toast.error('En az bir ürün ekleyin')
@@ -357,7 +362,7 @@ export function IeHazirlama() {
         kullanici: user?.username || user?.email || null, tarih: now,
       })
       toast.success('İş Emri verildi: ' + siparisNo)
-      setSiparisNo(''); setMusteri(''); setSiparisTarihi(today()); setTeslimTarihi(''); setKalemler([])
+      formSifirla()
     } catch (e: any) {
       toast.error('Kayıt hatası: ' + (e.message || e))
     } finally {
@@ -396,7 +401,7 @@ export function IeHazirlama() {
           <p className="text-xs text-zinc-500">Rapido BOM · Hammadde ihtiyaç + istasyon bazlı iş emri</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setTab('yeni')} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${tab === 'yeni' ? 'bg-accent text-white' : 'bg-bg-2 border border-border text-zinc-400 hover:text-white'}`}>
+          <button onClick={() => { setTab('yeni'); formSifirla() }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${tab === 'yeni' ? 'bg-accent text-white' : 'bg-bg-2 border border-border text-zinc-400 hover:text-white'}`}>
             + Yeni Hazırla
           </button>
           <button onClick={() => setTab('gecmis')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${tab === 'gecmis' ? 'bg-accent text-white' : 'bg-bg-2 border border-border text-zinc-400 hover:text-white'}`}>
