@@ -1206,3 +1206,119 @@ function BomDuzenleModal({ satir, onClose, onSaved }: {
     </div>
   )
 }
+
+// ─── Toplu Ekle ───────────────────────────────────────────────
+function newSlot(): TopluSlot {
+  return { id: uid(), urunKodu: '', urunAdi: '', adet: 1, arama: '' }
+}
+
+function TopluEkleModal({
+  urunler,
+  onEkle,
+  onClose,
+}: {
+  urunler: { kodu: string; adi: string }[]
+  onEkle: (slots: TopluSlot[]) => void
+  onClose: () => void
+}) {
+  const [slotlar, setSlotlar] = useState<TopluSlot[]>([newSlot(), newSlot(), newSlot()])
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  function update(id: string, patch: Partial<TopluSlot>) {
+    setSlotlar(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s))
+  }
+  function secUrun(id: string, u: { kodu: string; adi: string }) {
+    update(id, { urunKodu: u.kodu, urunAdi: u.adi, arama: `${u.kodu} — ${u.adi}` })
+    setActiveId(null)
+  }
+  function slotEkle() {
+    setSlotlar(prev => [...prev, newSlot()])
+    setTimeout(() => {
+      const els = document.querySelectorAll('[data-toplu-arama]')
+      const last = els[els.length - 1] as HTMLInputElement | null
+      last?.focus()
+    }, 50)
+  }
+  function slotSil(id: string) {
+    setSlotlar(prev => prev.filter(s => s.id !== id))
+  }
+  const gecerliSayisi = slotlar.filter(s => s.urunKodu && s.adet > 0).length
+
+  return (
+    <div className="fixed inset-0 z-[70] flex flex-col bg-bg-1">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+        <div>
+          <h2 className="text-base font-semibold">Toplu Ürün Ekle</h2>
+          <p className="text-[11px] text-zinc-500 mt-0.5">Birden fazla ürün seçip tek seferde ekle</p>
+        </div>
+        <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={20} /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+        {slotlar.map((slot, idx) => {
+          const filtreliler = slot.arama && !slot.urunKodu
+            ? urunler.filter(u =>
+                u.kodu.toLowerCase().includes(slot.arama.toLowerCase()) ||
+                u.adi.toLowerCase().includes(slot.arama.toLowerCase())
+              ).slice(0, 40)
+            : []
+          const showDrop = activeId === slot.id && filtreliler.length > 0
+          return (
+            <div key={slot.id} className="bg-bg-2 border border-border rounded-xl p-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-zinc-600 font-mono w-5 shrink-0">{idx + 1}</span>
+                <div className="relative flex-1">
+                  <input
+                    data-toplu-arama
+                    value={slot.arama}
+                    placeholder="Ürün kodu / adı ara..."
+                    onChange={e => { update(slot.id, { arama: e.target.value, urunKodu: '', urunAdi: '' }); setActiveId(slot.id) }}
+                    onFocus={() => { if (!slot.urunKodu && slot.arama) setActiveId(slot.id) }}
+                    onBlur={() => setTimeout(() => setActiveId(null), 150)}
+                    className={`w-full px-3 py-2 bg-bg-3 border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent ${slot.urunKodu ? 'border-green/40' : 'border-border'}`}
+                  />
+                  {showDrop && (
+                    <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-bg-1 border border-border rounded-lg shadow-xl max-h-44 overflow-y-auto">
+                      {filtreliler.map(u => (
+                        <button key={u.kodu} onMouseDown={() => secUrun(slot.id, u)}
+                          className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-bg-2 border-b border-border/30 last:border-0">
+                          <span className="font-mono text-accent text-[11px]">{u.kodu}</span>
+                          <span className="ml-2 text-zinc-400">{u.adi}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <input type="number" min={1} value={slot.adet}
+                  onChange={e => update(slot.id, { adet: Math.max(1, parseInt(e.target.value) || 1) })}
+                  className="w-20 px-3 py-2 bg-bg-3 border border-border rounded-lg text-xs text-zinc-200 text-center focus:outline-none focus:border-accent"
+                />
+                <button onClick={() => slotSil(slot.id)} className="p-1.5 text-zinc-600 hover:text-red shrink-0">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              {slot.urunAdi && (
+                <div className="mt-1.5 ml-7 text-[10px] text-green/70 font-mono truncate">✓ {slot.urunAdi}</div>
+              )}
+            </div>
+          )
+        })}
+        <button onClick={slotEkle}
+          className="w-full py-2 border border-dashed border-border rounded-xl text-xs text-zinc-500 hover:text-zinc-300 hover:border-zinc-500 flex items-center justify-center gap-1.5">
+          <Plus size={12} /> Yeni Satır
+        </button>
+      </div>
+      <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
+        <span className="text-[11px] text-zinc-500">
+          {gecerliSayisi > 0 ? `${gecerliSayisi} ürün seçili` : 'Henüz ürün seçilmedi'}
+        </span>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 hover:text-white rounded-lg text-xs">İptal</button>
+          <button onClick={() => onEkle(slotlar)} disabled={gecerliSayisi === 0}
+            className="flex items-center gap-1.5 px-5 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+            <CheckSquare size={13} /> Ekle ({gecerliSayisi} ürün)
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
