@@ -7,6 +7,7 @@ import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } f
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { z } from 'zod'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
 import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/lib/tedarikHelpers'
@@ -308,6 +309,19 @@ export function Procurement() {
   )
 }
 
+// TedarikFormModal validasyon şeması — sayısal ve tarih guard'ları client-side.
+// safeParse ile çağrılır; ilk issue toast'a düşer.
+const tedarikSchema = z.object({
+  malkod: z.string().trim().min(1, { message: 'Malzeme kodu zorunlu' }),
+  miktar: z.number()
+    .finite({ message: 'Miktar geçerli bir sayı olmalı' })
+    .positive({ message: 'Miktar 0\'dan büyük olmalı' }),
+  teslim: z.string().optional().refine(
+    v => !v || v >= today(),
+    { message: 'Teslim tarihi bugünden eski olamaz' }
+  ),
+})
+
 function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
   initial: Record<string, unknown> | null
   tedarikciler: { id: string; kod: string; ad: string }[]
@@ -384,9 +398,18 @@ function TedarikFormModal({ initial, tedarikciler, orders, onClose, onSave }: {
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
           <button onClick={async () => {
-            if (!malkod || !miktar) { toast.error('Malzeme kodu ve miktar zorunlu'); return }
+            const miktarSayi = parseFloat(miktar)
+            const parsed = tedarikSchema.safeParse({
+              malkod: malkod.trim(),
+              miktar: miktarSayi,
+              teslim,
+            })
+            if (!parsed.success) {
+              toast.error(parsed.error.issues[0]?.message || 'Geçersiz form')
+              return
+            }
             onSave({
-              malkod, malad, miktar: parseFloat(miktar), birim,
+              malkod: parsed.data.malkod, malad, miktar: parsed.data.miktar, birim,
               tedarikci_id: tedarikcId, tedarikci_ad: ted?.ad || '',
               order_id: orderId, siparis_no: ord?.siparisNo || '',
               teslim_tarihi: teslim,
