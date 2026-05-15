@@ -136,6 +136,9 @@ function OperatorRoutes({ onSignOut }: { onSignOut: () => void }) {
 }
 
 export default function App() {
+
+  console.log("🚀 APP ÇALIŞTI")
+  
   const { session, loading: authLoading, signIn, signInWithGoogle, signOut, guestLogin, operatorLogin, isGuest, isOperator, role, can } = useAuth()
 
  const orders = useOrderStore(s => s.orders)
