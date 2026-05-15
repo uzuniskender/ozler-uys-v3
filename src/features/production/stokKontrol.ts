@@ -18,10 +18,18 @@ export interface StokKontrolSonuc {
   mesaj?: string
 }
 
-function netStok(malkod: string, stokHareketler: StokHareket[]): number {
-  return stokHareketler
-    .filter(h => h.malkod === malkod)
-    .reduce((a: any, h: any) => a + (h.tip === 'giris' ? h.miktar : -h.miktar), 0)
+function buildNetStokMap(stokHareketler: StokHareket[]): Map<string, number> {  // E-1
+  const map = new Map<string, number>()
+  for (const h of stokHareketler) {
+    if (!h.malkod) continue
+    const delta = (h as any).tip === 'giris' ? (h.miktar || 0) : -(h.miktar || 0)
+    map.set(h.malkod, (map.get(h.malkod) ?? 0) + delta)
+  }
+  return map
+}
+
+function netStok(malkod: string, netStokMap: Map<string, number>): number {  // E-1: O(1)
+  return netStokMap.get(malkod) ?? 0
 }
 
 function netAcikTed(malkod: string, tedarikler: Tedarik[]): number {
@@ -49,7 +57,7 @@ function dogrudanAltBilesenler(
   if (rc && rc.satirlar?.length) {
     // 1) kirno-based top-level (nokta içermeyen kirno = 1. seviye)
     const kirnoTop = rc.satirlar.filter(
-      s => s.kirno && !s.kirno.includes('.') && s.malkod && s.malkod !== malkod
+      s => s.kirno && !s.kirno.includes('.') && s.malkod && s.malkod !== malkod && (s.miktar ?? 0) > 0  // E-3
     )
     if (kirnoTop.length > 0) {
       return kirnoTop.map(s => ({
@@ -64,7 +72,8 @@ function dogrudanAltBilesenler(
       s =>
         (s.tip === 'Hammadde' || s.tip === 'hammadde' || s.tip === 'YarıMamul') &&
         s.malkod &&
-        s.malkod !== malkod
+        s.malkod !== malkod &&
+        (s.miktar ?? 0) > 0  // E-3
     )
     if (tipBased.length > 0) {
       return tipBased.map(s => ({
@@ -102,7 +111,7 @@ function malzemeKontrol(
   malad: string,
   tip: string,
   gerekli: number,
-  stokHareketler: StokHareket[],
+  netStokMap: Map<string, number>,
   tedarikler: Tedarik[],
   recipes: Recipe[],
   materials: Material[] | undefined,
@@ -113,7 +122,7 @@ function malzemeKontrol(
   if (derinlik > 10 || ziyaret.has(malkod)) return []
   ziyaret.add(malkod)
 
-  const kendiStok = Math.max(0, Math.floor(netStok(malkod, stokHareketler)))
+  const kendiStok = Math.max(0, Math.floor(netStok(malkod, netStokMap)))
   if (kendiStok >= gerekli) return []
 
   const acikTed = netAcikTed(malkod, tedarikler)
@@ -130,7 +139,7 @@ function malzemeKontrol(
       const altSonuc = malzemeKontrol(
         alt.malkod, alt.malad, alt.tip,
         altGerekli,
-        stokHareketler, tedarikler, recipes, materials,
+        netStokMap, tedarikler, recipes, materials,
         new Set(ziyaret),
         derinlik + 1,
         wo
@@ -181,9 +190,10 @@ export function stokKontrolWO(
   recipes?: Recipe[]
 ): StokKontrolSonuc {
   if (kalan <= 0) return { durum: 'OK', satirlar: [], maxYapilabilir: 0 }
+  const netStokMap = buildNetStokMap(stokHareketler)  // E-1: tek seferlik Map
 
   // Mamul stokta varsa üretmeye gerek yok
-  const mamulStok = Math.floor(netStok(wo.malkod, stokHareketler))
+  const mamulStok = Math.floor(netStok(wo.malkod, netStokMap))
   if (mamulStok >= kalan) return { durum: 'OK', satirlar: [], maxYapilabilir: kalan }
 
   const altlar = dogrudanAltBilesenler(wo.malkod, recipes || [], wo)
@@ -233,7 +243,7 @@ export function stokKontrolWO(
     const sonuclar = malzemeKontrol(
       alt.malkod, alt.malad, alt.tip,
       altGerekli,
-      stokHareketler, tedarikler, recipes || [], materials,
+      netStokMap, tedarikler, recipes || [], materials,
       new Set([wo.malkod]),
       1,
       wo
