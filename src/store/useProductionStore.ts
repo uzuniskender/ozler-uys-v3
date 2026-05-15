@@ -5,6 +5,7 @@ import type {
   CuttingPlan, FireLog, AcikBar, ActiveWork, DurusKodu, PendingFlow, OperatorNote
 } from '@/types'
 import { entriesFor } from './tables'
+import { isFresh, markFresh } from '@/lib/queryCache'
 
 export interface ProductionStore {
   workOrders: WorkOrder[]
@@ -23,13 +24,14 @@ export interface ProductionStore {
   loading: boolean
   synced: boolean
   setWorkOrders: (wos: WorkOrder[]) => void
-  loadOwn: () => Promise<void>
+  loadOwn: (opts?: { force?: boolean }) => Promise<void>
   reloadOwn: (tables: string[]) => Promise<void>
 }
 
 const OWN = entriesFor('production')
+const CACHE_KEY = 'store:production:loadOwn'
 
-export const useProductionStore = create<ProductionStore>((set) => ({
+export const useProductionStore = create<ProductionStore>((set, get) => ({
   workOrders: [],
   logs: [],
   recipes: [],
@@ -48,7 +50,8 @@ export const useProductionStore = create<ProductionStore>((set) => ({
 
   setWorkOrders: (workOrders) => set({ workOrders }),
 
-  loadOwn: async () => {
+  loadOwn: async (opts) => {
+    if (!opts?.force && isFresh(CACHE_KEY) && get().synced) return
     set({ loading: true })
     try {
       const results = await Promise.all(OWN.map(t => supabase.from(t.table).select('*')))
@@ -61,6 +64,7 @@ export const useProductionStore = create<ProductionStore>((set) => ({
           ok++
         }
       })
+      if (ok > 0) markFresh(CACHE_KEY)
       set({ ...updates, loading: false, synced: ok > 0 })
     } catch (e) {
       console.error('useProductionStore.loadOwn:', e)

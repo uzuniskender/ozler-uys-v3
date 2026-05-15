@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { Material, StokHareket, Tedarik, Tedarikci, HmTip } from '@/types'
 import { M } from './mappers'
 import { entriesFor } from './tables'
+import { isFresh, markFresh } from '@/lib/queryCache'
 
 export interface WarehouseStore {
   materials: Material[]
@@ -12,12 +13,13 @@ export interface WarehouseStore {
   hmTipler: HmTip[]
   loading: boolean
   synced: boolean
-  loadOwn: () => Promise<void>
+  loadOwn: (opts?: { force?: boolean }) => Promise<void>
   reloadOwn: (tables: string[]) => Promise<void>
 }
 
 const OWN = entriesFor('warehouse')
 const STOK_TABLE = 'uys_stok_hareketler'
+const CACHE_KEY = 'store:warehouse:loadOwn'
 
 // stokHareketler: Supabase default limit (1000) aşılabilir — sayfalama (v16.53)
 async function fetchStokHareketler(): Promise<StokHareket[]> {
@@ -37,7 +39,7 @@ async function fetchStokHareketler(): Promise<StokHareket[]> {
   return tum
 }
 
-export const useWarehouseStore = create<WarehouseStore>((set) => ({
+export const useWarehouseStore = create<WarehouseStore>((set, get) => ({
   materials: [],
   stokHareketler: [],
   tedarikler: [],
@@ -46,7 +48,8 @@ export const useWarehouseStore = create<WarehouseStore>((set) => ({
   loading: true,
   synced: false,
 
-  loadOwn: async () => {
+  loadOwn: async (opts) => {
+    if (!opts?.force && isFresh(CACHE_KEY) && get().synced) return
     set({ loading: true })
     try {
       const digerler = OWN.filter(t => t.table !== STOK_TABLE)
@@ -65,6 +68,7 @@ export const useWarehouseStore = create<WarehouseStore>((set) => ({
         updates.stokHareketler = tumSH
         ok++
       }
+      if (ok > 0) markFresh(CACHE_KEY)
       set({ ...updates, loading: false, synced: ok > 0 })
     } catch (e) {
       console.error('useWarehouseStore.loadOwn:', e)

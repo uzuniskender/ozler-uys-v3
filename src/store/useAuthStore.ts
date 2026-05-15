@@ -4,6 +4,7 @@ import type {
   Operator, Kullanici, Izin, Bildirim, ChecklistItem, TestRun, Problem
 } from '@/types'
 import { entriesFor } from './tables'
+import { isFresh, markFresh } from '@/lib/queryCache'
 
 export interface AuthStore {
   operators: Operator[]
@@ -16,12 +17,13 @@ export interface AuthStore {
   yetkiMap: Record<string, string[]>
   loading: boolean
   synced: boolean
-  loadOwn: () => Promise<void>
+  loadOwn: (opts?: { force?: boolean }) => Promise<void>
   reloadOwn: (tables: string[]) => Promise<void>
   reloadYetki: () => Promise<void>
 }
 
 const OWN = entriesFor('auth')
+const CACHE_KEY = 'store:auth:loadOwn'
 
 async function fetchYetkiMap(): Promise<Record<string, string[]>> {
   const { data } = await supabase.from('uys_yetki_ayarlari').select('*')
@@ -34,7 +36,7 @@ async function fetchYetkiMap(): Promise<Record<string, string[]>> {
   return map
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   operators: [],
   kullanicilar: [],
   izinler: [],
@@ -46,7 +48,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   loading: true,
   synced: false,
 
-  loadOwn: async () => {
+  loadOwn: async (opts) => {
+    if (!opts?.force && isFresh(CACHE_KEY) && get().synced) return
     set({ loading: true })
     try {
       const results = await Promise.all(OWN.map(t => supabase.from(t.table).select('*')))
@@ -60,6 +63,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         }
       })
       updates.yetkiMap = await fetchYetkiMap()
+      if (ok > 0) markFresh(CACHE_KEY)
       set({ ...updates, loading: false, synced: ok > 0 })
     } catch (e) {
       console.error('useAuthStore.loadOwn:', e)

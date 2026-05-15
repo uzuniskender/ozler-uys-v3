@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 import type { Order, Customer, Sevk, MrpRezerve } from '@/types'
 import { entriesFor } from './tables'
+import { isFresh, markFresh } from '@/lib/queryCache'
 
 export interface OrderStore {
   orders: Order[]
@@ -11,13 +12,14 @@ export interface OrderStore {
   loading: boolean
   synced: boolean
   setOrders: (orders: Order[]) => void
-  loadOwn: () => Promise<void>
+  loadOwn: (opts?: { force?: boolean }) => Promise<void>
   reloadOwn: (tables: string[]) => Promise<void>
 }
 
 const OWN = entriesFor('order')
+const CACHE_KEY = 'store:order:loadOwn'
 
-export const useOrderStore = create<OrderStore>((set) => ({
+export const useOrderStore = create<OrderStore>((set, get) => ({
   orders: [],
   customers: [],
   sevkler: [],
@@ -27,7 +29,8 @@ export const useOrderStore = create<OrderStore>((set) => ({
 
   setOrders: (orders) => set({ orders }),
 
-  loadOwn: async () => {
+  loadOwn: async (opts) => {
+    if (!opts?.force && isFresh(CACHE_KEY) && get().synced) return
     set({ loading: true })
     try {
       const results = await Promise.all(OWN.map(t => supabase.from(t.table).select('*')))
@@ -40,6 +43,7 @@ export const useOrderStore = create<OrderStore>((set) => ({
           ok++
         }
       })
+      if (ok > 0) markFresh(CACHE_KEY)
       set({ ...updates, loading: false, synced: ok > 0 })
     } catch (e) {
       console.error('useOrderStore.loadOwn:', e)
