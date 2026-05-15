@@ -57,10 +57,35 @@
 - Supabase MCP bağlantısı oturum sonunda kapatılıyor (Buket manuel)
 - GitHub 2FA ✅ | Supabase 2FA ✅ | Windows otomatik kilit ✅
 
+### 15 Mayıs 2026 — useStore Shim Kaldırma + Hooks Düzeltmesi
+
+**Store build fix**
+- `src/store/index.ts` — composite shim restore edildi (önceki commit'te tip tanımları ile ezilmişti)
+- `src/store/loadAllStores.ts` — stub'dan gerçek `Promise.all([...loadOwn()...])` implementasyona geçildi
+- `src/app.tsx` — Windows case-insensitive dosya sistemi yüzünden oluşan `App.tsx` duplicate'i git'ten kaldırıldı
+
+**useStore shim Phase 3 — tam göç (5 dosya)**
+- `Topbar.tsx`, `Sidebar.tsx`, `Orders.tsx`, `DataManagement.tsx`, `testRunner.ts`
+- `useStore` → `useOrderStore`, `useProductionStore`, `useWarehouseStore`, `useAuthStore` slice hook'ları
+- `testRunner.ts`'de `getStores()` yardımcı fonksiyonu eklendi (non-React context için)
+- Sonuç: `grep -rn "\buseStore\b" src/` → 0 harici tüketici kaldı
+
+**DevSync crash fix (Rules of Hooks)**
+- `Topbar.tsx` — `&&` kısa-devre değerlendirmesi hook çağrılarını koşullu yapıyordu; her slice için ayrı `const` değişkeni + sonra `&&` boolean hesabı
+- Crash: "Cannot read properties of undefined (reading 'length') — vendor-charts içinde"
+
+**Refresh buton analizi (değişiklik yok — rapor)**
+- `force: true` gereken 3 buton: `Topbar.tsx:252`, `ActiveWorkPanel.tsx:79`, `DataManagement.tsx:~1216`
+- Backup/Logs/StokLog refresh butonları store cache kullanmıyor (doğrudan DB sorgusu) → etkilenmiyor
+
 ## Sıradaki görevler
 
-1. Normalize veri geçişi (kapsam belirsiz — ertelendi)
-2. Service katmanı Faz 3 (isteğe bağlı): sayfaların inline query'lerini servise taşıma — önce OperatorPanel izin, sonra Suppliers tedarikçi. Her biri ayrı onay ile.
+1. Refresh butonlarına `force: true` ekle (onay bekleniyor):
+   - `Topbar.tsx:252` → `loadAllStores({ force: true })`
+   - `ActiveWorkPanel.tsx:79` → `loadOwn({ force: true })`
+   - `DataManagement.tsx:~1216` → `loadAll({ force: true })`
+2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
+3. Service katmanı Faz 3 (isteğe bağlı): sayfaların inline query'lerini servise taşıma — önce OperatorPanel izin, sonra Suppliers tedarikçi. Her biri ayrı onay ile.
 
 ---
 
