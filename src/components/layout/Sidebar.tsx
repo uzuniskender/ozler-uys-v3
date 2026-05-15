@@ -9,7 +9,7 @@ import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   RefreshCw,
   Warehouse, Truck, TreePine, BookOpen, Package, Settings2,
-  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity, Weight, FileSearch, Monitor
+  Users, Building2, AlertCircle, BarChart3, Database, HardHat, ShoppingCart, Calculator, Cpu, MessageSquare, AlertOctagon, MessageCircle, Boxes, FlaskConical, Save, Activity, Weight, FileSearch, Monitor, Factory
 } from 'lucide-react'
 
 // guest: sadece görüntüleme izni olan sayfalar
@@ -31,6 +31,7 @@ const NAV = [
     { path: '/procurement', label: 'Tedarik', icon: ShoppingCart, badge: 'tedarikler', guest: false },
     { path: '/warehouse', label: 'Depolar', icon: Warehouse, badge: 'stokHareketler', guest: true },
     { path: '/stok-log', label: 'Stok Log', icon: FileSearch, guest: false },
+    { path: '/ie-hazirlama', label: 'İE Hazırlama', icon: Factory, guest: false },
     { path: '/shipment', label: 'Sevkiyat', icon: Truck, badge: 'sevkler', guest: false },
   ]},
   { label: 'TANIMLAR', items: [
