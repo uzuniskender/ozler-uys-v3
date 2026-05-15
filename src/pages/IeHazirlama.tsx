@@ -7,7 +7,7 @@ import { supabase, fetchAll } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight, Check, X, Pencil } from 'lucide-react'
+import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight, Check, X, Pencil, LayoutGrid, AlertTriangle } from 'lucide-react'
 
 // ─── Tipler ───────────────────────────────────────────────────
 interface BomSatir {
@@ -86,6 +86,14 @@ interface IeKalem {
   iptal_by: string | null
 }
 
+interface TopluSlot {
+  id: string
+  urunKodu: string
+  urunAdi: string
+  adet: number
+  arama: string
+}
+
 // ─── Hesaplama ────────────────────────────────────────────────
 function hesaplaHmIhtiyac(kalemler: Kalem[], bom: BomSatir[]): HmIhtiyac[] {
   const map = new Map<string, HmIhtiyac>()
@@ -94,7 +102,7 @@ function hesaplaHmIhtiyac(kalemler: Kalem[], bom: BomSatir[]): HmIhtiyac[] {
     // hammadde_kodu bazında: birim_adet × kesim_olc_mm topla
     const hmMap = new Map<string, { hammadde_adi: string; toplam_mm_per: number; hm_uzunluk_mm: number }>()
     for (const b of bomSatirlari) {
-      if (!b.hammadde_kodu || b.kesim_olc_mm <= 0) continue
+      if (!b.hammadde_kodu || b.kesim_olc_mm <= 0 || !b.birim_adet) continue
       const e = hmMap.get(b.hammadde_kodu)
       if (e) {
         e.toplam_mm_per += b.birim_adet * b.kesim_olc_mm
@@ -287,6 +295,7 @@ export function IeHazirlama() {
   const [sipAdet, setSipAdet] = useState<number>(1)
   const [saving, setSaving] = useState(false)
   const [urunArama, setUrunArama] = useState('')
+  const [showTopluModal, setShowTopluModal] = useState(false)
 
   // Geçmiş
   const [gecmis, setGecmis] = useState<IeBaslik[]>([])
@@ -299,6 +308,7 @@ export function IeHazirlama() {
   const [iptalHedef, setIptalHedef] = useState<IeBaslik | null>(null)
   const [iptalNeden, setIptalNeden] = useState('')
   const [islemYapiliyor, setIslemYapiliyor] = useState(false)
+  const [bomDuzenleSatir, setBomDuzenleSatir] = useState<BomSatir | null>(null)
   // Geçmiş — filtre + pagination
   const PAGE_SIZE = 30
   const [filterSiparisNo, setFilterSiparisNo] = useState('')
@@ -333,6 +343,15 @@ export function IeHazirlama() {
 
   const hmIhtiyac = useMemo(() => hesaplaHmIhtiyac(kalemler, bom), [kalemler, bom])
   const istasyonlar = useMemo(() => hesaplaIstasyonIe(kalemler, bom), [kalemler, bom])
+  const eksikBomSatirlari = useMemo(() => {
+    const eksik: BomSatir[] = []
+    for (const kalem of kalemler) {
+      bom
+        .filter(b => b.urun_kodu === kalem.urun_kodu && b.hammadde_kodu && b.kesim_olc_mm > 0 && !b.birim_adet)
+        .forEach(b => eksik.push(b))
+    }
+    return eksik
+  }, [kalemler, bom])
 
   async function loadGecmis(
     page: number,
@@ -376,6 +395,25 @@ export function IeHazirlama() {
     setGecmisPage(1)
     loadGecmis(1, { siparisNo: '', musteri: '', bas: '', bitis: '' })
   }, [tab])
+
+  function handleTopluEkle(slots: TopluSlot[]) {
+    const gecerli = slots.filter(s => s.urunKodu && s.adet > 0)
+    if (!gecerli.length) { toast.error('En az bir ürün seçin'); return }
+    setKalemler(prev => {
+      let next = [...prev]
+      for (const s of gecerli) {
+        const mevcut = next.find(k => k.urun_kodu === s.urunKodu)
+        if (mevcut) {
+          next = next.map(k => k.urun_kodu === s.urunKodu ? { ...k, siparis_adeti: k.siparis_adeti + s.adet } : k)
+        } else {
+          next.push({ id: uid(), urun_kodu: s.urunKodu, urun_adi: s.urunAdi, siparis_adeti: s.adet })
+        }
+      }
+      return next
+    })
+    setShowTopluModal(false)
+    toast.success(`${gecerli.length} ürün eklendi`)
+  }
 
   function kalemEkle() {
     if (!secilenUrun) return toast.error('Ürün seçin')
@@ -679,6 +717,10 @@ export function IeHazirlama() {
                 className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
                 <Plus size={13} /> Ekle
               </button>
+              <button onClick={() => setShowTopluModal(true)} disabled={bomLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-bg-3 border border-border hover:border-accent text-zinc-300 hover:text-white rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+                <LayoutGrid size={13} /> Toplu Ekle
+              </button>
             </div>
 
             {kalemler.length === 0 ? (
@@ -714,6 +756,57 @@ export function IeHazirlama() {
             )}
           </div>
 
+          {/* Eksik birim_adet uyarısı */}
+          {eksikBomSatirlari.length > 0 && (
+            <div className="bg-amber/10 border border-amber/30 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber/20">
+                <AlertTriangle size={13} className="text-amber shrink-0" />
+                <span className="text-xs font-semibold text-amber">
+                  {eksikBomSatirlari.length} BOM satırında "Birim Adet" eksik — hammadde ihtiyacı hesaplanamıyor
+                </span>
+              </div>
+              <table className="w-full text-xs">
+                <thead><tr className="border-b border-amber/20 text-zinc-500">
+                  <th className="text-left px-4 py-1.5">Ürün Kodu</th>
+                  <th className="text-left px-3 py-1.5">İstasyon</th>
+                  <th className="text-left px-3 py-1.5">HM Kodu</th>
+                  <th className="text-right px-3 py-1.5">Kesim (mm)</th>
+                  <th className="px-3 py-1.5 w-24"></th>
+                </tr></thead>
+                <tbody>
+                  {eksikBomSatirlari.map(b => (
+                    <tr key={b.id} className="border-b border-amber/10">
+                      <td className="px-4 py-1.5 font-mono text-[11px] text-accent">{b.urun_kodu}</td>
+                      <td className="px-3 py-1.5 text-zinc-400">{b.is_istasyonu || '—'}</td>
+                      <td className="px-3 py-1.5 font-mono text-[11px] text-zinc-300">{b.hammadde_kodu}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-zinc-400">{b.kesim_olc_mm}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        <button
+                          onClick={() => setBomDuzenleSatir(b)}
+                          className="px-2.5 py-1 bg-amber/20 hover:bg-amber/35 text-amber rounded text-[10px] font-semibold"
+                        >
+                          Bilgiyi tamamlayın
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* BOM düzenleme modal */}
+          {bomDuzenleSatir && (
+            <BomDuzenleModal
+              satir={bomDuzenleSatir}
+              onClose={() => setBomDuzenleSatir(null)}
+              onSaved={updated => {
+                setBom(prev => prev.map(b => b.id === updated.id ? updated : b))
+                setBomDuzenleSatir(null)
+              }}
+            />
+          )}
+
           {/* Hesaplama paneli */}
           {kalemler.length > 0 && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -738,6 +831,14 @@ export function IeHazirlama() {
             </div>
           )}
         </div>
+      )}
+
+      {showTopluModal && (
+        <TopluEkleModal
+          urunler={urunler}
+          onEkle={handleTopluEkle}
+          onClose={() => setShowTopluModal(false)}
+        />
       )}
 
       {/* ─── GEÇMİŞ ─── */}
@@ -1041,6 +1142,62 @@ function BaslikDuzenleModal({ ie, onClose, onSave }: {
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
           <button onClick={handleSave} disabled={saving || !siparisNo.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold disabled:opacity-40">
+            <Check size={13} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BOM Satır Düzenleme Modal ────────────────────────────────
+function BomDuzenleModal({ satir, onClose, onSaved }: {
+  satir: BomSatir
+  onClose: () => void
+  onSaved: (updated: BomSatir) => void
+}) {
+  const [birimAdet, setBirimAdet] = useState(satir.birim_adet ? String(satir.birim_adet) : '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    const val = parseInt(birimAdet)
+    if (!val || val <= 0) return toast.error('Geçerli bir sayı girin')
+    setSaving(true)
+    const { error } = await supabase.from('uys_rapido_bom').update({ birim_adet: val }).eq('id', satir.id)
+    if (error) { toast.error('Kayıt hatası: ' + error.message); setSaving(false); return }
+    toast.success('BOM satırı güncellendi')
+    onSaved({ ...satir, birim_adet: val })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold">BOM Satırı Düzenle</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+        </div>
+        <div className="space-y-2 mb-4 p-3 bg-bg-2 rounded-lg text-xs text-zinc-400">
+          <div className="flex justify-between"><span className="text-zinc-600">Ürün Kodu</span><span className="font-mono text-accent">{satir.urun_kodu}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-600">İstasyon</span><span>{satir.is_istasyonu || '—'}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-600">HM Kodu</span><span className="font-mono">{satir.hammadde_kodu}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-600">Kesim (mm)</span><span className="font-mono">{satir.kesim_olc_mm}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-600">HM Uzunluk (mm)</span><span className="font-mono">{satir.hm_uzunluk_mm}</span></div>
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-500 font-mono block mb-1">BİRİM ADET *</label>
+          <input
+            type="number" min={1} value={birimAdet}
+            onChange={e => setBirimAdet(e.target.value)}
+            autoFocus
+            placeholder="Kaç adet kesim gerekiyor?"
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent"
+          />
+          <p className="text-[10px] text-zinc-600 mt-1">1 ürün birimini üretmek için bu kesimden kaç adet gerekiyor</p>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={handleSave} disabled={saving || !birimAdet || parseInt(birimAdet) <= 0}
             className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold disabled:opacity-40">
             <Check size={13} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
