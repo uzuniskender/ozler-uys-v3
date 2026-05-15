@@ -28,8 +28,15 @@ export function Stations() {
   }
 
   async function save(data: { kod: string; ad: string; opIds: string[] }, editId?: string) {
-    if (editId) await supabase.from('uys_stations').update({ kod: data.kod, ad: data.ad, op_ids: data.opIds }).eq('id', editId)
-    else await supabase.from('uys_stations').insert({ id: uid(), kod: data.kod, ad: data.ad, op_ids: data.opIds })
+    const kodN = data.kod.trim()
+    const adN = data.ad.trim()
+    if (!kodN || !adN) { toast.error('Kod ve Ad zorunlu'); return }
+    const dupKod = stations.find(s => s.kod.trim().toLowerCase() === kodN.toLowerCase() && s.id !== editId)
+    if (dupKod) { toast.error(`"${kodN}" kodu zaten kullanımda`); return }
+    const dupAd = stations.find(s => s.ad.trim().toLowerCase() === adN.toLowerCase() && s.id !== editId)
+    if (dupAd) { toast.error(`"${adN}" adı zaten kullanımda`); return }
+    if (editId) await supabase.from('uys_stations').update({ kod: kodN, ad: adN, op_ids: data.opIds }).eq('id', editId)
+    else await supabase.from('uys_stations').insert({ id: uid(), kod: kodN, ad: adN, op_ids: data.opIds })
     loadOwn(); setShowForm(false); setEditItem(null); toast.success(editId ? 'Güncellendi' : 'Eklendi')
   }
 

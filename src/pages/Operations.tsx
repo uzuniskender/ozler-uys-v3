@@ -22,8 +22,15 @@ export function Operations() {
   }, [operations, search])
 
   async function save(kod: string, ad: string, bolum: string, editId?: string) {
-    if (editId) await supabase.from('uys_operations').update({ kod, ad, bolum }).eq('id', editId)
-    else await supabase.from('uys_operations').insert({ id: uid(), kod, ad, bolum })
+    const kodN = kod.trim()
+    const adN = ad.trim()
+    if (!kodN || !adN) { toast.error('Kod ve Ad zorunlu'); return }
+    const dupKod = operations.find(o => o.kod.trim().toLowerCase() === kodN.toLowerCase() && o.id !== editId)
+    if (dupKod) { toast.error(`"${kodN}" kodu zaten kullanımda`); return }
+    const dupAd = operations.find(o => o.ad.trim().toLowerCase() === adN.toLowerCase() && o.id !== editId)
+    if (dupAd) { toast.error(`"${adN}" adı zaten kullanımda`); return }
+    if (editId) await supabase.from('uys_operations').update({ kod: kodN, ad: adN, bolum }).eq('id', editId)
+    else await supabase.from('uys_operations').insert({ id: uid(), kod: kodN, ad: adN, bolum })
     loadOwn(); setShowForm(false); setEditItem(null)
   }
 
