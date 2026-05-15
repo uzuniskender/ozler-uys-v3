@@ -232,7 +232,7 @@ const operatorSchema = z.object({
   kod: z.string().min(1, 'Sicil no zorunludur').max(20, 'Sicil no en fazla 20 karakter').regex(/^\S+$/, 'Sicil no boşluk içeremez'),
   ad: z.string().min(2, 'Ad soyad en az 2 karakter').max(100, 'Ad soyad en fazla 100 karakter'),
   bolum: z.string().min(1, 'Bölüm zorunludur').max(50, 'Bölüm en fazla 50 karakter'),
-  sifre: z.string().min(4, 'Şifre en az 4 karakter olmalıdır').max(50, 'Şifre en fazla 50 karakter'),
+  sifre: z.string().min(4, 'Şifre en az 4 karakter olmalıdır').regex(/\d/, 'Şifre en az 1 rakam içermelidir').max(50, 'Şifre en fazla 50 karakter'),
 })
 
 function OprFormModal({ initial, bolumler, onClose, onSave }: {

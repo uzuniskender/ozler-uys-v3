@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
 import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
@@ -342,6 +343,11 @@ function FlowModal({ flows, onClose, onAction }: {
   )
 }
 
+const zSifre = z.string()
+  .min(4, 'Şifre en az 4 karakter olmalıdır')
+  .regex(/\d/, 'Şifre en az 1 rakam içermelidir')
+  .max(50, 'Şifre en fazla 50 karakter')
+
 function PassModal({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState('')
   const [newPass, setNewPass] = useState('')
@@ -351,7 +357,8 @@ function PassModal({ onClose }: { onClose: () => void }) {
     if (current !== 'admin123' && current !== localStorage.getItem('uys_admin_pass')) {
       toast.error('Mevcut şifre hatalı'); return
     }
-    if (newPass.length < 4) { toast.error('Yeni şifre en az 4 karakter olmalı'); return }
+    const parsed = zSifre.safeParse(newPass)
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz şifre'); return }
     if (newPass !== confirm) { toast.error('Şifreler eşleşmiyor'); return }
     localStorage.setItem('uys_admin_pass', newPass)
     toast.success('Şifre değiştirildi — yeni giriş: ' + newPass)
