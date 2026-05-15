@@ -17,8 +17,18 @@ const SYNC_EXTS = ['.tsx', '.ts', '.css', '.json', '.md', '.sql', '.cjs']
 const EXCLUDE_DIRS = ['node_modules', 'dist', '.git']
 
 type DevFile = { path: string; sha: string; size: number }
-type SyncedFile = { path: string; sha: string; size_bytes: number; updated_at: string; updated_by: string }
+type SyncedFile = { path: string; sha: string; size_bytes: number; updated_at: string; updated_by: string; committed_hash: string | null }
 type PendingChange = { path: string; updated_at: string; updated_by: string }
+
+async function computeGitBlobSha(content: string): Promise<string> {
+  const enc = new TextEncoder()
+  const body = enc.encode(content)
+  const header = enc.encode(`blob ${body.length}\0`)
+  const buf = new Uint8Array(header.length + body.length)
+  buf.set(header); buf.set(body, header.length)
+  const hash = await crypto.subtle.digest('SHA-1', buf)
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 // ─── Kopyala Modal ───
 function KopyalaModal({ cmd, onClose }: { cmd: string; onClose: () => void }) {
@@ -120,17 +130,51 @@ export function DevSync() {
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
   const [tab, setTab] = useState<'sync' | 'changes'>('sync')
 
-  async function loadSynced() {
+  async function loadSynced(): Promise<SyncedFile[]> {
     const { data } = await supabase
       .from('uys_dev_files')
-      .select('path, sha, size_bytes, updated_at, updated_by')
+      .select('path, sha, size_bytes, updated_at, updated_by, committed_hash')
       .order('path')
-    setSyncedFiles(data || [])
-    const changes = (data || []).filter(f => f.updated_by === 'claude')
-    setPendingChanges(changes)
+    const files = (data || []) as SyncedFile[]
+    setSyncedFiles(files)
+    setPendingChanges(files.filter(f => f.updated_by === 'claude'))
+    return files
   }
 
-  async function loadRepoTree() {
+  async function autoCheckCommitted(repoFiles: DevFile[], synced: SyncedFile[]) {
+    const repoMap = new Map(repoFiles.map(f => [f.path, f.sha]))
+    const claudeFiles = synced.filter(f => f.updated_by === 'claude')
+    if (!claudeFiles.length) return
+
+    const toUpdate: string[] = []
+
+    for (const sf of claudeFiles) {
+      const githubSha = repoMap.get(sf.path)
+      if (!githubSha) continue
+
+      let localSha = sf.committed_hash
+
+      if (!localSha) {
+        const { data } = await supabase
+          .from('uys_dev_files').select('content').eq('path', sf.path).single()
+        if (!data?.content) continue
+        localSha = await computeGitBlobSha(data.content)
+        await supabase.from('uys_dev_files')
+          .update({ committed_hash: localSha }).eq('path', sf.path)
+      }
+
+      if (localSha === githubSha) toUpdate.push(sf.path)
+    }
+
+    if (!toUpdate.length) return
+    await supabase.from('uys_dev_files')
+      .update({ updated_by: 'synced', committed_hash: null })
+      .in('path', toUpdate)
+    await loadSynced()
+    toast.success(`${toUpdate.length} dosya otomatik senkronize edildi`)
+  }
+
+  async function loadRepoTree(): Promise<DevFile[]> {
     setLoading(true)
     try {
       const res = await fetch(GITHUB_TREE)
@@ -143,8 +187,10 @@ export function DevSync() {
       })
       setRepoFiles(files)
       setSelectedPaths(new Set(files.filter(f => f.path.startsWith('src/')).map(f => f.path)))
+      return files
     } catch (e: any) {
       toast.error('GitHub tree yüklenemedi: ' + e.message)
+      return []
     } finally {
       setLoading(false)
     }
@@ -210,7 +256,13 @@ export function DevSync() {
     toast.success(`${pendingChanges.length} dosya indirildi`)
   }
 
-  useEffect(() => { loadSynced(); loadRepoTree() }, [])
+  useEffect(() => {
+    async function initialize() {
+      const [synced, repo] = await Promise.all([loadSynced(), loadRepoTree()])
+      await autoCheckCommitted(repo, synced)
+    }
+    initialize()
+  }, [])
 
   const syncedMap = new Map(syncedFiles.map(f => [f.path, f]))
   const filteredFiles = repoFiles.filter(f => !search || f.path.toLowerCase().includes(search.toLowerCase()))
