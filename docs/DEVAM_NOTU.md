@@ -172,6 +172,17 @@ docs/DEVAM_NOTU.md                       — bu notlar
 - **Inline Supabase** — `uys_izinler`, `uys_bildirimler`, `uys_tedarikciler`, `uys_notes` tabloları için servis katmanı; 7 sayfada toplam 20+ inline çağrı kaldırıldı
 - **loadAll alias şişkinliği** — 17 dosyada tekrarlayan tek satır alias kaldırıldı; codebase `loadAllStores` doğrudan referans ediyor
 
+### 15 Mayıs 2026 — Bug fix & Performans (2. oturum devamı)
+
+| Commit | Değişiklik |
+|--------|-----------|
+| `393c832` | IeHazirlama.tsx — başlık düzenleme (sipariş no, müşteri, tarihler, not) |
+| `a9333fd` | IeHazirlama.tsx — Excel export'a "Sipariş Bilgileri" sekmesi eklendi |
+| `4dc32af` | src/pages/ global error handling — Shipment/Procurement/WorkOrders/ProductionEntry try/catch+toast |
+| `c40b1c6` | autoChain.ts — fetchAll (A-5), freshTedarikler (A-7), upsert hata kontrolü (A-4) |
+| `7ffc483` | mrp.ts case-insensitive eşleşme; Dashboard.tsx logByWoId O(1) map + aktifOrders/acikWOs useMemo |
+| `df31b1f` | MRP.tsx — orderHasEksik sadece aktifOrders üzerinde döner (terminal/arşiv için senkron hesap kaldırıldı) |
+
 ## Sıradaki görevler
 
 1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
