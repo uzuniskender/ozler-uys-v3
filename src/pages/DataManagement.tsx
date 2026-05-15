@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
 import { getActivityLog, clearActivityLog } from '@/lib/activityLog'
 import { useState, useEffect, Fragment } from 'react'
-import { useStore } from '@/store'
+import { useOrderStore, useProductionStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { supabase, fetchAll } from '@/lib/supabase'
 import { Download, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
@@ -35,8 +35,12 @@ interface SaglikRaporu {
 }
 
 export function DataManagement() {
-  const store = useStore()
-  const { loadAll } = store
+  const materials = useWarehouseStore(s => s.materials)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
+  const synced = useOrderStore(s => s.synced) && useProductionStore(s => s.synced)
+    && useWarehouseStore(s => s.synced) && useAuthStore(s => s.synced)
+  const loadAll = loadAllStores
+  const store = { materials, stokHareketler, synced, loadAll }
   const { can } = useAuth()
 
   // ═══ SAĞLIK RAPORU STATE ═══
@@ -1423,8 +1427,12 @@ export function DataManagement() {
 }
 
 function SifirlamaSecimli() {
-  const store = useStore()
-  const { loadAll } = store
+  const o = useOrderStore()
+  const p = useProductionStore()
+  const w = useWarehouseStore()
+  const a = useAuthStore()
+  const store = { ...o, ...p, ...w, ...a }
+  const loadAll = loadAllStores
   const [siliniyor, setSiliniyor] = useState(false)
   const [acik, setAcik] = useState<string | null>(null)
   // Her tablo için seçili ID'ler
@@ -1592,7 +1600,12 @@ const TEST_TABLES = [
 ]
 
 function TestModuPanel() {
-  const store = useStore()
+  const o = useOrderStore()
+  const p = useProductionStore()
+  const w = useWarehouseStore()
+  const a = useAuthStore()
+  const store = { ...o, ...p, ...w, ...a }
+  const loadAll = loadAllStores
   const [siliniyor, setSiliniyor] = useState(false)
   const isTestMode = localStorage.getItem('uys_test_mode') === 'true'
   const snapshotRaw = localStorage.getItem('uys_test_snapshot')
@@ -1635,7 +1648,7 @@ function TestModuPanel() {
 
   async function deleteTestData() {
     // Store'u tazele (güncel ID'leri görmek için)
-    await store.loadAll()
+    await loadAll()
     // Kısa gecikme — store güncellensin
     await new Promise(r => setTimeout(r, 500))
 
@@ -1695,7 +1708,7 @@ function TestModuPanel() {
     localStorage.removeItem('uys_test_snapshot_time')
     localStorage.setItem('uys_test_mode', 'false')
     setSiliniyor(false)
-    store.loadAll()
+    loadAll()
     toast.success(`✓ ${deleted} test kaydı silindi`)
     window.location.reload()
   }
@@ -1773,7 +1786,8 @@ const ROL_LABELS: Record<string, string> = { admin: 'Admin', uretim_sor: 'Üreti
 const ROL_COLORS: Record<string, string> = { admin: 'text-red', uretim_sor: 'text-amber', planlama: 'text-accent', depocu: 'text-green' }
 
 function KullaniciPanel() {
-  const { kullanicilar, loadAll } = useStore()
+  const kullanicilar = useAuthStore(s => s.kullanicilar)
+  const loadAll = loadAllStores
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<any>(null)
   const [ad, setAd] = useState('')
@@ -1895,7 +1909,8 @@ function KullaniciPanel() {
 
 // ═══ YETKİ MATRİSİ EDİTÖRÜ ═══
 function YetkiPanel() {
-  const { yetkiMap, loadAll } = useStore()
+  const yetkiMap = useAuthStore(s => s.yetkiMap)
+  const loadAll = loadAllStores
   const [localMap, setLocalMap] = useState<Record<string, AdminRole[]>>({})
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -1997,7 +2012,8 @@ function YetkiPanel() {
 
 // ═══ HAMMADDE TİPLERİ PANELİ ═══
 function HmTipleriPanel() {
-  const { hmTipler, loadAll } = useStore()
+  const hmTipler = useWarehouseStore(s => s.hmTipler)
+  const loadAll = loadAllStores
   const [yeniKod, setYeniKod] = useState('')
   const [yeniAd, setYeniAd] = useState('')
   const [saving, setSaving] = useState(false)

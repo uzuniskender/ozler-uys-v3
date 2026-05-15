@@ -15,8 +15,17 @@ import { hesaplaMRP, siparisDelta } from '@/features/production/mrp'
 import { markTedarikGeldi } from './tedarikHelpers'
 import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/features/production/fireTelafi'
 import { canProduceWO, canDurus, canDeleteWO } from '@/features/production/validations'
-import { useStore } from '@/store'
+import { useOrderStore, useProductionStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import type { Recipe, WorkOrder, OrderItem, FireLog } from '@/types'
+
+function getStores() {
+  return {
+    ...useOrderStore.getState(),
+    ...useProductionStore.getState(),
+    ...useWarehogetStores(),
+    ...useAuthStore.getState(),
+  }
+}
 
 // ═══ TİPLER ═══
 
@@ -148,7 +157,7 @@ function adimSkip(state: RunnerState, name: string, neden: string, ctx: RunnerCo
 }
 
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-const loadAll = async () => { await useStore.getState().loadAll() }
+const loadAll = loadAllStores
 
 function finalize(state: RunnerState, senaryo: string, t0: number): SenaryoRapor {
   const fail = state.adimlar.filter(a => a.durum === 'FAIL').length
@@ -157,7 +166,7 @@ function finalize(state: RunnerState, senaryo: string, t0: number): SenaryoRapor
     fail === 0 ? 'PASS' : (ok > 0 ? 'KISMI' : 'FAIL')
 
   // Bitiş stok snapshot'ı
-  const store = useStore.getState()
+  const store = getStores()
   const stokSnapshotBitis: Record<string, number> = {}
   for (const malkod of state.ilgiliHamMalkodlar) {
     stokSnapshotBitis[malkod] = getStokMiktar(store.stokHareketler as any, malkod)
@@ -195,7 +204,7 @@ function findRecipe(recipes: Recipe[], recipeKod: string): Recipe {
 }
 
 async function _createOrder(state: RunnerState, ctx: RunnerContext, baslik: string): Promise<string> {
-  const store = useStore.getState()
+  const store = getStores()
   const rc = findRecipe(store.recipes, ctx.recipeKod)
   const orderId = uid()
   const siparisNo = `TEST-${baslik}-${Date.now().toString(36).toUpperCase().slice(-4)}`
@@ -216,7 +225,7 @@ async function _createOrder(state: RunnerState, ctx: RunnerContext, baslik: stri
   state.ozet.olusanIE += woCount
   await loadAll()
 
-  const fresh = useStore.getState()
+  const fresh = getStores()
   const createdIEs = fresh.workOrders.filter(w => w.orderId === orderId)
   state.ieIds.push(...createdIEs.map(w => w.id))
   // HM malkodlarını topla
@@ -226,7 +235,7 @@ async function _createOrder(state: RunnerState, ctx: RunnerContext, baslik: stri
 }
 
 async function _createWO(state: RunnerState, ctx: RunnerContext): Promise<string> {
-  const store = useStore.getState()
+  const store = getStores()
   const rc = findRecipe(store.recipes, ctx.recipeKod)
 
   const hm = (rc.satirlar || [])
@@ -259,7 +268,7 @@ async function _createWO(state: RunnerState, ctx: RunnerContext): Promise<string
 }
 
 async function _createCuttingPlans(state: RunnerState): Promise<{ yeni: number; guncellenen: number }> {
-  const store = useStore.getState()
+  const store = getStores()
   const logsSimple = store.logs.map(l => ({ woId: l.woId, qty: l.qty }))
   const cpMapped = store.cuttingPlans.map((p: any) => ({
     id: p.id, hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, hamBoy: p.hamBoy,
@@ -284,7 +293,7 @@ async function _createCuttingPlans(state: RunnerState): Promise<{ yeni: number; 
 }
 
 async function _runMRPAndCreateTedarik(state: RunnerState): Promise<{ mrpKalem: number; eksik: number; tedarik: number }> {
-  const store = useStore.getState()
+  const store = getStores()
   const ordIds = state.orderId ? [state.orderId] : []
   const ymSet = state.ieIds.length > 0 && !state.orderId ? new Set(state.ieIds) : null
   const cpMapped = store.cuttingPlans.map((p: any) => ({
@@ -323,7 +332,7 @@ async function _runMRPAndCreateTedarik(state: RunnerState): Promise<{ mrpKalem: 
 }
 
 async function _teslimAl(state: RunnerState): Promise<number> {
-  const store = useStore.getState()
+  const store = getStores()
   let count = 0
   for (const tId of state.tedarikIds) {
     const t = store.tedarikler.find(x => x.id === tId)
@@ -339,7 +348,7 @@ async function _teslimAl(state: RunnerState): Promise<number> {
 }
 
 async function _uretimGirisi(state: RunnerState, miktar: number): Promise<number> {
-  const store = useStore.getState()
+  const store = getStores()
   if (!state.ieIds.length) return 0
   const firstWoId = state.ieIds[0]
   const wo = store.workOrders.find(w => w.id === firstWoId)
@@ -411,7 +420,7 @@ async function runWithIsolation<T extends SenaryoRapor>(
 
   try {
     // Bu senaryo için state — sub-run id ile
-    const store = useStore.getState()
+    const store = getStores()
     const state = initState(childId, parentId)
 
     const rapor = await fn(state, t0)
@@ -425,7 +434,7 @@ async function runWithIsolation<T extends SenaryoRapor>(
 }
 
 function snapshotStok(state: RunnerState): void {
-  const store = useStore.getState()
+  const store = getStores()
   for (const malkod of state.ilgiliHamMalkodlar) {
     state.stokSnapshotBaslangic[malkod] = getStokMiktar(store.stokHareketler as any, malkod)
   }
@@ -460,7 +469,7 @@ export async function senaryo1(ctx: RunnerContext): Promise<SenaryoRapor> {
       // Doğrulama: stok gerçekten arttı mı?
       await wait(200)
       await adim(state, '4.1 Stok doğrulama (teslim sonrası)', async () => {
-        const store = useStore.getState()
+        const store = getStores()
         const mevcutStoklar: Record<string, number> = {}
         let artti = 0
         for (const mk of state.ilgiliHamMalkodlar) {
@@ -484,7 +493,7 @@ export async function senaryo1(ctx: RunnerContext): Promise<SenaryoRapor> {
 
       // Üretim doğrulama: log kaydedildi, stok azaldı mı
       await adim(state, '5.1 Üretim doğrulama', async () => {
-        const store = useStore.getState()
+        const store = getStores()
         const ie = store.workOrders.find(w => w.id === state.ieIds[0])
         const logs = store.logs.filter(l => l.woId === state.ieIds[0])
         const uretilen = logs.reduce((a, l) => a + l.qty, 0)
@@ -521,7 +530,7 @@ export async function senaryo2(ctx: RunnerContext): Promise<SenaryoRapor> {
       }), ctx)
 
       await adim(state, '4.1 Stok doğrulama', async () => {
-        const store = useStore.getState()
+        const store = getStores()
         const mevcut: Record<string, number> = {}
         let artti = 0
         for (const mk of state.ilgiliHamMalkodlar) {
@@ -601,7 +610,7 @@ export async function senaryo3(ctx: RunnerContext): Promise<SenaryoRapor> {
       }), ctx)
 
       await adim(state, '9.1 Stok doğrulama', async () => {
-        const store = useStore.getState()
+        const store = getStores()
         const stoklar: Record<string, number> = {}
         for (const mk of state.ilgiliHamMalkodlar) {
           stoklar[mk] = getStokMiktar(store.stokHareketler as any, mk)
@@ -698,7 +707,7 @@ async function _uretimGirisiFire(
   fireAdet: number,
   durusMinler: number[] = [],
 ): Promise<{ logId: string; fireLogId?: string }> {
-  const store = useStore.getState()
+  const store = getStores()
   if (!state.ieIds.length) throw new Error('İE yok')
   const firstWoId = state.ieIds[0]
   const wo = store.workOrders.find(w => w.id === firstWoId)
@@ -761,7 +770,7 @@ async function _uretimGirisiFire(
 
 /** Fire'dan telafi İE'si oluştur */
 async function _fireTelafiOlustur(state: RunnerState, fireLogId: string): Promise<string | null> {
-  const store = useStore.getState()
+  const store = getStores()
   const fireLog = store.fireLogs.find(f => f.id === fireLogId)
   if (!fireLog) throw new Error('Fire logu bulunamadı: ' + fireLogId)
   const origWo = store.workOrders.find(w => w.id === fireLog.woId)
@@ -816,7 +825,7 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
     // Fire loglandı mı kontrol
     await wait(200)
     await adim(state, '5.1 Fire logu doğrulama', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const fire = store.fireLogs.find(f => f.id === uretim.fireLogId)
       if (!fire) throw new Error('Fire logu DB\'de yok')
       if (fire.qty !== 2) throw new Error(`Fire miktarı yanlış: beklenen 2, bulundu ${fire.qty}`)
@@ -825,7 +834,7 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // Duruş kaydı kontrol (log.duruslar jsonb)
     await adim(state, '5.2 Duruş kaydı doğrulama', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const log = store.logs.find(l => l.id === uretim.logId)
       if (!log) throw new Error('Log bulunamadı')
       const durus = (log as any).duruslar || []
@@ -849,7 +858,7 @@ export async function senaryo5(ctx: RunnerContext): Promise<SenaryoRapor> {
       await wait(200)
       await adim(state, '8. Telafi MRP hesapla', async () => {
         // Telafi İE'si mevcut stoktan karşılanabilir (yeni tedarik gerekmeyebilir)
-        const store = useStore.getState()
+        const store = getStores()
         const cpMapped = store.cuttingPlans.map((p: any) => ({
           hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
           gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1248,7 +1257,7 @@ export async function senaryo8(ctx: RunnerContext): Promise<SenaryoRapor> {
     // ═══ ASIL TEST: fireTelafiAkisi çağrısı ═══
     await wait(200)
     const akisSonuc = await adim(state, '6. fireTelafiAkisi çağrısı (yeni recursive API)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const fire = store.fireLogs.find(f => f.id === uretim.fireLogId) as FireLog | undefined
       if (!fire) throw new Error('Fire DB\'de yok')
       const origWo = store.workOrders.find(w => w.id === fire.woId)
@@ -1287,7 +1296,7 @@ export async function senaryo8(ctx: RunnerContext): Promise<SenaryoRapor> {
     // ═══ 7. Üst telafi WO doğrulama: order_id = orijinal sipariş ═══
     await wait(200)
     await adim(state, '7. Üst telafi WO: order_id = orijinal sipariş (v15.76)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       // Telafi WO'lar fireTelafi.telafiWoOlustur içinde ieNo='<orig>-FT<fireId>' pattern'iyle açılır.
       // Orijinal sipariş'e bağlı, ieNo'da '-FT' içeren WO'lar = telafiler
       const telafiWOs = store.workOrders.filter(w =>
@@ -1323,7 +1332,7 @@ export async function senaryo8(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // ═══ 9. Sipariş.adet değişmedi (saha uyumu) ═══
     await adim(state, '9. Sipariş.adet değişmedi (50 müşteriye gider, üretim hedefi=50+fire)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const order = store.orders.find(o => o.id === state.orderId) as any
       if (!order) throw new Error('Sipariş bulunamadı')
       // Bu senaryoda ctx.adet (default 10 ya da kullanıcının girdiği) = orijinal sipariş.adet
@@ -1338,7 +1347,7 @@ export async function senaryo8(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // ═══ 10. İdempotency: ikinci kez aynı fire için çağır → hata beklenir ═══
     await adim(state, '10. İdempotency — aynı fire için 2. kez çağırırsa zaten açıldı hatası', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const fire = store.fireLogs.find(f => f.id === uretim.fireLogId) as FireLog | undefined
       if (!fire) throw new Error('Fire bulunamadı')
       const origWo = store.workOrders.find(w => w.id === fire.woId) as WorkOrder | undefined
@@ -1525,7 +1534,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
     await wait(200)
     const manualIE = await adim(state, '2. Manuel İE oluştur (orderId=null, bagimsiz=true)', async () => {
       const woId = await _createWO(state, ctx)  // _createWO: order_id=null, bagimsiz=true, siparis_disi=true
-      const store = useStore.getState()
+      const store = getStores()
       const wo = store.workOrders.find(w => w.id === woId)
       if (!wo) throw new Error('Manuel İE oluşturulamadı')
       if (wo.orderId) throw new Error('Manuel İE orderId boş olmalıydı: ' + wo.orderId)
@@ -1538,7 +1547,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
     // ═══ 3. MOD A: ordIds=[], secilenYMIds=null → tümü dahil ═══
     await wait(200)
     await adim(state, '3. MOD A — ordIds=[], secilenYMIds=null (tümü dahil)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1557,7 +1566,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
     // Basit kontrol: sonuç sayısı, MOD A ile karşılaştırılabilir farkta mı?
     await wait(200)
     await adim(state, '4. MOD B — sipariş bazlı (ordIds=[orderId], YM override yok)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1572,7 +1581,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
     // ═══ 5. MOD C: ordIds=[], secilenYMIds=[manuelWoId] → eksik çıkmalı ═══
     await wait(200)
     await adim(state, '5. MOD C — sadece manuel İE seçili (ordIds=[], ymSet={manuelWoId})', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1590,7 +1599,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
     // v15.78 SONRASI: secilenYMIds explicit override → manuel İE de hesaba dahil
     await wait(200)
     await adim(state, '6. MOD D ⭐ — Sipariş + Manuel İE (v15.78 saha bug fix)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1612,7 +1621,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // ═══ 7. Karşılaştırma: MOD C vs MOD D — manuel İE'nin payı her ikisinde de görünmeli ═══
     await adim(state, '7. MOD C vs MOD D — Manuel İE payı tutarlı mı', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1815,7 +1824,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
     if (!ctx.recipeKod || ctx.recipeKod === 'N/A') {
       throw new Error('Senaryo 12 reçete kodu gerektirir (S1-S5 ile aynı)')
     }
-    const store0 = useStore.getState()
+    const store0 = getStores()
     const recipe = store0.recipes.find(r =>
       (r.mamulKod || '').toLowerCase() === ctx.recipeKod.toLowerCase() ||
       (r.kod || '').toLowerCase() === ctx.recipeKod.toLowerCase()
@@ -1826,7 +1835,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
     let manualWoId = ''
     await adim(state, '1. Manuel İE oluştur (orderId=null, hedef=10)', async () => {
       manualWoId = await _createWO(state, ctx)  // _createWO: bagimsiz=true, siparis_disi=true
-      const wo = useStore.getState().workOrders.find(w => w.id === manualWoId)
+      const wo = getStores().workOrders.find(w => w.id === manualWoId)
       if (!wo) throw new Error('WO oluşturulamadı')
       return { woId: manualWoId, hedef: wo.hedef, durum: wo.durum }
     }, ctx)
@@ -1834,7 +1843,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
     // ═══ 2. logs olmadan hesaplaMRP çağrısı: kalan=hedef → ihtiyaç çıkar ═══
     let ihtiyacGorduk = false
     await adim(state, '2. logs PARAM YOK → eski davranış (uretilen=0, ihtiyaç çıkar)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1851,7 +1860,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // ═══ 3. logs verirsek (boş array) → uretilen=0 → davranış aynı ═══
     await adim(state, '3. logs=[] → uretilen=0, ihtiyaç hala çıkmalı', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1867,7 +1876,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // ═══ 4. Hedefin %50'si üretildi (logs ile geçir) → kalan ihtiyacın yarısı ═══
     await adim(state, '4. logs=hedef×0.5 → kalan=hedef×0.5, ihtiyaç yarıya düşmeli', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1888,7 +1897,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     // ═══ 5. Hedef %100 üretildi (logs ile) → kalan=0 → ihtiyaç=0 ⭐ KRİTİK ═══
     await adim(state, '5. ⭐ logs=hedef×1.0 → kalan=0, ihtiyaç ÇIKMAMALI (saha bug fix)', async () => {
-      const store = useStore.getState()
+      const store = getStores()
       const cpMapped = store.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1916,7 +1925,7 @@ export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
       if (error) throw new Error('WO update: ' + error.message)
       await loadAll()
 
-      const store2 = useStore.getState()
+      const store2 = getStores()
       const cpMapped = store2.cuttingPlans.map((p: any) => ({
         hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
         gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
@@ -1947,7 +1956,7 @@ export async function senaryo13(ctx: RunnerContext): Promise<SenaryoRapor> {
   return runWithIsolation(parentId, 'S13', async (state, t0) => {
     // Test reçetesinin kesim opsiyonu (op_id var) içermesi gerekiyor — kesim planı oluşamazsa
     // bar çıkışı = 0 olur ve modal items dizisi boş döner. Bu durumda Adım 2 SKIP edilmeli.
-    const store = useStore.getState()
+    const store = getStores()
     const rc = store.recipes.find(r => r.mamulKod === ctx.recipeKod || r.id === ctx.recipeKod)
     if (!rc) throw new Error(`Reçete bulunamadı: ${ctx.recipeKod}`)
     const kesimOpVar = (rc.satirlar || []).some(s => !!s.opId)
@@ -1973,7 +1982,7 @@ export async function senaryo13(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     await wait(200)
     await adim(state, '2. autoZincir + onKesimFark=kabul', async () => {
-      const s = useStore.getState()
+      const s = getStores()
       const fresh = s.workOrders.filter(w => w.orderId === kabulOrderId)
       const woCount = fresh.length
 
@@ -2070,7 +2079,7 @@ export async function senaryo13(ctx: RunnerContext): Promise<SenaryoRapor> {
 
     await wait(200)
     await adim(state, '5. autoZincir + onKesimFark=iptal', async () => {
-      const s = useStore.getState()
+      const s = getStores()
       const fresh = s.workOrders.filter(w => w.orderId === iptalOrderId)
       const woCount = fresh.length
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Menu, LogOut, RefreshCw, Key, MessageCircle, AtSign, Workflow, Scissors, Calculator, Truck, Bell, X } from 'lucide-react'
-import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores, useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -18,7 +18,10 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick, onSignOut }: TopbarProps) {
   const navigate = useNavigate()
-  const synced = useStore(s => s.synced)
+  const synced = useOrderStore(s => s.synced)
+    && useProductionStore(s => s.synced)
+    && useWarehouseStore(s => s.synced)
+    && useAuthStore(s => s.synced)
   const pendingFlows = useProductionStore(s => s.pendingFlows)
   const workOrders = useProductionStore(s => s.workOrders)
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)

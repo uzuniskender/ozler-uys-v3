@@ -1,7 +1,7 @@
 import { isWorkOrderOpen } from '@/lib/statusUtils'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { useStore } from '@/store'
+import { useOrderStore, useProductionStore, useWarehouseStore, useAuthStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { useChatNotifStore } from '@/hooks/useChatNotifications'
 import { isActive as isOrderActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
@@ -64,7 +64,11 @@ export { GUEST_PATHS }
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const store = useStore()
+  const o = useOrderStore()
+  const p = useProductionStore()
+  const w = useWarehouseStore()
+  const a = useAuthStore()
+  const store = { ...o, ...p, ...w, ...a }
   const { user, can } = useAuth()
   const isGuest = user?.role === 'guest'
   const chatUnread = useChatNotifStore(s => s.unreadCount)

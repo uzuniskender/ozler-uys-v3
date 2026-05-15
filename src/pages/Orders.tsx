@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
 import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
-import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores, useStore } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditLog } from '@/lib/audit'
 import { uid, today, pctColor } from '@/lib/utils'
@@ -103,7 +103,7 @@ export function Orders() {
     if (!selIds.size) return
     if (!await showConfirm(`${selIds.size} sipariş SİLİNECEK.\n\nHer sipariş için İE + kesim plan + açık tedarik + rezerve temizlenecek. Üretim başlamışsa ayrıca onay sorulacak. Devam?`)) return
 
-    const s = useStore.getState()
+    const s = useProductionStore.getState()
     let basariSayac = 0
     let iptalSayac = 0
     let hataSayac = 0
@@ -224,7 +224,7 @@ export function Orders() {
     if (!order) return
     if (!await showConfirm(`"${order.siparisNo}" siparişini silmek istediğinize emin misiniz?\n\nİş emirleri, kesim plan kesimleri, açık tedarikler ve rezerveler temizlenecek. Gelmiş malzemeler serbest stokta kalacak.`)) return
 
-    const s = useStore.getState()
+    const s = useProductionStore.getState()
     let result = await siparisSilKapsamli(id, { workOrders: s.workOrders, logs: s.logs, cuttingPlans: s.cuttingPlans as any })
 
     // Üretim başladıysa: kullanıcıya onay sor, force ile tekrar dene
@@ -252,7 +252,9 @@ export function Orders() {
   }
 
   async function topluMRP() {
-    const { recipes: fullRecipes, stokHareketler, tedarikler, workOrders: wos, cuttingPlans: cp, materials: mats, mrpRezerve, logs: allLogs } = useStore.getState()
+    const { recipes: fullRecipes, workOrders: wos, cuttingPlans: cp, logs: allLogs } = useProductionStore.getState()
+    const { stokHareketler, tedarikler, materials: mats } = useWarehouseStore.getState()
+    const { mrpRezerve } = useOrderStore.getState()
     const hedefOrders = selIds.size > 0
       ? orders.filter(o => selIds.has(o.id))
       : orders.filter(o => orderPct(o.id) < 100 && ((o.urunler && o.urunler.length > 0 && o.urunler.some(u => u.rcId)) || o.receteId))
@@ -633,7 +635,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
       urunler: kalemler,
     }
 
-    const { recipes: fullRecipes, workOrders: allWos, cuttingPlans: allPlans } = useStore.getState()
+    const { recipes: fullRecipes, workOrders: allWos, cuttingPlans: allPlans } = useProductionStore.getState()
 
     let createdOrderId = ''  // v15.36: yeni sipariş için DB id — flow state'ine yazılacak
 
@@ -675,7 +677,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
         adet: toplamAdet,
       }
 
-      const delta = siparisDelta(eskiOrder, yeniOrder, allWos as any, useStore.getState().logs as any)
+      const delta = siparisDelta(eskiOrder, yeniOrder, allWos as any, useProductionStore.getState().logs as any)
 
       // Hata kontrolü — azalış senaryosunda üretildi > yeniAdet
       if (delta.hatalar.length > 0) {
@@ -918,7 +920,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
                   className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-500 italic disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               ) : (() => {
-                const { customers, orders: allOrders } = useStore.getState()
+                const { customers, orders: allOrders } = useOrderStore.getState()
                 const musteriSet = new Set([...customers.map(c => c.ad || c.kod), ...allOrders.map(o => o.musteri)].filter(Boolean))
                 const opts = [...musteriSet].sort((a, b) => a.localeCompare(b, 'tr')).map(m => ({ value: m, label: m }))
                 return <SearchSelect options={opts} value={musteri} onChange={(v) => setMusteri(v)} placeholder="Müşteri ara veya yaz..." allowNew />
@@ -1173,7 +1175,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   async function yenidenCalistir() {
     if (!await showConfirm('Mevcut İE\'ler silinip reçetelerden yeniden oluşturulacak. Devam?')) return
     for (const w of workOrders) { await supabase.from('uys_work_orders').delete().eq('id', w.id) }
-    const { recipes: fullRecipes } = useStore.getState()
+    const { recipes: fullRecipes } = useProductionStore.getState()
     let total = 0
     const liste = kalemler.length > 0 ? kalemler : (order.receteId ? [{ rcId: order.receteId, adet: order.adet, mamulKod: order.mamulKod, mamulAd: order.mamulAd, termin: order.termin, not: '' }] : [])
     for (const k of liste) {
@@ -1183,7 +1185,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   }
 
   async function eksikIETamamla() {
-    const { recipes: fullRecipes } = useStore.getState()
+    const { recipes: fullRecipes } = useProductionStore.getState()
     const rcId = kalemler[0]?.rcId || order.receteId
     if (!rcId) { toast.error('Reçete bulunamadı'); return }
     const rc = fullRecipes.find(r => r.id === rcId)
@@ -1387,7 +1389,7 @@ function TamZincirButton({ order, workOrders, loadAll, onClose }: { order: Order
     setRunning(true)
     setAdimlar(['⏳ İş emirleri kontrol ediliyor...'])
     try {
-      const s = useStore.getState()
+      const s = { ...useProductionStore.getState(), ...useWarehouseStore.getState(), ...useOrderStore.getState() }
       const kalemler = order.urunler || []
       // DB'den anlık sorgu — store stale olabilir, tekrar WO açılmasını önler
       const { data: woRows } = await supabase.from('uys_work_orders').select('id').eq('order_id', order.id)
@@ -1604,7 +1606,7 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
     setImporting(true)
     setProgress({ cur: 0, total: grupMap.size })
 
-    const { recipes: fullRecipes } = useStore.getState()
+    const { recipes: fullRecipes } = useProductionStore.getState()
 
     let siparisToplam = 0
     let woTotal = 0
