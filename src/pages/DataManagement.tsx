@@ -1797,9 +1797,23 @@ function KullaniciPanel() {
   async function save() {
     if (!ad.trim() || !kullaniciAd.trim() || !sifre.trim()) { toast.error('Tüm alanlar zorunlu'); return }
     if (editItem) {
+      const yeniSifre = sifre.trim()
+      const sifreChanged = yeniSifre !== editItem.sifre
       await supabase.from('uys_kullanicilar').update({
-        ad: ad.trim(), kullanici_ad: kullaniciAd.trim(), sifre: sifre.trim(), rol,
+        ad: ad.trim(), kullanici_ad: kullaniciAd.trim(), sifre: yeniSifre, rol,
       }).eq('id', editItem.id)
+      // v16.89 (Plan B): Şifre değiştiyse auth.users.encrypted_password senkron yaz.
+      // RPC fail olursa toast.warning ile bildir — uys_kullanicilar update zaten geçti.
+      // auth_user_id NULL ise RPC içinde error fırlar (kullanıcı Auth göçü yapılmamış).
+      if (sifreChanged) {
+        const { error: rpcErr } = await supabase.rpc('admin_update_user_password', {
+          target_user_id: editItem.id,
+          new_password: yeniSifre,
+        })
+        if (rpcErr) {
+          toast.warning('Auth şifre senkronu başarısız: ' + rpcErr.message + ' (uys_kullanicilar güncellendi)')
+        }
+      }
       toast.success('Kullanıcı güncellendi')
     } else {
       // Aynı kullanıcı adı var mı kontrol
