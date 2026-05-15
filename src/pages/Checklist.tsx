@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { z } from 'zod'
 import { useState, useMemo } from 'react'
 import { useAuthStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -121,6 +122,13 @@ export function Checklist() {
   )
 }
 
+const clSchema = z.object({
+  baslik: z.string().min(1, 'Başlık zorunludur').max(200, 'Başlık en fazla 200 karakter'),
+  aciklama: z.string().max(1000, 'Açıklama en fazla 1000 karakter'),
+  atanan: z.string().max(50, 'Atanan en fazla 50 karakter'),
+  kategori: z.string().max(50, 'Kategori en fazla 50 karakter'),
+})
+
 function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | null; onClose: () => void; onSaved: () => void }) {
   const checklist = useAuthStore(s => s.checklist)
   const [tip, setTip] = useState<string>(initial?.tip || 'gorev')
@@ -132,7 +140,8 @@ function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | n
   const [kategori, setKategori] = useState(initial?.kategori || '')
 
   async function save() {
-    if (!baslik.trim()) { toast.error('Başlık zorunlu'); return }
+    const v = clSchema.safeParse({ baslik, aciklama, atanan, kategori })
+    if (!v.success) { toast.error(v.error.issues[0].message); return }
     const row = { tip, baslik: baslik.trim(), aciklama, atanan, oncelik, termin, kategori, tarih: today(), olusturan: 'admin' }
     if (initial?.id) {
       await supabase.from('uys_checklist').update(row).eq('id', initial.id)
@@ -158,9 +167,9 @@ function CLFormModal({ initial, onClose, onSaved }: { initial: ChecklistItem | n
             </select></div>
           </div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Başlık *</label>
-          <input value={baslik} onChange={e => setBaslik(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
+          <input value={baslik} onChange={e => setBaslik(e.target.value)} maxLength={200} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" autoFocus /></div>
           <div><label className="text-[11px] text-zinc-500 mb-1 block">Açıklama</label>
-          <textarea value={aciklama} onChange={e => setAciklama(e.target.value)} rows={3} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 resize-none focus:outline-none focus:border-accent" /></div>
+          <textarea value={aciklama} onChange={e => setAciklama(e.target.value)} maxLength={1000} rows={3} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 resize-none focus:outline-none focus:border-accent" /></div>
           <div className="grid grid-cols-3 gap-3">
             <div><label className="text-[11px] text-zinc-500 mb-1 block">Atanan</label>
             <select value={atanan} onChange={async e => {

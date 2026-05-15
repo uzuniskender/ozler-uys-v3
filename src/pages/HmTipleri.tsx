@@ -250,6 +250,7 @@ export function HmTipleri() {
         <HmTipiModal
           tip={duzenlenen}
           kullaniciAd={kullaniciAd}
+          mevcutKodlar={tipler.map(t => t.kod)}
           onKapat={() => { setModalAcik(false); setDuzenlenen(null) }}
           onKaydedildi={() => { setModalAcik(false); setDuzenlenen(null); yukle() }}
         />
@@ -274,11 +275,12 @@ export function HmTipleri() {
 interface ModalProps {
   tip: HmTipi | null
   kullaniciAd: string | null
+  mevcutKodlar: string[]
   onKapat: () => void
   onKaydedildi: () => void
 }
 
-function HmTipiModal({ tip, kullaniciAd, onKapat, onKaydedildi }: ModalProps) {
+function HmTipiModal({ tip, kullaniciAd, mevcutKodlar, onKapat, onKaydedildi }: ModalProps) {
   const duzenleme = !!tip
 
   const [kod, setKod] = useState(tip?.kod ?? '')
@@ -308,6 +310,9 @@ function HmTipiModal({ tip, kullaniciAd, onKapat, onKaydedildi }: ModalProps) {
       return `Açıklama en fazla ${HM_TIPI_KURALLAR.ACIKLAMA_MAX} karakter olabilir`
     if (sira < HM_TIPI_KURALLAR.SIRA_MIN || sira > HM_TIPI_KURALLAR.SIRA_MAX)
       return 'Sıra 0-9999 arasında olmalı'
+    const editingKod = tip?.kod ?? null
+    if (mevcutKodlar.some(k => k === kodNormalized && k !== editingKod))
+      return `"${kodNormalized}" kodu zaten kullanılıyor`
     return null
   }
 
