@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
-**Tarih:** 15 Mayıs 2026
-**Versiyon:** v16.85
+**Tarih:** 16 Mayıs 2026
+**Versiyon:** v16.87
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -253,6 +253,50 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 - `Reports.tsx` quality negatif → 0 sıkıştırma
 - `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
 
+### 15-16 Mayıs 2026 — Güvenlik & Kalite Oturumu
+
+#### Kod kalitesi fix'leri (commit serisi)
+
+| Dosya | Guard | Açıklama |
+|---|---|---|
+| `barModel.ts` | B-1 | `satirTamamlandiMi()` — tüm WO'lar iptal/silindi ise `aktifWoVar=false` → `false` döner (önceki: yanlışlıkla `true`) |
+| `barModel.ts` | B-2 | `barModelSync()` — `hamAdet = Math.min(hamAdet, 500)` üst limit; sınırsız DB insert riski kapatıldı |
+| `stokHelper.ts` | C-1 | `addStokHareketiToplu()` — boş `malkod` satırı varsa sessiz filtre yerine explicit error döner |
+| `stokHelper.ts` | C-2 | Batch insert loop'u hataları biriktirir, ilk hatada kesilmez |
+| `stokKontrol.ts` | E-1 | `netStok()` O(n²)→O(n): `buildNetStokMap()` ile tek pass Map, tüm recursive çağrılarda O(1) lookup |
+| `stokKontrol.ts` | E-3 | `dogrudanAltBilesenler()` — `(s.miktar ?? 0) > 0` guard; `birimIhtiyac=0` false-positive "stok yeterli" kapatıldı |
+
+#### Zod form validation (4 modal)
+
+Zod `^4.4.3` önceki oturumda eklenmişti; bu oturumda 4 form daha kapsandı:
+
+| Sayfa / Modal | Schema alanları |
+|---|---|
+| `Suppliers.tsx` — `SupplierFormModal` | kod(max20), ad(required+max100), tel(max20+regex), email(max100+regex), adres(max200), not(max500) |
+| `Operators.tsx` — `OprFormModal` | kod(required+max20+no-spaces regex), ad(min2+max100), bolum(required+max50), sifre(min4+max50) |
+| `HmTipleri.tsx` — `HmTipiModal` | Client-side unique check: `mevcutKodlar` prop + `dogrula()` içinde `k === kodNormalized && k !== editingKod` karşılaştırması |
+| `Checklist.tsx` — `CLFormModal` | baslik(required+max200), aciklama(max1000), atanan(max50), kategori(max50) + `maxLength` attr'ları |
+
+#### RLS migrations — 4 tablo (TEST uygulandı, PROD onay bekliyor)
+
+Tüm policy'ler `current_user_role()` (v16.0.0 Faz 1.1a) üzerine inşa edildi.
+Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
+
+| Migration | Tablolar | Policy'ler | Commit |
+|---|---|---|---|
+| `20260515_v16_86_rls_ie_hazirlama_rapido_bom.sql` | `uys_ie_hazirlama`, `uys_rapido_bom` | SELECT/INSERT/UPDATE/DELETE × 2 | `650c51a` |
+| `20260515_v16_87_rls_recipes_bom_trees.sql` | `uys_recipes`, `uys_bom_trees` | SELECT/INSERT/UPDATE/DELETE × 2 | `591cc25` |
+
+Önceki güvenlik oturumunda eklenenler (`84b240e`, `090bba8`):
+- `uys_kullanicilar`, `uys_yetki_ayarlari` — v16.86
+- `uys_work_orders`, `uys_stok_hareketler` — v16.87
+
+**⚠ PROD için bekleyen:** `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` — onay alındığında MCP ile uygulanacak.
+
+**Not:** `current_user_role()` → `auth_user_id` → Supabase Auth JWT zinciri gerektirir. Custom username/password login kullanan kullanıcılar (`anon` rol) bu RLS'den okuyamaz; Faz 1.1b auth link tamamlanmadan PROD'a uygulamak okuma erişimini kırar.
+
+---
+
 ## Sıradaki görevler
 
 1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
@@ -262,8 +306,10 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
-8. Zod adoption diğer 26 form modal'a yayılması (15/41 tamam) — Faz 2: high-risk listede kalan (Operators sicil/şifre policy, WorkOrders inline edit'ler, IeHazirlama UYS sipariş no format)
+8. Zod adoption diğer 22 form modal'a yayılması (19/41 tamam — bu oturumda 4 eklendi) — kalan high-risk: WorkOrders inline edit'ler, IeHazirlama UYS sipariş no format
 9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
+10. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
+11. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
 
 ---
 
