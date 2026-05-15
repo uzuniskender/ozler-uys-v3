@@ -223,6 +223,43 @@ let _sgOwner: string | null = null
       return { error: 'Auth basarisiz (session yok)' }
     }
 
+    // v16.87 — Non-admin: önce Supabase Auth dene (username@uys.local).
+    // Başarılı olursa authenticated JWT alınır → RLS politikaları current_user_role()
+    // ile kullanıcı rolünü DB'den okuyabilir.
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: `${username}@uys.local`,
+      password,
+    })
+    if (!authError && authData?.session) {
+      // Rolü uys_kullanicilar'dan oku (authenticated JWT ile)
+      const { data: kRows } = await supabase.from('uys_kullanicilar')
+        .select('id, ad, rol')
+        .eq('auth_user_id', authData.session.user.id)
+        .eq('aktif', true)
+        .limit(1)
+      if (kRows && kRows.length > 0) {
+        const k = kRows[0]
+        const existing = getStored()
+        const authUser: AuthUser = {
+          role: ((k.rol as string) || 'planlama') as UserRole,
+          username: (k.ad as string) || username,
+          loginTime: new Date().toISOString(),
+          dbId: k.id as string,
+          sessionId: (existing?.dbId === k.id && existing?.sessionId) ? existing.sessionId : generateSessionId(),
+          authUserId: authData.session.user.id,
+        }
+        persistUser(authUser)
+        setUser(authUser)
+        return { error: null }
+      }
+      // Auth başarılı ama uys_kullanicilar kaydı yok
+      await supabase.auth.signOut()
+      return { error: 'Kullanıcı kaydı bulunamadı' }
+    }
+
+    // Fallback: doğrudan DB sorgusu (henüz Supabase Auth hesabı açılmamış kullanıcılar).
+    // Not: uys_kullanicilar'da authenticated_select politikası varsa bu yol
+    // anon erişimini engelleyebilir; kullanıcıların @uys.local hesabı olması gerekir.
     try {
       const { data } = await supabase.from('uys_kullanicilar')
         .select('*')
@@ -232,19 +269,18 @@ let _sgOwner: string | null = null
         .limit(1)
       if (data && data.length > 0) {
         const k = data[0]
-        const rol = (k.rol || 'planlama') as UserRole
         const authUser: AuthUser = {
-          role: rol,
-          username: k.ad || username,
+          role: ((k.rol as string) || 'planlama') as UserRole,
+          username: (k.ad as string) || username,
           loginTime: new Date().toISOString(),
-          dbId: k.id,
+          dbId: k.id as string,
           sessionId: generateSessionId(),
         }
         persistUser(authUser)
         setUser(authUser)
         return { error: null }
       }
-    } catch { /* tablo yoksa veya hata → reddet */ }
+    } catch { /* RLS veya bağlantı hatası */ }
 
     return { error: 'Hatalı şifre' }
   }

@@ -1,6 +1,6 @@
 -- v16.87 — uys_work_orders ve uys_stok_hareketler RLS politikaları
 -- TEST  applied: 2026-05-15
--- PROD  applied: —
+-- PROD  applied: 2026-05-15
 
 -- ─── uys_work_orders ────────────────────────────────────────────────────────
 -- Mevcut "allow_all" politikasını kaldır
