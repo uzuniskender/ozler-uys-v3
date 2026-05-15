@@ -119,7 +119,11 @@ function malzemeKontrol(
   derinlik: number,
   wo?: WorkOrder
 ): StokKontrolSatir[] {
-  if (derinlik > 10 || ziyaret.has(malkod)) return []
+  if (ziyaret.has(malkod)) {
+    console.warn(`stokKontrol: dairesel reçete — ${malkod}`)
+    return []
+  }
+  if (derinlik > 10) return []
   ziyaret.add(malkod)
 
   const kendiStok = Math.max(0, Math.floor(netStok(malkod, netStokMap)))
@@ -270,7 +274,8 @@ export function stokKontrolWO(
         const mevcutToplam = s.mevcut + s.acikTed
         return Math.floor(mevcutToplam / birimIhtiyac)
       })
-    minMax = oranlar.length ? Math.max(0, Math.min(...oranlar)) : 0
+    const sonlu = oranlar.filter(isFinite)
+    minMax = sonlu.length ? Math.max(0, Math.min(...sonlu)) : 0
   }
 
   return {
