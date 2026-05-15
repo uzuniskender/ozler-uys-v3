@@ -1,5 +1,5 @@
 # UYS v3 — DEVAM NOTU
-**Tarih:** 13 Mayıs 2026
+**Tarih:** 15 Mayıs 2026
 **Versiyon:** v16.76
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
@@ -12,6 +12,26 @@
 - v16.75 — MRP badge sadece gerçek eksik sayar (isOrderMrpPending false positive giderildi)
 - v16.76 — Production build console ve debugger drop (vite.config.ts esbuild.drop)
 
+### 15 Mayıs 2026 — API Abstraction / Service Katmanı
+
+**Faz 1 — Scaffold** (`src/services/_base/`)
+- `errors.ts` — `ServiceError` sınıfı + `wrap()`, `isGuestBlocked`, `isUniqueViolation`, `isForeignKeyViolation`
+- `query.ts` — `applyIlikeArama`, `applyAktifFiltre`, `auditAlanlari` (overload), `norm.{kod,ad,optStr}`
+- `README.md` — Türkçe kural seti + şablon + kapsam kararları
+
+**Faz 2 — İlk servisler** (tümü `src/services/` + gerekirse `src/types/`)
+- `notesService.ts` + `ekipNot.ts` → `uys_notes` (listNotes/getNote/createNote/updateNote/deleteNote)
+- `tedarikciService.ts` + `tedarikci.ts` → `uys_tedarikciler` (not_ ↔ not köprüsü dahili)
+- `acikBarlarService.ts` → `uys_acik_barlar` (listAcikBarlar/getAcikBar/hurdaGonder; barModel domain işlemleri dokunulmadı)
+- `izinlerService.ts` + `izin.ts` → `uys_izinler` (createIzin/onaylaIzin/reddetIzin/deleteIzin)
+- `bildirimlerService.ts` → `uys_bildirimler` (listBildirimler/createBildirim/okunduIsaretle/topluOkunduIsaretle/acikBildirimVarMi)
+
+**Kapsam dışında bırakılanlar (bilinçli):**
+- `store/index.ts` TABLE_MAP/mapper'ları — dokunulmadı
+- `barModel.ts`, `mrpCache.ts`, `autoChain.ts`, `stokTuketim.ts` — domain layer, dokunulmadı
+- `chatService.ts` — zaten servis konumunda, ayrı stil
+- Sayfa içi inline query'ler — organik göç; yeni kodda servis-first
+
 ## Güvenlik oturumu tamamlananlar
 
 - uys_dev_files + uys_session_memory → RLS aktif, sadece uzuniskender@gmail.com erişebilir
@@ -22,6 +42,7 @@
 ## Sıradaki görevler
 
 1. Normalize veri geçişi (kapsam belirsiz — ertelendi)
+2. Service katmanı Faz 3 (isteğe bağlı): sayfaların inline query'lerini servise taşıma — önce OperatorPanel izin, sonra Suppliers tedarikçi. Her biri ayrı onay ile.
 
 ---
 
