@@ -19,7 +19,7 @@ import { startFlow, advanceFlow } from '@/services/pendingFlowService'
 import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen, getPlanliWoIds } from '@/lib/statusUtils'
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
-import { stateLabel, stateBadgeClass, isActive as isStateActive, createOrder as createOrderInDb, copyOrder as copyOrderInDb, updateOrderMrpDurum } from '@/services/orderService'
+import { stateLabel, stateBadgeClass, isActive as isStateActive, createOrder as createOrderInDb, copyOrder as copyOrderInDb, updateOrderMrpDurum, updateOrderOncelik, updateOrderDurum, saveMrpCalculationSnapshot, deleteWorkOrders, createTedarikFromMrp, getOrderWorkOrderIds, insertOrderRow } from '@/services/orderService'
 import { z } from 'zod'
 
 export function Orders() {
@@ -294,7 +294,7 @@ export function Orders() {
   async function oncelikDegistir(orderId: string, delta: number) {
     const order = orders.find(o => o.id === orderId)
     if (!order) return
-    await supabase.from('uys_orders').update({ oncelik: (order.oncelik || 0) + delta }).eq('id', orderId)
+    await updateOrderOncelik(orderId, (order.oncelik || 0) + delta)
     loadAllStores()
   }
 
@@ -397,7 +397,7 @@ export function Orders() {
                     {can('orders_edit') && <button onClick={async () => { setEditOrder(o); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-amber" title="Düzenle"><Pencil size={13} /></button>}
                     {can('orders_edit') && <button onClick={async () => {
                       const yeniDurum = o.durum === 'kapalı' ? '' : 'kapalı'
-                      await supabase.from('uys_orders').update({ durum: yeniDurum }).eq('id', o.id)
+                      await updateOrderDurum(o.id, yeniDurum)
                       auditLog({ olay: 'siparis_durum', tablo: 'uys_orders', kayitId: o.id,
                         alan: 'durum', eskiDeger: o.durum || '', yeniDeger: yeniDurum,
                         aciklama: `${o.siparisNo}: ${yeniDurum === 'kapalı' ? 'kapatıldı' : 'açıldı'}`,
@@ -1098,15 +1098,9 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     }
     const hesaplayan = user?.username || user?.email || user?.dbId || 'system'
     try {
-      await supabase.from('uys_mrp_calculations').insert({
-        id: calcId,
-        order_id: order.id,
-        hesaplayan,
-        brut_ihtiyac: brut,
-        stok_durumu: stok,
-        acik_tedarik: acik,
-        net_ihtiyac: net,
-        durum: 'tamamlandi',
+      await saveMrpCalculationSnapshot({
+        id: calcId, orderId: order.id, hesaplayan,
+        brutIhtiyac: brut, stokDurumu: stok, acikTedarik: acik, netIhtiyac: net,
       })
       setLastCalcId(calcId)
     } catch (e) {
@@ -1180,7 +1174,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
 
   async function yenidenCalistir() {
     if (!await showConfirm('Mevcut İE\'ler silinip reçetelerden yeniden oluşturulacak. Devam?')) return
-    for (const w of workOrders) { await supabase.from('uys_work_orders').delete().eq('id', w.id) }
+    await deleteWorkOrders(workOrders.map(w => w.id))
     const { recipes: fullRecipes } = useProductionStore.getState()
     let total = 0
     const liste = kalemler.length > 0 ? kalemler : (order.receteId ? [{ rcId: order.receteId, adet: order.adet, mamulKod: order.mamulKod, mamulAd: order.mamulAd, termin: order.termin, not: '' }] : [])
@@ -1343,8 +1337,8 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
                         <td className={`px-3 py-1.5 text-right font-mono font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net}</td>
                         <td className="px-3 py-1.5"><span className={`text-[10px] font-semibold ${r.net > 0 ? 'text-red' : 'text-green'}`}>{r.net > 0 ? '⚠ Eksik' : '✓ Yeterli'}</span></td>
                         <td className="px-3 py-1.5">{r.net > 0 && can('mrp_supply') && <button onClick={async () => {
-                          await supabase.from('uys_tedarikler').insert({ id: uid(), malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', tarih: today(), teslim_tarihi: r.termin || null, durum: 'bekliyor', geldi: false, siparis_no: order.siparisNo, order_id: order.id, not_: 'MRP', auto_olusturuldu: false, mrp_calculation_id: lastCalcId })
-                          await supabase.from('uys_orders').update({ mrp_durum: 'tamam' }).eq('id', order.id)
+                          await createTedarikFromMrp({ malkod: r.malkod, malad: r.malad, miktar: Math.ceil(r.net), birim: r.birim || 'Adet', termin: r.termin, siparisNo: order.siparisNo, orderId: order.id, mrpCalculationId: lastCalcId })
+                          await updateOrderMrpDurum(order.id, 'tamam')
                           loadAllStores(); toast.success(r.malkod + ' tedarik oluşturuldu')
                           await triggerRezerveSync()
                         }} className="text-amber text-[10px] hover:underline">+ Tedarik</button>}</td>
@@ -1398,8 +1392,8 @@ function TamZincirButton({ order, workOrders, onClose }: { order: Order; workOrd
       const s = { ...useProductionStore.getState(), ...useWarehouseStore.getState(), ...useOrderStore.getState() }
       const kalemler = order.urunler || []
       // DB'den anlık sorgu — store stale olabilir, tekrar WO açılmasını önler
-      const { data: woRows } = await supabase.from('uys_work_orders').select('id').eq('order_id', order.id)
-      let woCount = (woRows?.length || 0)
+      const woRows = await getOrderWorkOrderIds(order.id)
+      let woCount = woRows.length
       if (!woCount) {
         if (kalemler.length > 0) {
           for (const u of kalemler) {
@@ -1653,9 +1647,10 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
           })),
       }
 
-      const { error: ordErr } = await supabase.from('uys_orders').insert(insertRow)
-      if (ordErr) {
-        toast.error(`${siparisNo} hatasi: ${ordErr.message}`)
+      try {
+        await insertOrderRow(insertRow)
+      } catch (e: any) {
+        toast.error(`${siparisNo} hatasi: ${e?.message ?? 'bilinmeyen'}`)
         continue
       }
       siparisToplam++
