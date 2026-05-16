@@ -3,7 +3,7 @@
 -- Sebep: app_current_role LOWER() ve aktif filtresi içermiyordu;
 --        current_user_role() (v16.87a) her ikisini de sağlıyor.
 -- TEST  applied: 2026-05-16
--- PROD  applied: —
+-- PROD  applied: 2026-05-16
 
 -- Mevcut politikaları ve eski fonksiyonu temizle (IF EXISTS — idempotent)
 DROP POLICY IF EXISTS orders_write ON public.uys_orders;
