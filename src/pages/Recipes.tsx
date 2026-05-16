@@ -6,7 +6,7 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { Recipe, RecipeRow } from '@/types'
-import { newRecipeSchema, recipeEditSchema, recipeRowSchema } from '@/lib/validations/recipeSchemas'
+import { newRecipeSchema, recipeEditSchema, recipeRowSchema, rcKodSchema, mamulKodSchema } from '@/lib/validations/recipeSchemas'
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock, BookOpen } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
@@ -327,7 +327,10 @@ export function Recipes() {
                       </td>
                       <td className="px-4 py-2.5 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
                         const yeni = await showPrompt('Reçete kodu değiştir', 'Yeni kod', r.rcKod)
-                        if (yeni && yeni.trim() !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: yeni.trim() }).eq('id', r.id); loadAllStores(); toast.success('Kod güncellendi') }
+                        if (yeni == null) return
+                        const p = rcKodSchema.safeParse(yeni)
+                        if (!p.success) { toast.error(p.error.issues[0].message); return }
+                        if (p.data !== r.rcKod) { await supabase.from('uys_recipes').update({ rc_kod: p.data }).eq('id', r.id); loadAllStores(); toast.success('Kod güncellendi') }
                       }}>
                         {r.rcKod || '—'} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
                       </td>
@@ -336,7 +339,10 @@ export function Recipes() {
                       </td>
                       <td className="px-4 py-2.5 font-mono text-zinc-500 cursor-pointer hover:text-accent group" onClick={async () => {
                         const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', r.mamulKod)
-                        if (yeni && yeni.trim() !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: yeni.trim() }).eq('id', r.id); loadAllStores(); toast.success('Mamul kodu güncellendi') }
+                        if (yeni == null) return
+                        const p = mamulKodSchema.safeParse(yeni)
+                        if (!p.success) { toast.error(p.error.issues[0].message); return }
+                        if (p.data !== r.mamulKod) { await supabase.from('uys_recipes').update({ mamul_kod: p.data }).eq('id', r.id); loadAllStores(); toast.success('Mamul kodu güncellendi') }
                       }}>
                         {r.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50 ml-0.5" />
                       </td>
@@ -673,7 +679,7 @@ export function RecipeEditor({ recipe, operations, onClose, onSaved }: {
   }
 
   async function save() {
-    const adCheck = recipeEditSchema.safeParse({ ad: ad.trim() })
+    const adCheck = recipeEditSchema.safeParse({ ad: ad.trim(), rcKod: rcKod.trim() })
     if (!adCheck.success) { toast.error(adCheck.error.issues[0].message); return }
     for (const r of rows) {
       const rowCheck = recipeRowSchema.safeParse({ malkod: r.malkod || '', miktar: r.miktar })
