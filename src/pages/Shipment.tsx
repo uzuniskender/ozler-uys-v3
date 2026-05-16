@@ -1,11 +1,9 @@
-import { getStok } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
-import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo } from 'react'
 import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
-import { supabase } from '@/lib/supabase'
-import { uid, today } from '@/lib/utils'
+import { today } from '@/lib/utils'
 import { toast } from 'sonner'
+import { createSevk as createSevkService, updateSevk as updateSevkService, deleteSevk as deleteSevkService } from '@/services/sevkService'
 import { showConfirm } from '@/lib/prompt'
 import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
@@ -66,22 +64,9 @@ export function Shipment() {
   async function deleteSevk(id: string) {
     if (!await showConfirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
     const silinenSevk = sevkler.find(s => s.id === id)
+    const ord = silinenSevk?.orderId ? orders.find(o => o.id === silinenSevk.orderId) : null
     try {
-      await supabase.from('uys_sevkler').delete().eq('id', id)
-      await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + id + '-%')
-      if (silinenSevk?.orderId) {
-        const ord = orders.find(o => o.id === silinenSevk.orderId)
-        if (ord) {
-          const { data: kalanSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', silinenSevk.orderId)
-          let toplamSevk = 0
-          for (const s of (kalanSevkler || [])) {
-            const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
-            toplamSevk += kk.filter(k => k.malkod === (ord as any).mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
-          }
-          const yeniDurum = toplamSevk <= 0 ? 'sevk_yok' : toplamSevk >= (ord as any).adet ? 'tamamen_sevk' : 'kismi_sevk'
-          await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', silinenSevk.orderId)
-        }
-      }
+      await deleteSevkService(id, silinenSevk?.orderId || null, (ord as any)?.adet || 0, (ord as any)?.mamulKod || '')
       loadAllStores(); toast.success('Sevkiyat silindi')
     } catch (e: any) {
       toast.error('Silme hatası: ' + (e?.message || e))
@@ -276,6 +261,7 @@ function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const [kalemler, setKalemler] = useState<{ malkod: string; malad: string; miktar: number }[]>(
     (sevk.kalemler || []).map((k: any) => ({ malkod: k.malkod || '', malad: k.malad || '', miktar: k.miktar || 0 }))
   )
@@ -294,52 +280,25 @@ function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
     const _r = _sevkEditSchema.safeParse({ kalemler: validKalemler, not_: not_ })
     if (!_r.success) { toast.error(_r.error.issues[0].message); return }
     setSaving(true)
-    // 1. Sevkiyat güncelle
-    await supabase.from('uys_sevkler').update({ kalemler: validKalemler, not_: not_ }).eq('id', sevk.id)
-    // 2. Eski stok çıkışlarını sil, yeni kalemlerle yeniden yaz
-    await supabase.from('uys_stok_hareketler').delete().like('id', 'sev-' + sevk.id + '-%')
-    // Stok kontrolü: eski çıkışlar silindi, şu anki stok + yeni miktar uyuyor mu?
-    const stokYetersiz = validKalemler.filter(k => {
-      const stokSonrasiSilme = getStok(k.malkod, stokHareketler)
-      return stokSonrasiSilme < k.miktar
-    })
-    if (stokYetersiz.length > 0) {
-      // Eski çıkışları geri yaz
-      for (const k of (sevk.kalemler || [])) {
-        await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id, tarih: sevk.tarih || today() })
-      }
-      toast.error('Stok yetersiz: ' + stokYetersiz.map(k => `${k.malad || k.malkod} (mevcut stok: ${getStok(k.malkod, stokHareketler)}, talep: ${k.miktar})`).join(' · '))
+    const ord = sevk.orderId ? orders.find(o => o.id === sevk.orderId) : null
+    try {
+      await updateSevkService({
+        sevkId: sevk.id,
+        orderId: sevk.orderId || null,
+        kalemler: validKalemler,
+        not_,
+        doStokCikis: true,
+        stokHareketler,
+        tarih: sevk.tarih,
+        ordAdet: ord?.adet,
+        mamulKod: ord?.mamulKod,
+      })
       setSaving(false)
-      return
+      onSaved()
+    } catch (e: any) {
+      toast.error('Güncelleme hatası: ' + (e?.message || e))
+      setSaving(false)
     }
-    for (const k of validKalemler) {
-      await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevk.id, tarih: sevk.tarih || today() })
-    }
-    // 3. sevk_durum güncelle — D1 fix
-    if (sevk.orderId) {
-      const ord = orders.find(o => o.id === sevk.orderId)
-      if (ord) {
-        const { data: tumSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', sevk.orderId)
-        let toplam = 0
-        for (const s of (tumSevkler || [])) {
-          const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
-          // Bu sevkin güncel kalemlerini kullan (henüz DB'ye yansımış)
-          const kalemlerSource = s === tumSevkler?.find((x: any) => x.id === sevk.id) ? validKalemler : kk
-          toplam += kalemlerSource.filter(k => k.malkod === ord.mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
-        }
-        // Hesap: eski sevk dahil toplam (güncelleme yapıldığı için yeniden çek)
-        const { data: guncellenmis } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', sevk.orderId)
-        let toplamGun = 0
-        for (const s of (guncellenmis || [])) {
-          const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
-          toplamGun += kk.filter(k => k.malkod === ord.mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
-        }
-        const yeniDurum = toplamGun <= 0 ? 'sevk_yok' : toplamGun >= ord.adet ? 'tamamen_sevk' : 'kismi_sevk'
-        await supabase.from('uys_orders').update({ sevk_durum: yeniDurum }).eq('id', sevk.orderId)
-      }
-    }
-    setSaving(false)
-    onSaved()
   }
 
   return (
@@ -410,6 +369,7 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
   onClose: () => void
   onSaved: () => void
 }) {
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const [orderId, setOrderId] = useState('')
   const [orderSearch, setOrderSearch] = useState('')  // S1 — sipariş arama
   const [showOrderList, setShowOrderList] = useState(false)
@@ -497,51 +457,25 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
       toast.error(`${ord.siparisNo} zaten tamamen sevk edilmiş. Kaydedilemez.`); return
     }
     try {
-      const sevkId = uid()
-      await supabase.from('uys_sevkler').insert({
-        id: sevkId, order_id: orderId || null, siparis_no: ord?.siparisNo || '',
-        musteri: ord?.musteri || '', tarih: tarih, kalemler: validKalemler, not_: not_,
+      const { sevkDurum } = await createSevkService({
+        orderId: orderId || null,
+        siparisNo: ord?.siparisNo || '',
+        musteri: ord?.musteri || '',
+        kalemler: validKalemler,
+        tarih,
+        not_,
+        doStokCikis: stokCikis,
+        stokHareketler,
+        ordAdet: ord?.adet,
+        mamulKod: ord?.mamulKod,
       })
-      if (stokCikis) {
-        // Stok kontrolü — yetersizse kaydetme
-        const stokYetersiz = validKalemler.filter(k => {
-          const mevcutStok = getStok(k.malkod, stokHareketler)
-          return mevcutStok < k.miktar
-        })
-        if (stokYetersiz.length > 0) {
-          toast.error('Stok yetersiz: ' + stokYetersiz.map(k => `${k.malad || k.malkod} (stok: ${getStok(k.malkod, stokHareketler)}, talep: ${k.miktar})`).join(' · '))
-          setSaving(false)
-          return
-        }
-        for (const k of validKalemler) {
-          await addStokHareketi({ malkod: k.malkod, malad: k.malad, miktar: k.miktar, tip: 'cikis', aciklama: 'Sevkiyat — ' + sevkId, tarih: tarih })
-        }
-      }
-      if (orderId && ord) {
-        const yeniSevkDurum = await hesaplaSevkDurum(orderId, ord.adet, ord.mamulKod, validKalemler)
-        await supabase.from('uys_orders').update({ sevk_durum: yeniSevkDurum }).eq('id', orderId)
-        if (yeniSevkDurum === 'tamamen_sevk' && (ord as any).durum !== 'kapalı') {
-          toast.success('🎯 Sipariş tamamen sevk edildi.', { duration: 6000 })
-        }
+      if (sevkDurum === 'tamamen_sevk' && ord && (ord as any).durum !== 'kapalı') {
+        toast.success('🎯 Sipariş tamamen sevk edildi.', { duration: 6000 })
       }
       onSaved()
     } catch (e: any) {
       toast.error('Sevkiyat kaydedilemedi: ' + (e?.message || e))
-      setSaving(false)
     }
-  }
-
-  async function hesaplaSevkDurum(ordId: string, toplamAdet: number, mamulKod: string, yeniKalemler: { malkod: string; miktar: number }[]): Promise<string> {
-    const { data: mevcutSevkler } = await supabase.from('uys_sevkler').select('kalemler').eq('order_id', ordId)
-    let toplamSevk = 0
-    for (const s of (mevcutSevkler || [])) {
-      const kk = (s.kalemler || []) as { malkod: string; miktar: number }[]
-      toplamSevk += kk.filter(k => k.malkod === mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
-    }
-    toplamSevk += yeniKalemler.filter(k => k.malkod === mamulKod).reduce((a, k) => a + (k.miktar || 0), 0)
-    if (toplamSevk <= 0) return 'sevk_yok'
-    if (toplamSevk >= toplamAdet) return 'tamamen_sevk'
-    return 'kismi_sevk'
   }
 
   return (
