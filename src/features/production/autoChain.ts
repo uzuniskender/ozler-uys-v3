@@ -311,6 +311,7 @@ export async function autoZincir(
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', orderId)
   } catch (e: any) {
     adimlar.push('⚠️ MRP hatası: ' + e.message)
+    try { await supabase.from('uys_orders').update({ mrp_durum: 'hata' }).eq('id', orderId) } catch {}
   }
   onProgress?.(adimlar)
 
