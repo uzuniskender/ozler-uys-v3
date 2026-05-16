@@ -4,6 +4,15 @@ import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { toast } from 'sonner'
 import { Search, X, Download, RefreshCw, ChevronDown, ChevronUp, Edit2, Check, ArrowUpCircle, ArrowDownCircle, Package, Truck, Wrench, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { z } from 'zod'
+
+const _malkodSecimSchema = z.object({
+  kod: z.string().trim().min(1, 'Malzeme kodu zorunlu').max(50, 'Malzeme kodu en fazla 50 karakter')
+    .refine(s => !/\s/.test(s), 'Malzeme kodu boşluk içeremez'),
+  ad: z.string().trim().min(1, 'Malzeme adı zorunlu').max(200, 'Malzeme adı en fazla 200 karakter'),
+})
+
+const _aciklamaSchema = z.string().trim().max(500, 'Açıklama en fazla 500 karakter')
 
 /* ───────── tipler ───────── */
 interface StokHareket {
@@ -157,8 +166,11 @@ export function StokLog() {
   /* ── malkod değiştir ── */
   async function saveMalkod(yeniMal: { kod: string; ad: string }, toplu: boolean) {
     if (!selected) return
+    const _r = _malkodSecimSchema.safeParse(yeniMal)
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
+    const dogruMal = _r.data
     setSaving(true)
-    const update = { malkod: yeniMal.kod, malad: yeniMal.ad }
+    const update = { malkod: dogruMal.kod, malad: dogruMal.ad }
     let error: any
     if (toplu) {
       // Aynı malkod'daki tüm hareketleri güncelle
@@ -173,8 +185,8 @@ export function StokLog() {
     }
     if (error) { toast.error('Kaydedilemedi: ' + error.message); setSaving(false); return }
     toast.success(toplu
-      ? `"${selected.malkod}" altındaki tüm hareketler → "${yeniMal.kod}" olarak güncellendi`
-      : `Malkod güncellendi → ${yeniMal.kod}`)
+      ? `"${selected.malkod}" altındaki tüm hareketler → "${dogruMal.kod}" olarak güncellendi`
+      : `Malkod güncellendi → ${dogruMal.kod}`)
     setEditMalkodMode(false)
     setMalkodSearch('')
     setSelected(null)
@@ -185,15 +197,18 @@ export function StokLog() {
   /* ── açıklama düzenle ── */
   async function saveNote() {
     if (!selected) return
+    const _r = _aciklamaSchema.safeParse(editNote)
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
+    const yeniAciklama = _r.data
     setSaving(true)
     const { error } = await supabase
       .from('uys_stok_hareketler')
-      .update({ aciklama: editNote })
+      .update({ aciklama: yeniAciklama })
       .eq('id', selected.id)
     if (error) { toast.error('Kaydedilemedi'); setSaving(false); return }
     toast.success('Açıklama güncellendi')
-    setRows(r => r.map(x => x.id === selected.id ? { ...x, aciklama: editNote } : x))
-    setSelected(s => s ? { ...s, aciklama: editNote } : s)
+    setRows(r => r.map(x => x.id === selected.id ? { ...x, aciklama: yeniAciklama } : x))
+    setSelected(s => s ? { ...s, aciklama: yeniAciklama } : s)
     setEditMode(false)
     setSaving(false)
   }
