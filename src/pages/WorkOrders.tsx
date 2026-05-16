@@ -1,11 +1,9 @@
 import { useAuth } from '@/hooks/useAuth'
-import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
-import { supabase } from '@/lib/supabase'
-import { auditWoDurum, auditLog } from '@/services/auditService'
-import { uid, today, pctColor } from '@/lib/utils'
+import { today, pctColor } from '@/lib/utils'
+import * as wos from '@/services/workOrderService'
 import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText } from 'lucide-react'
@@ -16,7 +14,6 @@ import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { ActiveFlowDecisionModal } from '@/components/ActiveFlowDecisionModal'
 import { stokKontrolWO } from '@/services/productionService/stokKontrol'
-import { isBarMaterialByKod } from '@/services/productionService/barModel'
 import { canDeleteWO } from '@/services/productionService/validations'
 import { requirePassword } from '@/lib/prompt'
 import { OprEntryModal } from '@/pages/OperatorPanel'
@@ -157,13 +154,7 @@ export function WorkOrders() {
       }
     }
     if (!await showConfirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
-    for (const id of selected) {
-      const wo = workOrders.find(w => w.id === id)
-      const eskiDurum = wo?.durum || 'bekliyor'
-      await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
-      if (wo) auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
-        siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
-    }
+    await wos.topluDurumGuncelle([...selected], durum, workOrders, orders)
     const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE güncellendi`)
   }
 
@@ -185,7 +176,7 @@ export function WorkOrders() {
     if (!await showConfirm(`${selected.size} İE SİLİNECEK. Bu işlem geri alınamaz!`)) return
     if (!await requirePassword('Toplu İE Silme')) return
     try {
-      for (const id of selected) { await supabase.from('uys_work_orders').delete().eq('id', id) }
+      await wos.topluSil([...selected])
       const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE silindi`)
     } catch (e: any) {
       toast.error('Silme hatası: ' + (e?.message || e))
@@ -195,23 +186,7 @@ export function WorkOrders() {
   async function topluKopyala() {
     if (!selected.size) return
     if (!await showConfirm(`${selected.size} İE kopyalanacak (-K son eki ile). Devam?`)) return
-    let cnt = 0
-    for (const id of selected) {
-      const w = workOrders.find(x => x.id === id); if (!w) continue
-      await supabase.from('uys_work_orders').insert({
-        id: uid(), order_id: w.orderId || null, rc_id: w.rcId || null,
-        sira: workOrders.length + cnt + 1, kirno: w.kirno,
-        op_id: w.opId, op_kod: w.opKod, op_ad: w.opAd,
-        ist_id: w.istId, ist_kod: w.istKod, ist_ad: w.istAd,
-        malkod: w.malkod, malad: w.malad, hedef: w.hedef,
-        mpm: w.mpm, hm: w.hm || [], ie_no: w.ieNo + '-K',
-        wh_alloc: 0, hazirlik_sure: w.hazirlikSure, islem_sure: w.islemSure,
-        durum: 'bekliyor', bagimsiz: w.bagimsiz, siparis_disi: w.siparisDisi,
-        mamul_kod: w.mamulKod, mamul_ad: w.mamulAd, mamul_auto: w.mamulAuto,
-        not_: w.not, olusturma: today(),
-      })
-      cnt++
-    }
+    const cnt = await wos.topluKopyala([...selected], workOrders)
     setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE kopyalandı`)
   }
 
@@ -284,7 +259,6 @@ export function WorkOrders() {
   }, [filtered, groupBy, orders])
 
   async function setDurum(id: string, durum: string) {
-    // Tamamlandı için log zorunlu
     if (durum === 'tamamlandi') {
       const logsVar = useProductionStore.getState().logs
       if (!logsVar.some(l => l.woId === id)) {
@@ -294,7 +268,6 @@ export function WorkOrders() {
     }
     const wo = workOrders.find(w => w.id === id); if (!wo) return
     const prod = logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0)
-    const tarih = today()
     if (durum === 'iptal') {
       if (!await requirePassword('İE İptal')) return
       const neden = await showPrompt('İptal nedeni (zorunlu)')
@@ -303,20 +276,12 @@ export function WorkOrders() {
       const nedenTrim = _n.data
       if (prod > 0) {
         if (!await showConfirm(`${wo.ieNo}: ${prod} adet üretim var.\nİptal edilirse stok ters kayıt yapılır. Devam?`)) return
-        await addStokHareketi({ malkod: wo.malkod, malad: wo.malad, miktar: prod, tip: 'cikis', aciklama: 'İPTAL ters — ' + wo.ieNo + ' (' + nedenTrim + ')', woId: id })
-        const hmCikislar = stokHareketler.filter(h => h.woId === id && h.tip === 'cikis' && h.logId)
-        for (const h of hmCikislar) {
-          await addStokHareketi({ malkod: h.malkod, malad: h.malad, miktar: h.miktar, tip: 'giris', aciklama: 'İPTAL HM iadesi — ' + wo.ieNo, woId: id })
-        }
-        toast.info('Ters stok hareketi yazıldı')
       }
-      await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + nedenTrim }).eq('id', id)
+      await wos.setWoDurum(id, durum, { wo, neden: nedenTrim, prod, stokHareketler: stokHareketler as any[] })
+      if (prod > 0) toast.info('Ters stok hareketi yazıldı')
       loadAllStores(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
-    const eskiDurum = wo.durum || 'bekliyor'
-    await supabase.from('uys_work_orders').update({ durum }).eq('id', id)
-    auditWoDurum({ woId: id, ieNo: wo.ieNo, eskiDurum, yeniDurum: durum,
-      siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo, malkod: wo.malkod })
+    await wos.setWoDurum(id, durum, { wo, siparisNo: orders.find(o => o.id === wo.orderId)?.siparisNo })
     loadAllStores(); toast.success(wo.ieNo + ' → ' + durum)
   }
 
@@ -327,7 +292,7 @@ export function WorkOrders() {
     if (!r.ok) { toast.error(r.reason || 'İE silinemez'); return }
     if (!await showConfirm(wo.ieNo + ' silinecek.')) return
     if (!await requirePassword("İE Silme")) return
-    await supabase.from('uys_work_orders').delete().eq('id', id)
+    await wos.deleteWO(id)
     loadAllStores(); toast.success(wo.ieNo + ' silindi')
   }
 
@@ -338,7 +303,7 @@ export function WorkOrders() {
     const _h = _hedefSchema.safeParse(val)
     if (!_h.success) { toast.error(_h.error.issues[0].message); return }
     const hedef = _h.data
-    await supabase.from('uys_work_orders').update({ hedef }).eq('id', id)
+    await wos.updateHedef(id, hedef)
     loadAllStores(); toast.success('Hedef güncellendi: ' + hedef)
   }
 
