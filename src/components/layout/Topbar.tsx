@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { okunduIsaretle, topluOkunduIsaretle } from '@/services/bildirimlerService'
 import { HelpNotesButtons } from '@/components/HelpNotesButtons'
 import { useChatNotifications, useChatNotifStore } from '@/hooks/useChatNotifications'
-import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/lib/pendingFlow'
+import { cancelFlow, devamEttirFlow, stepToRoute, stepLabel } from '@/services/pendingFlowService'
 import { isOrderMrpPending, isWorkOrderOpen, isProcurementPending, isKesimWO, getPlanliWoIds, getPlanBekleyenWoIds, computeOrderHammaddeEksik } from '@/lib/statusUtils'
 import { Hourglass } from 'lucide-react'
 

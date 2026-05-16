@@ -13,7 +13,7 @@ import { getStok, buildIhtiyacMap, getYolda } from '@/lib/hammaddeHesap'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/services/productionService/hammaddeTahsis'
 import { isOrderArchived , isWorkOrderOpen} from '@/lib/statusUtils'
-import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
+import { advanceFlow, completeFlow } from '@/services/pendingFlowService'
 import { FlowProgress } from '@/components/FlowProgress'
 import { createBildirim, acikBildirimVarMi } from '@/services/bildirimlerService'
 

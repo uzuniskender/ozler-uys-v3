@@ -3,8 +3,8 @@
 // Her kullanıcı aynı anda 1 aktif flow tutabilir; aktif flow'u bitirene
 // kadar yeni sipariş başlatması UI'da engellenir.
 
-import { supabase } from './supabase'
-import { uid } from './utils'
+import { supabase } from '@/lib/supabase'
+import { uid } from '@/lib/utils'
 import type { PendingFlow, FlowStep, FlowType } from '@/types'
 
 const TABLE = 'uys_pending_flows'

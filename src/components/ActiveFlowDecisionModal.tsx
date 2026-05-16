@@ -10,7 +10,7 @@
  *   - Beklet: durumu 'beklet' yapar (Topbar'da kalır, yeni iş açılır)
  *   - İptal Et: cancelFlow() ile akış sonlandırılır, yeni iş emri yolu açılır
  */
-import { cancelFlow, bekletFlow, stepToRoute } from '@/lib/pendingFlow'
+import { cancelFlow, bekletFlow, stepToRoute } from '@/services/pendingFlowService'
 import { toast } from 'sonner'
 import { AlertTriangle, ArrowRight, X, Pause } from 'lucide-react'
 import type { PendingFlow } from '@/types'

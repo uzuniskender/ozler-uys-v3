@@ -13,7 +13,7 @@ import type { WorkOrder, AcikBar } from '@/types'
 import { isWorkOrderOpen, isCuttingPlanPending, isAcikBarAvailable } from '@/lib/statusUtils'
 import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
-import { advanceFlow } from '@/lib/pendingFlow'
+import { advanceFlow } from '@/services/pendingFlowService'
 import { FlowProgress } from '@/components/FlowProgress'
 import { z } from 'zod'
 
