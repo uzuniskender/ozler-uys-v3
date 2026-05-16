@@ -9,6 +9,21 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
+import { z } from 'zod'
+
+const _sevkKalemSchema = z.object({
+  malkod: z.string().trim().min(1, 'Malzeme kodu zorunlu'),
+  malad: z.string().trim().min(1, 'Malzeme adı zorunlu'),
+  miktar: z.number().int('Tam sayı girin').positive('Miktar pozitif olmalı'),
+})
+
+const _sevkSubmitSchema = z.object({
+  kalemler: z.array(_sevkKalemSchema).min(1, 'En az bir kalem ekleyin'),
+  not_: z.string().max(500, 'Not en fazla 500 karakter olabilir'),
+  tarih: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD formatında olmalı'),
+})
+
+const _sevkEditSchema = _sevkSubmitSchema.pick({ kalemler: true, not_: true })
 
 export function Shipment() {
   const sevkler = useOrderStore(s => s.sevkler)
@@ -276,7 +291,8 @@ function SevkEditModal({ sevk, orders, materials, onClose, onSaved }: {
 
   async function save() {
     const validKalemler = kalemler.filter(k => k.malad && k.miktar > 0)
-    if (!validKalemler.length) { toast.error('En az bir kalem ekleyin'); return }
+    const _r = _sevkEditSchema.safeParse({ kalemler: validKalemler, not_: not_ })
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
     setSaving(true)
     // 1. Sevkiyat güncelle
     await supabase.from('uys_sevkler').update({ kalemler: validKalemler, not_: not_ }).eq('id', sevk.id)
@@ -474,7 +490,8 @@ function SevkFormModal({ orders, sevkler, workOrders, logs, materials, onClose, 
 
   async function save() {
     const validKalemler = kalemler.filter(k => k.malad && k.miktar > 0)
-    if (!validKalemler.length) { toast.error('En az bir kalem ekleyin'); return }
+    const _r = _sevkSubmitSchema.safeParse({ kalemler: validKalemler, not_: not_, tarih })
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
     // S2 — Son kalkan: kayıt sırasında tekrar kontrol
     if (orderId && ord && mevcutSevkAdet >= ord.adet) {
       toast.error(`${ord.siparisNo} zaten tamamen sevk edilmiş. Kaydedilemez.`); return

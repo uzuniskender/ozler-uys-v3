@@ -18,6 +18,17 @@ const _newBomSchema = z.object({
   ad: z.string().min(1, 'Ürün adı zorunlu').max(200, 'Ürün adı çok uzun'),
 })
 
+const _yenidenAdSchema = z.string()
+  .trim()
+  .min(1, 'Ürün adı zorunlu')
+  .max(200, 'Ürün adı en fazla 200 karakter')
+
+const _yeniKodSchema = z.string()
+  .trim()
+  .min(1, 'Mamul kodu zorunlu')
+  .max(100, 'Mamul kodu en fazla 100 karakter')
+  .refine(s => !/\s/.test(s), 'Mamul kodu boşluk içeremez')
+
 export function BomTrees() {
   const bomTrees = useProductionStore(s => s.bomTrees)
   const recipes = useProductionStore(s => s.recipes)
@@ -106,8 +117,11 @@ export function BomTrees() {
 
   async function renameBom(bt: BomTree) {
     const yeniAd = await showPrompt('Yeni ürün ağacı adı', 'Ürün adı', bt.ad || bt.mamulAd)
-    if (!yeniAd || yeniAd.trim() === (bt.ad || bt.mamulAd)) return
-    const ad = yeniAd.trim()
+    if (yeniAd == null) return
+    const _r = _yenidenAdSchema.safeParse(yeniAd)
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
+    const ad = _r.data
+    if (ad === (bt.ad || bt.mamulAd)) return
 
     // 1. BOM güncelle — rows[0].malad dahil
     const rows = [...(bt.rows || [])]
@@ -321,7 +335,13 @@ export function BomTrees() {
                 <td className="px-3 py-2"><input type="checkbox" checked={checkedIds.has(bt.id)} onChange={() => toggleCheck(bt.id)} className="accent-accent" /></td>
                 <td className="px-4 py-2 font-mono text-accent cursor-pointer hover:text-white group" onClick={async () => {
                   const yeni = await showPrompt('Mamul kodu değiştir', 'Yeni kod', bt.mamulKod)
-                  if (yeni && yeni.trim() !== bt.mamulKod) { await supabase.from('uys_bom_trees').update({ mamul_kod: yeni.trim() }).eq('id', bt.id); loadAllStores(); toast.success('Kod güncellendi') }
+                  if (yeni == null) return
+                  const _r = _yeniKodSchema.safeParse(yeni)
+                  if (!_r.success) { toast.error(_r.error.issues[0].message); return }
+                  const yeniKod = _r.data
+                  if (yeniKod === bt.mamulKod) return
+                  await supabase.from('uys_bom_trees').update({ mamul_kod: yeniKod }).eq('id', bt.id)
+                  loadAllStores(); toast.success('Kod güncellendi')
                 }}>{bt.mamulKod} <Pencil size={9} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-zinc-300 cursor-pointer hover:text-accent group" onClick={() => renameBom(bt)}>{bt.ad || bt.mamulAd} <Pencil size={10} className="inline opacity-0 group-hover:opacity-50" /></td>
                 <td className="px-4 py-2 text-right font-mono">

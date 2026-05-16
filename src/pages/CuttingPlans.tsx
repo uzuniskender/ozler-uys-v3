@@ -15,6 +15,20 @@ import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { advanceFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
+import { z } from 'zod'
+
+const _kesimPlaniSchema = z.object({
+  hamMalkod: z.string().trim().min(1, 'Hammadde seçin'),
+  barCount: z.number().int().positive('En az bir kesim satırı olmalı'),
+})
+
+const _seciliAdetSchema = z.coerce.number().int('Tam sayı girin').min(1, 'En az 1 adet').max(99999, 'Adet çok büyük')
+
+const _artikKodSchema = z.string()
+  .trim()
+  .min(3, 'Artık kodu en az 3 karakter')
+  .max(50, 'Artık kodu en fazla 50 karakter')
+  .refine(s => !/\s/.test(s), 'Artık kodu boşluk içeremez')
 
 export function CuttingPlans() {
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)
@@ -657,6 +671,9 @@ function ArtikOneriModal({ info, materials, workOrders, operations, recipes, log
 
   async function stokaGir() {
     if (!stokGirisi) { onClose(); return }
+    // Artık kodu kullanılmasa da validate edelim — ileride DISABLE kalkarsa hazır
+    const _r = _artikKodSchema.safeParse(artikKod)
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
     // v15.32: DISABLE. Artıklar artık uys_acik_barlar havuzunda otomatik izleniyor.
     // Manuel "artıkı stoka gir" akışı çift kayıt tehlikesi yarattığı için kapatıldı.
     toast.info('Artıklar artık "Açık Bar Havuzu"nda otomatik izleniyor — manuel stoka giriş gerekmez.', { duration: 5000 })
@@ -822,7 +839,8 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   }
 
   async function kaydet() {
-    if (!barlar.length) { toast.error('Kesim satırı yok'); return }
+    const _r = _kesimPlaniSchema.safeParse({ hamMalkod, barCount: barlar.length })
+    if (!_r.success) { toast.error(_r.error.issues[0].message); return }
     const satirlar = barlar.map(b => ({
       id: uid(), hamAdet: 1, fireMm: b.fire, durum: 'bekliyor',
       kesimler: b.kesimler.map(k => {
@@ -885,7 +903,11 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
                         <td className="px-3 py-1.5 text-right">
                           {seciliIEler[w.id] !== undefined && (
                             <input type="number" value={seciliIEler[w.id]} min={1} max={w.kalan}
-                              onChange={e => setSeciliIEler(prev => ({ ...prev, [w.id]: Math.min(parseInt(e.target.value) || 1, w.kalan) }))}
+                              onChange={e => {
+                                const _r = _seciliAdetSchema.safeParse(e.target.value)
+                                const adet = _r.success ? _r.data : 1
+                                setSeciliIEler(prev => ({ ...prev, [w.id]: Math.min(adet, w.kalan) }))
+                              }}
                               onClick={e => e.stopPropagation()}
                               className="w-16 px-1.5 py-0.5 bg-bg-3 border border-accent/30 rounded text-[11px] text-zinc-200 text-right focus:outline-none" />
                           )}
