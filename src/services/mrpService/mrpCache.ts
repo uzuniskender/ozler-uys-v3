@@ -180,3 +180,21 @@ export async function clearMrpCacheAll(): Promise<void> {
     .update({ invalidated: true, updated_at: nowIso })
     .gte('order_id', '')  // tüm satırlar (Supabase WHERE zorunlu)
 }
+
+/**
+ * Sadece order bazlı cache'leri bayatla — global dokunulmaz.
+ * v16.89 DB trigger (fn_stok_invalidate_mrp_state) ile aynı mantık: blanket invalidation.
+ * Stok dışı TS akışlarından (örn. toplu tüketim) manuel tetiklemek için.
+ */
+export async function invalidateMrpOrderCacheAll(): Promise<void> {
+  if (inTestMode()) return
+
+  const { error } = await supabase
+    .from('uys_mrp_state_order')
+    .update({ invalidated: true, updated_at: new Date().toISOString() })
+    .gte('order_id', '')  // tüm satırlar (Supabase WHERE zorunlu)
+
+  if (error) {
+    console.warn('[mrpCache] order cache invalidation basarisiz:', error.message)
+  }
+}
