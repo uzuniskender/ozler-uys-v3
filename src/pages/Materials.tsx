@@ -719,6 +719,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
     const enNum = parseFloat(en) || 0
     const check = materialFormSchema.safeParse({
       kod: kod.trim(), ad: ad.trim(),
+      tip, birim, hammaddeTipi,
       boy: boyNum, en: enNum,
       kalinlik: parseFloat(kalinlik) || 0,
       uzunluk: parseFloat(uzunluk) || 0,
