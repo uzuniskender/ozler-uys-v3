@@ -244,8 +244,8 @@ export function Reports() {
             // OEE
             const oeeRows = opData.map(d => {
               const fire = parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0)
-              const perf = d.hedef > 0 ? Math.round(d.uretim / d.hedef * 100) : 0
-              const qual = d.uretim > 0 ? Math.round((d.uretim - fire) / d.uretim * 100) : 100
+              const perf = d.hedef > 0 ? Math.min(100, Math.round(d.uretim / d.hedef * 100)) : 0
+              const qual = d.uretim > 0 ? Math.max(0, Math.round((d.uretim - fire) / d.uretim * 100)) : 100
               return { Operasyon: d.op, Hedef: d.hedef, Üretim: d.uretim, Fire: fire, 'Performans %': perf, 'Kalite %': qual, 'OEE %': Math.round(perf * qual / 100) }
             })
             if (oeeRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(oeeRows), 'OEE')
@@ -268,7 +268,7 @@ export function Reports() {
             <div className="bg-bg-2 border border-border rounded-lg p-4 text-center"><div className="text-2xl font-light font-mono">{orders.length}</div><div className="text-[11px] text-zinc-500">Sipariş</div></div>
             <div className="bg-bg-2 border border-border rounded-lg p-4 text-center"><div className="text-2xl font-light font-mono">{workOrders.length}</div><div className="text-[11px] text-zinc-500">İş Emri</div></div>
             <div className="bg-bg-2 border border-border rounded-lg p-4 text-center"><div className="text-2xl font-light font-mono">{operators.length}</div><div className="text-[11px] text-zinc-500">Operatör</div></div>
-            <div className="bg-bg-2 border border-border rounded-lg p-4 text-center"><div className="text-2xl font-light font-mono">{toplamUretim > 0 ? Math.round(toplamFire / toplamUretim * 100) : 0}%</div><div className="text-[11px] text-zinc-500">Fire Oranı</div></div>
+            <div className="bg-bg-2 border border-border rounded-lg p-4 text-center"><div className="text-2xl font-light font-mono">{(toplamUretim + toplamFire) > 0 ? Math.round(toplamFire / (toplamUretim + toplamFire) * 100) : 0}%</div><div className="text-[11px] text-zinc-500">Fire Oranı</div></div>
           </div>
           {gunlukData.length > 1 && (
             <div className="bg-bg-2 border border-border rounded-lg p-4">
@@ -430,7 +430,7 @@ export function Reports() {
                 </BarChart>
               </ResponsiveContainer>
               <table className="w-full text-xs mt-4"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Tarih</th><th className="text-right px-4 py-2">Üretim</th><th className="text-right px-4 py-2">Fire</th><th className="text-right px-4 py-2">Fire %</th></tr></thead>
-              <tbody>{gunlukData.map(d => (<tr key={d.tarih} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-zinc-400">{d.tarih}</td><td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td><td className="px-4 py-1.5 text-right font-mono text-red">{d.fire}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{d.uretim > 0 ? Math.round(d.fire / d.uretim * 100) : 0}%</td></tr>))}</tbody></table>
+              <tbody>{gunlukData.map(d => (<tr key={d.tarih} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-zinc-400">{d.tarih}</td><td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td><td className="px-4 py-1.5 text-right font-mono text-red">{d.fire}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{(d.uretim + d.fire) > 0 ? Math.round(d.fire / (d.uretim + d.fire) * 100) : 0}%</td></tr>))}</tbody></table>
             </>
           ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
         </div>
@@ -616,7 +616,7 @@ export function Reports() {
       {/* OEE */}
       {tab === 'oee' && (() => {
         const oeeData = opData.map(d => {
-          const perf = d.hedef > 0 ? Math.round(d.uretim / d.hedef * 100) : 0
+          const perf = d.hedef > 0 ? Math.min(100, Math.round(d.uretim / d.hedef * 100)) : 0
           const quality = d.uretim > 0 ? Math.max(0, Math.round((d.uretim - (parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0))) / d.uretim * 100)) : 100
           const oee = Math.round(perf * quality / 100)
           return { ...d, perf, quality, oee }
@@ -719,7 +719,7 @@ export function Reports() {
                 <BarChart data={oprData.slice(0, 15)} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis type="number" tick={{ fontSize: 10, fill: '#888' }} /><YAxis dataKey="ad" type="category" width={100} tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Bar dataKey="uretim" fill="#06b6d4" name="Üretim" radius={[0, 3, 3, 0]} /></BarChart>
               </ResponsiveContainer>
               <table className="w-full text-xs mt-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operatör</th><th className="text-right px-4 py-2">Üretim</th><th className="text-right px-4 py-2">Fire</th><th className="text-right px-4 py-2">Gün</th><th className="text-right px-4 py-2">Günlük Ort.</th><th className="text-right px-4 py-2">Fire %</th></tr></thead>
-              <tbody>{oprData.map(o => (<tr key={o.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{o.ad}</td><td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td><td className="px-4 py-1.5 text-right font-mono text-red">{o.fire}</td><td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td><td className="px-4 py-1.5 text-right font-mono text-accent">{o.gunlukOrt}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{o.uretim > 0 ? Math.round(o.fire / o.uretim * 100) : 0}%</td></tr>))}</tbody></table>
+              <tbody>{oprData.map(o => (<tr key={o.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{o.ad}</td><td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td><td className="px-4 py-1.5 text-right font-mono text-red">{o.fire}</td><td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td><td className="px-4 py-1.5 text-right font-mono text-accent">{o.gunlukOrt}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{(o.uretim + o.fire) > 0 ? Math.round(o.fire / (o.uretim + o.fire) * 100) : 0}%</td></tr>))}</tbody></table>
               </>
             ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
           </div>
@@ -728,26 +728,24 @@ export function Reports() {
 
       {/* Malzeme Tüketim */}
       {tab === 'maltuket' && (() => {
-        const tuketimMap: Record<string, { malkod: string; malad: string; toplam: number }> = {}
+        const tuketimMap: Record<string, { malkod: string; malad: string; uretimQty: number; stokMiktar: number }> = {}
         logs.forEach(l => {
           if (!l.malkod) return
-          if (!tuketimMap[l.malkod]) tuketimMap[l.malkod] = { malkod: l.malkod, malad: '', toplam: 0 }
-          tuketimMap[l.malkod].toplam += l.qty
+          if (!tuketimMap[l.malkod]) tuketimMap[l.malkod] = { malkod: l.malkod, malad: '', uretimQty: 0, stokMiktar: 0 }
+          tuketimMap[l.malkod].uretimQty += l.qty
         })
-        // HM tüketim from stok hareketleri
-        const { stokHareketler } = useWarehouseStore.getState()
         stokHareketler.filter(h => h.tip === 'cikis' && h.logId).forEach(h => {
-          if (!tuketimMap[h.malkod]) tuketimMap[h.malkod] = { malkod: h.malkod, malad: h.malad, toplam: 0 }
+          if (!tuketimMap[h.malkod]) tuketimMap[h.malkod] = { malkod: h.malkod, malad: h.malad, uretimQty: 0, stokMiktar: 0 }
           tuketimMap[h.malkod].malad = h.malad
-          tuketimMap[h.malkod].toplam += h.miktar
+          tuketimMap[h.malkod].stokMiktar += h.miktar
         })
-        const data = Object.values(tuketimMap).sort((a, b) => b.toplam - a.toplam)
+        const data = Object.values(tuketimMap).sort((a, b) => (b.stokMiktar || b.uretimQty) - (a.stokMiktar || a.uretimQty))
         return (
           <div className="bg-bg-2 border border-border rounded-lg p-4">
             <h3 className="text-sm font-semibold mb-3">Malzeme Tüketim ({data.length} malzeme)</h3>
             {data.length ? (
-              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Malzeme Kodu</th><th className="text-left px-4 py-2">Malzeme Adı</th><th className="text-right px-4 py-2">Toplam Tüketim</th></tr></thead>
-              <tbody>{data.slice(0, 30).map(d => (<tr key={d.malkod} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-accent">{d.malkod}</td><td className="px-4 py-1.5 text-zinc-300">{d.malad}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{Math.round(d.toplam)}</td></tr>))}</tbody></table>
+              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Malzeme Kodu</th><th className="text-left px-4 py-2">Malzeme Adı</th><th className="text-right px-4 py-2">Üretim (adet)</th><th className="text-right px-4 py-2">Stok Çıkış</th></tr></thead>
+              <tbody>{data.slice(0, 50).map(d => (<tr key={d.malkod} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-accent">{d.malkod}</td><td className="px-4 py-1.5 text-zinc-300">{d.malad}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.uretimQty > 0 ? d.uretimQty : '—'}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{d.stokMiktar > 0 ? Math.round(d.stokMiktar) : '—'}</td></tr>))}</tbody></table>
             ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
           </div>
         )
