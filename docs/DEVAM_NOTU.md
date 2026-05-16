@@ -253,6 +253,25 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 - `Reports.tsx` quality negatif → 0 sıkıştırma
 - `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
 
+### 16 Mayıs 2026 — Zod yayılımı (21/41)
+
+**WorkOrders.tsx**
+- `_iptalNedenSchema`: `z.string().trim().min(3).max(500)`
+- `setDurum` iptal akışında `safeParse` → `nedenTrim` (önceki: sadece `!trim()`)
+- (mpm hiçbir yerde inline edit edilmiyor — sadece okuma/hesaplama; ek validation gereksiz)
+
+**IeHazirlama.tsx**
+- `_uysSiparisNoSchema`: `OZD + 4 yıl + serbest` (min 7, max 50, boşluksuz)
+  - Regex: `/^OZD\d{4}/` — prefix kontrol, sonrası serbest
+- 3 noktada uygulandı:
+  - `kaydetVeVer` (yeni İE form)
+  - `BaslikDuzenleModal.handleSave` (geçmiş düzenleme)
+  - `kaydetUysSiparisNo` (per-kalem; boş bırakma = temizleme, format'tan muaf)
+
+**⚠ Commit anomalisi:** `git commit -m "feat: Zod yayılımı..."` çağrısı "nothing to commit" döndü; Zod değişiklikleri eşzamanlı `3120ba7` commit'ine (Reports O(n²)→O(n) ile birlikte, "perf/fix: Reports..." mesajıyla) dahil olarak push edildi. Kod main'de doğru, sadece commit mesajı misleading. Paralel Claude session veya ikinci makine commit'lemiş olabilir.
+
+---
+
 ### 15-16 Mayıs 2026 — Güvenlik & Kalite Oturumu
 
 #### Kod kalitesi fix'leri (commit serisi)
@@ -306,7 +325,7 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
-8. Zod adoption diğer 22 form modal'a yayılması (19/41 tamam — bu oturumda 4 eklendi) — kalan high-risk: WorkOrders inline edit'ler, IeHazirlama UYS sipariş no format
+8. Zod adoption diğer 20 form modal'a yayılması (21/41 tamam — bu oturumda 4+2 eklendi; WorkOrders iptal neden + IeHazirlama UYS sipariş no formatı tamamlandı)
 9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
 10. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
 11. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
