@@ -303,10 +303,26 @@ export function getEffectiveStatus(
   logs?: { woId: string; qty: number }[],
   orderHmEksikMap?: Map<string, Set<string>>,
 ): StatusReason {
-  // 1. DB durumu zorlayıcı
+  // 1. DB durumu zorlayıcı (iptal + tamamlandi)
   const d = (w.durum || '').toLowerCase().trim()
   if (d === 'iptal') return { status: 'iptal', reason: 'İptal edilmiş', blockedBy: null }
   if (d === 'tamamlandi') return { status: 'tamamlandi', reason: 'Tamamlandı', blockedBy: null }
+
+  // v16.90 — Fonksiyonel tamamlama: hedefini doldurmuş ama DB durumu hâlâ
+  // 'bekliyor'/'aktif'/'uretimde' kalmış WO'lar (örn. operatör son üretimi
+  // girdi ama mark-tamamlandı akışı kopuk) için status hesabını burada
+  // erken döndür. Aksi halde kesim WO'larında plan yoksa L313'teki check
+  // PlanBekliyor yanlış pozitifi üretir.
+  // 'beklemede' / 'uretimde' DB durumları bilinçli olarak bu check'TEN ÖNCE
+  // değildir — DB durumu açıkça beklemede ise %100 üretim de olsa
+  // operatörün bekletme niyeti korunur. ('bekliyor' ≠ 'beklemede'.)
+  if (logs && w.hedef > 0) {
+    const uretildi = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+    if (uretildi >= w.hedef) {
+      return { status: 'tamamlandi', reason: 'Hedef ulaşıldı (üretim %100)', blockedBy: null }
+    }
+  }
+
   if (d === 'beklemede') return { status: 'beklemede', reason: 'Bekletiliyor', blockedBy: null }
   if (d === 'uretimde') return { status: 'uretimde', reason: 'Üretimde', blockedBy: null }
 
