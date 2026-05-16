@@ -28,7 +28,7 @@ import { supabase } from '@/lib/supabase'
 import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { Search, Calendar, Filter, X, ExternalLink, RefreshCw, Activity, Package, Factory, AlertTriangle } from 'lucide-react'
-import { getDbActivityLog, type ActivityLogRow } from '@/lib/activityLog'
+import { getDbActivityLog, type ActivityLogRow } from '@/services/activityLogService'
 
 // Birleşik log tipi (UI için)
 interface LogRow {

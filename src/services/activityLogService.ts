@@ -11,8 +11,8 @@
  * Eski API geriye uyumlu — caller'lar değişmedi.
  */
 
-import { supabase } from './supabase'
-import { uid } from './utils'
+import { supabase } from '@/lib/supabase'
+import { uid } from '@/lib/utils'
 
 const LOG_KEY = 'uys_activity_log'
 const MAX_LOGS = 200
