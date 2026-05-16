@@ -32,7 +32,9 @@ export interface MRPRow {
 // 'bar_acilis' → çıkış gibi sayılır (hammadde kullanıma açıldı)
 // 'rezerv' → serbest stoktan düşülür ama fiziksel çıkış değil
 // getStok → merkezi kaynak: hammaddeHesap.ts
-export { getStok, getYolda } from '@/lib/hammaddeHesap'
+// Hem local kullanım (line 63/116/179) hem dış re-export için import + export
+import { getStok, getYolda } from '@/lib/hammaddeHesap'
+export { getStok, getYolda }
 
 // Rezerve toplam (hangi siparişe ne kadar rezerve edilmiş)
 export function getRezervDetay(malkod: string, stokHareketler: StokHareket[]): { orderId: string; miktar: number }[] {
