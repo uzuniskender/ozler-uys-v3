@@ -17,7 +17,9 @@ Bu klasör, Supabase'a giden CRUD ve sorgu çağrılarını **tablo başına** b
    - `isGuestBlocked / isUniqueViolation / isForeignKeyViolation` helper'ları UI'da kullanıcıya özelleştirilmiş mesaj göstermek için kullanılabilir.
 7. **Dönüş tipleri DB satırının TS karşılığı.** Şimdilik camelCase mapper kullanmıyoruz — `src/store/index.ts`'deki `M` ile çakışmaması için. Tip dosyası: `src/types/<entity>.ts` altında `<Entity>`, `<Entity>Insert`, `<Entity>Update`.
 8. **Realtime servisin işi değil.** Realtime subscription'lar `src/hooks/useRealtime.ts` veya feature-spesifik subscribe fonksiyonlarında kalır.
-9. **Global cache'e giren tablolar (`TABLE_MAP`) için servis YAZMA.** Bu tablolar `loadAll` ile zaten store'da; bir servis paralel okuma yaparsa kafa karışıklığı olur. Servisler **store dışı**, **whitelist** tabloları içindir (bkz. `scripts/audit-schema.cjs` `STORE_WHITELIST`).
+9. **Global cache'e giren tablolar (`TABLE_MAP`) için CRUD servisi YAZMA.** Bu tablolar `loadAll` ile zaten store'da; bir CRUD servisi paralel okuma yaparsa kafa karışıklığı olur. CRUD servisleri (`*Service.ts`) **store dışı**, **whitelist** tabloları içindir (bkz. `scripts/audit-schema.cjs` `STORE_WHITELIST`).
+
+   **İstisna — Use-case service:** Multi-tablo, sıralı yan-etkili domain akışları ayrı alt klasörlerde yaşar: `mrpService/`, `orderService/`, `productionService/`. Bunlar TABLE_MAP tabloları üzerinde yan etki yapabilir (insert/update zincirleri). CRUD `*Service.ts` ile **karışmazlar**; ayrı klasör, ayrı stil. Kural sadece CRUD yazımına dair.
 
 ## Şablon
 
@@ -81,9 +83,19 @@ Sadece `STORE_WHITELIST`'te olan, store'a girmeyen tablolar:
 
 Her biri ayrı commit, kullanıcı onayı ile.
 
+## Use-case service alt klasörleri
+
+Multi-tablo, sıralı yan-etkili domain akışları aşağıdaki alt klasörlerde yaşar (kural 9 istisnası):
+
+- `src/services/mrpService/` — `mrp.ts`, `mrpCache.ts` (MRP hesabı + cache; `uys_mrp_state_global/order`)
+- `src/services/orderService/` — `stateMachine.ts` (sipariş state machine, UI metadata)
+- `src/services/productionService/` — `autoChain.ts`, `cutting.ts`, `cuttingArtik.ts`, `stokTuketim.ts`, `stokKontrol.ts`, `barModel.ts` (iş emri zinciri, kesim planı + artık, stok tüketim/kontrol, bar modeli)
+
+Bu dosyalar 6 sayfa + `lib/testRunner.ts` tarafından import ediliyor. CRUD `*Service.ts` şablonuna uymak zorunda değiller; mevcut stillerini korurlar. Yeni use-case akışları aynı klasörlere eklenebilir.
+
 ## Faz 2 dışı (bilinçli)
 
 - `src/store/index.ts` — global cache + realtime; dokunulmaz.
 - `src/features/chat/chatService.ts` — zaten servis konumunda; farklı stil ama çalışıyor.
-- `src/features/production/*` (`mrp`, `mrpCache`, `autoChain`, `stokTuketim`, `barModel`...) — multi-tablo, sıralı yan-etkili domain akışları; "use-case service" konumundalar.
+- `src/features/production/*` (geriye kalan: `validations`, `mamulRezerv`, `hammaddeTahsis`, `stokTahsis`, `fireTelafi`, `levhaKesim`, `sureAnaliz`) — feature-spesifik yardımcılar; gerekirse use-case servislere taşınabilir.
 - Sayfa içi inline query'ler — yeni kodda servis-first, eski kod organik göç eder.
