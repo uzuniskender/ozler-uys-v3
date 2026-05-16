@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -9,6 +10,11 @@ import { topluFireTelafi, fireTelafiIeOlustur } from '@/features/production/fire
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts'
 
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+
+const detayFiltreSchemasi = z.object({
+  baslangic: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Geçerli bir başlangıç tarihi girin'),
+  bitis: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Geçerli bir bitiş tarihi girin'),
+}).refine(d => d.baslangic <= d.bitis, { message: 'Başlangıç tarihi bitiş tarihinden sonra olamaz', path: ['baslangic'] })
 
 export function Reports() {
   const workOrders = useProductionStore(s => s.workOrders)
@@ -325,11 +331,19 @@ export function Reports() {
             <div className="flex flex-wrap items-end gap-2">
               <div>
                 <label className="text-[10px] text-zinc-500 block mb-0.5">Başlangıç</label>
-                <input type="date" value={dBaslangic} onChange={e => setDBaslangic(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
+                <input type="date" value={dBaslangic} onChange={e => {
+                  const g = detayFiltreSchemasi.safeParse({ baslangic: e.target.value, bitis: dBitis })
+                  if (!g.success) { toast.error(g.error.issues[0].message); return }
+                  setDBaslangic(e.target.value)
+                }} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 block mb-0.5">Bitiş</label>
-                <input type="date" value={dBitis} onChange={e => setDBitis(e.target.value)} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
+                <input type="date" value={dBitis} onChange={e => {
+                  const g = detayFiltreSchemasi.safeParse({ baslangic: dBaslangic, bitis: e.target.value })
+                  if (!g.success) { toast.error(g.error.issues[0].message); return }
+                  setDBitis(e.target.value)
+                }} className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 block mb-0.5">Operatör</label>
