@@ -50,7 +50,7 @@ export function WorkOrders() {
   )
   const { can, isGuest, user } = useAuth()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'beklemede']))
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['PlanBekliyor']))
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['siparis', 'ym']))
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
