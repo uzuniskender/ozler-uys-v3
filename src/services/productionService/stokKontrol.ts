@@ -1,4 +1,4 @@
-import { getStok, getYolda } from '@/lib/hammaddeHesap'
+import { getStok, getYolda, buildStokMap } from '@/lib/hammaddeHesap'
 import type { WorkOrder, StokHareket, Tedarik, Material, Recipe } from '@/types'
 
 export interface StokKontrolSatir {
@@ -18,19 +18,9 @@ export interface StokKontrolSonuc {
   mesaj?: string
 }
 
-function buildNetStokMap(stokHareketler: StokHareket[]): Map<string, number> {  // E-1
-  const map = new Map<string, number>()
-  for (const h of stokHareketler) {
-    if (!h.malkod) continue
-    const delta = (h as any).tip === 'giris' ? (h.miktar || 0) : -(h.miktar || 0)
-    map.set(h.malkod, (map.get(h.malkod) ?? 0) + delta)
-  }
-  return map
-}
-
-function netStok(malkod: string, netStokMap: Map<string, number>): number {  // E-1: O(1)
-  return netStokMap.get(malkod) ?? 0
-}
+// E-1 O(n) tek-pass stok haritası → merkezi kaynak: lib/hammaddeHesap.ts:buildStokMap
+// (önceden buradaki lokal kopyası getStok'tan farklı davranıyordu — bilinmeyen tipi
+//  çıkış sayıyordu. Şimdi tek formül.)
 
 function netAcikTed(malkod: string, tedarikler: Tedarik[]): number {
   return tedarikler
@@ -111,7 +101,7 @@ function malzemeKontrol(
   malad: string,
   tip: string,
   gerekli: number,
-  netStokMap: Map<string, number>,
+  netStokMap: Record<string, number>,
   tedarikler: Tedarik[],
   recipes: Recipe[],
   materials: Material[] | undefined,
@@ -126,7 +116,7 @@ function malzemeKontrol(
   if (derinlik > 10) return []
   ziyaret.add(malkod)
 
-  const kendiStok = Math.max(0, Math.floor(netStok(malkod, netStokMap)))
+  const kendiStok = Math.max(0, Math.floor(netStokMap[malkod] ?? 0))
   if (kendiStok >= gerekli) return []
 
   const acikTed = netAcikTed(malkod, tedarikler)
@@ -194,10 +184,10 @@ export function stokKontrolWO(
   recipes?: Recipe[]
 ): StokKontrolSonuc {
   if (kalan <= 0) return { durum: 'OK', satirlar: [], maxYapilabilir: 0 }
-  const netStokMap = buildNetStokMap(stokHareketler)  // E-1: tek seferlik Map
+  const netStokMap = buildStokMap(stokHareketler)  // E-1: tek seferlik merkezi map
 
   // Mamul stokta varsa üretmeye gerek yok
-  const mamulStok = Math.floor(netStok(wo.malkod, netStokMap))
+  const mamulStok = Math.floor(netStokMap[wo.malkod] ?? 0)
   if (mamulStok >= kalan) return { durum: 'OK', satirlar: [], maxYapilabilir: kalan }
 
   const altlar = dogrudanAltBilesenler(wo.malkod, recipes || [], wo)

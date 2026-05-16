@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { buildIhtiyacMap, getStok } from '@/lib/hammaddeHesap'
+import { buildIhtiyacMap, getStok, buildStokMap } from '@/lib/hammaddeHesap'
 import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -44,12 +44,16 @@ export function Warehouse() {
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
 
   const stokMap = useMemo(() => {
-    const map: Record<string, { malkod: string; malad: string; miktar: number }> = {}
-    stokHareketler.forEach(h => {
-      if (!map[h.malkod]) map[h.malkod] = { malkod: h.malkod, malad: h.malad, miktar: 0 }
-      map[h.malkod].miktar += h.tip === 'giris' ? h.miktar : -h.miktar
-    })
-    return Object.values(map).filter(s => Math.abs(s.miktar) > 0.01).sort((a, b) => a.malad.localeCompare(b.malad, 'tr'))
+    // Net stok: merkezi kaynak (lib/hammaddeHesap.ts:buildStokMap) — getStok ile aynı semantik
+    const netMap = buildStokMap(stokHareketler)
+    const adMap: Record<string, string> = {}
+    for (const h of stokHareketler) {
+      if (h.malkod && !adMap[h.malkod]) adMap[h.malkod] = h.malad
+    }
+    return Object.entries(netMap)
+      .map(([malkod, miktar]) => ({ malkod, malad: adMap[malkod] || '', miktar }))
+      .filter(s => Math.abs(s.miktar) > 0.01)
+      .sort((a, b) => a.malad.localeCompare(b.malad, 'tr'))
   }, [stokHareketler])
 
   // Anlık ihtiyaç: kesim planı varsa plan bar adedi, yoksa WO hm toplamı
