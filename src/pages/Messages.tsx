@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useProductionStore, useAuthStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,6 +14,10 @@ import {
 } from '@/hooks/useMessageNotifications'
 
 const isAdmin = (n: OperatorNote) => (n.opAd || '').includes('Yönetim')
+
+const mesajSchema = z.object({
+  mesaj: z.string().min(1, 'Mesaj boş olamaz').max(1000, 'Mesaj en fazla 1000 karakter'),
+})
 
 export function Messages() {
   const operatorNotes = useProductionStore(s => s.operatorNotes)
@@ -130,7 +135,9 @@ export function Messages() {
   }, [selectedOprId, operatorNotes, loadOwn])
 
   async function send() {
-    if (!mesaj.trim() || !selectedOprId || sending) return
+    const v = mesajSchema.safeParse({ mesaj: mesaj.trim() })
+    if (!v.success) { toast.error(v.error.issues[0].message); return }
+    if (!selectedOprId || sending) return
     setSending(true)
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')

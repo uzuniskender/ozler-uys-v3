@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { useState, useMemo, useEffect } from 'react'
@@ -14,6 +15,22 @@ import type { IzinTip } from '@/types/izin'
 import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
 import { canProduceWO, canDurus } from '@/features/production/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
+
+const mesajSchema = z.object({
+  mesaj: z.string().min(1, 'Mesaj boş olamaz').max(1000, 'Mesaj en fazla 1000 karakter'),
+})
+
+const izinSchema = z.object({
+  baslangic: z.string().min(1, 'Başlangıç tarihi zorunludur'),
+  bitis: z.string().min(1, 'Bitiş tarihi zorunludur'),
+}).refine(d => d.bitis >= d.baslangic, { message: 'Bitiş tarihi başlangıçtan önce olamaz', path: ['bitis'] })
+
+const uretimGirisSchema = z.object({
+  qty: z.number().int().min(0, 'Negatif değer girilemez'),
+  fire: z.number().int().min(0, 'Negatif değer girilemez'),
+  aciklama: z.string().max(500, 'Açıklama en fazla 500 karakter'),
+  tarih: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Geçersiz tarih formatı'),
+})
 
 export function OperatorPanel() {
   const operators = useAuthStore(s => s.operators)
@@ -915,8 +932,9 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
   async function save() {
     const q = parseInt(qty) || 0; const f = parseInt(fire) || 0
     const hasDurus = duruslar.some(d => d.kodId && d.sure > 0)
+    const girisSonuc = uretimGirisSchema.safeParse({ qty: q, fire: f, aciklama, tarih })
+    if (!girisSonuc.success) { toast.error(girisSonuc.error.issues[0].message); return }
     if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Adet, fire veya duruş girin'); return }
-    if (q < 0 || f < 0) { toast.error('Negatif değer girilemez'); return }
     // Güncel üretim + fire'ı çek — İE kapasitesi (fire dahil)
     const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
     const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
@@ -1261,7 +1279,8 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
   }, [oprId])
 
   async function send() {
-    if (!mesaj.trim()) return
+    const v = mesajSchema.safeParse({ mesaj: mesaj.trim() })
+    if (!v.success) { toast.error(v.error.issues[0].message); return }
     const now = new Date()
     const saat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
     const { error } = await supabase.from('uys_operator_notes').insert({
@@ -1275,7 +1294,8 @@ function MesajForm({ oprId, oprAd, onSent }: { oprId: string; oprAd: string; onS
   }
 
   async function saveEdit(id: string) {
-    if (!editText.trim()) return
+    const v = mesajSchema.safeParse({ mesaj: editText.trim() })
+    if (!v.success) { toast.error(v.error.issues[0].message); return }
     await supabase.from('uys_operator_notes').update({ mesaj: editText.trim() }).eq('id', id)
     setEditId(null); setEditText(''); loadAllStores(); toast.success('Mesaj güncellendi')
   }
@@ -1431,7 +1451,9 @@ function IzinTalepForm({ oprId, oprAd, onSaved }: { oprId: string; oprAd: string
         <button
           disabled={saving}
           onClick={async () => {
-            if (!baslangic) { toast.error('Başlangıç tarihi girilmeli'); return }
+            const v = izinSchema.safeParse({ baslangic, bitis })
+            if (!v.success) { toast.error(v.error.issues[0].message); return }
+            if (saatlik && saatBas && saatBit && saatBit <= saatBas) { toast.error('Saatlik bitiş saati başlangıçtan önce olamaz'); return }
             setSaving(true)
             await createIzin({
               opId: oprId, opAd: oprAd,
