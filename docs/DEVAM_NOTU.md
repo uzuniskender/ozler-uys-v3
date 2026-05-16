@@ -253,6 +253,18 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 - `Reports.tsx` quality negatif → 0 sıkıştırma
 - `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
 
+### 16 Mayıs 2026 — Materials schema kapsam genişlemesi (`85680df`)
+
+`src/lib/validations/materialSchema.ts` — mevcut Zod şeması 5 alan → 8 alan:
+- `kod` / `ad`: trim + max sınırı (50 / 200)
+- **Yeni:** `tip` (min 1, max 50), `birim` (min 1, max 20), `hammaddeTipi` (opsiyonel, max 50)
+- **Yeni cross-field refine:** tip Hammadde veya YarıMamul ise hammaddeTipi zorunlu
+- `Materials.tsx` `MatFormModal.save` safeParse'a yeni alanlar geçirildi
+
+Not: 26/41 sayacı değişmedi (Materials zaten Zod kullanıyordu) — sadece kapsam derinleşti.
+
+---
+
 ### 16 Mayıs 2026 — Zod yayılımı (26/41)
 
 **DataManagement.tsx** (`eab8f9d`) — paralel session
