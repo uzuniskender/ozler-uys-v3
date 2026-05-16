@@ -3,7 +3,7 @@ import { logAction } from '@/lib/activityLog'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/features/production/autoChain'
-import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/features/production/mrp'
+import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/services/mrpService'
 import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditLog } from '@/lib/audit'
@@ -19,7 +19,7 @@ import { startFlow, advanceFlow } from '@/lib/pendingFlow'
 import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen, getPlanliWoIds } from '@/lib/statusUtils'
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
-import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
+import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/services/orderService/stateMachine'
 import { z } from 'zod'
 
 export function Orders() {

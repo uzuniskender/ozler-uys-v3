@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { hesaplaMRP } from './mrp'
+import { hesaplaMRP } from '@/services/mrpService'
 import type { WorkOrder, Recipe, StokHareket, Tedarik, Material, MrpRezerve } from '@/types'
 
 // ─── Test fixture'ları ───────────────────────────────────────────

@@ -2,7 +2,7 @@ import { supabase, fetchAll } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
-import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, type MRPRow } from './mrp'
+import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, type MRPRow } from '@/services/mrpService'
 // v15.85 — test_run_id propagation: autoZincir snapshot kayitlarinin
 // canli veriye karismasini onler. Etiketsiz kayit cleanup'a takilmazdi.
 import { withTestRunId } from '@/lib/testRun'

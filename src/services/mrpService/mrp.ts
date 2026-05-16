@@ -1297,7 +1297,7 @@ export async function siparisRevizeUygula(
     if (kd.tip === 'kalem_ekle') {
       // Yeni kalem için WO'lar oluştur — buildWorkOrders dynamic import
       // (Circular dep önlemek için)
-      const { buildWorkOrders } = await import('./autoChain')
+      const { buildWorkOrders } = await import('@/features/production/autoChain')
       // Kalem ekle: woTotal başlangıç max sira + 1
       const { data: maxSira } = await supabase
         .from('uys_work_orders')

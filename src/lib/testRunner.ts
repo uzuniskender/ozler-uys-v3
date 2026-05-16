@@ -11,7 +11,7 @@ import { uid, today } from './utils'
 import { getActiveTestRunId, tempSetActiveTestRunId, cascadeDeleteTestRun, newTestRunId } from './testRun'
 import { buildWorkOrders, autoZincir, type KesimFarkItem } from '@/features/production/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/features/production/cutting'
-import { hesaplaMRP, siparisDelta } from '@/features/production/mrp'
+import { hesaplaMRP, siparisDelta } from '@/services/mrpService'
 import { markTedarikGeldi } from './tedarikHelpers'
 import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/features/production/fireTelafi'
 import { canProduceWO, canDurus, canDeleteWO } from '@/features/production/validations'
@@ -1812,7 +1812,7 @@ export async function senaryo11(ctx: RunnerContext): Promise<SenaryoRapor> {
 //
 // 6 alt-test: Kapsamlı.
 
-import { hesaplaMRP as hmrp } from '@/features/production/mrp'
+import { hesaplaMRP as hmrp } from '@/services/mrpService'
 
 export async function senaryo12(ctx: RunnerContext): Promise<SenaryoRapor> {
   const parentId = getActiveTestRunId() || ''

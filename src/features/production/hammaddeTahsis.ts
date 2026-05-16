@@ -15,7 +15,7 @@
 // Bu hesap MRP'nin uzantisi. hesaplaMRP tek siparis icin (veya ordIds set'i icin)
 // brüt-net hesaplar; hammaddeTahsis ise TUM aktif siparişler arasinda paylastirir.
 
-import { hesaplaMRP, type MRPRow } from './mrp'
+import { hesaplaMRP, type MRPRow } from '@/services/mrpService'
 import type { Order, WorkOrder, Recipe, Material, StokHareket, Tedarik, MrpRezerve } from '@/types'
 
 export interface SiparisTahsis {

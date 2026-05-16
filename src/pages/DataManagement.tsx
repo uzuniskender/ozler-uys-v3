@@ -10,9 +10,9 @@ import { Download, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
-import { cuttingPlanTemizle, hesaplaMRP, hesaplaMRPCached } from '@/features/production/mrp'
+import { cuttingPlanTemizle, hesaplaMRP, hesaplaMRPCached } from '@/services/mrpService'
 import { tedarikStokId } from '@/lib/tedarikHelpers'
-import { isActive as isStateActive } from '@/features/order/stateMachine'
+import { isActive as isStateActive } from '@/services/orderService/stateMachine'
 import { z } from 'zod'
 
 // ═══ SAĞLIK RAPORU TİPLERİ ═══
