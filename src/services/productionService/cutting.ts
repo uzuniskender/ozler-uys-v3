@@ -462,9 +462,45 @@ export function havuzdanYenidenOptimize(
 }
 
 // Kesim planlarını Supabase'e kaydet
+// v16.91 — DB-level duplicate guard: aynı (ham_malkod, durum='bekliyor') için yeni id ile
+// ikinci bir plan oluşturulmasını engeller. Stale caller state'i (kesimPlanOlustur'a geçirilen
+// mevcutPlanlar parametresi) son anda DB ile kıyaslanır; çakışma varsa SKIP + warn log.
+// Kök neden: aynı oturumda autoZincir 2 kez çağrıldığında store realtime sync gecikirse
+// kesimPlanOlustur boş `mevcutPlanlar` görür → yeni uid() → upsert onConflict:'id' yakalamaz.
 export async function kesimPlanlariKaydet(planlar: KesimPlanSonuc[]): Promise<number> {
   if (!planlar.length) return 0
+
+  // DB-level duplicate guard: aynı ham_malkod için DB'de bekleyen plan var mı?
+  const hamMalkodlar = [...new Set(planlar.map(p => p.hamMalkod))]
+  const planIds = new Set(planlar.map(p => p.id))
+  const mevcutHamMap = new Map<string, string>()  // ham_malkod → mevcut id (caller'ın planIds'inde değil)
+  try {
+    const { data: mevcutBekleyenler } = await supabase
+      .from('uys_kesim_planlari')
+      .select('id, ham_malkod')
+      .in('ham_malkod', hamMalkodlar)
+      .eq('durum', 'bekliyor')
+    for (const r of (mevcutBekleyenler || [])) {
+      const id = (r as { id: string }).id
+      const hm = (r as { ham_malkod: string }).ham_malkod
+      if (!planIds.has(id)) mevcutHamMap.set(hm, id)
+    }
+  } catch (e) {
+    console.warn('[kesimPlanlariKaydet] duplicate guard DB sorgusu başarısız, normal akış devam:', e)
+  }
+
+  let kaydedildi = 0
+  let atlanan = 0
   for (const plan of planlar) {
+    const cakisanId = mevcutHamMap.get(plan.hamMalkod)
+    if (cakisanId) {
+      console.warn(
+        `[kesimPlanlariKaydet] DUPLICATE GUARD: '${plan.hamMalkod}' için bekleyen plan zaten var (id=${cakisanId}). ` +
+        `Yeni id=${plan.id} atlandı — stale caller state. Bir sonraki render fresh state ile birleştirir.`
+      )
+      atlanan++
+      continue
+    }
     await supabase.from('uys_kesim_planlari').upsert({
       id: plan.id,
       ham_malkod: plan.hamMalkod, ham_malad: plan.hamMalad,
@@ -473,6 +509,10 @@ export async function kesimPlanlariKaydet(planlar: KesimPlanSonuc[]): Promise<nu
       satirlar: plan.satirlar, gerekli_adet: plan.gerekliAdet,
       tarih: plan.tarih,
     }, { onConflict: 'id' })
+    kaydedildi++
+  }
+  if (atlanan > 0) {
+    console.warn(`[kesimPlanlariKaydet] ${atlanan}/${planlar.length} mükerrer plan atlandı (duplicate guard)`)
   }
 
   // Bu planlardaki WO'lara ait siparişlerin state'ini güncelle: plan_bekliyor → uretilebilir
@@ -495,7 +535,7 @@ export async function kesimPlanlariKaydet(planlar: KesimPlanSonuc[]): Promise<nu
     }
   } catch (e) { console.warn('[kesimPlanlariKaydet] state güncelleme hatası:', e) }
 
-  return planlar.length
+  return kaydedildi
 }
 
 // ═══ BACKWARD COMPAT ═══

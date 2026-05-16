@@ -170,9 +170,27 @@ export async function autoZincir(
   })) || workOrders
 
   // ADIM 2: Kesim Planı
+  // v16.91 — Mükerrer plan önlemi: stale store yerine DB'den fresh cuttingPlans çek.
+  // Stale snapshot ile çalışınca aynı oturumda 2. autoZincir çağrısı aynı hamMalkod için
+  // tekrar plan oluşturuyordu (yeni uid → upsert conflict yakalamıyordu). Bkz. burst:
+  // 2026-05-16 08:53 6 plan ~16sn arayla 2 kez insert (21 ham_malkod mükerrer).
+  let freshCuttingPlans = cuttingPlans
+  try {
+    const { data: cpRows } = await supabase.from('uys_kesim_planlari').select('*').neq('durum', 'iptal')
+    if (cpRows) {
+      freshCuttingPlans = cpRows.map((r: any) => ({
+        id: r.id, hamMalkod: r.ham_malkod, hamMalad: r.ham_malad,
+        hamBoy: r.ham_boy || 0, hamEn: r.ham_en || 0,
+        kesimTip: r.kesim_tip || 'boy', durum: r.durum,
+        satirlar: r.satirlar || [], gerekliAdet: r.gerekli_adet || 0,
+        tarih: r.tarih || '',
+      }))
+    }
+  } catch { /* stale fallback */ }
+
   let kesimCount = 0
   try {
-    const yeniPlanlar = kesimPlanOlustur(allWOs, operations, recipes, materials, logs, cuttingPlans)
+    const yeniPlanlar = kesimPlanOlustur(allWOs, operations, recipes, materials, logs, freshCuttingPlans)
     if (yeniPlanlar.length) {
       kesimCount = await kesimPlanlariKaydet(yeniPlanlar)
       adimlar.push(`✅ ${kesimCount} kesim planı oluşturuldu`)
