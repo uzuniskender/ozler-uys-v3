@@ -253,6 +253,18 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 - `Reports.tsx` quality negatif → 0 sıkıştırma
 - `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
 
+### 16 Mayıs 2026 — Zod yayılımı (35/41) — StokLog (`786f193`)
+
+`src/pages/StokLog.tsx`:
+- `_malkodSecimSchema`: kod (trim, min 1, max 50, boşluksuz) + ad (trim, min 1, max 200)
+- `_aciklamaSchema`: trim, max 500 karakter
+- `saveMalkod()` safeParse: malzeme değişimi (toplu/tekil) öncesi şema kontrolü — toplu malkod güncelleme yüksek etkili olduğu için kritik
+- `saveNote()` safeParse: açıklama uzunluk kontrolü
+
+Not: Bu dosyada miktar inline edit yok (salt-okunur gösterim). Warehouse.tsx miktar inline edit zaten `stokInlineEditSchema` (`59ba6a1`) ile korunuyor.
+
+---
+
 ### 16 Mayıs 2026 — Zod yayılımı (34/41) — 8 sayfa daha (`59ba6a1`, `555edcc`, `a10aea8`, paralel session)
 
 **Eklenen sayfalar:**
@@ -388,7 +400,7 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
-8. Zod adoption diğer 7 form modal'a yayılması (34/41 tamam — son: HmTipleri + Login + Chat + Stations + Operations + DowntimeCodes + ProblemTakip + Warehouse). Kalanlar büyük ihtimalle display-only sayfalar (Dashboard, Reports, Logs, AuditLog, vb.) veya StokLog inline edit gibi düşük öncelik alanlar.
+8. Zod adoption — **35/41 tamam** (son: StokLog `saveMalkod`/`saveNote`). Kalan 6 sayfa display-only ya da N/A: Dashboard, Reports, Logs, AuditLog, Backup, HammaddeRapor, DevSync, ActiveWorkPanel, TestPanel, TestMode. Bu sayfalarda gerçek kullanıcı form input'u yok; pratikte Zod yayılımı tamamlanmış sayılır.
 9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
 10. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
 11. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
