@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import {
   Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell, AtSign, Paperclip, Download, FileText, Image as ImageIcon, Loader2,
 } from 'lucide-react'
-import { useChatUser } from '@/features/chat/useChatUser'
+import { useChatUser } from '@/services/chatService/useChatUser'
 import {
   getSidebarChannels,
   getMessagesWithSenders,
@@ -32,13 +32,13 @@ import {
   isImageMime,
   formatFileSize,
   type ChatAttachmentView,
-} from '@/features/chat/chatService'
+} from '@/services/chatService/chatService'
 import {
   getUserDisplayName,
   type ChatSidebarItem,
   type ChatMessage,
   type ChatUserLite,
-} from '@/features/chat/types'
+} from '@/services/chatService/types'
 import {
   requestNotificationPermission,
   getNotificationPermission,

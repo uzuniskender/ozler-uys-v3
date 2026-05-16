@@ -90,11 +90,11 @@ Multi-tablo, sıralı yan-etkili domain akışları aşağıdaki alt klasörlerd
 - `src/services/mrpService/` — `mrp.ts`, `mrpCache.ts` (MRP hesabı + cache; `uys_mrp_state_global/order`)
 - `src/services/orderService/` — `stateMachine.ts` (sipariş state machine, UI metadata)
 - `src/services/productionService/` — `autoChain.ts`, `autoChainSubBoms.ts`, `cutting.ts`, `cuttingArtik.ts`, `stokTuketim.ts`, `stokKontrol.ts`, `barModel.ts`, `fireTelafi.ts`, `hammaddeTahsis.ts`, `levhaKesim.ts`, `mamulRezerv.ts`, `sureAnaliz.ts`, `validations.ts` (iş emri zinciri + alt BOM otomasyonu, kesim planı + artık, stok tüketim/kontrol, bar modeli, fire telafi, HM tahsis, levha kesim, mamul rezerv hesabı, süre analizi, validation kuralları)
+- `src/services/chatService/` — `chatService.ts`, `types.ts`, `useChatUser.ts` (kurumsal mesajlaşma; `uys_chat_*` tabloları, realtime subscribe)
 
 Bu dosyalar 6 sayfa + `lib/testRunner.ts` tarafından import ediliyor. CRUD `*Service.ts` şablonuna uymak zorunda değiller; mevcut stillerini korurlar. Yeni use-case akışları aynı klasörlere eklenebilir.
 
 ## Faz 2 dışı (bilinçli)
 
 - `src/store/index.ts` — global cache + realtime; dokunulmaz.
-- `src/features/chat/chatService.ts` — zaten servis konumunda; farklı stil ama çalışıyor.
 - Sayfa içi inline query'ler — yeni kodda servis-first, eski kod organik göç eder.

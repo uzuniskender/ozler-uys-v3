@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { wrap } from '@/services/_base/errors'
 import { applyIlikeArama, norm } from '@/services/_base/query'
 import { uid, today } from '@/lib/utils'
-import { auditLog } from '@/lib/audit'
+import { auditLog } from '@/services/auditService'
 import type { Tedarikci } from '@/types'
 import type { TedarikciInsert, TedarikciUpdate } from '@/types/tedarikci'
 

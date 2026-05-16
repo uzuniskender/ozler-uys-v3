@@ -15,13 +15,13 @@
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { useAuth } from './useAuth'
-import { useChatUser } from '@/features/chat/useChatUser'
+import { useChatUser } from '@/services/chatService/useChatUser'
 import {
   getTotalUnreadCount,
   getUnreadMentionCount,
   subscribeToAllUserMessages,
   subscribeToUserMentions,
-} from '@/features/chat/chatService'
+} from '@/services/chatService/chatService'
 import { isSoundEnabled } from './useMessageNotifications'
 
 // ---- Store ------------------------------------------------------------------
