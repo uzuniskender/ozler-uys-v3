@@ -193,3 +193,90 @@ export async function kodVarMi(
   wrap(error, { table: TABLO, op: 'select' })
   return (count ?? 0) > 0
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// uys_tedarikler (procurement order) CRUD — Procurement.tsx için
+// ─────────────────────────────────────────────────────────────────────────────
+// Tipler snake_case (DB row) — Procurement.tsx zaten DB formatında veri üretiyor.
+
+const TED_TABLO = 'uys_tedarikler'
+
+/** Procurement INSERT/UPDATE payload — DB kolonları (snake_case). */
+export interface TedarikDbRow {
+  id?: string
+  malkod: string
+  malad?: string
+  miktar: number
+  birim?: string
+  order_id?: string | null
+  siparis_no?: string | null
+  durum?: string
+  geldi?: boolean
+  teslim_tarihi?: string | null
+  tedarikci_id?: string | null
+  tedarikci_ad?: string | null
+  not_?: string | null
+  tarih?: string
+}
+
+/** Tedariki DB'den oku — id + order_id (cascade işlemler için). */
+export async function getTedarik(id: string): Promise<{ id: string; order_id: string | null } | null> {
+  const { data, error } = await supabase
+    .from(TED_TABLO)
+    .select('id, order_id')
+    .eq('id', id)
+    .maybeSingle()
+  wrap(error, { table: TED_TABLO, op: 'select' })
+  return data ? { id: data.id as string, order_id: (data.order_id as string) ?? null } : null
+}
+
+/** Yeni tedarik oluştur. */
+export async function createTedarik(payload: TedarikDbRow): Promise<{ id: string }> {
+  const id = payload.id ?? uid()
+  const row = { ...payload, id, tarih: payload.tarih ?? today() }
+  const { error } = await supabase.from(TED_TABLO).insert(row)
+  wrap(error, { table: TED_TABLO, op: 'insert' })
+  return { id }
+}
+
+/** Toplu tedarik insert (Excel import için). */
+export async function createTedariklerBulk(list: TedarikDbRow[]): Promise<number> {
+  if (!list.length) return 0
+  const today_ = today()
+  const rows = list.map(p => ({ ...p, id: p.id ?? uid(), tarih: p.tarih ?? today_ }))
+  const { error } = await supabase.from(TED_TABLO).insert(rows)
+  wrap(error, { table: TED_TABLO, op: 'insert' })
+  return rows.length
+}
+
+/** Mevcut tedariki güncelle. */
+export async function updateTedarik(id: string, patch: Partial<TedarikDbRow>): Promise<void> {
+  const { error } = await supabase.from(TED_TABLO).update(patch).eq('id', id)
+  wrap(error, { table: TED_TABLO, op: 'update' })
+}
+
+/**
+ * Tedariki sil — cascade: stok hareketi (geldi ise) + bağlı sipariş mrp_durum invalidate.
+ *
+ * @param opts.stokSil — true ise tedarikStokId(id) hareketi de silinir (wasGeldi durumunda)
+ */
+export async function deleteTedarik(id: string, opts: { stokSil: boolean }): Promise<void> {
+  // 1. order_id'yi DB'den al (state stale olabilir)
+  const ted = await getTedarik(id)
+  const orderId = ted?.order_id ?? null
+
+  // 2. Stoktan ters kayıt sil (geldi durumda)
+  if (opts.stokSil) {
+    await supabase.from('uys_stok_hareketler').delete().eq('id', tedarikStokId(id))
+  }
+
+  // 3. Tedariki sil
+  const { error } = await supabase.from(TED_TABLO).delete().eq('id', id)
+  wrap(error, { table: TED_TABLO, op: 'delete' })
+
+  // 4. Bağlı siparişin MRP durumunu invalidate et
+  if (orderId) {
+    const { updateOrderMrpDurum } = await import('@/services/orderService/orderCrud')
+    await updateOrderMrpDurum(orderId, 'bekliyor')
+  }
+}

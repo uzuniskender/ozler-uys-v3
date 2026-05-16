@@ -4,13 +4,15 @@ import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
-import { supabase } from '@/lib/supabase'
-import { uid, today } from '@/lib/utils'
+import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
-import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/services/tedarikciService'
+import {
+  markTedarikGeldi, markTedarikGelmedi,
+  createTedarik, updateTedarik, deleteTedarik, createTedariklerBulk,
+} from '@/services/tedarikciService'
 
 import { FlowProgress } from '@/components/FlowProgress'
 import { isProcurementPending } from '@/lib/statusUtils'
@@ -99,23 +101,13 @@ export function Procurement() {
 
   async function del(id: string) {
     const ted = tedarikler.find(t => t.id === id)
-    const wasGeldi = ted?.geldi
+    const wasGeldi = !!ted?.geldi
     const msg = wasGeldi
       ? 'Bu tedarik "geldi" durumda. Silinirse stok girişi de silinecek. Devam?'
       : 'Silmek istediğinize emin misiniz?'
     if (!await showConfirm(msg)) return
     try {
-      // Silinen tedarikin order_id'sini DB'den al (state kirli olabilir)
-      const { data: tedRow } = await supabase.from('uys_tedarikler').select('order_id').eq('id', id).maybeSingle()
-      const orderId = (tedRow as { order_id?: string } | null)?.order_id
-      // Geldi ise ilgili stok hareketini de sil
-      if (wasGeldi) {
-        await supabase.from('uys_stok_hareketler').delete().eq('id', tedarikStokId(id))
-      }
-      await supabase.from('uys_tedarikler').delete().eq('id', id)
-      if (orderId) {
-        await supabase.from('uys_orders').update({ mrp_durum: 'bekliyor' }).eq('id', orderId)
-      }
+      await deleteTedarik(id, { stokSil: wasGeldi })
       loadAllStores(); toast.success(wasGeldi ? 'Tedarik + stok girişi silindi' : 'Tedarik silindi')
     } catch (e: any) {
       toast.error('Silme hatası: ' + (e?.message || e))
@@ -128,8 +120,8 @@ export function Procurement() {
     const yeniGeldi = !!data.geldi
     const eskiGeldi = !!oncekiTed?.geldi
 
-    if (editId) await supabase.from('uys_tedarikler').update(data).eq('id', editId)
-    else await supabase.from('uys_tedarikler').insert({ id: uid(), ...data })
+    if (editId) await updateTedarik(editId, data as any)
+    else await createTedarik(data as any)
 
     // Geldi → true olduysa stok hareketi yaz
     if (editId && yeniGeldi && !eskiGeldi) {
@@ -171,22 +163,23 @@ export function Procurement() {
       const wb = XLSX.read(buf); const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws) as Record<string, unknown>[]
       if (!rows.length) { toast.error('Dosya boş'); return }
-      let count = 0
       const { materials: mats } = useWarehouseStore.getState()
-      for (const row of rows) {
-        const malkod = String(row['Malzeme Kodu'] || row['malkod'] || row['Malzeme Kod'] || '').trim(); if (!malkod) continue
-        const miktar = parseFloat(String(row['Sipariş Miktarı'] || row['Miktar'] || row['miktar'] || '0')); if (!miktar) continue
+      const payload = rows.flatMap(row => {
+        const malkod = String(row['Malzeme Kodu'] || row['malkod'] || row['Malzeme Kod'] || '').trim()
+        if (!malkod) return []
+        const miktar = parseFloat(String(row['Sipariş Miktarı'] || row['Miktar'] || row['miktar'] || '0'))
+        if (!miktar) return []
         const mat = mats.find(m => m.kod === malkod)
         const malad = String(row['Malzeme Adı'] || row['malad'] || row['Malzeme'] || mat?.ad || malkod)
         const teslim = String(row['Beklenen Tarih'] || row['Teslim'] || row['teslim'] || '').trim()
         const tedAd = String(row['Tedarikçi'] || row['Tedarikci'] || row['tedarikci'] || '').trim()
-        await supabase.from('uys_tedarikler').insert({
-          id: uid(), malkod, malad, miktar, birim: String(row['Birim'] || mat?.birim || 'Adet'),
+        return [{
+          malkod, malad, miktar, birim: String(row['Birim'] || mat?.birim || 'Adet'),
           teslim_tarihi: teslim, tedarikci_ad: tedAd,
           tarih: today(), durum: 'bekliyor', geldi: false, not_: 'Excel import',
-        })
-        count++
-      }
+        }]
+      })
+      const count = await createTedariklerBulk(payload)
       loadAllStores(); toast.success(count + ' tedarik yüklendi')
     }
     input.click()
