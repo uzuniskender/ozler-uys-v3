@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { getStok } from '@/lib/hammaddeHesap'
-import { addStokHareketi } from '@/lib/stokHelper'
+import { kapasiteKontrol, kaydetUretimGirisi, duzenleUretimGirisi, startWork as svcStartWork, stopWork as svcStopWork } from '@/services/productionEntryService'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore, useProductionStore, useWarehouseStore, useOrderStore, loadAllStores, reloadTablesDispatched } from '@/store'
@@ -12,7 +12,7 @@ import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-r
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { createIzin, onaylaIzin, reddetIzin } from '@/services/izinlerService'
 import type { IzinTip } from '@/types/izin'
-import { barModelSync, isBarMaterialByKod } from '@/services/productionService/barModel'
+import { barModelSync } from '@/services/productionService/barModel'
 import { canProduceWO, canDurus } from '@/services/productionService/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
 
@@ -289,39 +289,16 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     const w = workOrders.find(x => x.id === woId)
     if (!w) return
     if (myActiveList.some(a => a.woId === woId)) { toast.error('Bu işte zaten çalışıyorsun'); return }
-    const now = new Date()
-    const currentSaat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-    let saat = currentSaat
-    // Zaten aktif işi varsa → şu anki saat
-    // Aktif işi yoksa ama bugün bir iş bitirdiyse → bitiş saati default
-    if (myActiveList.length === 0) {
-      try {
-        const raw = localStorage.getItem('uys_lastStop_' + oprId)
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          if (parsed.tarih === today() && parsed.saat) {
-            saat = parsed.saat
-            toast.info('Başlangıç saati önceki işin bitişinden alındı: ' + saat)
-          }
-        }
-      } catch {}
-    }
-    const { error } = await supabase.from('uys_active_work').insert({
-      id: uid(), op_id: oprId, op_ad: opr.ad, wo_id: woId,
-      wo_ad: w.malad, baslangic: saat, tarih: today(),
-    })
-    if (error) { toast.error('İşe başlatılamadı: ' + error.message); return }
-    loadAllStores(); toast.success('İş başlatıldı: ' + w.ieNo + ' (' + saat + ')')
+    const result = await svcStartWork({ woId, oprId, oprAd: opr.ad, woMalad: w.malad, tarih: today(), myActiveCount: myActiveList.length })
+    if (!result.ok) { toast.error('İşe başlatılamadı: ' + result.error); return }
+    if (result.usedLastStop) toast.info('Başlangıç saati önceki işin bitişinden alındı: ' + result.saat)
+    loadAllStores(); toast.success('İş başlatıldı: ' + w.ieNo + ' (' + result.saat + ')')
   }
 
   async function stopWork(activeId?: string) {
     const target = activeId ? myActiveList.find(a => a.id === activeId) : myActiveList[0]
     if (!target) return
-    // Bitiş saatini kaydet — sonraki işin başlangıcı olacak
-    const now = new Date()
-    const stopSaat = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
-    try { localStorage.setItem('uys_lastStop_' + oprId, JSON.stringify({ tarih: today(), saat: stopSaat })) } catch {}
-    await supabase.from('uys_active_work').delete().eq('id', target.id)
+    await svcStopWork(target.id, oprId, today())
     loadAllStores(); toast.success('İş durduruldu')
   }
 
@@ -936,12 +913,8 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     if (!girisSonuc.success) { toast.error(girisSonuc.error.issues[0].message); return }
     if (q <= 0 && f <= 0 && !hasDurus) { toast.error('Adet, fire veya duruş girin'); return }
     // Güncel üretim + fire'ı çek — İE kapasitesi (fire dahil)
-    const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
-    const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
-    const freshFire = (freshLogs || []).reduce((a: number, l: any) => a + (l.fire || 0), 0)
-    // Edit mode'da mevcut log'un q ve f'i çıkart, yeni değerleri karşılaştır
-    const kapasiteOnceki = freshProd + freshFire - (editLog?.qty || 0) - (editLog?.fire || 0)
-    const freshKalan = Math.max(0, w.hedef - kapasiteOnceki)
+    // Edit modunda mevcut log dışarıda bırakılır (excludeLogId)
+    const { uretilen: freshProd, fireSayisi: freshFire, kalan: freshKalan } = await kapasiteKontrol(woId, w.hedef, editLogId || undefined)
     const opToplam = q + f
     if (opToplam > freshKalan) {
       toast.error(
@@ -985,105 +958,40 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     if (!stokKontrol.ok) { toast.error(stokKontrol.reason || 'Stok yetersiz'); return }
 
     setSaving(true)
-    const logId = editLogId || uid()
-    if (editLog && editLogId) {
-      // DÜZENLEME MODU — mevcut logu güncelle
-      await supabase.from('uys_logs').update({
-        qty: q, fire: f, not_: aciklama, tarih,
-        operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
-        duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
-      }).eq('id', editLogId)
-      // Stok hareketlerini yeniden oluştur
-      await supabase.from('uys_stok_hareketler').delete().eq('log_id', editLogId)
-      // Mamul stok girişi — sadece sağlam adet
-      if (q > 0) {
-        await addStokHareketi({ malkod: w.malkod, malad: w.malad, miktar: q, tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '), woId: woId, logId: editLogId })
-      }
-      // HM tüketim — sağlam + fire = toplam harcanan
-      // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
-      // Onlar barModelSync tarafından kesim planı satırı tamamlanınca tam sayı yazılır.
-      const editToplam = q + f
-      if (editToplam > 0) {
-        for (const hm of hmSatirlar) {
-          const hmKod = hm.malkod || hm.kod
-          if (isBarMaterialByKod(hmKod, materials)) continue
-          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * editToplam
-          if (hmMiktar > 0) {
-            await supabase.from('uys_stok_hareketler').insert({
-              id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-              tip: 'cikis',
-              aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''}) - düzenlendi`,
-              tarih, log_id: editLogId, wo_id: woId,
-            })
-          }
-        }
-      }
-      // Fire log güncelle
-      await supabase.from('uys_fire_logs').delete().eq('log_id', editLogId)
-      if (f > 0) {
-        await supabase.from('uys_fire_logs').insert({
-          id: uid(), log_id: editLogId, wo_id: woId, tarih,
-          malkod: w.malkod, malad: w.malad, qty: f,
-          ie_no: w.ieNo, op_ad: oprList.map(o => o.ad).join(', '),
-          operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
-          not_: aciklama || '',
-        })
-      }
-    } else {
-      // YENİ KAYIT MODU
-      const nowOp = new Date()
-      const logSaat = oprList[0]?.bas || (String(nowOp.getHours()).padStart(2, '0') + ':' + String(nowOp.getMinutes()).padStart(2, '0'))
-      await supabase.from('uys_logs').insert({
-        id: logId, wo_id: woId, tarih, saat: logSaat, qty: q, fire: f,
-        operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
-        not_: aciklama, duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
-      })
-      // Mamul stok girişi — sadece sağlam adet
-      if (q > 0) {
-        await addStokHareketi({ malkod: w.malkod, malad: w.malad, miktar: q, tip: 'giris', aciklama: w.ieNo + ' - ' + oprList.map(o => o.ad).join(', '), woId: woId, logId: logId })
-      }
-      // HM tüketim — sağlam + fire = toplam harcanan
-      // v15.32: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
-      const yeniToplam2 = q + f
-      if (yeniToplam2 > 0) {
-        for (const hm of hmSatirlar) {
-          const hmKod = hm.malkod || hm.kod
-          if (isBarMaterialByKod(hmKod, materials)) continue
-          const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * yeniToplam2
-          if (hmMiktar > 0) {
-            await supabase.from('uys_stok_hareketler').insert({
-              id: uid(), malkod: hmKod, malad: hm.malad || hm.ad, miktar: hmMiktar,
-              tip: 'cikis',
-              aciklama: `${w.ieNo} HM tüketim (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''})`,
-              tarih, log_id: logId, wo_id: woId,
-            })
-          }
-        }
-      }
-      if (f > 0) {
-        await supabase.from('uys_fire_logs').insert({
-          id: uid(), log_id: logId, wo_id: woId, tarih,
-          malkod: w.malkod, malad: w.malad, qty: f,
-          ie_no: w.ieNo, op_ad: oprList.map(o => o.ad).join(', '),
-          operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
-          not_: aciklama || '',
-        })
-        // Telafi İE otomatik açılmaz — yönetim Reports → Fire sekmesinden onaylayıp açar
-        toast.info(`⚠ ${f} fire kaydedildi. Telafi için yönetim onayı bekleniyor.`, { duration: 5000 })
-      }
+    // hmSatirlar'ı servise uygun normalize et (malkod||kod, malad||ad)
+    const hmSatirlarNorm = hmSatirlar.map((hm: any) => ({
+      malkod: hm.malkod || hm.kod || '',
+      malad: hm.malad || hm.ad || '',
+      miktar: hm.miktar || 0,
+    }))
+    const girisParams = {
+      woId, wo: w, tarih,
+      saat: oprList[0]?.bas || nowHHMM,
+      qty: q, fire: f,
+      oprList: oprList.map(o => ({ id: o.id, ad: o.ad, bas: o.bas, bit: o.bit })),
+      duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
+      not_: aciklama,
+      hmSatirlar: hmSatirlarNorm,
+      materials,
+      freshProd, freshFire,
     }
-    // ═══ AUTO-CLOSE: İE kapasitesi doldu mu? (sağlam + fire >= hedef) ═══
-    const q_ = parseInt(qty) || 0
-    const f_ = parseInt(fire) || 0
-    // Edit mode'da mevcut log'un eski q ve f'ini çıkart
-    const eskiQ = editLog?.qty || 0
-    const eskiF = editLog?.fire || 0
-    const yeniKapasite = (freshProd - eskiQ + q_) + (freshFire - eskiF + f_)
-    if (yeniKapasite >= w.hedef && w.hedef > 0) {
-      // İE durumu 'tamamlandi'
-      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi' }).eq('id', woId)
-      // Bu İE'ye ait tüm active_work kayıtlarını otomatik kapat
-      await supabase.from('uys_active_work').delete().eq('wo_id', woId)
+    const sonuc = editLog && editLogId
+      ? await duzenleUretimGirisi(editLogId, girisParams)
+      : await kaydetUretimGirisi(girisParams)
+
+    if (!sonuc.ok) {
+      toast.error('Kayıt hatası: ' + sonuc.error)
+      setSaving(false)
+      return
+    }
+
+    if (f > 0 && !editLog) {
+      // Telafi İE otomatik açılmaz — yönetim Reports → Fire sekmesinden onaylayıp açar
+      toast.info(`⚠ ${f} fire kaydedildi. Telafi için yönetim onayı bekleniyor.`, { duration: 5000 })
+    }
+
+    // ═══ AUTO-CLOSE: DB güncellemesi service içinde; sayfa localStorage + toast ═══
+    if (sonuc.autoKapatildi) {
       // Her operatörün bitiş saatini kaydet (sonraki iş için akıllı saat)
       const stopNow = new Date()
       const stopSaat = String(stopNow.getHours()).padStart(2, '0') + ':' + String(stopNow.getMinutes()).padStart(2, '0')
@@ -1091,9 +999,6 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         try { localStorage.setItem('uys_lastStop_' + o.id, JSON.stringify({ tarih: today(), saat: stopSaat })) } catch {}
       })
       toast.success(w.ieNo + ' tamamlandı ✓ Aktif çalışma otomatik kapatıldı', { duration: 4000 })
-    } else if (w.durum === 'bekliyor') {
-      // İlk üretim/fire girişi → durum "uretimde"
-      await supabase.from('uys_work_orders').update({ durum: 'uretimde' }).eq('id', woId)
     }
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {

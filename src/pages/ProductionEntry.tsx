@@ -5,7 +5,8 @@ import { auditUretimLog } from '@/services/auditService'
 import { useAuth } from '@/hooks/useAuth'
 import { logAction } from '@/services/activityLogService'
 import { stokTuketimIsle } from '@/services/productionService/stokTuketim'
-import { barModelSync, isBarMaterialByKod } from '@/services/productionService/barModel'
+import { barModelSync } from '@/services/productionService/barModel'
+import { kapasiteKontrol, kaydetUretimGirisi } from '@/services/productionEntryService'
 import { isKesimWO, getPlanliWoIds } from '@/lib/statusUtils'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -416,10 +417,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     }
     // #2: Fazla üretim kontrolü — HARD BLOCK (fire dahil)
     // Güncel üretim + fire'ı Supabase'den çek (stale data riski)
-    const { data: freshLogs } = await supabase.from('uys_logs').select('qty, fire').eq('wo_id', woId)
-    const freshProd = (freshLogs || []).reduce((a: number, l: any) => a + (l.qty || 0), 0)
-    const freshFire = (freshLogs || []).reduce((a: number, l: any) => a + (l.fire || 0), 0)
-    const freshKapasite = Math.max(0, w.hedef - freshProd - freshFire)
+    const { uretilen: freshProd, fireSayisi: freshFire, kalan: freshKapasite } = await kapasiteKontrol(woId, w.hedef)
     const toplamYeni = q + f
     if (toplamYeni > freshKapasite) {
       toast.error(
@@ -434,69 +432,27 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     // Stok kontrolü kaldırıldı — İE hedefi zaten hammadde tahsisi demek, İE oluşturma anında kontrol edildi
     setSaving(true)
     try {
-    const logId = uid()
     const nowTs = new Date()
     const saatStr = String(nowTs.getHours()).padStart(2, '0') + ':' + String(nowTs.getMinutes()).padStart(2, '0')
 
-    // Üretim logu
-    await supabase.from('uys_logs').insert({
-      id: logId, wo_id: woId, tarih, saat: saatStr, qty: q, fire: f,
-      operatorlar: oprList.length > 0 ? oprList : [],
+    const sonuc = await kaydetUretimGirisi({
+      woId, wo: w, tarih, saat: saatStr, qty: q, fire: f,
+      oprList,
       duruslar: duruslar.filter(d => d.kodId && d.sure > 0).map(d => ({ kodId: d.kodId, kodAd: d.kodAd, sure: d.sure, bas: d.bas, bit: d.bit })),
-      not_: not, malkod: w.malkod, ie_no: w.ieNo,
-      operator_id: oprList[0]?.id || null, vardiya: '',
+      not_: not,
+      hmSatirlar,
+      materials,
+      freshProd, freshFire,
     })
-
-    // Audit: üretim logu
-    auditUretimLog({ logId, woId, ieNo: w.ieNo, qty: q, fire: f, malkod: w.malkod,
-      siparisNo: orders?.find((o: any) => o.id === w.orderId)?.siparisNo })
-
-    // Stok girişi (üretilen mamul) — sadece sağlam adet varsa
-    if (q > 0) {
-      await addStokHareketi({ malkod: w.malkod, malad: w.malad, miktar: q, tip: 'giris', aciklama: 'Üretim — ' + w.ieNo, woId: woId, logId: logId })
-    }
-
-    // Fire logu (fire mamul stoğuna girmediği için çıkış kaydı yok — HM tüketimi aşağıda q+f üzerinden hesaplanır)
-    if (f > 0) {
-      await supabase.from('uys_fire_logs').insert({
-        id: uid(), log_id: logId, wo_id: woId, tarih,
-        malkod: w.malkod, malad: w.malad, qty: f,
-        ie_no: w.ieNo, op_ad: w.opAd,
-        operatorlar: oprList.map(o => ({ id: o.id, ad: o.ad })),
-        not_: not,
-      })
-    }
-
-    // HM stok tüketimi — sağlam + fire = toplam harcanan malzeme
-    // v15.31: Bar-model malzemeleri (tip=Hammadde + uzunluk>0) ATLANIR.
-    // Onlar barModelSync tarafından kesim planı satırı tamamlanınca tam sayı yazılır.
-    const toplamTuketilen = q + f
-    if (toplamTuketilen > 0 && hmSatirlar.length > 0) {
-      for (const hm of hmSatirlar) {
-        // Bar modeline giren HM'ler burada atlanır
-        if (isBarMaterialByKod(hm.malkod, materials)) continue
-
-        const hmMiktar = (hm.miktar || 0) * (w.mpm || 1) * toplamTuketilen
-        if (hmMiktar > 0) {
-          await supabase.from('uys_stok_hareketler').insert({
-            id: uid(), tarih, malkod: hm.malkod, malad: hm.malad,
-            miktar: Math.round(hmMiktar * 100) / 100, tip: 'cikis',
-            log_id: logId, wo_id: woId,
-            aciklama: `HM tüketim — ${w.ieNo} (${q} sağlam${f > 0 ? ' + ' + f + ' fire' : ''})`,
-          })
-        }
-      }
-    }
+    if (!sonuc.ok) throw new Error(sonuc.error)
 
     // v15.31: Bar Model tetikleyici — kesim planı satırı tamamlandıysa
     // bar_acilis + acik_bar_giris yaz. İdempotent (deterministik id).
     try {
       const { cuttingPlans: cpState, workOrders: woState, logs: logState } = useProductionStore.getState()
       // Freshly yazılan log store'a henüz gelmediyse hesaba katmak için manuel ekle
-      const freshLogs = [...logState, { id: logId, woId, qty: q, fire: f } as any]
-      const r = await barModelSync(woId, cpState, woState, freshLogs, materials)
-      if (r.barSayisi > 0) {
-      }
+      const freshLogs2 = [...logState, { id: sonuc.logId, woId, qty: q, fire: f } as any]
+      await barModelSync(woId, cpState, woState, freshLogs2, materials)
     } catch (err) {
       console.error('[barModel] Sync hatası:', err)
     }
@@ -513,12 +469,10 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       )
     }
 
-    // Auto-close: İE kapasitesi doldu mu? (q + fire >= hedef)
-    const yeniProdToplam = freshProd + q
-    const yeniFireToplam = freshFire + f
-    const yeniKapasite = yeniProdToplam + yeniFireToplam
-    if (yeniKapasite >= w.hedef && w.durum !== 'tamamlandi') {
-      await supabase.from('uys_work_orders').update({ durum: 'tamamlandi' }).eq('id', woId)
+    // Auto-close toast (DB güncellemesi service içinde yapılıyor)
+    if (sonuc.autoKapatildi) {
+      const yeniProdToplam = freshProd + q
+      const yeniFireToplam = freshFire + f
       if (yeniProdToplam < w.hedef) {
         toast.warning(
           `⚠️ İE kapasite doldu — ${yeniProdToplam} sağlam, ${yeniFireToplam} fire.` +
@@ -526,9 +480,6 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
           { duration: 10000, action: { label: '→ Fire Analizi', onClick: () => navigate('/reports') } }
         )
       }
-    } else if (freshProd === 0 && w.durum !== 'uretimde') {
-      // İlk üretim girişi → durum "üretimde"
-      await supabase.from('uys_work_orders').update({ durum: 'uretimde' }).eq('id', woId)
     }
 
     logAction('Üretim girişi', w.ieNo + ' — ' + (parseInt(qty) || 0) + ' adet')
