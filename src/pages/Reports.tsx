@@ -108,6 +108,29 @@ export function Reports() {
   const orderMap = useMemo(() => { const m: Record<string, typeof orders[0]> = {}; orders.forEach(o => { m[o.id] = o }); return m }, [orders])
   const opBolumMap = useMemo(() => { const m: Record<string, string> = {}; operations.forEach(op => { if (op.bolum) m[op.id] = op.bolum }); return m }, [operations])
 
+  // OEE Availability: operasyon başına toplam çalışma + duruş dk (SUM — max değil)
+  const opTimeMap = useMemo(() => {
+    const calisma = new Map<string, number>()
+    const durus = new Map<string, number>()
+    logs.forEach(l => {
+      const opAd = woMap[l.woId]?.opAd || 'Tanımsız'
+      const oprArr = Array.isArray(l.operatorlar) ? l.operatorlar : []
+      oprArr.forEach((o: { bas?: string; bit?: string }) => {
+        if (o.bas && o.bit && o.bit >= o.bas) {
+          const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
+          const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
+          calisma.set(opAd, (calisma.get(opAd) ?? 0) + Math.max(0, e - b))
+        }
+      })
+      if (Array.isArray(l.duruslar)) {
+        l.duruslar.forEach((d: { sure?: number }) => {
+          durus.set(opAd, (durus.get(opAd) ?? 0) + (d.sure || 0))
+        })
+      }
+    })
+    return { calisma, durus }
+  }, [logs, woMap])
+
   // Unique filter options
   const dOperatorList = useMemo(() => {
     const s = new Set<string>()
@@ -247,9 +270,12 @@ export function Reports() {
             // OEE
             const oeeRows = opData.map(d => {
               const fire = parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0)
+              const calismaDk = opTimeMap.calisma.get(d.op) ?? 0
+              const durusDk = Math.min(opTimeMap.durus.get(d.op) ?? 0, calismaDk)
+              const avail = calismaDk > 0 ? Math.max(0, Math.round((calismaDk - durusDk) / calismaDk * 100)) : 100
               const perf = d.hedef > 0 ? Math.min(100, Math.round(d.uretim / d.hedef * 100)) : 0
               const qual = d.uretim > 0 ? Math.max(0, Math.round((d.uretim - fire) / d.uretim * 100)) : 100
-              return { Operasyon: d.op, Hedef: d.hedef, Üretim: d.uretim, Fire: fire, 'Performans %': perf, 'Kalite %': qual, 'OEE %': Math.round(perf * qual / 100) }
+              return { Operasyon: d.op, Hedef: d.hedef, Üretim: d.uretim, Fire: fire, 'Çalışma dk': calismaDk, 'Duruş dk': durusDk, 'Kullanılabilirlik %': calismaDk > 0 ? avail : '—', 'Performans %': perf, 'Kalite %': qual, 'OEE %': Math.round(avail * perf * qual / 10000) }
             })
             if (oeeRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(oeeRows), 'OEE')
             // Geciken siparişler
@@ -619,10 +645,13 @@ export function Reports() {
       {/* OEE */}
       {tab === 'oee' && (() => {
         const oeeData = opData.map(d => {
+          const calismaDk = opTimeMap.calisma.get(d.op) ?? 0
+          const durusDk = Math.min(opTimeMap.durus.get(d.op) ?? 0, calismaDk)
+          const avail = calismaDk > 0 ? Math.max(0, Math.round((calismaDk - durusDk) / calismaDk * 100)) : 100
           const perf = d.hedef > 0 ? Math.min(100, Math.round(d.uretim / d.hedef * 100)) : 0
           const quality = d.uretim > 0 ? Math.max(0, Math.round((d.uretim - (parcaFireLogs.filter(f => f.opAd === d.op).reduce((a, f) => a + f.qty, 0))) / d.uretim * 100)) : 100
-          const oee = Math.round(perf * quality / 100)
-          return { ...d, perf, quality, oee }
+          const oee = Math.round(avail * perf * quality / 10000)
+          return { ...d, avail, perf, quality, oee, calismaDk, durusDk }
         })
         const totalUretimOEE = oeeData.reduce((s, d) => s + d.uretim, 0)
         const avgOEE = totalUretimOEE > 0
@@ -634,16 +663,17 @@ export function Reports() {
               <h3 className="text-sm font-semibold">OEE — Genel Ekipman Etkinliği</h3>
               <div className={`text-2xl font-mono font-light ${avgOEE >= 85 ? 'text-green' : avgOEE >= 60 ? 'text-amber' : 'text-red'}`}>{avgOEE}%</div>
             </div>
-            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operasyon</th><th className="text-right px-4 py-2">Performans</th><th className="text-right px-4 py-2">Kalite</th><th className="text-right px-4 py-2 font-semibold">OEE</th></tr></thead>
+            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operasyon</th><th className="text-right px-4 py-2">Kullanılabilirlik</th><th className="text-right px-4 py-2">Performans</th><th className="text-right px-4 py-2">Kalite</th><th className="text-right px-4 py-2 font-semibold">OEE</th></tr></thead>
             <tbody>{oeeData.map(d => (
               <tr key={d.op} className="border-b border-border/30">
                 <td className="px-4 py-1.5 text-zinc-300">{d.op}</td>
+                <td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.calismaDk > 0 ? `${d.avail}%` : '—'}</td>
                 <td className="px-4 py-1.5 text-right font-mono">{d.perf}%</td>
                 <td className="px-4 py-1.5 text-right font-mono">{d.quality}%</td>
                 <td className={`px-4 py-1.5 text-right font-mono font-semibold ${d.oee >= 85 ? 'text-green' : d.oee >= 60 ? 'text-amber' : 'text-red'}`}>{d.oee}%</td>
               </tr>
             ))}</tbody></table>
-            <div className="mt-3 text-[10px] text-zinc-600">OEE = Performans × Kalite | Hedef: ≥85% | Performans = Üretilen/Hedef | Kalite = (Üretilen-Fire)/Üretilen</div>
+            <div className="mt-3 text-[10px] text-zinc-600">OEE = Kullanılabilirlik × Performans × Kalite | Hedef: ≥85% | K=(Çalışma−Duruş)/Çalışma | P=Üretilen/Hedef | Q=(Üretilen−Fire)/Üretilen | K: operatör süresi girilmemişse 100%</div>
           </div>
         )
       })()}

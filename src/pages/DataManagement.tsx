@@ -13,6 +13,7 @@ import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
 import { cuttingPlanTemizle, hesaplaMRP, hesaplaMRPCached } from '@/features/production/mrp'
 import { tedarikStokId } from '@/lib/tedarikHelpers'
 import { isActive as isStateActive } from '@/features/order/stateMachine'
+import { z } from 'zod'
 
 // ═══ SAĞLIK RAPORU TİPLERİ ═══
 type SaglikDurum = 'pass' | 'warn' | 'fail'
@@ -1779,6 +1780,13 @@ function TestModuPanel() {
 }
 
 // ═══ KULLANICI YÖNETİMİ — RBAC ═══
+const kullaniciSchema = z.object({
+  ad: z.string().trim().min(1, 'Ad Soyad zorunlu'),
+  kullaniciAd: z.string().trim().min(2, 'Kullanıcı adı en az 2 karakter olmalı')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Yalnızca harf, rakam ve alt çizgi kullanılabilir'),
+  sifre: z.string().min(4, 'Şifre en az 4 karakter olmalı'),
+})
+
 const ROL_LABELS: Record<string, string> = { admin: 'Admin', uretim_sor: 'Üretim Sorumlusu', planlama: 'Planlama', depocu: 'Depocu' }
 const ROL_COLORS: Record<string, string> = { admin: 'text-red', uretim_sor: 'text-amber', planlama: 'text-accent', depocu: 'text-green' }
 
@@ -1795,12 +1803,13 @@ function KullaniciPanel() {
   function openEdit(k: any) { setEditItem(k); setAd(k.ad); setKullaniciAd(k.kullaniciAd); setSifre(k.sifre); setRol(k.rol); setShowForm(true) }
 
   async function save() {
-    if (!ad.trim() || !kullaniciAd.trim() || !sifre.trim()) { toast.error('Tüm alanlar zorunlu'); return }
+    const parsed = kullaniciSchema.safeParse({ ad, kullaniciAd, sifre })
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz form'); return }
+    const { ad: cleanAd, kullaniciAd: cleanKullaniciAd, sifre: cleanSifre } = parsed.data
     if (editItem) {
-      const yeniSifre = sifre.trim()
-      const sifreChanged = yeniSifre !== editItem.sifre
+      const sifreChanged = cleanSifre !== editItem.sifre
       await supabase.from('uys_kullanicilar').update({
-        ad: ad.trim(), kullanici_ad: kullaniciAd.trim(), sifre: yeniSifre, rol,
+        ad: cleanAd, kullanici_ad: cleanKullaniciAd, sifre: cleanSifre, rol,
       }).eq('id', editItem.id)
       // v16.89 (Plan B): Şifre değiştiyse auth.users.encrypted_password senkron yaz.
       // RPC fail olursa toast.warning ile bildir — uys_kullanicilar update zaten geçti.
@@ -1808,7 +1817,7 @@ function KullaniciPanel() {
       if (sifreChanged) {
         const { error: rpcErr } = await supabase.rpc('admin_update_user_password', {
           target_user_id: editItem.id,
-          new_password: yeniSifre,
+          new_password: cleanSifre,
         })
         if (rpcErr) {
           toast.warning('Auth şifre senkronu başarısız: ' + rpcErr.message + ' (uys_kullanicilar güncellendi)')
@@ -1817,10 +1826,10 @@ function KullaniciPanel() {
       toast.success('Kullanıcı güncellendi')
     } else {
       // Aynı kullanıcı adı var mı kontrol
-      const existing = kullanicilar.find(k => k.kullaniciAd === kullaniciAd.trim())
+      const existing = kullanicilar.find(k => k.kullaniciAd === cleanKullaniciAd)
       if (existing) { toast.error('Bu kullanıcı adı zaten kullanılıyor'); return }
       await supabase.from('uys_kullanicilar').insert({
-        id: uid(), ad: ad.trim(), kullanici_ad: kullaniciAd.trim(), sifre: sifre.trim(), rol, aktif: true,
+        id: uid(), ad: cleanAd, kullanici_ad: cleanKullaniciAd, sifre: cleanSifre, rol, aktif: true,
       })
       toast.success('Kullanıcı eklendi')
     }
@@ -2020,6 +2029,11 @@ function YetkiPanel() {
 }
 
 // ═══ HAMMADDE TİPLERİ PANELİ ═══
+const hmTipiSchema = z.object({
+  kod: z.string().trim().min(1, 'Kod zorunlu').max(20, 'Kod en fazla 20 karakter olabilir'),
+  ad: z.string().trim(),
+})
+
 function HmTipleriPanel() {
   const hmTipler = useWarehouseStore(s => s.hmTipler)
   const [yeniKod, setYeniKod] = useState('')
@@ -2029,9 +2043,13 @@ function HmTipleriPanel() {
   const sorted = [...hmTipler].sort((a, b) => a.sira - b.sira || a.kod.localeCompare(b.kod))
 
   async function ekle() {
-    const kod = yeniKod.trim().toLocaleUpperCase('tr-TR')
-    const ad = yeniAd.trim() || kod
-    if (!kod) { toast.error('Kod zorunlu'); return }
+    const parsed = hmTipiSchema.safeParse({
+      kod: yeniKod.toLocaleUpperCase('tr-TR'),
+      ad: yeniAd,
+    })
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz form'); return }
+    const kod = parsed.data.kod
+    const ad = parsed.data.ad || kod
     if (hmTipler.some(t => t.kod === kod)) { toast.error('Bu kod zaten var'); return }
     setSaving(true)
     const maxSira = Math.max(0, ...hmTipler.map(t => t.sira))
