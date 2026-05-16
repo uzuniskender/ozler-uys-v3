@@ -2,6 +2,7 @@
 // Hammadde tipleri yönetim sayfası
 
 import { useEffect, useMemo, useState } from 'react'
+import { z } from 'zod'
 import {
   Plus, Pencil, Power, Trash2, Search, X, Loader2, AlertCircle,
 } from 'lucide-react'
@@ -272,6 +273,20 @@ export function HmTipleri() {
 // EKLE / DÜZENLE MODAL
 // =============================================================
 
+const hmTipiSchema = z.object({
+  kod: z.string()
+    .min(HM_TIPI_KURALLAR.KOD_MIN, `Kod en az ${HM_TIPI_KURALLAR.KOD_MIN} karakter olmalı`)
+    .max(HM_TIPI_KURALLAR.KOD_MAX, `Kod en fazla ${HM_TIPI_KURALLAR.KOD_MAX} karakter olabilir`)
+    .regex(HM_TIPI_KURALLAR.KOD_REGEX, 'Kod sadece BÜYÜK harf, rakam ve _ içerebilir'),
+  ad: z.string()
+    .min(HM_TIPI_KURALLAR.AD_MIN, 'Ad boş olamaz')
+    .max(HM_TIPI_KURALLAR.AD_MAX, `Ad en fazla ${HM_TIPI_KURALLAR.AD_MAX} karakter olabilir`),
+  aciklama: z.string().max(HM_TIPI_KURALLAR.ACIKLAMA_MAX, `Açıklama en fazla ${HM_TIPI_KURALLAR.ACIKLAMA_MAX} karakter olabilir`),
+  sira: z.number().int()
+    .min(HM_TIPI_KURALLAR.SIRA_MIN, 'Sıra 0-9999 arasında olmalı')
+    .max(HM_TIPI_KURALLAR.SIRA_MAX, 'Sıra 0-9999 arasında olmalı'),
+})
+
 interface ModalProps {
   tip: HmTipi | null
   kullaniciAd: string | null
@@ -295,30 +310,14 @@ function HmTipiModal({ tip, kullaniciAd, mevcutKodlar, onKapat, onKaydedildi }: 
 
   const kodNormalized = kod.toUpperCase().trim()
 
-  function dogrula(): string | null {
-    if (kodNormalized.length < HM_TIPI_KURALLAR.KOD_MIN)
-      return `Kod en az ${HM_TIPI_KURALLAR.KOD_MIN} karakter olmalı`
-    if (kodNormalized.length > HM_TIPI_KURALLAR.KOD_MAX)
-      return `Kod en fazla ${HM_TIPI_KURALLAR.KOD_MAX} karakter olabilir`
-    if (!HM_TIPI_KURALLAR.KOD_REGEX.test(kodNormalized))
-      return 'Kod sadece BÜYÜK harf, rakam ve _ içerebilir'
-    if (ad.trim().length < HM_TIPI_KURALLAR.AD_MIN)
-      return 'Ad boş olamaz'
-    if (ad.trim().length > HM_TIPI_KURALLAR.AD_MAX)
-      return `Ad en fazla ${HM_TIPI_KURALLAR.AD_MAX} karakter olabilir`
-    if (aciklama.length > HM_TIPI_KURALLAR.ACIKLAMA_MAX)
-      return `Açıklama en fazla ${HM_TIPI_KURALLAR.ACIKLAMA_MAX} karakter olabilir`
-    if (sira < HM_TIPI_KURALLAR.SIRA_MIN || sira > HM_TIPI_KURALLAR.SIRA_MAX)
-      return 'Sıra 0-9999 arasında olmalı'
-    const editingKod = tip?.kod ?? null
-    if (mevcutKodlar.some(k => k === kodNormalized && k !== editingKod))
-      return `"${kodNormalized}" kodu zaten kullanılıyor`
-    return null
-  }
-
   async function kaydet() {
-    const v = dogrula()
-    if (v) { setHata(v); return }
+    const v = hmTipiSchema.safeParse({ kod: kodNormalized, ad: ad.trim(), aciklama, sira })
+    if (!v.success) { setHata(v.error.issues[0].message); return }
+    const editingKod = tip?.kod ?? null
+    if (mevcutKodlar.some(k => k === kodNormalized && k !== editingKod)) {
+      setHata(`"${kodNormalized}" kodu zaten kullanılıyor`)
+      return
+    }
 
     try {
       setKaydediliyor(true)

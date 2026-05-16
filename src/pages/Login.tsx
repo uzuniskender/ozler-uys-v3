@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { toast, Toaster } from 'sonner'
 import { hashSicil, verifySicil, isHashed } from '@/lib/sicilHash'
+
+const loginSchema = z.object({
+  username: z.string().min(1, 'Kullanıcı adı boş olamaz').max(50, 'Kullanıcı adı en fazla 50 karakter'),
+  password: z.string().min(1, 'Şifre boş olamaz').max(100, 'Şifre en fazla 100 karakter'),
+})
 
 interface LoginProps {
   onLogin: (username: string, password: string) => Promise<{ error: unknown }>
@@ -43,6 +49,8 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const v = loginSchema.safeParse({ username, password })
+    if (!v.success) { setError(v.error.issues[0].message); return }
     setError('')
     setLoading(true)
     const { error } = await onLogin(username, password)

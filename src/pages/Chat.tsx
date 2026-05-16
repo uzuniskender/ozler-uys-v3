@@ -3,6 +3,7 @@
 // Slack/Discord tarzı: sol kanal listesi, sağ mesaj alanı.
 
 import { useEffect, useRef, useState } from 'react'
+import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
@@ -42,6 +43,8 @@ import {
   requestNotificationPermission,
   getNotificationPermission,
 } from '@/hooks/useMessageNotifications'
+
+const chatMesajSchema = z.string().max(4000, 'Mesaj en fazla 4000 karakter olabilir')
 
 // ═══════════════════════════════════════════════════════════════════
 // ANA SAYFA
@@ -239,6 +242,10 @@ export default function Chat() {
     const hasText = !!input.trim()
     const hasFiles = pendingFiles.length > 0
     if (!hasText && !hasFiles) return
+    if (hasText) {
+      const v = chatMesajSchema.safeParse(input.trim())
+      if (!v.success) { alert(v.error.issues[0].message); return }
+    }
     if (!selectedChannelId || !chatUser || sending) return
     setSending(true)
     try {
