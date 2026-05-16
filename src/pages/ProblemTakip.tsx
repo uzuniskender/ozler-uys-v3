@@ -7,9 +7,19 @@ import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { CLIENT_ID } from '@/hooks/useRealtime'
 import { Search, Plus, Pencil, Trash2, AlertCircle } from 'lucide-react'
+import { z } from 'zod'
 import type { Problem } from '@/types'
 
 const DURUM_OPTIONS = ['Açık', 'Devam', 'Kapandı']
+
+const problemFormSchema = z.object({
+  problem: z.string().trim().min(1, 'Problem tanımı zorunlu'),
+  termin: z.string(),
+  sorumlu: z.string().trim(),
+  durum: z.enum(['Açık', 'Devam', 'Kapandı'] as const, { message: 'Geçersiz durum' }),
+  yapilanlar: z.string(),
+  notlar: z.string(),
+})
 
 function fmtDate(iso: string): string {
   if (!iso) return '—'
@@ -345,17 +355,15 @@ function ProblemFormModal({
   }
 
   function submit() {
-    if (!problem.trim()) {
-      toast.error('Problem tanımı zorunlu')
-      return
-    }
+    const parsed = problemFormSchema.safeParse({ problem, termin, sorumlu, durum, yapilanlar, notlar })
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz form'); return }
     onSave({
-      problem: problem.trim(),
-      termin,
-      sorumlu: sorumlu.trim(),
-      durum,
-      yapilanlar,
-      notlar,
+      problem: parsed.data.problem,
+      termin: parsed.data.termin,
+      sorumlu: parsed.data.sorumlu,
+      durum: parsed.data.durum,
+      yapilanlar: parsed.data.yapilanlar,
+      notlar: parsed.data.notlar,
     }, initial?.id)
   }
 

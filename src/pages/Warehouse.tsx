@@ -7,11 +7,21 @@ import { uid, today } from '@/lib/utils'
 import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
+import { z } from 'zod'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/production/barModel'
 // v15.92 — Madde 15 P2: Mamul cikis 2-asama modal
 import { MamulCikisModal } from '@/components/MamulCikisModal'
+
+const stokGirisSchema = z.object({
+  malkod: z.string().min(1, 'Malzeme seçimi zorunlu'),
+  miktar: z.coerce.number().positive('Miktar sıfırdan büyük olmalı'),
+  tip: z.enum(['giris', 'cikis'] as const),
+  aciklama: z.string(),
+})
+
+const stokInlineEditSchema = z.coerce.number().positive('Miktar sıfırdan büyük olmalı')
 
 export function Warehouse() {
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
@@ -240,7 +250,9 @@ export function Warehouse() {
                     {!h.logId && <><button onClick={async () => {
                       const newMiktar = await showPrompt('Yeni miktar', 'Miktar', String(h.miktar))
                       if (!newMiktar) return
-                      await supabase.from('uys_stok_hareketler').update({ miktar: parseFloat(newMiktar) || h.miktar }).eq('id', h.id)
+                      const inlineParsed = stokInlineEditSchema.safeParse(newMiktar)
+                      if (!inlineParsed.success) { toast.error(inlineParsed.error.issues[0]?.message || 'Geçersiz miktar'); return }
+                      await supabase.from('uys_stok_hareketler').update({ miktar: inlineParsed.data }).eq('id', h.id)
                       loadOwn(); toast.success('Stok hareketi güncellendi')
                     }} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düzenle</button>
                     <button onClick={async () => {
@@ -589,10 +601,12 @@ function StokGirisModal({ materials, onClose, onSaved }: {
   const selectedMat = materials.find(m => m.kod === malkod)
 
   async function save() {
-    if (!malkod || !miktar) { toast.error('Malzeme ve miktar zorunlu'); return }
+    const parsed = stokGirisSchema.safeParse({ malkod, miktar, tip, aciklama })
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz form'); return }
     await supabase.from('uys_stok_hareketler').insert({
-      id: uid(), tarih: today(), malkod, malad: selectedMat?.ad || malkod,
-      miktar: parseFloat(miktar), tip, aciklama: aciklama || (tip === 'giris' ? 'Manuel giriş' : 'Manuel çıkış'),
+      id: uid(), tarih: today(), malkod: parsed.data.malkod, malad: selectedMat?.ad || parsed.data.malkod,
+      miktar: parsed.data.miktar, tip: parsed.data.tip,
+      aciklama: parsed.data.aciklama || (parsed.data.tip === 'giris' ? 'Manuel giriş' : 'Manuel çıkış'),
     })
     onSaved()
   }
