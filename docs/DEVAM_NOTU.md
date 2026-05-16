@@ -253,6 +253,19 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 - `Reports.tsx` quality negatif → 0 sıkıştırma
 - `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
 
+### 16 Mayıs 2026 — Zod yayılımı (28/41) — Recipes (`c2cd71b`, paralel session)
+
+`src/lib/validations/recipeSchemas.ts`:
+- `rcKodSchema` (min 1, max 50)
+- `mamulKodSchema` (min 1, max 100, boşluksuz)
+- `recipeEditSchema` genişletildi: `rcKod` alanı (max 50, opsiyonel)
+
+`src/pages/Recipes.tsx`:
+- Inline rcKod / mamulKod showPrompt'ları safeParse ile korunuyor
+- `RecipeEditor.save()` rcKod alanı da `recipeEditSchema` ile validate ediliyor
+
+---
+
 ### 16 Mayıs 2026 — Materials schema kapsam genişlemesi (`85680df`)
 
 `src/lib/validations/materialSchema.ts` — mevcut Zod şeması 5 alan → 8 alan:
@@ -361,7 +374,7 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
-8. Zod adoption diğer 15 form modal'a yayılması (26/41 tamam — BomTrees + CuttingPlans + Shipment + DataManagement KullaniciPanel/HmTipleriPanel eklendi)
+8. Zod adoption diğer 13 form modal'a yayılması (28/41 tamam — son: Recipes rcKod/mamulKod + RecipeEditor)
 9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
 10. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
 11. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
