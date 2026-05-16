@@ -18,7 +18,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { restoreBackup, type Backup, type RestoreResult } from '@/lib/backup'
+import { restoreBackup, type Backup, type RestoreResult } from '@/services/backupService'
 import { Loader2, AlertTriangle, ShieldCheck, Skull, X, CheckCircle2 } from 'lucide-react'
 
 type RestoreMode = 'merge' | 'replace'

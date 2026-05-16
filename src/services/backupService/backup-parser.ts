@@ -26,7 +26,7 @@
  * Faz 3'te onu kullanan adapter yazılacak.
  */
 
-import type { BackupSnapshot } from './backup'
+import type { BackupSnapshot } from '.'
 
 export type BackupVersion = 'v3' | 'v22' | 'unknown'
 

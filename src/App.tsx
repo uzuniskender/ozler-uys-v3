@@ -7,7 +7,7 @@ import { loadAllStores } from '@/store'
 import { Layout } from '@/components/layout/Layout'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
-import { ensureDailyAutoBackup } from '@/lib/backup'
+import { ensureDailyAutoBackup } from '@/services/backupService'
 
 import { GUEST_PATHS } from '@/components/layout/Sidebar'
 

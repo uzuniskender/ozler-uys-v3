@@ -23,7 +23,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { takeBackup, listBackups, getBackup, deleteBackup, type Backup } from '@/lib/backup'
+import { takeBackup, listBackups, getBackup, deleteBackup, type Backup } from '@/services/backupService'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Save, Download, Trash2, Loader2, Database, Clock, HardDrive, RotateCcw } from 'lucide-react'
