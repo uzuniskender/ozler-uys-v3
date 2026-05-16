@@ -6,8 +6,8 @@
 //   4. Özet metrikler adım delilleriyle tutarlı
 //   5. SKIP durumu aktif (tedarik yoksa teslim adımı SKIP)
 
-import { supabase } from './supabase'
-import { uid, today } from './utils'
+import { supabase } from '@/lib/supabase'
+import { uid, today } from '@/lib/utils'
 import { getActiveTestRunId, tempSetActiveTestRunId, cascadeDeleteTestRun, newTestRunId } from './testRun'
 import { buildWorkOrders, autoZincir, type KesimFarkItem } from '@/services/productionService/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/services/productionService/cutting'
@@ -1647,7 +1647,7 @@ export async function senaryo10(ctx: RunnerContext): Promise<SenaryoRapor> {
 // KRİTİK: Operatör paneli sadece Üretilebilir + Üretimde gösteriyor.
 //         Bu fonksiyonun yanlış sonuç vermesi = operatör hayalet İE görür / gerçek İE göremez.
 
-import { getEffectiveStatus as gefs } from './statusUtils'
+import { getEffectiveStatus as gefs } from '@/lib/statusUtils'
 
 function _fakeWoForS11(overrides: Partial<WorkOrder> = {}): WorkOrder {
   return {

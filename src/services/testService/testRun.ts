@@ -5,8 +5,8 @@
 // Aktif test run'ı tutmak için: localStorage['uys_active_test_run_id']
 // Bu değer varsa kayıt oluşturan her fonksiyon (Orders, WorkOrders, vb.) otomatik ekler.
 
-import { supabase } from './supabase'
-import { today } from './utils'
+import { supabase } from '@/lib/supabase'
+import { today } from '@/lib/utils'
 import type { TestRun } from '@/types'
 
 const TABLE = 'uys_test_runs'

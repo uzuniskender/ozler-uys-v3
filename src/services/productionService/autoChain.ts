@@ -5,7 +5,7 @@ import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
 import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, type MRPRow } from '@/services/mrpService'
 // v15.85 — test_run_id propagation: autoZincir snapshot kayitlarinin
 // canli veriye karismasini onler. Etiketsiz kayit cleanup'a takilmazdi.
-import { withTestRunId } from '@/lib/testRun'
+import { withTestRunId } from '@/services/testService/testRun'
 
 // ═══ İE OLUŞTUR — reçeteden iş emirleri ═══
 // v15.87 — Idempotency koruması:

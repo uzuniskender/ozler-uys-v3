@@ -12,8 +12,8 @@ import { Play, StopCircle, RotateCcw, AlertTriangle, Check, X as XIcon } from 'l
 import {
   startTestRun, finishTestRun, cancelTestRun,
   getActiveTestRunId, cascadeDeleteTestRun,
-} from '@/lib/testRun'
-import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, senaryo11, senaryo12, senaryo13, type SenaryoRapor, type SenaryoAdim } from '@/lib/testRunner'
+} from '@/services/testService/testRun'
+import { senaryo1, senaryo2, senaryo3, senaryo4, senaryo5, senaryo6, senaryo7, senaryo8, senaryo9, senaryo10, senaryo11, senaryo12, senaryo13, type SenaryoRapor, type SenaryoAdim } from '@/services/testService/testRunner'
 
 export function TestMode() {
   const testRuns = useAuthStore(s => s.testRuns)

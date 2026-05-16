@@ -91,6 +91,7 @@ Multi-tablo, sıralı yan-etkili domain akışları aşağıdaki alt klasörlerd
 - `src/services/orderService/` — `stateMachine.ts` (sipariş state machine, UI metadata)
 - `src/services/productionService/` — `autoChain.ts`, `autoChainSubBoms.ts`, `cutting.ts`, `cuttingArtik.ts`, `stokTuketim.ts`, `stokKontrol.ts`, `barModel.ts`, `fireTelafi.ts`, `hammaddeTahsis.ts`, `levhaKesim.ts`, `mamulRezerv.ts`, `sureAnaliz.ts`, `validations.ts` (iş emri zinciri + alt BOM otomasyonu, kesim planı + artık, stok tüketim/kontrol, bar modeli, fire telafi, HM tahsis, levha kesim, mamul rezerv hesabı, süre analizi, validation kuralları)
 - `src/services/chatService/` — `chatService.ts`, `types.ts`, `useChatUser.ts` (kurumsal mesajlaşma; `uys_chat_*` tabloları, realtime subscribe)
+- `src/services/testService/` — `testRun.ts`, `testRunner.ts` (test mod altyapısı + 13 senaryo runner; `uys_test_runs` + cascade delete)
 
 Bu dosyalar 6 sayfa + `lib/testRunner.ts` tarafından import ediliyor. CRUD `*Service.ts` şablonuna uymak zorunda değiller; mevcut stillerini korurlar. Yeni use-case akışları aynı klasörlere eklenebilir.
 
