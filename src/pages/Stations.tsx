@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
 import { useProductionStore } from '@/store'
@@ -6,6 +7,11 @@ import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil } from 'lucide-react'
+
+const stationSchema = z.object({
+  kod: z.string().trim().min(1, 'Kod zorunlu'),
+  ad: z.string().trim().min(1, 'Ad zorunlu'),
+})
 
 export function Stations() {
   const stations = useProductionStore(s => s.stations)
@@ -28,9 +34,10 @@ export function Stations() {
   }
 
   async function save(data: { kod: string; ad: string; opIds: string[] }, editId?: string) {
-    const kodN = data.kod.trim()
-    const adN = data.ad.trim()
-    if (!kodN || !adN) { toast.error('Kod ve Ad zorunlu'); return }
+    const parsed = stationSchema.safeParse({ kod: data.kod, ad: data.ad })
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return }
+    const kodN = parsed.data.kod
+    const adN = parsed.data.ad
     const dupKod = stations.find(s => s.kod.trim().toLowerCase() === kodN.toLowerCase() && s.id !== editId)
     if (dupKod) { toast.error(`"${kodN}" kodu zaten kullanımda`); return }
     const dupAd = stations.find(s => s.ad.trim().toLowerCase() === adN.toLowerCase() && s.id !== editId)

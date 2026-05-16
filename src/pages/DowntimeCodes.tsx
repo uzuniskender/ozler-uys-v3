@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
@@ -7,11 +8,20 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { Plus } from 'lucide-react'
 
+const durusKoduSchema = z.object({
+  kod: z.string().trim().min(1, 'Kod zorunlu'),
+  ad: z.string().trim().min(1, 'Ad zorunlu'),
+  kategori: z.string().trim(),
+})
+
 export function DowntimeCodes() {
   const durusKodlari = useProductionStore(s => s.durusKodlari)
   const loadOwn = useProductionStore(s => s.loadOwn)
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
+  const [dkKod, setDkKod] = useState('')
+  const [dkAd, setDkAd] = useState('')
+  const [dkKat, setDkKat] = useState('')
 
   const grouped = useMemo(() => {
     const map: Record<string, typeof durusKodlari> = {}
@@ -24,8 +34,11 @@ export function DowntimeCodes() {
     await supabase.from('uys_durus_kodlari').delete().eq('id', id); loadOwn()
   }
 
-  async function add(kod: string, ad: string, kategori: string) {
-    await supabase.from('uys_durus_kodlari').insert({ id: uid(), kod, ad, kategori }); loadOwn(); setShowForm(false)
+  async function add() {
+    const parsed = durusKoduSchema.safeParse({ kod: dkKod, ad: dkAd, kategori: dkKat })
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return }
+    await supabase.from('uys_durus_kodlari').insert({ id: uid(), kod: parsed.data.kod, ad: parsed.data.ad, kategori: parsed.data.kategori })
+    loadOwn(); setShowForm(false); setDkKod(''); setDkAd(''); setDkKat('')
   }
 
   return (
@@ -81,13 +94,13 @@ export function DowntimeCodes() {
           <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold mb-4">Yeni Duruş Kodu</h2>
             <div className="space-y-3">
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">Kod</label><input id="dk-kod" className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">Ad</label><input id="dk-ad" className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
-              <div><label className="text-[11px] text-zinc-500 mb-1 block">Kategori</label><input id="dk-kat" className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Kod</label><input value={dkKod} onChange={e => setDkKod(e.target.value)} autoFocus className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Ad</label><input value={dkAd} onChange={e => setDkAd(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
+              <div><label className="text-[11px] text-zinc-500 mb-1 block">Kategori</label><input value={dkKat} onChange={e => setDkKat(e.target.value)} className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" /></div>
             </div>
             <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
-              <button onClick={async () => { const k=(document.getElementById('dk-kod') as HTMLInputElement).value; const a=(document.getElementById('dk-ad') as HTMLInputElement).value; const c=(document.getElementById('dk-kat') as HTMLInputElement).value; if(k&&a)add(k,a,c) }} className="px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold">Kaydet</button>
+              <button onClick={() => { setShowForm(false); setDkKod(''); setDkAd(''); setDkKat('') }} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+              <button onClick={add} className="px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold">Kaydet</button>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
 import { showConfirm } from '@/lib/prompt'
 import { useState, useMemo } from 'react'
@@ -6,6 +7,11 @@ import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { Search, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+
+const operationSchema = z.object({
+  kod: z.string().trim().min(1, 'Kod zorunlu'),
+  ad: z.string().trim().min(1, 'Ad zorunlu'),
+})
 
 export function Operations() {
   const operations = useProductionStore(s => s.operations)
@@ -22,9 +28,10 @@ export function Operations() {
   }, [operations, search])
 
   async function save(kod: string, ad: string, bolum: string, editId?: string) {
-    const kodN = kod.trim()
-    const adN = ad.trim()
-    if (!kodN || !adN) { toast.error('Kod ve Ad zorunlu'); return }
+    const parsed = operationSchema.safeParse({ kod, ad })
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return }
+    const kodN = parsed.data.kod
+    const adN = parsed.data.ad
     const dupKod = operations.find(o => o.kod.trim().toLowerCase() === kodN.toLowerCase() && o.id !== editId)
     if (dupKod) { toast.error(`"${kodN}" kodu zaten kullanımda`); return }
     const dupAd = operations.find(o => o.ad.trim().toLowerCase() === adN.toLowerCase() && o.id !== editId)
