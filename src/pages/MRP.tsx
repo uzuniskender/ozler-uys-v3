@@ -11,7 +11,7 @@ import { Download, ArrowRight } from 'lucide-react'
 import { hesaplaMRP, mrpTedarikOlustur, type MRPRow } from '@/services/mrpService'
 import { getStok, buildIhtiyacMap, getYolda } from '@/lib/hammaddeHesap'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
-import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/features/production/hammaddeTahsis'
+import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/services/productionService/hammaddeTahsis'
 import { isOrderArchived , isWorkOrderOpen} from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'

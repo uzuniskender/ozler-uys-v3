@@ -12,7 +12,7 @@ import { X, AlertTriangle, Lock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { createBildirim } from '@/services/bildirimlerService'
-import { hesaplaMamulRezervDurum } from '@/features/production/mamulRezerv'
+import { hesaplaMamulRezervDurum } from '@/services/productionService/mamulRezerv'
 import type { StokHareket } from '@/types'
 
 const SEBEP_SECENEKLERI = [

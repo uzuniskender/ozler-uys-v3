@@ -6,7 +6,7 @@ import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loa
 import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { topluFireTelafi, fireTelafiIeOlustur } from '@/features/production/fireTelafi'
+import { topluFireTelafi, fireTelafiIeOlustur } from '@/services/productionService/fireTelafi'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts'
 
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']

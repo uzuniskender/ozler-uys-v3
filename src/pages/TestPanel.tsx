@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
-import { fireTelafiIeOlustur } from '@/features/production/fireTelafi'
+import { fireTelafiIeOlustur } from '@/services/productionService/fireTelafi'
 import type { FireLog, WorkOrder } from '@/types'
 
 type Step = { ad: string; durum: 'bekliyor' | 'calisiyor' | 'ok' | 'fail'; detay?: string; sure?: number }

@@ -13,7 +13,7 @@ import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNote
 import { createIzin, onaylaIzin, reddetIzin } from '@/services/izinlerService'
 import type { IzinTip } from '@/types/izin'
 import { barModelSync, isBarMaterialByKod } from '@/services/productionService/barModel'
-import { canProduceWO, canDurus } from '@/features/production/validations'
+import { canProduceWO, canDurus } from '@/services/productionService/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
 
 const mesajSchema = z.object({

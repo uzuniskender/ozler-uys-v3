@@ -13,8 +13,8 @@ import { buildWorkOrders, autoZincir, type KesimFarkItem } from '@/services/prod
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/services/productionService/cutting'
 import { hesaplaMRP, siparisDelta } from '@/services/mrpService'
 import { markTedarikGeldi } from './tedarikHelpers'
-import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/features/production/fireTelafi'
-import { canProduceWO, canDurus, canDeleteWO } from '@/features/production/validations'
+import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/services/productionService/fireTelafi'
+import { canProduceWO, canDurus, canDeleteWO } from '@/services/productionService/validations'
 import { useOrderStore, useProductionStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import type { Recipe, WorkOrder, OrderItem, FireLog } from '@/types'
 

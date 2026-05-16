@@ -10,7 +10,7 @@ import { newRecipeSchema, recipeEditSchema, recipeRowSchema, rcKodSchema, mamulK
 import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Clock, BookOpen } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
-import { analizReceteTumSatirlar, donusturBirim } from '@/features/production/sureAnaliz'
+import { analizReceteTumSatirlar, donusturBirim } from '@/services/productionService/sureAnaliz'
 
 export function Recipes() {
   const recipes = useProductionStore(s => s.recipes)
