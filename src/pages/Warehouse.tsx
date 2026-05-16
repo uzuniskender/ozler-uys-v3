@@ -10,7 +10,7 @@ import { Search, Download, Plus, Upload } from 'lucide-react'
 import { z } from 'zod'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
-import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/features/production/barModel'
+import { acikBarHurdadanGeriAl, acikBarTuketimGeriAl } from '@/services/productionService/barModel'
 // v15.92 — Madde 15 P2: Mamul cikis 2-asama modal
 import { MamulCikisModal } from '@/components/MamulCikisModal'
 

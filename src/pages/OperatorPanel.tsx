@@ -12,7 +12,7 @@ import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-r
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { createIzin, onaylaIzin, reddetIzin } from '@/services/izinlerService'
 import type { IzinTip } from '@/types/izin'
-import { barModelSync, isBarMaterialByKod } from '@/features/production/barModel'
+import { barModelSync, isBarMaterialByKod } from '@/services/productionService/barModel'
 import { canProduceWO, canDurus } from '@/features/production/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
 
