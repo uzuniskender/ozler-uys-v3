@@ -453,6 +453,46 @@ tedarikciService.ts      testService/             workOrderService.ts
 
 ---
 
+### 16 Mayıs 2026 — Servis Taşıması Devamı + Bug Fix Round
+
+#### Servis migrasyonları (devam)
+
+| Commit | Değişiklik |
+|--------|-----------|
+| `9178928` | **Orders.tsx** — kalan 8 inline Supabase çağrısı `orderCrud.ts`'e taşındı: `updateOrderOncelik`, `updateOrderDurum`, `saveMrpCalculationSnapshot`, `deleteWorkOrders`, `createTedarikFromMrp`, `getOrderWorkOrderIds`, `insertOrderRow`. `Orders.tsx`'te artık hiç direkt `supabase.from('uys_orders/tedarikler/work_orders')` yok. |
+| `2a51e4f` | **Procurement.tsx** — 7 inline Supabase çağrısı `tedarikciService`'e taşındı: `getTedarik`, `createTedarik`, `createTedariklerBulk` (Excel import — N insert → tek round-trip), `updateTedarik`, `deleteTedarik` (cascade: stok hareketi + sipariş mrp_durum). Cross-service bağımlılık `orderService.updateOrderMrpDurum` lazy import ile çözüldü (circular dep yok). |
+
+#### Stok hesaplaması tek kaynağa indirgendi (`7d35503`)
+
+**Problem:** 3 farklı stok agregasyon formülü vardı ve birbirinden sessizce ayrışıyordu:
+- `lib/hammaddeHesap.ts:getStok` — bilinmeyen tip → **ignore**
+- `productionService/stokKontrol.ts:buildNetStokMap` — bilinmeyen tip → **çıkış say**
+- `pages/Warehouse.tsx` inline aggregation — bilinmeyen tip → **çıkış say**
+
+`stokKontrol` ve `Warehouse` gereksiz stok düşürüyordu; `getStok` ile çelişiyordu.
+
+**Çözüm:** `lib/hammaddeHesap.ts`'e `buildStokMap` eklendi — `getStok` ile aynı semantik (bilinmeyen → ignore). `stokKontrol.ts`'teki yerel `buildNetStokMap` + `netStok` helper'ları kaldırıldı, `buildStokMap` import edildi. `Warehouse.tsx` inline aggregation yerine `buildStokMap` kullanıyor.
+
+Etkilenen dosyalar: `hammaddeHesap.ts`, `stokKontrol.ts`, `Warehouse.tsx` (3 dosya, +27/-28 satır)
+
+#### Kesim planı duplicate prevention — iki katmanlı guard (`7dfbdca`)
+
+**Kök sorun:** 2026-05-16 PROD'da 21 ham_malkod için mükerrer kayıt tespit edildi (örn. 6 plan ~16sn arayla 2 kez insert). `autoChain.ts` store snapshot (stale olabilir) kullanıyordu → `kesimPlanOlustur` boş `mevcutPlanlar` görüyordu → yeni `uid()` → `upsert onConflict:'id'` mükerreri yakalamıyordu.
+
+**Katman 1 — autoChain.ts (caller-side):**
+`kesimPlanOlustur` öncesi `cuttingPlans` store snapshot yerine DB'den fresh çekilir (`.neq durum, iptal`). Realtime sync gecikmesinden bağımsız.
+
+**Katman 2 — cutting.ts:kesimPlanlariKaydet (service-side, son kalkan):**
+Insert öncesi DB'de aynı `(ham_malkod, durum='bekliyor')` + farklı id var mı kontrol. Varsa SKIP + warn log. Defense-in-depth: caller fresh çekmeyi unutsa bile servis mükerreri DB-level engeller.
+
+Etkilenen dosyalar: `productionService/autoChain.ts`, `productionService/cutting.ts` (2 dosya, +60/-2 satır)
+
+#### Mükerrer kesim planı DB temizliği (PROD — MCP ile)
+
+`7dfbdca` commit'i sonrası PROD'daki mükerrer kayıtlar MCP `execute_sql` ile temizlendi. Her `ham_malkod` grubu için en eski `id`'li kayıt korundu, diğerleri silindi. Temizlik sonrası duplicate sayısı 0'a düştü.
+
+---
+
 ## Sıradaki görevler
 
 1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
