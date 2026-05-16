@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { useOrderStore, useProductionStore, useWarehouseStore, useAuthStore } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { useChatNotifStore } from '@/hooks/useChatNotifications'
-import { isActive as isOrderActive } from '@/features/order/stateMachine'  // v16.34 IE #14 Faz B Slice 3
+import { isActive as isOrderActive } from '@/services/orderService/stateMachine'
 import {
   LayoutDashboard, ClipboardList, Clock, PlusCircle, Scissors,
   RefreshCw,
