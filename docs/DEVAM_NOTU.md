@@ -414,7 +414,7 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 | `src/lib/backup.ts` + `backup-parser.ts` | `src/services/backupService/` |
 | `src/lib/sevk-utils.ts` | `src/services/sevkService.ts` |
 
-**src/services/ altında 15 servis (+ _base/):**
+**src/services/ altında 15 servis (+ _base/) — bu oturum sonu itibarıyla 18'e yükseldi (aşağıya bak):**
 
 ```
 acikBarlarService.ts   activityLogService.ts  auditService.ts
@@ -428,6 +428,31 @@ productionService/     sevkService.ts         tedarikciService.ts
 
 ---
 
+### 16 Mayıs 2026 — Servis Katmanı Genişlemesi (5 yeni)
+
+Sayfa inline Supabase çağrıları kaldırılmaya devam edildi; 5 yeni servis / servis modülü eklendi.
+
+| Commit | Servis | İçerik |
+|--------|--------|--------|
+| `3e38993` | `testService/` | `testRun.ts` + `testRunner.ts` `src/lib/`'ten taşındı; relative import'lar `@/lib/*`'a düzeltildi; `TestMode.tsx` + `autoChain.ts` import'ları güncellendi |
+| `3393f35` | `orderService/orderCrud.ts` | `createOrder`, `copyOrder`, `updateMrpDurum` — `Orders.tsx`'teki 4 direkt Supabase UPDATE/INSERT kaldırıldı |
+| `1c7c7e1` | `sevkService.ts` (genişleme) | `calcSevkDurum`, `deleteSevk`, `createSevk`, `updateSevk` eklendi; `Shipment.tsx`'teki 12 inline çağrı kaldırıldı; stok silme pattern bug'ı düzeltildi (`id LIKE` → `aciklama LIKE`) |
+| `90a8ba3` + `8085a63` | `workOrderService.ts` | WO durum geçişleri, log INSERT, stok tüketim, bar material kontrolü; `WorkOrders.tsx`'ten ~80 satır kaldırıldı |
+| `cc9ebc3` | `productionEntryService/` | `kaydetUretimGirisi`, `duzenleUretimGirisi`, `startWork`, `stopWork` — `ProductionEntry.tsx` + `OperatorPanel.tsx` arasındaki ~100 satır kopya kod birleştirildi; `OperatorPanel`'deki eksik `auditUretimLog` çağrısı kapatıldı |
+
+**src/services/ altında 18 servis (+ _base/):**
+
+```
+acikBarlarService.ts     activityLogService.ts    auditService.ts
+backupService/           bildirimlerService.ts    chatService/
+hmTipleriService.ts      izinlerService.ts        mrpService/
+notesService.ts          orderService/            pendingFlowService.ts
+productionEntryService/  productionService/       sevkService.ts
+tedarikciService.ts      testService/             workOrderService.ts
+```
+
+---
+
 ## Sıradaki görevler
 
 1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
@@ -438,7 +463,7 @@ productionService/     sevkService.ts         tedarikciService.ts
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
 8. ~~Zod adoption~~ — **TAMAMLANDI ✅ (35/41)**. Kalan dosyalar display-only / N/A: Dashboard, Reports, Logs, AuditLog, Backup, HammaddeRapor, DevSync, ActiveWorkPanel, TestPanel, TestMode.
-9. ~~Servis katmanı taşıması~~ — **TAMAMLANDI ✅** (`features/` boş, 15 servis `src/services/` altında)
+9. ~~Servis katmanı taşıması~~ — **TAMAMLANDI ✅** (`features/` boş, 18 servis `src/services/` altında; workOrderService, productionEntryService, orderCrud, sevkService genişlemesi, testService taşıması dahil)
 10. Servis şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` vb.)
 11. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
 12. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
