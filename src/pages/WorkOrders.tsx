@@ -30,6 +30,11 @@ const _logEditSchema = z.object({
   fire: z.coerce.number().int('Tam sayı girin').min(0, 'Sıfır veya pozitif olmalı'),
 }).refine(d => d.qty > 0 || d.fire > 0, { message: 'Adet veya fire en az biri >0 olmalı' })
 
+const _iptalNedenSchema = z.string()
+  .trim()
+  .min(3, 'İptal nedeni en az 3 karakter olmalı')
+  .max(500, 'İptal nedeni en fazla 500 karakter')
+
 export function WorkOrders() {
   const workOrders = useProductionStore(s => s.workOrders)
   const logs = useProductionStore(s => s.logs)
@@ -293,17 +298,19 @@ export function WorkOrders() {
     if (durum === 'iptal') {
       if (!await requirePassword('İE İptal')) return
       const neden = await showPrompt('İptal nedeni (zorunlu)')
-      if (!neden?.trim()) { toast.error('İptal nedeni zorunlu'); return }
+      const _n = _iptalNedenSchema.safeParse(neden ?? '')
+      if (!_n.success) { toast.error(_n.error.issues[0].message); return }
+      const nedenTrim = _n.data
       if (prod > 0) {
         if (!await showConfirm(`${wo.ieNo}: ${prod} adet üretim var.\nİptal edilirse stok ters kayıt yapılır. Devam?`)) return
-        await addStokHareketi({ malkod: wo.malkod, malad: wo.malad, miktar: prod, tip: 'cikis', aciklama: 'İPTAL ters — ' + wo.ieNo + ' (' + neden + ')', woId: id })
+        await addStokHareketi({ malkod: wo.malkod, malad: wo.malad, miktar: prod, tip: 'cikis', aciklama: 'İPTAL ters — ' + wo.ieNo + ' (' + nedenTrim + ')', woId: id })
         const hmCikislar = stokHareketler.filter(h => h.woId === id && h.tip === 'cikis' && h.logId)
         for (const h of hmCikislar) {
           await addStokHareketi({ malkod: h.malkod, malad: h.malad, miktar: h.miktar, tip: 'giris', aciklama: 'İPTAL HM iadesi — ' + wo.ieNo, woId: id })
         }
         toast.info('Ters stok hareketi yazıldı')
       }
-      await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden }).eq('id', id)
+      await supabase.from('uys_work_orders').update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + nedenTrim }).eq('id', id)
       loadAllStores(); toast.success(wo.ieNo + ' iptal edildi'); return
     }
     const eskiDurum = wo.durum || 'bekliyor'

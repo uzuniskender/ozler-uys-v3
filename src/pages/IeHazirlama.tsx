@@ -18,6 +18,14 @@ const _bomUrunSatirSchema = z.object({
   hm_uzunluk_mm: z.number().min(0, 'HM uzunluk ≥ 0 olmalı'),
 })
 
+// UYS Sipariş No formatı: OZD + 4 haneli yıl + serbest (örn. OZD2026, OZD20260516, OZD2026-123)
+const _uysSiparisNoSchema = z.string()
+  .trim()
+  .min(7, 'En az 7 karakter olmalı (örn. OZD2026)')
+  .max(50, 'En fazla 50 karakter olabilir')
+  .regex(/^OZD\d{4}/, 'Format: OZD + 4 haneli yıl ile başlamalı (örn. OZD2026, OZD20260516, OZD2026-123)')
+  .refine(s => !/\s/.test(s), 'Boşluk içeremez')
+
 // ─── Tipler ───────────────────────────────────────────────────
 interface BomSatir {
   id: string
@@ -445,14 +453,16 @@ export function IeHazirlama() {
   }
 
   async function kaydetVeVer() {
-    if (!siparisNo.trim()) return toast.error('Sipariş No zorunlu')
+    const _s = _uysSiparisNoSchema.safeParse(siparisNo)
+    if (!_s.success) return toast.error(_s.error.issues[0].message)
+    const sNo = _s.data
     if (kalemler.length === 0) return toast.error('En az bir ürün ekleyin')
     setSaving(true)
     try {
       const now = new Date().toISOString()
       const ieId = uid()
       const { error: e1 } = await supabase.from('uys_ie_hazirlama').insert({
-        id: ieId, siparis_no: siparisNo.trim(), musteri: musteri.trim() || null,
+        id: ieId, siparis_no: sNo, musteri: musteri.trim() || null,
         siparis_tarihi: siparisTarihi || null, teslim_tarihi: teslimTarihi || null,
         olusturan: user?.username || user?.email || null,
         durum: 'verildi', ie_verildi_at: now, ie_verildi_by: user?.username || user?.email || null,
@@ -471,7 +481,7 @@ export function IeHazirlama() {
         aciklama: `${kalemler.length} kalem, ${kalemler.reduce((a, k) => a + k.siparis_adeti, 0)} adet`,
         kullanici: user?.username || user?.email || null, tarih: now,
       })
-      toast.success('İş Emri verildi: ' + siparisNo)
+      toast.success('İş Emri verildi: ' + sNo)
       formSifirla()
     } catch (e: any) {
       toast.error('Kayıt hatası: ' + (e.message || e))
@@ -539,6 +549,11 @@ export function IeHazirlama() {
     const eski = kalem.uys_siparis_no || ''
     const yeni = yeniNo.trim()
     if (eski === yeni) return
+    // Boş bırakmak temizleme demektir → format kontrolünden muaf
+    if (yeni) {
+      const _s = _uysSiparisNoSchema.safeParse(yeni)
+      if (!_s.success) { toast.error(_s.error.issues[0].message); return }
+    }
     const { error } = await supabase.from('uys_ie_hazirlama_kalemler')
       .update({ uys_siparis_no: yeni || null })
       .eq('id', kalem.id)
@@ -1124,9 +1139,10 @@ function BaslikDuzenleModal({ ie, onClose, onSave }: {
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
-    if (!siparisNo.trim()) return toast.error('Sipariş No zorunlu')
+    const _s = _uysSiparisNoSchema.safeParse(siparisNo)
+    if (!_s.success) return toast.error(_s.error.issues[0].message)
     setSaving(true)
-    await onSave({ siparis_no: siparisNo, musteri, siparis_tarihi: siparisTarihi, teslim_tarihi: teslimTarihi, not_ })
+    await onSave({ siparis_no: _s.data, musteri, siparis_tarihi: siparisTarihi, teslim_tarihi: teslimTarihi, not_ })
     setSaving(false)
   }
 

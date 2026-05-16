@@ -67,12 +67,15 @@ export function Reports() {
     return Object.values(map).sort((a, b) => a.tarih.localeCompare(b.tarih)).slice(-14)
   }, [logs, parcaFireLogs])
 
-  // Operasyon bazlı — logs'u woId → toplam qty Map'ine indirgeyerek O(n²) → O(n)
+  // woId → toplam üretim qty — gecikme, istperf ve opData paylaşır (O(n²) → O(n))
+  const uretimByWo = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const l of logs) m.set(l.woId, (m.get(l.woId) ?? 0) + l.qty)
+    return m
+  }, [logs])
+
+  // Operasyon bazlı
   const opData = useMemo(() => {
-    const uretimByWo = new Map<string, number>()
-    for (const l of logs) {
-      uretimByWo.set(l.woId, (uretimByWo.get(l.woId) ?? 0) + l.qty)
-    }
     const map: Record<string, { op: string; hedef: number; uretim: number; woCount: number }> = {}
     workOrders.forEach(w => {
       const k = w.opAd || 'Tanımsız'
@@ -81,7 +84,7 @@ export function Reports() {
       map[k].uretim += uretimByWo.get(w.id) ?? 0
     })
     return Object.values(map).sort((a, b) => b.hedef - a.hedef)
-  }, [workOrders, logs])
+  }, [workOrders, uretimByWo])
 
   // Fire operasyona göre dağılım — sadece parça fire
   const firePieData = useMemo(() => {
@@ -621,7 +624,10 @@ export function Reports() {
           const oee = Math.round(perf * quality / 100)
           return { ...d, perf, quality, oee }
         })
-        const avgOEE = oeeData.length ? Math.round(oeeData.reduce((a, d) => a + d.oee, 0) / oeeData.length) : 0
+        const totalUretimOEE = oeeData.reduce((s, d) => s + d.uretim, 0)
+        const avgOEE = totalUretimOEE > 0
+          ? Math.round(oeeData.reduce((s, d) => s + d.oee * d.uretim, 0) / totalUretimOEE)
+          : oeeData.length ? Math.round(oeeData.reduce((a, d) => a + d.oee, 0) / oeeData.length) : 0
         return (
           <div className="bg-bg-2 border border-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
@@ -676,7 +682,7 @@ export function Reports() {
         const geciken = orders.filter(o => o.termin && o.termin < todayStr).map(o => {
           const wos = workOrders.filter(w => w.orderId === o.id)
           const totalPct = wos.length ? wos.reduce((s, w) => {
-            const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+            const prod = uretimByWo.get(w.id) ?? 0
             return s + (w.hedef > 0 ? Math.min(100, prod / w.hedef * 100) : 0)
           }, 0) / wos.length : 0
           const pct = Math.round(totalPct)
@@ -779,7 +785,7 @@ export function Reports() {
         workOrders.forEach(w => {
           const key = w.istAd || w.opAd || 'Tanımsız'
           if (!istMap[key]) istMap[key] = { ad: key, uretim: 0, woCount: 0 }
-          istMap[key].uretim += logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
+          istMap[key].uretim += uretimByWo.get(w.id) ?? 0
           istMap[key].woCount++
         })
         const data = Object.values(istMap).sort((a, b) => b.uretim - a.uretim)
