@@ -391,6 +391,43 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 
 ---
 
+### 16 Mayıs 2026 — Servis Katmanı Taşıması Tamamlandı
+
+`src/features/` tamamen boşaltıldı; tüm domain logic `src/services/` altında toplandı.
+
+**Taşınan dosyalar (bu oturumda):**
+
+| Kaynak | Hedef |
+|---|---|
+| `src/features/order/stateMachine.ts` | `src/services/orderService/stateMachine.ts` |
+| `src/features/production/mrp.ts` + `mrpCache.ts` | `src/services/mrpService/` |
+| `src/features/production/` (autoChain, cutting, stokKontrol, vb.) | `src/services/productionService/` |
+| `src/lib/tedarikHelpers.ts` | `src/services/tedarikciService.ts`'e entegre |
+| `src/lib/pendingFlow.ts` | `src/services/pendingFlowService.ts` |
+
+**İkinci makine tarafından taşınan (aynı oturum):**
+
+| Kaynak | Hedef |
+|---|---|
+| `src/lib/audit.ts` | `src/services/auditService.ts` |
+| `src/lib/activityLog.ts` | `src/services/activityLogService.ts` |
+| `src/lib/backup.ts` + `backup-parser.ts` | `src/services/backupService/` |
+| `src/lib/sevk-utils.ts` | `src/services/sevkService.ts` |
+
+**src/services/ altında 15 servis (+ _base/):**
+
+```
+acikBarlarService.ts   activityLogService.ts  auditService.ts
+backupService/         bildirimlerService.ts  chatService/
+hmTipleriService.ts    izinlerService.ts      mrpService/
+notesService.ts        orderService/          pendingFlowService.ts
+productionService/     sevkService.ts         tedarikciService.ts
+```
+
+`src/features/` klasörü boş — silinebilir veya gelecek özellikler için tutulabilir.
+
+---
+
 ## Sıradaki görevler
 
 1. ~~Refresh butonlarına `force: true` ekle~~ — **tamamlandı** (`8ca5a60`)
@@ -400,10 +437,11 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
-8. ~~Zod adoption~~ — **TAMAMLANDI ✅ (35/41)**. Kalan 6 dosya display-only / N/A: Dashboard, Reports, Logs, AuditLog, Backup, HammaddeRapor, DevSync, ActiveWorkPanel, TestPanel, TestMode. Gerçek kullanıcı form input'u olan her sayfa Zod ile korunuyor.
-9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
-10. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
-11. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
+8. ~~Zod adoption~~ — **TAMAMLANDI ✅ (35/41)**. Kalan dosyalar display-only / N/A: Dashboard, Reports, Logs, AuditLog, Backup, HammaddeRapor, DevSync, ActiveWorkPanel, TestPanel, TestMode.
+9. ~~Servis katmanı taşıması~~ — **TAMAMLANDI ✅** (`features/` boş, 15 servis `src/services/` altında)
+10. Servis şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` vb.)
+11. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
+12. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
 
 ---
 
