@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -15,6 +16,14 @@ import { isOrderArchived , isWorkOrderOpen} from '@/lib/statusUtils'
 import { advanceFlow, completeFlow } from '@/lib/pendingFlow'
 import { FlowProgress } from '@/components/FlowProgress'
 import { createBildirim, acikBildirimVarMi } from '@/services/bildirimlerService'
+
+const mrpHesaplaSchema = z.object({
+  ordIds: z.array(z.string()),
+  ymIds: z.array(z.string()),
+}).refine(
+  d => d.ordIds.length > 0 || d.ymIds.length > 0,
+  { message: 'En az bir sipariş veya iş emri seçin' }
+)
 
 export function MRP() {
   const orders = useOrderStore(s => s.orders)
@@ -285,7 +294,8 @@ export function MRP() {
       ymSet = split.ymIds.length > 0 ? new Set(split.ymIds) : null
     }
 
-    if (!ordIds.length && !(ymSet && ymSet.size)) { toast.error('Sipariş veya iş emri seçin'); return }
+    const guard = mrpHesaplaSchema.safeParse({ ordIds, ymIds: ymSet ? [...ymSet] : [] })
+    if (!guard.success) { toast.error(guard.error.issues[0].message); return }
 
     const cpMapped = cuttingPlans.map((p: any) => ({
       hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
