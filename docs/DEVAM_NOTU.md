@@ -253,6 +253,25 @@ Her dosyada DATA LOSS uyarısı + 4 adımlı uygulama sırası (kod geri al → 
 - `Reports.tsx` quality negatif → 0 sıkıştırma
 - `ActiveWorkPanel.tsx`, `Messages.tsx` — `loadAll` dep array referansları `loadOwn`'a çevrildi
 
+### 16 Mayıs 2026 — Zod yayılımı (24/41)
+
+**BomTrees.tsx** (`cf4faf4`)
+- `_yenidenAdSchema` (trim min 1 max 200) → `renameBom` showPrompt
+- `_yeniKodSchema` (trim min 1 max 100, boşluksuz) → inline "Mamul kodu değiştir" showPrompt
+- (`_newBomSchema` zaten vardı, değişmedi)
+
+**CuttingPlans.tsx** (`cf4faf4`) — zod import yeni eklendi
+- `_kesimPlaniSchema` (hamMalkod + barCount) → `KesimOlusturModal.kaydet`
+- `_seciliAdetSchema` (int 1-99999) → İE adet input
+- `_artikKodSchema` (trim 3-50, boşluksuz) → `ArtikOneriModal.stokaGir` (akış disabled ama hazır)
+
+**Shipment.tsx** (`cf4faf4`) — zod import yeni eklendi
+- `_sevkKalemSchema` (malkod + malad + miktar)
+- `_sevkSubmitSchema` (kalemler[] + not_ max 500 + tarih YYYY-MM-DD) → `SevkFormModal.save`
+- `_sevkEditSchema = _sevkSubmitSchema.pick({kalemler, not_})` → `SevkEditModal.save`
+
+---
+
 ### 16 Mayıs 2026 — Zod yayılımı (21/41)
 
 **WorkOrders.tsx**
@@ -325,7 +344,7 @@ Kural: **Okuma → `authenticated`** | **Yazma → `admin` veya `planlama`**
 5. ~~IeHazirlama durum geçişleri~~ — **tamamlandı** (`72d37e4`) — TEST + PROD onaylandı
 6. ~~Backup workflow konum/secret refactor~~ — **tamamlandı** (`73c4ce1` ilk başarılı dump)
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
-8. Zod adoption diğer 20 form modal'a yayılması (21/41 tamam — bu oturumda 4+2 eklendi; WorkOrders iptal neden + IeHazirlama UYS sipariş no formatı tamamlandı)
+8. Zod adoption diğer 17 form modal'a yayılması (24/41 tamam — BomTrees + CuttingPlans + Shipment formları eklendi)
 9. Servis katmanı şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` validation'ı schema üzerinden)
 10. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
 11. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
