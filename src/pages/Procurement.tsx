@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { showConfirm } from '@/lib/prompt'
 import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
-import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/lib/tedarikHelpers'
+import { markTedarikGeldi, markTedarikGelmedi, tedarikStokId } from '@/services/tedarikciService'
 
 import { FlowProgress } from '@/components/FlowProgress'
 import { isProcurementPending } from '@/lib/statusUtils'

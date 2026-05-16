@@ -12,7 +12,7 @@ import { getActiveTestRunId, tempSetActiveTestRunId, cascadeDeleteTestRun, newTe
 import { buildWorkOrders, autoZincir, type KesimFarkItem } from '@/services/productionService/autoChain'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from '@/services/productionService/cutting'
 import { hesaplaMRP, siparisDelta } from '@/services/mrpService'
-import { markTedarikGeldi } from './tedarikHelpers'
+import { markTedarikGeldi } from '@/services/tedarikciService'
 import { fireTelafiIeOlustur, fireTelafiAkisi } from '@/services/productionService/fireTelafi'
 import { canProduceWO, canDurus, canDeleteWO } from '@/services/productionService/validations'
 import { useOrderStore, useProductionStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'

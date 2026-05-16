@@ -8,7 +8,7 @@
  *   - cancelSevk(): iptal + stok geri alma
  */
 
-import { supabase } from './supabase'
+import { supabase } from '@/lib/supabase'
 
 /**
  * Sıradaki sevk numarasını döner. Format: SEV-YYYY-NNNN (örn. SEV-2026-0042)
