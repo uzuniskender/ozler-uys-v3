@@ -19,7 +19,7 @@ import { startFlow, advanceFlow } from '@/services/pendingFlowService'
 import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen, getPlanliWoIds } from '@/lib/statusUtils'
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
-import { stateLabel, stateBadgeClass, isActive as isStateActive } from '@/services/orderService/stateMachine'
+import { stateLabel, stateBadgeClass, isActive as isStateActive, createOrder as createOrderInDb, copyOrder as copyOrderInDb, updateOrderMrpDurum } from '@/services/orderService'
 import { z } from 'zod'
 
 export function Orders() {
@@ -211,13 +211,13 @@ export function Orders() {
   }, [workOrders, cuttingPlans])
 
   async function copyOrder(o: Order) {
-    const newId = uid()
-    const { error } = await supabase.from('uys_orders').insert({
-      id: newId, siparis_no: o.siparisNo + '-KOPYA', musteri: o.musteri, tarih: today(), termin: o.termin,
-      mamul_kod: o.mamulKod, mamul_ad: o.mamulAd, adet: o.adet, recete_id: o.receteId,
-      urunler: o.urunler || [], mrp_durum: 'bekliyor', olusturma: today(),
-    })
-    if (!error) { loadAllStores(); toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA') }
+    try {
+      await copyOrderInDb(o)
+      loadAllStores()
+      toast.success('Sipariş kopyalandı: ' + o.siparisNo + '-KOPYA')
+    } catch (e: any) {
+      toast.error('Kopyalama hatası: ' + (e?.message ?? 'bilinmeyen'))
+    }
   }
   async function deleteOrder(id: string) {
     const order = orders.find(o => o.id === id)
@@ -275,7 +275,7 @@ export function Orders() {
         () => hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, o.id, allLogs)
       )
       const yeniDurum = tekMrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
-      await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', o.id)
+      await updateOrderMrpDurum(o.id, yeniDurum)
       // Rezerve kayıtları yaz
     }
     loadAllStores()
@@ -759,7 +759,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
     } else {
       const newId = uid()
       createdOrderId = newId
-      await supabase.from('uys_orders').insert({ id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today() })
+      await createOrderInDb(newId, row)
       let woTotal = 0
       for (const k of kalemler) {
         // v16.73 — stoktan: true ise WO açılmaz, mamul stoktan karşılanır
@@ -1115,7 +1115,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     }
 
     const yeniDurum = rows.some(r => r.net > 0) ? 'eksik' : 'tamam'
-    await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', order.id)
+    await updateOrderMrpDurum(order.id, yeniDurum)
     // Rezerve kayıtları yaz
 
     // v15.56 F-19/20 — Otomatik tedarik açma (İş Emri #13 madde 19, 20)
