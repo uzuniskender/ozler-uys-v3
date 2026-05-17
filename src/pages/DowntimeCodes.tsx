@@ -6,7 +6,7 @@ import { useState, useMemo } from 'react'
 import { useProductionStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
-import { Plus } from 'lucide-react'
+import { Plus, X, ChevronRight } from 'lucide-react'
 
 const durusKoduSchema = z.object({
   kod: z.string().trim().min(1, 'Kod zorunlu'),
@@ -16,18 +16,59 @@ const durusKoduSchema = z.object({
 
 export function DowntimeCodes() {
   const durusKodlari = useProductionStore(s => s.durusKodlari)
+  const logs = useProductionStore(s => s.logs)
+  const workOrders = useProductionStore(s => s.workOrders)
   const loadOwn = useProductionStore(s => s.loadOwn)
   const { can } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [dkKod, setDkKod] = useState('')
   const [dkAd, setDkAd] = useState('')
   const [dkKat, setDkKat] = useState('')
+  const [selectedKod, setSelectedKod] = useState<string | null>(null)
 
   const grouped = useMemo(() => {
     const map: Record<string, typeof durusKodlari> = {}
     durusKodlari.forEach(d => { const k = d.kategori || 'Genel'; if (!map[k]) map[k] = []; map[k].push(d) })
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0], 'tr'))
   }, [durusKodlari])
+
+  // İstasyon lookup
+  const woIstMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const w of workOrders) if (w.istAd) m.set(w.id, w.istAd)
+    return m
+  }, [workOrders])
+
+  // Her duruş kodu için: kullanım, toplam süre, istasyon dağılımı
+  const durusStats = useMemo(() => {
+    type Stat = { kullanim: number; toplamSure: number; istasyonlar: Record<string, number> }
+    const map: Record<string, Stat> = {}
+    for (const dk of durusKodlari) map[dk.kod] = { kullanim: 0, toplamSure: 0, istasyonlar: {} }
+
+    for (const log of logs) {
+      if (!Array.isArray(log.duruslar) || !log.duruslar.length) continue
+      const istAd = woIstMap.get(log.woId) || 'Tanımsız'
+      for (const d of log.duruslar as { kod?: string; ad?: string; sure?: number; bas?: string; bit?: string }[]) {
+        const kod = d.kod || ''
+        if (!kod || !map[kod]) continue
+        const s = map[kod]
+        s.kullanim++
+        const sure = (d.sure && d.sure > 0) ? d.sure
+          : (d.bas && d.bit) ? (() => {
+              const [bh, bm] = d.bas!.split(':').map(Number)
+              const [eh, em] = d.bit!.split(':').map(Number)
+              return Math.max(0, (eh * 60 + em) - (bh * 60 + bm))
+            })() : 0
+        s.toplamSure += sure
+        s.istasyonlar[istAd] = (s.istasyonlar[istAd] || 0) + 1
+      }
+    }
+    return map
+  }, [durusKodlari, logs, woIstMap])
+
+  // Seçili kod detayı
+  const selectedDk = selectedKod ? durusKodlari.find(d => d.kod === selectedKod) : null
+  const selectedStat = selectedKod ? durusStats[selectedKod] : null
 
   async function del(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -79,16 +120,81 @@ export function DowntimeCodes() {
         <div key={kat} className="mb-4">
           <div className="px-3 py-1.5 bg-bg-3/50 border border-border rounded-t-lg text-[11px] font-semibold text-zinc-400">{kat} ({codes.length})</div>
           <div className="bg-bg-2 border border-border border-t-0 rounded-b-lg divide-y divide-border/30">
-            {codes.map(d => (
-              <div key={d.id} className="flex items-center gap-3 px-3 py-2 hover:bg-bg-3/30">
-                <span className="font-mono text-[11px] text-accent w-16">{d.kod}</span>
-                <span className="flex-1 text-xs">{d.ad}</span>
-                {can('durus_delete') && <button onClick={() => del(d.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
-              </div>
-            ))}
+            {codes.map(d => {
+              const st = durusStats[d.kod] || { kullanim: 0, toplamSure: 0, istasyonlar: {} }
+              const topIst = Object.entries(st.istasyonlar).sort((a, b) => b[1] - a[1])[0]
+              const isSelected = selectedKod === d.kod
+              return (
+                <div key={d.id}
+                  className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'bg-accent/8 border-l-2 border-l-accent' : 'hover:bg-bg-3/30'}`}
+                  onClick={() => setSelectedKod(isSelected ? null : d.kod)}
+                >
+                  <span className="font-mono text-[11px] text-accent w-16 shrink-0">{d.kod}</span>
+                  <span className="flex-1 text-xs text-zinc-300">{d.ad}</span>
+                  {st.kullanim > 0 ? (
+                    <>
+                      <span className="text-[10px] font-mono text-zinc-400 whitespace-nowrap">{st.kullanim}×</span>
+                      <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap">{st.toplamSure} dk</span>
+                      {topIst && <span className="text-[10px] text-zinc-600 truncate max-w-[100px]" title={topIst[0]}>{topIst[0]}</span>}
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-zinc-700">—</span>
+                  )}
+                  <ChevronRight size={12} className={`text-zinc-600 shrink-0 transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+                  {can('durus_delete') && <button onClick={e => { e.stopPropagation(); del(d.id) }} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red shrink-0">Sil</button>}
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}
+      {selectedDk && selectedStat && (
+        <div className="fixed top-0 right-0 h-full w-80 bg-bg-1 border-l border-border z-40 flex flex-col shadow-xl">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+            <div>
+              <span className="font-mono text-xs text-accent">{selectedDk.kod}</span>
+              <p className="text-sm font-semibold text-zinc-200 mt-0.5">{selectedDk.ad}</p>
+              {selectedDk.kategori && <p className="text-[10px] text-zinc-500">{selectedDk.kategori}</p>}
+            </div>
+            <button onClick={() => setSelectedKod(null)} className="p-1 hover:bg-bg-3 rounded text-zinc-500 hover:text-zinc-300"><X size={14} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Kullanım', value: selectedStat.kullanim + '×' },
+                { label: 'Toplam', value: selectedStat.toplamSure + ' dk' },
+                { label: 'Ort.', value: selectedStat.kullanim > 0 ? Math.round(selectedStat.toplamSure / selectedStat.kullanim) + ' dk' : '—' },
+              ].map(k => (
+                <div key={k.label} className="bg-bg-2 border border-border rounded-lg px-3 py-2 text-center">
+                  <div className="text-xs font-semibold text-zinc-200">{k.value}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">{k.label}</div>
+                </div>
+              ))}
+            </div>
+            {Object.keys(selectedStat.istasyonlar).length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-400 mb-2">İstasyon Dağılımı</p>
+                <div className="space-y-1.5">
+                  {Object.entries(selectedStat.istasyonlar).sort((a, b) => b[1] - a[1]).map(([ist, cnt]) => {
+                    const pct = Math.round(cnt / selectedStat.kullanim * 100)
+                    return (
+                      <div key={ist}>
+                        <div className="flex justify-between text-[10px] text-zinc-400 mb-0.5">
+                          <span className="truncate max-w-[160px]" title={ist}>{ist}</span>
+                          <span className="shrink-0 ml-2">{cnt}× · %{pct}</span>
+                        </div>
+                        <div className="h-1 bg-bg-3 rounded-full overflow-hidden">
+                          <div className="h-full bg-accent rounded-full" style={{ width: pct + '%' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
