@@ -32,7 +32,7 @@ const baseRecipe: Recipe = {
   satirlar: [
     {
       id: 'row-001',
-      kirno: '1',
+      kirno: '',
       malkod: 'HM-TEST-001',
       malad: 'Test Hammadde',
       tip: 'Hammadde',
