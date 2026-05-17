@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
-**Tarih:** 16 Mayıs 2026
-**Versiyon:** v16.87
+**Tarih:** 17 Mayıs 2026
+**Versiyon:** v17.05
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -504,9 +504,11 @@ Etkilenen dosyalar: `productionService/autoChain.ts`, `productionService/cutting
 7. ~~Son 5 migration için rollback scriptleri~~ — **tamamlandı** (`1985167`)
 8. ~~Zod adoption~~ — **TAMAMLANDI ✅ (35/41)**. Kalan dosyalar display-only / N/A: Dashboard, Reports, Logs, AuditLog, Backup, HammaddeRapor, DevSync, ActiveWorkPanel, TestPanel, TestMode.
 9. ~~Servis katmanı taşıması~~ — **TAMAMLANDI ✅** (`features/` boş, 18 servis `src/services/` altında; workOrderService, productionEntryService, orderCrud, sevkService genişlemesi, testService taşıması dahil)
-10. Servis şemalarının Zod ile birleştirilmesi (`tedarikciService.createTedarikci` vb.)
-11. **RLS PROD onayı** — `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` (onay bekleniyor)
-12. **Faz 1.1b auth link** — custom-login kullanıcılarının `auth_user_id` ile Supabase Auth'a bağlanması (RLS'nin tam çalışması için ön koşul)
+10. ~~Servis şemalarının Zod ile birleştirilmesi~~ — **TAMAMLANDI ✅** (`8e3af34` v17.00 — 5 servis)
+11. ~~**RLS PROD onayı**~~ — **TAMAMLANDI ✅** (v16.86+v16.87 uygulanmış)
+12. ~~**Faz 1.1b auth link**~~ — **TAMAMLANDI ✅** (v16.88 — 89/89 operatör)
+13. **mrpEngine Faz 3** — karar noktaları (satın alma teklifi, acil üretim) akışı
+14. **ActiveWorkPanel v2 test** — istasyon/bölüm gruplama görünümü PROD'da doğrulama
 
 ---
 
@@ -534,13 +536,46 @@ Etkilenen dosyalar: `productionService/autoChain.ts`, `productionService/cutting
 
 ---
 
-### 17 Mayıs 2026 — Paralel Oturum (7 Terminal)
+### 17 Mayıs 2026 — Paralel Oturum (7 Terminal) + Akşam Oturumu
 
-- v17.00 — Servis katmani Zod dogrulama: tedarikciService, orderCrud, workOrderService, productionEntryService, sevkService
-- v16.88 — ALI EKBER AYYILDIZ (op_090) Supabase Auth baglandı — 89/89 operator tam
-- RLS PROD: 4 tablo zaten uygulanmis (v16.86+v16.87)
-- T5 MRP#19 stoktan ver: Orders.tsx'de zaten tamamlanmis
-- T6 src/features/: zaten silinmis
+#### Gün boyunca tamamlananlar
+
+**v16.88 — Auth link** (`c573904`)
+- ALİ EKBER AYYILDIZ (op_090) Supabase Auth'a bağlandı — 89/89 operatör tam
+- RLS PROD: `uys_ie_hazirlama`, `uys_rapido_bom`, `uys_recipes`, `uys_bom_trees` — zaten uygulanmış (v16.86+v16.87)
+
+**v17.00 — Servis katmanı Zod giriş doğrulama** (`8e3af34`, `28e5ef2`)
+- `tedarikciService`, `orderCrud`, `workOrderService`, `productionEntryService`, `sevkService` — tüm create/update fonksiyonları Zod `safeParse` ile korundu
+- T5 MRP#19 stoktan ver: `Orders.tsx`'de zaten tamamlanmış
+- T6 `src/features/`: zaten silinmiş
+
+**v17.01 — DevSync v1.3 + mrpEngine saf fonksiyon katmanları** (`f7c66db`)
+- `DevSync.tsx`: `backups/` alt klasörü yükleme dışında bırakıldı (yedek SQL dosyaları Supabase'e push edilmiyordu)
+- `mrpService/mrpEngine.ts` oluşturuldu: 339 satır — saf fonksiyon katmanları; `mrp.ts`'ten iş mantığı ayrıştırıldı
+
+**v17.02 — İstek #18 fire telafisi İE** (`28e5ef2`)
+- `WorkOrders.tsx` — fire tespitinde telafi İE (iş emri) oluştur akışı (+19 satır)
+- `workOrderService.ts` — `createTelafİE` fonksiyonu Zod doğrulamalı (+60 satır)
+
+**v17.03 — mrpEngine Faz 2** (`99ef8c8`)
+- `mrpEngine.ts` +147 satır: cutting plan override (mevcut plan varsa güncelle) + multi-sipariş agregasyonu
+- `mrp.ts`'e bağımlı olmayan bağımsız hesaplama yolu; test edilebilir saf fonksiyonlar
+
+**v17.04 — ActiveWorkPanel v2** (`ce1474b`)
+- `ActiveWorkPanel.tsx` 293 ekleme / 64 silme — tam yeniden yazım:
+  - Progress bar (tamamlanan/toplam adet oranı) her iş emri satırında
+  - İstasyon ve bölüm bazlı gruplama görünümü
+  - Ortalama ilerleme hesabı (bölüm/istasyon toplamı)
+
+**v17.05 — StokLog sayfalama** (`3bf5d2e`)
+- `StokLog.tsx` +53 / -11 satır: filtreler artık client-side değil server-side push-down
+- Sayfa sayfalama (pagination) eklendi — büyük `uys_stok_hareketler` sorgularında bellek ve gecikme azaldı
+
+**v17.06 — Dashboard: tamamlanma yakın İE rengi + Bugün Üretim KPI**
+- `Dashboard.tsx` — `aktifKartlar`'a `yakin` flag eklendi: `pct >= 90 && !uzunAcik && !durgun`
+- Aktif Çalışmalar panel başlığına `✓ N tamamlanıyor` badge (emerald) eklendi
+- Tamamlanmaya yakın kartlar yeşil-emerald border/bg ile ayrıştırıldı; progress bar emerald renk
+- KPI grid'e "Bugün Üretim" kartı eklendi (`logs.tarih === today` toplam adet); grid `lg:grid-cols-7`'ye genişletildi
 
 #### Bekleyen
-- Normalize veri gecisi (kapsam belirsiz — ertelendi)
+- Normalize veri geçişi (kapsam belirsiz — ertelendi)

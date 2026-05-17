@@ -317,6 +317,11 @@ export function Dashboard() {
     return Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-7)
   }, [logs])
 
+  const bugunUretim = useMemo(() =>
+    logs.filter(l => l.tarih === todayStr).reduce((a, l) => a + l.qty, 0),
+    [logs, todayStr]
+  )
+
   const aktifKartlar = useMemo(() => {
     return gercekAktif.map(a => {
       const wo = workOrders.find(w => w.id === a.woId)
@@ -346,12 +351,14 @@ export function Dashboard() {
       }
       const uzunAcik = dk > 480
       const durgun = !uzunAcik && sonLogDk > 180 && dk > 60
-      return { a, wo, prod, hedef, pct, dk, sureLabel, uzunAcik, durgun, sonLogDk }
+      const yakin = !uzunAcik && !durgun && pct >= 90 && pct < 100
+      return { a, wo, prod, hedef, pct, dk, sureLabel, uzunAcik, durgun, yakin, sonLogDk }
     }).sort((a, b) => b.dk - a.dk)
   }, [gercekAktif, workOrders, logs, nowTick])
 
   const uzunSayi = aktifKartlar.filter(k => k.uzunAcik).length
   const durgunSayi = aktifKartlar.filter(k => k.durgun).length
+  const yakinSayi = aktifKartlar.filter(k => k.yakin).length
 
   const alertCount = terminGecen.length + minStokUyari.length +
     (kesimEksik > 0 ? 1 : 0) + (mrpYapilmamis > 0 ? 1 : 0) +
@@ -428,10 +435,11 @@ export function Dashboard() {
 
       {/* KPI Row */}
       <SectionTitle>Anahtar Göstergeler</SectionTitle>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         <Kpi icon="📋" label="Aktif Sipariş" value={aktifOrders.length} sub={`${acikWOs.length} açık İE`} onClick={() => navigate('/orders')} />
         <Kpi icon="⚙" label="Açık İş Emri" value={acikWOs.length} sub={ieBekleyenCount > 0 ? `${ieBekleyenCount} oluşturulmadı` : 'tüm sipariş İE\'li'} tone={ieBekleyenCount > 0 ? 'warn' : 'neutral'} onClick={() => navigate('/work-orders')} />
         <Kpi icon="🔧" label="Aktif Çalışma" value={uretimCount} sub={uretimCount > 0 ? 'canlı · 30sn' : 'bekliyor'} onClick={() => navigate('/production')} />
+        <Kpi icon="🏭" label="Bugün Üretim" value={bugunUretim || '—'} sub="adet · bugün" onClick={() => navigate('/production')} />
         <Kpi icon="🔥" label="Bugün Fire" value={toplamFire || '—'} sub={bekleyenTelafiAdet > 0 ? `${bekleyenTelafiAdet} telafi bekliyor` : 'temiz'} tone={toplamFire > 0 ? 'warn' : 'neutral'} onClick={() => navigate('/reports')} />
         <Kpi icon="📦" label="Min Stok Altı" value={minStokUyari.length || '—'} sub={minStokUyari.length > 0 ? 'tedarik oluştur →' : 'temiz'} tone={minStokUyari.length > 0 ? 'alert' : 'neutral'} onClick={() => navigate('/warehouse')} />
         <Kpi icon="🚚" label="Bu Hafta Sevk" value={sevkBekleyenCount || '—'} sub={`${monStr.slice(5)}–${sunStr.slice(5)}`} onClick={() => navigate('/shipment')} />
@@ -633,12 +641,13 @@ export function Dashboard() {
               <span>Aktif Çalışmalar — Canlı ({gercekAktif.length})</span>
               {uzunSayi > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-mono">⏰ {uzunSayi} uzun</span>}
               {durgunSayi > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-mono">⌛ {durgunSayi} durgun</span>}
+              {yakinSayi > 0 && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-mono">✓ {yakinSayi} tamamlanıyor</span>}
             </span>
           } count="her 30sn güncellenir">
             <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {aktifKartlar.map(({ a, wo, prod, hedef, pct, sureLabel, uzunAcik, durgun, sonLogDk }) => {
-                const cardCls = uzunAcik ? 'border-red-300 bg-red-50' : durgun ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'
-                const barCls = uzunAcik ? 'bg-red-500' : durgun ? 'bg-amber-500' : pct >= 50 ? 'bg-blue-600' : 'bg-gray-400'
+              {aktifKartlar.map(({ a, wo, prod, hedef, pct, sureLabel, uzunAcik, durgun, yakin, sonLogDk }) => {
+                const cardCls = uzunAcik ? 'border-red-300 bg-red-50' : durgun ? 'border-amber-300 bg-amber-50' : yakin ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 bg-white'
+                const barCls = uzunAcik ? 'bg-red-500' : durgun ? 'bg-amber-500' : yakin ? 'bg-emerald-500' : pct >= 50 ? 'bg-blue-600' : 'bg-gray-400'
                 const sureCls = uzunAcik ? 'text-red-700 font-semibold' : durgun ? 'text-amber-700 font-semibold' : 'text-gray-700'
                 return (
                   <div
