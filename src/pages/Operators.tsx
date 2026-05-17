@@ -10,6 +10,18 @@ import { toast } from 'sonner'
 import { Search, Plus, UserCheck, UserX, LayoutGrid, List } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 
+// Bu hafta (Pzt–Paz) başlangıç ve bitiş tarihleri
+function haftaSinirlari() {
+  const now = new Date()
+  const gun = now.getDay() // 0=Pazar, 1=Pazartesi
+  const fark = gun === 0 ? -6 : 1 - gun
+  const pzt = new Date(now)
+  pzt.setDate(now.getDate() + fark)
+  const paz = new Date(pzt)
+  paz.setDate(pzt.getDate() + 6)
+  return { bas: pzt.toISOString().slice(0, 10), son: paz.toISOString().slice(0, 10) }
+}
+
 export function Operators() {
   const operators = useAuthStore(s => s.operators)
   const izinler = useAuthStore(s => s.izinler)
@@ -23,6 +35,21 @@ export function Operators() {
   const [izinForm, setIzinForm] = useState<boolean | 'toplu' | Record<string, any>>(false)
   const [viewMode, setViewMode] = useState<'liste' | 'bolum'>('liste')
   const activeWork = useProductionStore(s => s.activeWork)
+
+  // Bu hafta onaylanmış izni olan operatörlerin ID seti
+  const izinliOpIdler = useMemo(() => {
+    const { bas, son } = haftaSinirlari()
+    return new Set(
+      izinler
+        .filter(iz =>
+          (iz.durum === 'onaylandi' || iz.durum === 'duzenlendi') &&
+          iz.tip !== 'mesai' &&
+          iz.baslangic <= son &&
+          iz.bitis >= bas,
+        )
+        .map(iz => iz.opId),
+    )
+  }, [izinler])
 
   const bolumler = useMemo(() => [...new Set(operators.map(o => o.bolum).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')), [operators])
 
@@ -45,9 +72,15 @@ export function Operators() {
     const todayOpIds = new Set(activeWork.filter(w => w.tarih === todayStr).map(w => w.opId))
     return bolumler.map(b => {
       const bolumOps = operators.filter(o => o.bolum === b)
-      return { bolum: b, toplam: bolumOps.length, aktif: bolumOps.filter(o => o.aktif).length, calisan: bolumOps.filter(o => todayOpIds.has(o.id)).length }
+      return {
+        bolum: b,
+        toplam: bolumOps.length,
+        aktif: bolumOps.filter(o => o.aktif).length,
+        calisan: bolumOps.filter(o => todayOpIds.has(o.id)).length,
+        izinli: bolumOps.filter(o => izinliOpIdler.has(o.id)).length,
+      }
     })
-  }, [operators, bolumler, activeWork])
+  }, [operators, bolumler, activeWork, izinliOpIdler])
 
   async function toggleAktif(id: string, aktif: boolean) {
     await supabase.from('uys_operators').update({ aktif }).eq('id', id)
@@ -118,9 +151,12 @@ export function Operators() {
 
       {viewMode === 'bolum' ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {bolumStats.map(({ bolum, toplam, aktif, calisan }) => (
-            <div key={bolum} className="bg-bg-2 border border-border rounded-lg p-4">
-              <div className="font-mono text-sm font-semibold text-accent mb-3">{bolum}</div>
+          {bolumStats.map(({ bolum, toplam, aktif, calisan, izinli }) => (
+            <div key={bolum} className={`bg-bg-2 border rounded-lg p-4 ${izinli > 0 ? 'border-amber/30' : 'border-border'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-mono text-sm font-semibold text-accent">{bolum}</span>
+                {izinli > 0 && <span className="px-1.5 py-0.5 text-[9px] bg-amber/15 text-amber border border-amber/25 rounded-full">{izinli} izinli</span>}
+              </div>
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
                   <span className="text-zinc-500">Aktif operatör</span>
@@ -130,6 +166,12 @@ export function Operators() {
                   <span className="text-zinc-500">Bugün çalışan</span>
                   <span className={`font-semibold ${calisan > 0 ? 'text-green' : 'text-zinc-600'}`}>{calisan}</span>
                 </div>
+                {izinli > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-amber/80">Bu hafta izinli</span>
+                    <span className="font-semibold text-amber">{izinli}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -143,10 +185,13 @@ export function Operators() {
               </div>
               <div className="bg-bg-2 border border-border border-t-0 rounded-b-lg overflow-hidden divide-y divide-border/30">
                 {oprs.map(o => (
-                  <div key={o.id} className="flex items-center gap-3 px-3 py-2 hover:bg-bg-3/30">
+                  <div key={o.id} className={`flex items-center gap-3 px-3 py-2 hover:bg-bg-3/30 ${izinliOpIdler.has(o.id) ? 'bg-amber/5' : ''}`}>
                     <div className={`w-2 h-2 rounded-full ${o.aktif ? 'bg-green' : 'bg-zinc-600'}`} />
                     <span className="font-mono text-[11px] text-accent w-20">{o.kod}</span>
                     <span className="flex-1 text-xs font-medium">{o.ad}</span>
+                    {izinliOpIdler.has(o.id) && (
+                      <span className="px-1.5 py-0.5 text-[9px] bg-amber/15 text-amber border border-amber/25 rounded-full shrink-0">Bu hafta izinli</span>
+                    )}
                     <div className="flex gap-1">
                       {can('opr_edit') && <button onClick={async () => { setEditOpr(o); setShowForm(true) }} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white">Düzenle</button>}
                       <button onClick={() => toggleAktif(o.id, !o.aktif)} className="p-1 text-zinc-500 hover:text-amber" title={o.aktif ? 'Pasife al' : 'Aktifleştir'}>

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
-  Plus, Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell, AtSign, Paperclip, Download, FileText, Image as ImageIcon, Loader2,
+  Send, X, Users, User, Search, MessageCircle, Trash2, Pencil, Check, Bell, Paperclip, Download, FileText, Image as ImageIcon, Loader2,
 } from 'lucide-react'
 import { useChatUser } from '@/services/chatService/useChatUser'
 import {
@@ -28,7 +28,6 @@ import {
   type SearchResultRow,
   uploadAttachment,
   getMessageAttachments,
-  deleteAttachment,
   isImageMime,
   formatFileSize,
   type ChatAttachmentView,
@@ -90,7 +89,7 @@ export default function Chat() {
     if (!chatUser?.id) return
     getAllActiveUsers(chatUser.id)
       .then((users) => setAllUsers(users))
-      .catch((e) => console.warn('Mention için kullanıcı listesi yüklenemedi:', e))
+      .catch(() => {})
   }, [chatUser?.id])
 
   // v15.18 — Arama debounce (250ms)
@@ -106,8 +105,7 @@ export default function Chat() {
     const handle = setTimeout(() => {
       searchMessages(chatUser.id, q, 50)
         .then((rows) => setSearchResults(rows))
-        .catch((e) => {
-          console.warn('Arama hatası:', e)
+        .catch(() => {
           setSearchResults([])
         })
         .finally(() => setSearchLoading(false))
@@ -135,8 +133,7 @@ export default function Chat() {
     try {
       const items = await getSidebarChannels(chatUser.id)
       setSidebar(items)
-    } catch (e) {
-      console.error('Sidebar yükleme hatası:', e)
+    } catch {
     }
   }
 
@@ -169,13 +166,12 @@ export default function Chat() {
             .then((map) => {
               if (!cancelled) setAttachments(map)
             })
-            .catch((e) => console.warn('Attachment yükleme hatası:', e))
+            .catch(() => {})
         } else {
           setAttachments({})
         }
       })
-      .catch((e) => {
-        console.error(e)
+      .catch(() => {
         setLoadingMsgs(false)
       })
 
@@ -805,6 +801,7 @@ export default function Chat() {
 // ═══════════════════════════════════════════════════════════════════
 function AttachmentView({ att }: { att: ChatAttachmentView }) {
   const isImg = isImageMime(att.mime_type)
+  const isPdf = att.mime_type === 'application/pdf'
   const name = att.file_name || 'dosya'
 
   if (isImg) {
@@ -820,6 +817,27 @@ function AttachmentView({ att }: { att: ChatAttachmentView }) {
         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500">
           <span className="truncate flex-1">{name}</span>
           <span className="font-mono">{formatFileSize(att.size_bytes)}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // v15.20 — PDF inline önizleme
+  if (isPdf) {
+    return (
+      <div className="max-w-sm w-72">
+        <embed
+          src={att.public_url}
+          type="application/pdf"
+          className="w-full rounded border border-border bg-bg-2"
+          style={{ height: '320px' }}
+        />
+        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500">
+          <span className="truncate flex-1">{name}</span>
+          <span className="font-mono">{formatFileSize(att.size_bytes)}</span>
+          <a href={att.public_url} target="_blank" rel="noopener noreferrer" download={name} title="İndir">
+            <Download size={12} className="text-zinc-500 hover:text-zinc-300" />
+          </a>
         </div>
       </div>
     )
@@ -1085,7 +1103,7 @@ function NewDmModal({
   useEffect(() => {
     getAllActiveUsers(currentUserId)
       .then(setUsers)
-      .catch((e) => console.error(e))
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [currentUserId])
 
@@ -1159,7 +1177,7 @@ function NewGroupModal({
   useEffect(() => {
     getAllActiveUsers(currentUserId)
       .then(setUsers)
-      .catch((e) => console.error(e))
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [currentUserId])
 
