@@ -21,21 +21,31 @@ export function Checklist() {
   const [search, setSearch] = useState('')
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [durumFilterSet, setDurumFilterSet] = useState<Set<string>>(new Set(['bekliyor', 'devam']))
+  const [atananFilter, setAtananFilter] = useState('')
+  const [sortMode, setSortMode] = useState<'oncelik' | 'tarih'>('oncelik')
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<ChecklistItem | null>(null)
   const [detailItem, setDetailItem] = useState<ChecklistItem | null>(null)
+
+  const atananlar = useMemo(() =>
+    [...new Set(checklist.map(c => c.atanan).filter(Boolean))].sort()
+  , [checklist])
 
   const filtered = useMemo(() => {
     return checklist.filter(c => {
       if (tipFilter.size > 0 && !tipFilter.has(c.tip)) return false
       if (durumFilterSet.size > 0 && !durumFilterSet.has(c.durum)) return false
+      if (atananFilter && c.atanan !== atananFilter) return false
       if (search) return (c.baslik + c.aciklama + c.atanan + c.kategori).toLowerCase().includes(search.toLowerCase())
       return true
     }).sort((a, b) => {
-      const op = { acil: 0, yuksek: 1, normal: 2, dusuk: 3 }
-      return (op[a.oncelik] || 2) - (op[b.oncelik] || 2) || (b.tarih || '').localeCompare(a.tarih || '')
+      if (sortMode === 'oncelik') {
+        const op: Record<string, number> = { acil: 0, yuksek: 1, normal: 2, dusuk: 3 }
+        return (op[a.oncelik] ?? 2) - (op[b.oncelik] ?? 2) || (b.tarih || '').localeCompare(a.tarih || '')
+      }
+      return (b.tarih || '').localeCompare(a.tarih || '')
     })
-  }, [checklist, search, tipFilter, durumFilterSet])
+  }, [checklist, search, tipFilter, durumFilterSet, atananFilter, sortMode])
 
   async function deleteCL(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -51,6 +61,9 @@ export function Checklist() {
 
   const gorevCount = checklist.filter(c => c.tip === 'gorev' && c.durum !== 'tamamlandi' && c.durum !== 'iptal').length
   const istekCount = checklist.filter(c => c.tip === 'istek' && c.durum !== 'tamamlandi' && c.durum !== 'iptal').length
+  const toplamCount = checklist.filter(c => c.durum !== 'iptal').length
+  const tamamlananCount = checklist.filter(c => c.durum === 'tamamlandi').length
+  const tamamlanmaOrani = toplamCount > 0 ? Math.round(tamamlananCount / toplamCount * 100) : 0
 
   return (
     <div>
@@ -66,6 +79,22 @@ export function Checklist() {
         </div>
       </div>
 
+      {/* Tamamlanma oranı progress bar */}
+      {toplamCount > 0 && (
+        <div className="mb-4 bg-bg-2 border border-border rounded-lg px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-zinc-400">Tamamlanma Oranı</span>
+            <span className="text-xs font-semibold font-mono text-zinc-300">{tamamlananCount} / {toplamCount} — {tamamlanmaOrani}%</span>
+          </div>
+          <div className="w-full bg-bg-3 rounded-full h-2 overflow-hidden">
+            <div
+              className={`h-2 rounded-full transition-all duration-500 ${tamamlanmaOrani === 100 ? 'bg-green' : tamamlanmaOrani >= 60 ? 'bg-accent' : tamamlanmaOrani >= 30 ? 'bg-amber' : 'bg-red'}`}
+              style={{ width: `${tamamlanmaOrani}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
@@ -78,6 +107,25 @@ export function Checklist() {
           { value: 'devam', label: 'Devam Ediyor' },
           { value: 'tamamlandi', label: 'Tamamlanan' },
         ]} selected={durumFilterSet} onChange={setDurumFilterSet} />
+        {/* Atanan kişi filtresi */}
+        {atananlar.length > 0 && (
+          <select value={atananFilter} onChange={e => setAtananFilter(e.target.value)}
+            className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-accent">
+            <option value="">Tüm Kişiler</option>
+            {atananlar.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+        {/* Sıralama toggle */}
+        <div className="ml-auto flex rounded overflow-hidden border border-border">
+          <button onClick={() => setSortMode('oncelik')}
+            className={`px-3 py-1.5 text-xs ${sortMode === 'oncelik' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
+            Öncelik
+          </button>
+          <button onClick={() => setSortMode('tarih')}
+            className={`px-3 py-1.5 text-xs ${sortMode === 'tarih' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
+            Tarih
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">
