@@ -767,7 +767,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
         // v15.86 — BUG FIX: siparisNo.trim() yerine etkinSiparisNo kullan.
         // Tekil IE modunda siparisNo state bos kaliyordu, etkinSiparisNo ise IE-AUTO-...
         // formatini iceriyor. Eski kod ie_no'yu IE--01 / IE--02 (bos prefix) uretiyordu.
-        if (k.rcId) { const c = await buildWorkOrders(newId, etkinSiparisNo, k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
+        if (k.rcId) { const { count: c } = await buildWorkOrders(newId, etkinSiparisNo, k.rcId, k.adet, fullRecipes, k.termin, woTotal); woTotal += c }
       }
       // v16.82 MRP#19 — stoktan seçilen kalemler için stok çıkış hareketi yaz
       const stokKarsiSayi = kalemler.filter(k => k.stoktan).length
@@ -1179,7 +1179,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     let total = 0
     const liste = kalemler.length > 0 ? kalemler : (order.receteId ? [{ rcId: order.receteId, adet: order.adet, mamulKod: order.mamulKod, mamulAd: order.mamulAd, termin: order.termin, not: '' }] : [])
     for (const k of liste) {
-      if (k.rcId) { const c = await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes, k.termin, total); total += c }
+      if (k.rcId) { const { count: c } = await buildWorkOrders(order.id, order.siparisNo, k.rcId, k.adet, fullRecipes, k.termin, total); total += c }
     }
     loadAllStores(); toast.success(total + ' İE yeniden oluşturuldu')
   }
@@ -1194,7 +1194,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     const eksikSatirlar = (rc.satirlar || []).filter(s => !mevcutKodlar.has(s.malkod))
     if (!eksikSatirlar.length) { toast.info('Eksik İE yok — tüm bileşenler mevcut'); return }
     const adet = kalemler[0]?.adet || order.adet
-    const count = await buildWorkOrders(order.id, order.siparisNo, rcId, adet, fullRecipes, kalemler[0]?.termin || order.termin)
+    const { count } = await buildWorkOrders(order.id, order.siparisNo, rcId, adet, fullRecipes, kalemler[0]?.termin || order.termin)
     loadAllStores(); toast.success(count + ' eksik İE oluşturuldu')
   }
 
@@ -1394,13 +1394,20 @@ function TamZincirButton({ order, workOrders, onClose }: { order: Order; workOrd
       // DB'den anlık sorgu — store stale olabilir, tekrar WO açılmasını önler
       const woRows = await getOrderWorkOrderIds(order.id)
       let woCount = woRows.length
+      const createdWoIds: string[] = []
       if (!woCount) {
         if (kalemler.length > 0) {
           for (const u of kalemler) {
-            if (u.rcId) { const c = await buildWorkOrders(order.id, order.siparisNo, u.rcId, u.adet, s.recipes, u.termin, woCount); woCount += c }
+            if (u.rcId) {
+              const { count: c, ids } = await buildWorkOrders(order.id, order.siparisNo, u.rcId, u.adet, s.recipes, u.termin, woCount)
+              woCount += c
+              createdWoIds.push(...ids)
+            }
           }
         } else if (order.receteId) {
-          woCount = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes, order.termin)
+          const { count: wc, ids } = await buildWorkOrders(order.id, order.siparisNo, order.receteId, order.adet, s.recipes, order.termin)
+          woCount = wc
+          createdWoIds.push(...ids)
         }
       }
       setAdimlar(['✅ ' + woCount + ' iş emri hazır'])
@@ -1415,7 +1422,9 @@ function TamZincirButton({ order, workOrders, onClose }: { order: Order; workOrd
         s.logs.map(l => ({ woId: l.woId, qty: l.qty })),
         cpMapped,
         hesaplayan,
-        (steps) => setAdimlar([...steps])
+        (steps) => setAdimlar([...steps]),
+        undefined,      // onKesimFark
+        createdWoIds    // rollback için yeni oluşturulan İE ID'leri
       )
       setSonuc(result)
       loadAllStores()
@@ -1659,7 +1668,7 @@ function BulkOrderImportModal({ existingOrders, recipes, onClose, onComplete }: 
       let woTotalSip = 0
       for (const k of kalemler) {
         if (!k.receteId) continue
-        const c = await buildWorkOrders(orderId, siparisNo, k.receteId, k.adet, fullRecipes, k.termin, woTotalSip)
+        const { count: c } = await buildWorkOrders(orderId, siparisNo, k.receteId, k.adet, fullRecipes, k.termin, woTotalSip)
         woTotalSip += c
         woTotal += c
         kalemToplam++

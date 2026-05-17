@@ -1,5 +1,6 @@
 import { supabase, fetchAll } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
+import { toast } from 'sonner'
 import type { Recipe, RecipeRow, WorkOrder, Material, StokHareket, Tedarik } from '@/types'
 import { kesimPlanOlustur, kesimPlanlariKaydet } from './cutting'
 import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, type MRPRow } from '@/services/mrpService'
@@ -16,9 +17,9 @@ import { withTestRunId } from '@/services/testService/testRun'
 // degil -- her durumda dogru sonuc.
 export async function buildWorkOrders(
   orderId: string, siparisNo: string, recipeId: string, adet: number, recipes: Recipe[], termin?: string, siraBaslangic?: number
-): Promise<number> {
+): Promise<{ count: number; ids: string[] }> {
   const rc = recipes.find(r => r.id === recipeId)
-  if (!rc || !rc.satirlar?.length) return 0
+  if (!rc || !rc.satirlar?.length) return { count: 0, ids: [] }
 
   const satirlar = rc.satirlar
   const opRows = satirlar.filter(s => s.opId).sort((a, b) => {
@@ -108,7 +109,7 @@ export async function buildWorkOrders(
       }
     }
   }
-  return workOrders.length
+  return { count: workOrders.length, ids: workOrders.map(w => w.id as string) }
 }
 
 // ═══ TAM ZİNCİR: İE → Kesim → MRP → Tedarik ═══
@@ -151,11 +152,56 @@ export async function autoZincir(
   cuttingPlans: any[],
   hesaplayan: string,
   onProgress?: (adimlar: string[]) => void,
-  onKesimFark?: (items: KesimFarkItem[]) => Promise<'kabul' | 'iptal'>
+  onKesimFark?: (items: KesimFarkItem[]) => Promise<'kabul' | 'iptal'>,
+  createdWoIds?: string[]
 ): Promise<ZincirSonuc> {
   const adimlar: string[] = []
   adimlar.push(`✅ ${woCount} iş emri oluşturuldu`)
   onProgress?.(adimlar)
+
+  // Rollback izleme: bu zincirde oluşturulan kayıtların ID'leri
+  const kesimPlanIds: string[] = []
+  let calcId: string | null = null
+  // freshTedarikler ADIM 3 ve ADIM 4 arasında paylaşılır (dış scope'ta tanımlanır)
+  let freshTedarikler: Tedarik[] = tedarikler
+
+  // ─── Rollback: başarıyla oluşturulan kayıtları sil, toast ile hata bildir ───
+  async function rollback(failedStep: string) {
+    const cleaned: string[] = []
+    // 1. Tedarikler (bugün, bu sipariş için otomatik oluşturulanlar)
+    try {
+      await supabase.from('uys_tedarikler').delete()
+        .eq('order_id', orderId).eq('tarih', today()).eq('auto_olusturuldu', true)
+      cleaned.push('tedarikler')
+    } catch {}
+    // 2. MRP hesaplama snapshot
+    try {
+      if (calcId) {
+        await supabase.from('uys_mrp_calculations').delete().eq('id', calcId)
+        cleaned.push('MRP snapshot')
+        calcId = null
+      }
+    } catch {}
+    // 3. Kesim planları (bu zincirde oluşturuldu olarak işaretlenenler)
+    try {
+      if (kesimPlanIds.length) {
+        await supabase.from('uys_kesim_planlari').delete().in('id', kesimPlanIds)
+        cleaned.push(`${kesimPlanIds.length} kesim planı`)
+      }
+    } catch {}
+    // 4. İş emirleri (çağıran tarafından ID listesi verilmişse)
+    try {
+      if (createdWoIds?.length) {
+        await supabase.from('uys_work_orders').delete().in('id', createdWoIds)
+        await supabase.from('uys_orders').update({ mrp_durum: null }).eq('id', orderId)
+        cleaned.push(`${createdWoIds.length} İE`)
+      }
+    } catch {}
+    const temizlendi = cleaned.length ? cleaned.join(', ') + ' temizlendi' : 'temizlenecek kayıt yok'
+    adimlar.push(`🔄 Rollback (${failedStep}): ${temizlendi}`)
+    onProgress?.(adimlar)
+    toast.error(`Zincir başarısız — ${failedStep} adımında hata · ${temizlendi}`)
+  }
 
   // Re-fetch work orders (just created) — fetchAll: 1000 satır cap'i aşabilir
   const { data: freshWOs } = await fetchAll<any>('uys_work_orders')
@@ -192,13 +238,17 @@ export async function autoZincir(
   try {
     const yeniPlanlar = kesimPlanOlustur(allWOs, operations, recipes, materials, logs, freshCuttingPlans)
     if (yeniPlanlar.length) {
+      yeniPlanlar.forEach(p => kesimPlanIds.push(p.id))  // rollback için ID'leri kaydet
       kesimCount = await kesimPlanlariKaydet(yeniPlanlar)
       adimlar.push(`✅ ${kesimCount} kesim planı oluşturuldu`)
     } else {
       adimlar.push('ℹ️ Kesim operasyonlu İE bulunamadı')
     }
   } catch (e: any) {
-    adimlar.push('⚠️ Kesim planı hatası: ' + e.message)
+    adimlar.push('❌ Kesim planı hatası: ' + e.message)
+    onProgress?.(adimlar)
+    await rollback('Kesim planı')
+    throw new Error('Kesim planı adımında hata: ' + e.message)
   }
   onProgress?.(adimlar)
 
@@ -267,12 +317,10 @@ export async function autoZincir(
 
   // ADIM 3: MRP + Snapshot + mrp_durum
   let mrpSonuc: MRPRow[] = []
-  let calcId: string | null = null
   try {
     // v16.82 — Stale store fix: MRP öncesi tedarikler DB'den taze çekiliyor.
     // Aynı oturumda art arda 2 sipariş açılırsa 2. sipariş için acikTedPool
     // 1. siparişin yeni tedarikini görür ve net=0 → çift tedarik önlenir.
-    let freshTedarikler: Tedarik[] = tedarikler
     try {
       const { data: freshTed } = await supabase.from('uys_tedarikler').select('*').eq('geldi', false)
       if (freshTed && freshTed.length >= 0) {
@@ -328,8 +376,11 @@ export async function autoZincir(
     const yeniDurum = mrpSonuc.some(r => r.net > 0) ? 'eksik' : 'tamam'
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', orderId)
   } catch (e: any) {
-    adimlar.push('⚠️ MRP hatası: ' + e.message)
+    adimlar.push('❌ MRP hatası: ' + e.message)
     try { await supabase.from('uys_orders').update({ mrp_durum: 'hata' }).eq('id', orderId) } catch {}
+    onProgress?.(adimlar)
+    await rollback('MRP hesaplama')
+    throw new Error('MRP adımında hata: ' + e.message)
   }
   onProgress?.(adimlar)
 
@@ -360,7 +411,10 @@ export async function autoZincir(
     })
     adimlar.push(tedCount > 0 ? `✅ ${tedCount} tedarik oluşturuldu` : '✅ Tüm malzemeler yeterli')
   } catch (e: any) {
-    adimlar.push('⚠️ Tedarik hatası: ' + e.message)
+    adimlar.push('❌ Tedarik hatası: ' + e.message)
+    onProgress?.(adimlar)
+    await rollback('Tedarik oluşturma')
+    throw new Error('Tedarik adımında hata: ' + e.message)
   }
   onProgress?.(adimlar)
 
