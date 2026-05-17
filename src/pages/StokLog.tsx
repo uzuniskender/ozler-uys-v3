@@ -94,19 +94,36 @@ export function StokLog() {
   const [saving, setSaving]             = useState(false)
   const [sortCol, setSortCol]     = useState<'tarih' | 'malkod' | 'miktar'>('tarih')
   const [sortDir, setSortDir]     = useState<'desc' | 'asc'>('desc')
+  // v17.05 — sayfalama
+  const PAGE_SIZE = 500
+  const [page, setPage]           = useState(0)
+  const [totalCount, setTotalCount] = useState<number | null>(null)
 
-  /* ── veri çek ── */
-  async function load() {
+  /* ── veri çek — server-side filter push-down v17.05 ── */
+  async function load(pg = 0) {
     setLoading(true)
-    const { data, error } = await supabase
+    let q = supabase
       .from('uys_stok_hareketler')
-      .select('*')
-      .order('tarih', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .limit(2000)
+      .select('*', { count: 'exact' })
+      .order('tarih', { ascending: sortDir === 'asc' })
+      .order('updated_at', { ascending: sortDir === 'asc' })
+
+    // Server-side filtreler — limit öncesi DB'de çalışır
+    if (tipFilter !== 'tumu') q = q.eq('tip', tipFilter)
+    if (dateFrom) q = q.gte('tarih', dateFrom)
+    if (dateTo)   q = q.lte('tarih', dateTo)
+    if (search.trim()) {
+      const s = search.trim()
+      q = (q as any).or(`malkod.ilike.%${s}%,malad.ilike.%${s}%,aciklama.ilike.%${s}%`)
+    }
+
+    q = q.range(pg * PAGE_SIZE, (pg + 1) * PAGE_SIZE - 1)
+
+    const { data, error, count } = await q
     if (error) { toast.error('Yüklenemedi: ' + error.message); setLoading(false); return }
 
-    // wo_id varsa order_id'yi store'dan çek
+    setTotalCount(count ?? null)
+
     const enriched: StokHareket[] = (data ?? []).map(h => {
       const wo = workOrders.find(w => w.id === h.wo_id)
       const ord = wo ? orders.find(o => o.id === wo.orderId) : null
@@ -118,10 +135,12 @@ export function StokLog() {
       }
     })
     setRows(enriched)
+    setPage(pg)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [workOrders.length])  // eslint-disable-line
+  // Filtre/sort değişince sayfa 0'a dön
+  useEffect(() => { load(0) }, [tipFilter, dateFrom, dateTo, search, sortDir, workOrders.length])  // eslint-disable-line
 
   /* ── filtrele ── */
   const filtered = useMemo(() => {
@@ -502,11 +521,34 @@ export function StokLog() {
       </div>
 
       {/* Özet şerit */}
-      <div className="px-6 py-2 border-b border-border flex gap-6 text-xs text-zinc-500">
-        <span><span className="text-zinc-300 font-mono">{ozet.sayi}</span> kayıt</span>
+      <div className="px-6 py-2 border-b border-border flex gap-6 text-xs text-zinc-500 flex-wrap items-center">
+        <span>
+          <span className="text-zinc-300 font-mono">{ozet.sayi}</span> kayıt
+          {totalCount !== null && totalCount > PAGE_SIZE && (
+            <span className="ml-1 text-zinc-600">/ {totalCount} toplam</span>
+          )}
+        </span>
         <span>↑ Giriş: <span className="text-green-400 font-mono">{fmtNum(ozet.giris)}</span> <span className="text-zinc-600">adet</span></span>
         <span>↓ Çıkış: <span className="text-red-400 font-mono">{fmtNum(ozet.cikis)}</span> <span className="text-zinc-600">adet</span></span>
         <span title="Giriş − Çıkış toplamı (bar açılışları dahil)">Net: <span className={`font-mono font-semibold ${ozet.net >= 0 ? 'text-accent' : 'text-red-400'}`}>{fmtNum(ozet.net)}</span> <span className="text-zinc-600">adet</span></span>
+        {/* v17.05 — Sayfa navigasyonu */}
+        {totalCount !== null && totalCount > PAGE_SIZE && (
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              disabled={page === 0 || loading}
+              onClick={() => load(page - 1)}
+              className="px-2 py-0.5 bg-bg-3 border border-border rounded text-[10px] disabled:opacity-40 hover:bg-bg-2"
+            >← Önceki</button>
+            <span className="text-[10px] text-zinc-400">
+              {page + 1} / {Math.ceil(totalCount / PAGE_SIZE)}
+            </span>
+            <button
+              disabled={(page + 1) * PAGE_SIZE >= totalCount || loading}
+              onClick={() => load(page + 1)}
+              className="px-2 py-0.5 bg-bg-3 border border-border rounded text-[10px] disabled:opacity-40 hover:bg-bg-2"
+            >Sonraki →</button>
+          </div>
+        )}
       </div>
 
       {/* İçerik */}
