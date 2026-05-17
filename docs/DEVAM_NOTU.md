@@ -695,3 +695,43 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 - **Procurement.tsx** tedarikçi gruplama — Liste ↔ Tedarikçi toggle, geciken/bekleyen badge, miktarOzet (`d7817f7`)
 - **Reports.tsx İstasyon Perf.** tab — OEE bileşen bar, fire oranı bar, haftalık trend LineChart, tıklanabilir karşılaştırma tablosu (`cd51246` + `7918281`)
 - **AuditLog.tsx** filtreler + Excel export (`c9e6346`)
+
+---
+
+### 17 Mayıs 2026 — Son Oturum (v17.13 — OperatorPanel + ProductionEntry)
+
+#### OperatorPanel Günlük Hedef göstergesi (`6915285`)
+
+`src/pages/OperatorPanel.tsx`:
+- `VARDIYA_DK = 480` — 8 saatlik standart vardiya sabiti (module-level)
+- `gunlukHedefInfo` useMemo — her `acikWO` için:
+  - `islemSure > 0` → `min(kalan, floor(480 / islemSure))` — işlem süresi bazlı kapasite tahmini
+  - `islemSure = 0` → kalan hedef adedi (fallback)
+  - Çıktı: `{ uretim, hedef, pct, varIslemSure }`
+- **🎯 Günlük Hedef** kartı — İşler tabı başında, hedef veya üretim > 0 ise görünür:
+  - Üretilen / Hedef rakamları + %ilerleme
+  - Renkli ilerleme bar: accent → amber (%70) → green (%100)
+  - Alt başlık: "işlem süresi bazlı tahmin" / "kalan İE hedefleri"
+
+#### ProductionEntry Şablondan Yükle (`d72fc2e`)
+
+`src/pages/ProductionEntry.tsx` → `EntryModal`:
+- `sonKayitlar` useMemo — aynı WO'nun son 3 logu; koşul: en az 1 operatör, duruş veya not
+- `uygulaŞablon(log)` — seçilen şablondan `oprList`, `duruslar`, `not` alanlarını doldurur (saat şu an ile normalize edilir, aktif olmayan operatörler filtrelenir)
+- **📋 Şablondan Yükle (N)** butonu — tarih alanının üzerinde, sadece şablon varsa görünür; toggle ile şablon listesi açılır
+- Şablon kartları: tarih + adet + operatör adları + duruş sayısı + not önizlemesi
+
+#### Vitest unit testleri — 3 yeni dosya (önceki oturumdan, bu oturum tamamlandı)
+
+| Dosya | Test sayısı | Kapsam |
+|---|---|---|
+| `barModel.test.ts` | 15 | `isBarMaterial`, `isBarMaterialByKod`, `barAcilisStokId`, `acikBarKayitId`, `acikBarHavuzuToplamMm` |
+| `fireTelafi.test.ts` | 10 | `fireTelafiIeOlustur` guard'lar, `fireTelafiAkisi` hata + başarı yolları, `topluFireTelafi` filtreleme |
+| `cutting.pure.test.ts` | 8 | `getParcaBoy` (uzunluk/boy/min/fallback), `getHamBoy` (uzunluk/max/MM parse) |
+
+**Toplam birim testi:** 111 (önceki 78 → +33) — tümü yeşil
+
+#### Sıradaki görevler (güncellendi)
+
+- Normalize veri geçişi (kapsam belirsiz — ertelendi)
+- mrpEngine Faz 3 — karar noktaları (satın alma teklifi, acil üretim) akışı
