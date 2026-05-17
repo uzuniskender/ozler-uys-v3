@@ -40,18 +40,24 @@ export function DowntimeCodes() {
   }, [workOrders])
 
   // Her duruş kodu için: kullanım, toplam süre, istasyon dağılımı
+  // DB'de duruslar JSONB'si { kodId (UUID), kodAd, sure, bas, bit } formatını kullanır.
+  // Eski loglar { kod (short string), ad, bas, bit } formatında olabilir — her ikisi desteklenir.
   const durusStats = useMemo(() => {
     type Stat = { kullanim: number; toplamSure: number; istasyonlar: Record<string, number> }
     const map: Record<string, Stat> = {}
-    for (const dk of durusKodlari) map[dk.kod] = { kullanim: 0, toplamSure: 0, istasyonlar: {} }
+    const idToKod: Record<string, string> = {}
+    for (const dk of durusKodlari) {
+      map[dk.kod] = { kullanim: 0, toplamSure: 0, istasyonlar: {} }
+      idToKod[dk.id] = dk.kod
+    }
 
     for (const log of logs) {
       if (!Array.isArray(log.duruslar) || !log.duruslar.length) continue
       const istAd = woIstMap.get(log.woId) || 'Tanımsız'
-      for (const d of log.duruslar as { kod?: string; ad?: string; sure?: number; bas?: string; bit?: string }[]) {
-        const kod = d.kod || ''
-        if (!kod || !map[kod]) continue
-        const s = map[kod]
+      for (const d of log.duruslar as { kodId?: string; kodAd?: string; sure?: number; bas?: string; bit?: string; kod?: string }[]) {
+        const durusKod = d.kodId ? (idToKod[d.kodId] || '') : (d.kod || '')
+        if (!durusKod || !map[durusKod]) continue
+        const s = map[durusKod]
         s.kullanim++
         const sure = (d.sure && d.sure > 0) ? d.sure
           : (d.bas && d.bit) ? (() => {
@@ -66,9 +72,31 @@ export function DowntimeCodes() {
     return map
   }, [durusKodlari, logs, woIstMap])
 
-  // Seçili kod detayı
+  // Seçili kod detayı + son 5 kullanım
   const selectedDk = selectedKod ? durusKodlari.find(d => d.kod === selectedKod) : null
   const selectedStat = selectedKod ? durusStats[selectedKod] : null
+
+  const sonKullanim = useMemo(() => {
+    if (!selectedKod) return []
+    const idToKod: Record<string, string> = {}
+    for (const dk of durusKodlari) idToKod[dk.id] = dk.kod
+    const result: { tarih: string; saat: string; sure: number; istAd: string }[] = []
+    for (const log of logs) {
+      if (!Array.isArray(log.duruslar) || !log.duruslar.length) continue
+      for (const d of log.duruslar as { kodId?: string; sure?: number; bas?: string; bit?: string; kod?: string }[]) {
+        const dk = d.kodId ? (idToKod[d.kodId] || '') : (d.kod || '')
+        if (dk !== selectedKod) continue
+        const sure = (d.sure && d.sure > 0) ? d.sure
+          : (d.bas && d.bit) ? (() => {
+              const [bh, bm] = d.bas!.split(':').map(Number)
+              const [eh, em] = d.bit!.split(':').map(Number)
+              return Math.max(0, (eh * 60 + em) - (bh * 60 + bm))
+            })() : 0
+        result.push({ tarih: log.tarih, saat: log.saat, sure, istAd: woIstMap.get(log.woId) || 'Tanımsız' })
+      }
+    }
+    return result.sort((a, b) => (b.tarih + b.saat).localeCompare(a.tarih + a.saat)).slice(0, 5)
+  }, [selectedKod, logs, durusKodlari, woIstMap])
 
   async function del(id: string) {
     if (!await showConfirm('Silmek istediğinize emin misiniz?')) return
@@ -189,6 +217,24 @@ export function DowntimeCodes() {
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+
+            {sonKullanim.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-400 mb-2">Son 5 Kullanım</p>
+                <div className="space-y-1.5">
+                  {sonKullanim.map((k, i) => (
+                    <div key={i} className="flex items-center gap-2 py-1.5 border-b border-border/30 last:border-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] text-zinc-500 truncate">{k.istAd}</div>
+                        <div className="text-[9px] text-zinc-700 font-mono">{k.tarih} {k.saat}</div>
+                      </div>
+                      <span className="text-[10px] font-mono text-red shrink-0">{k.sure} dk</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
