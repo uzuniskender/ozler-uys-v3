@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 17 Mayıs 2026
-**Versiyon:** v17.05
+**Versiyon:** v17.14
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -744,3 +744,33 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 
 - Normalize veri geçişi (kapsam belirsiz — ertelendi)
 - mrpEngine Faz 3 — karar noktaları (satın alma teklifi, acil üretim) akışı
+
+---
+
+### 17 Mayıs 2026 — Bu Oturum (v17.05–v17.07)
+
+Bu oturumda 6 özellik tamamlandı. İlk 3'ü context sıkıştırılmadan önce yapıldı; son 3'ü bu pencerede.
+
+#### Tamamlananlar
+
+| Commit | Dosya | Özellik |
+|--------|-------|---------|
+| `0e65431` | `mrpEngine.ts` + `mrpEngine.test.ts` | **hesaplaMRPv2()** — `HesaplaMRPParams` alır; `ordIds` filtresi, `urunler` multi-product genişlemesi, `secilenWoIds`; `buildResult` ile `MRPRow[]` döndürür; mevcut `hesaplaMRP` dokunulmadı. 8 birim testi (vitest): no-recipe, stok yok/yeterli, ordIds filtresi, null tümü, urunler genişleme, MRPRow şekli |
+| `e7aba56` | `WorkOrders.tsx` + `workOrderService.ts` | **Toplu Termin Güncelle** — toplu işlemler barına Calendar ikonu + DatePicker + onay modal; `topluTerminGuncelle(ids, termin)` servise eklendi; `wo_edit` RBAC kapısı |
+| `759b7ff` | `Shipment.tsx` | **Paketleme Listesi** — per-satır ve per-grup checkbox; seçim toolbar (N sevkiyat); `window.print()` popup HTML: minified CSS, şirket başlığı, her kalem malkod/malad/miktar/birim (birim: SevkKalem.birim → materials → 'Adet' zinciri) |
+| `e42de88` | `ProblemTakip.tsx` | **Excel export + Özet görünümü** (v17.05): Excel: D1–D8 + durum + termin gecikme + 30 gün+ geciken Evet/Hayır + audit alanları (xlsx lazy import). Özet: Recharts donut PieChart (Açık/Devam/Kapandı renk kodlu), 5 özet kart, son 30 gün kapanan + kapatılma oranı. Liste↔Özet toggle buton header'da |
+| `6773f09` | `Logs.tsx` | **Kullanıcı Aktivite Özeti** (v17.06): mount'ta `uys_activity_log`'dan son 7 günü filtreden bağımsız yükler (limit 2000). Kullanıcı başına: toplam işlem, normalize sıklık çubuğu (`aktiviteMax`), modül/aksiyon badge (top 4). Açılır/kapanır panel, varsayılan açık |
+| `7918281` | `Reports.tsx` | **İstasyon Perf. geliştirme** (v17.07): OEE tek bar → gruplu 4-bar (Kullanılabilirlik/Performans/Kalite/OEE), `Legend` eklendi; haftalık trend dual Y-eksen (sol: üretim/fire, sağ: 0–100%) + Kalite % çizgisi; tablo Fire% ve OEE hücrelerine renk kodlu mini progress bar |
+
+#### Teknik notlar
+
+- **mrpEngine.test.ts** — 8 test eklendi → toplam 31 (mrpEngine dosyasında), tüm 78 birim testi yeşil (bu oturum öncesi)
+- **recharts Legend** — `Reports.tsx` import satırına eklendi; `ProblemTakip.tsx`'e `PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer` eklendi (daha önce yoktu)
+- **xlsx lazy import** — `ProblemTakip.tsx`'te de aynı pattern (dynamic `import('xlsx')`) kullanıldı; bundle bölümlemesi korundu
+- **Dual-axis LineChart** — haftalık trend'de `yAxisId="left"/"right"` + `orientation="right"` pattern; `CartesianGrid` + `Legend` var, `ReferenceLine` yok (kalite için eşik belirsiz)
+
+#### Build durumu
+
+Tüm commitler `npm run build` öncesi geçirildi: prebuild audits (schema + column + saglik-syntax) + `tsc --noEmit` + `vite build` — hepsi temiz.
+
+---
