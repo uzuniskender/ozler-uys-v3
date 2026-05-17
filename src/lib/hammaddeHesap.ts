@@ -9,16 +9,19 @@ function _isWoAktif(w: any): boolean {
   return d !== 'iptal' && d !== 'tamamlandi' && d !== 'kismi_tamam'
 }
 
+// Stok hareketi delta — getStok ve buildStokMap ortak semantiği
+function _stokDelta(h: any): number {
+  if (h.tip === 'giris') return Number(h.miktar)
+  if (h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv') return -Number(h.miktar)
+  return 0
+}
+
 // ─── 1. FİZİKSEL STOK ────────────────────────────────────────────────────────
 export function getStok(malkod: string, stokHareketler: any[]): number {
   return Math.floor(
     stokHareketler
       .filter((h: any) => h.malkod === malkod)
-      .reduce((a: number, h: any) => {
-        if (h.tip === 'giris') return a + Number(h.miktar)
-        if (h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv') return a - Number(h.miktar)
-        return a
-      }, 0)
+      .reduce((a: number, h: any) => a + _stokDelta(h), 0)
   )
 }
 
@@ -109,11 +112,9 @@ export function computeOrderEksik(
 
     const eksikSet = new Set<string>()
     for (const [malkod, ihtiyac] of Object.entries(hmGrup)) {
-      const stok = getStok(malkod, stokHareketler)
-      const yolda = (tedarikler || [])
-        .filter((t: any) => t.malkod === malkod && !t.geldi)
-        .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
-      if ((ihtiyac as number) > stok + yolda) eksikSet.add(malkod)
+      if ((ihtiyac as number) > getStok(malkod, stokHareketler) + getYolda(malkod, tedarikler)) {
+        eksikSet.add(malkod)
+      }
     }
     if (eksikSet.size > 0) result.set(o.id, eksikSet)
   }
@@ -123,19 +124,13 @@ export function computeOrderEksik(
 
 // ─── 4. TOPLU STOK MAP ───────────────────────────────────────────────────────
 // Tüm stokHareketler'den malkod → net stok haritası (tek geçiş, O(n))
-// KURAL: getStok ile bire bir aynı semantik — bilinmeyen tip ignore.
-// (Önceden else branch'ı bilinmeyen tipi çıkış sayıyordu → getStok ile uyumsuzdu.)
 export function buildStokMap(stokHareketler: any[]): Record<string, number> {
   const map: Record<string, number> = {}
   for (const h of (stokHareketler || [])) {
     const mk: string = h.malkod
     if (!mk) continue
-    if (h.tip === 'giris') {
-      map[mk] = (map[mk] ?? 0) + Number(h.miktar)
-    } else if (h.tip === 'cikis' || h.tip === 'bar_acilis' || h.tip === 'rezerv') {
-      map[mk] = (map[mk] ?? 0) - Number(h.miktar)
-    }
-    // else: bilinmeyen tip → ignore (getStok ile uyumlu)
+    const delta = _stokDelta(h)
+    if (delta !== 0) map[mk] = (map[mk] ?? 0) + delta
   }
   return map
 }
