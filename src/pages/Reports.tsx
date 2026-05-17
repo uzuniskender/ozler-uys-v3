@@ -30,6 +30,7 @@ export function Reports() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('ozet')
   const [telafiRunning, setTelafiRunning] = useState(false)
+  const [stokKritikOnly, setStokKritikOnly] = useState(false)
 
   // Detaylı Rapor filtreleri
   const [dBaslangic, setDBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
@@ -53,6 +54,7 @@ export function Reports() {
     { id: 'trend', label: 'Trend' },
     { id: 'istperf', label: 'İstasyon Perf.' },
     { id: 'oprsaat', label: 'Operatör Saat' },
+    { id: 'stokdurum', label: 'Stok Durumu' },
   ]
 
   const todayStr = today()
@@ -138,6 +140,41 @@ export function Reports() {
   }, [logs, woMap])
 
   // Unique filter options
+  // Stok Durumu: malkod bazında net stok
+  const stokData = useMemo(() => {
+    const netMap: Record<string, number> = {}
+    const maladMap: Record<string, string> = {}
+    stokHareketler.forEach(h => {
+      if (!netMap[h.malkod]) netMap[h.malkod] = 0
+      if (h.malad) maladMap[h.malkod] = h.malad
+      if (h.tip === 'giris') netMap[h.malkod] += h.miktar
+      else netMap[h.malkod] -= h.miktar  // cikis ve bar_acilis depodan çıkış
+    })
+    const matMap = new Map(materials.map(m => [m.kod, m]))
+    const allKodlar = new Set([
+      ...Object.keys(netMap),
+      ...materials.filter(m => m.aktif !== false).map(m => m.kod),
+    ])
+    return [...allKodlar]
+      .map(kod => {
+        const mat = matMap.get(kod)
+        if (mat && mat.aktif === false) return null
+        const netStok = Math.round((netMap[kod] ?? 0) * 100) / 100
+        const minStok = mat?.minStok ?? 0
+        const malad = mat?.ad || maladMap[kod] || ''
+        const birim = mat?.birim || ''
+        const sifir = netStok <= 0
+        const eksik = minStok > 0 && netStok < minStok
+        return { kod, malad, birim, netStok, minStok, sifir, eksik }
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => {
+        const pa = a.sifir ? 0 : a.eksik ? 1 : 2
+        const pb = b.sifir ? 0 : b.eksik ? 1 : 2
+        return pa !== pb ? pa - pb : a.kod.localeCompare(b.kod)
+      })
+  }, [stokHareketler, materials])
+
   const dOperatorList = useMemo(() => {
     const s = new Set<string>()
     logs.forEach(l => Array.isArray(l.operatorlar) && l.operatorlar.forEach(o => o.ad && s.add(o.ad)))
@@ -845,6 +882,89 @@ export function Reports() {
               <tbody>{data.map(d => (<tr key={d.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{d.ad}</td><td className="px-4 py-1.5 text-right font-mono">{d.woCount}</td><td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td></tr>))}</tbody></table>
               </>
             ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+          </div>
+        )
+      })()}
+
+      {/* Stok Durumu */}
+      {tab === 'stokdurum' && (() => {
+        const kritikSayisi = stokData.filter(r => r.sifir || r.eksik).length
+        const sifirSayisi = stokData.filter(r => r.sifir).length
+        const gosterilen = stokKritikOnly ? stokData.filter(r => r.sifir || r.eksik) : stokData
+        return (
+          <div>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono">{stokData.length}</div>
+                <div className="text-[11px] text-zinc-500">Toplam Malzeme</div>
+              </div>
+              <div className={`bg-bg-2 border rounded-lg p-4 text-center ${kritikSayisi > 0 ? 'border-red/40' : 'border-border'}`}>
+                <div className={`text-2xl font-light font-mono ${kritikSayisi > 0 ? 'text-red' : 'text-zinc-500'}`}>{kritikSayisi}</div>
+                <div className="text-[11px] text-zinc-500">Kritik (Eksik / Sıfır)</div>
+              </div>
+              <div className={`bg-bg-2 border rounded-lg p-4 text-center ${sifirSayisi > 0 ? 'border-amber/40' : 'border-border'}`}>
+                <div className={`text-2xl font-light font-mono ${sifirSayisi > 0 ? 'text-amber' : 'text-zinc-500'}`}>{sifirSayisi}</div>
+                <div className="text-[11px] text-zinc-500">Sıfır / Negatif Stok</div>
+              </div>
+            </div>
+            <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-border">
+                <h3 className="text-sm font-semibold">Malzeme Stok Durumu</h3>
+                <span className="flex-1" />
+                <button
+                  onClick={() => setStokKritikOnly(v => !v)}
+                  className={`px-2.5 py-1 rounded text-xs border transition-colors ${stokKritikOnly ? 'bg-red/20 border-red/40 text-red' : 'bg-bg-1 border-border text-zinc-400 hover:text-white'}`}
+                >
+                  {stokKritikOnly ? '⚠ Sadece Kritik' : 'Tümü'}
+                </button>
+                <span className="text-[11px] text-zinc-500">{gosterilen.length} malzeme</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-zinc-500 bg-bg-1/50">
+                      <th className="text-left px-3 py-2">Malzeme Kodu</th>
+                      <th className="text-left px-3 py-2">Malzeme Adı</th>
+                      <th className="text-center px-3 py-2">Birim</th>
+                      <th className="text-right px-3 py-2">Net Stok</th>
+                      <th className="text-right px-3 py-2">Min Stok</th>
+                      <th className="text-center px-3 py-2">Durum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gosterilen.length === 0 && (
+                      <tr><td colSpan={6} className="px-3 py-8 text-center text-zinc-600">
+                        {stokKritikOnly ? 'Min. stok altı malzeme yok' : 'Veri yok'}
+                      </td></tr>
+                    )}
+                    {gosterilen.map(r => (
+                      <tr key={r.kod} className={`border-b border-border/20 ${r.sifir ? 'bg-red/5' : r.eksik ? 'bg-amber/5' : ''}`}>
+                        <td className="px-3 py-1.5 font-mono text-accent">{r.kod}</td>
+                        <td className="px-3 py-1.5 text-zinc-300">{r.malad}</td>
+                        <td className="px-3 py-1.5 text-center text-zinc-500">{r.birim || '—'}</td>
+                        <td className={`px-3 py-1.5 text-right font-mono font-semibold ${r.sifir ? 'text-red' : r.eksik ? 'text-amber' : 'text-green'}`}>
+                          {r.netStok}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono text-zinc-500">
+                          {r.minStok > 0 ? r.minStok : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-center">
+                          {r.sifir ? (
+                            <span className="px-1.5 py-0.5 bg-red/20 text-red rounded text-[10px] font-semibold">STOK YOK</span>
+                          ) : r.eksik ? (
+                            <span className="px-1.5 py-0.5 bg-amber/20 text-amber rounded text-[10px] font-semibold">EKSİK</span>
+                          ) : r.minStok > 0 ? (
+                            <span className="px-1.5 py-0.5 bg-green/10 text-green rounded text-[10px]">OK</span>
+                          ) : (
+                            <span className="text-zinc-600 text-[10px]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )
       })()}
