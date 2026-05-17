@@ -35,6 +35,10 @@ export function Reports() {
   // Detaylı Rapor filtreleri
   const [dBaslangic, setDBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
   const [dBitis, setDBitis] = useState(today())
+
+  // Operatör Performans filtreleri
+  const [oprBaslangic, setOprBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
+  const [oprBitis, setOprBitis] = useState(today())
   const [dOperator, setDOperator] = useState('')
   const [dOperasyon, setDOperasyon] = useState('')
   const [dBolum, setDBolum] = useState('')
@@ -554,8 +558,7 @@ export function Reports() {
                       const sonuc = await topluFireTelafi(parcaFireLogs, workOrders, recipes, stokHareketler, materials)
                       setTelafiRunning(false)
                       if (sonuc.basarili > 0) toast.success(`${sonuc.basarili} fire için telafi açıldı (alt basamaklar dahil)`)
-                      if (sonuc.hata > 0) toast.error(`${sonuc.hata} hata — konsol kontrol et`)
-                      if (sonuc.hatalar.length) console.warn('Fire telafi hataları:', sonuc.hatalar)
+                      if (sonuc.hata > 0) toast.error(`${sonuc.hata} hata`)
                       loadAllStores()
                     }}
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-amber/10 border border-amber/25 text-amber rounded text-[11px] hover:bg-amber/20 disabled:opacity-40"
@@ -785,6 +788,7 @@ export function Reports() {
       {tab === 'operator' && (() => {
         const oprMap: Record<string, { ad: string; uretim: number; fire: number; logSayisi: number; gunler: Set<string> }> = {}
         logs.forEach(l => {
+          if (l.tarih < oprBaslangic || l.tarih > oprBitis) return
           l.operatorlar?.forEach((o: { id?: string; ad?: string }) => {
             const key = o.ad || 'Tanımsız'
             if (!oprMap[key]) oprMap[key] = { ad: key, uretim: 0, fire: 0, logSayisi: 0, gunler: new Set() }
@@ -795,20 +799,81 @@ export function Reports() {
           })
         })
         const oprData = Object.values(oprMap).map(o => ({
-          ...o, gunSayisi: o.gunler.size, gunlukOrt: o.gunler.size > 0 ? Math.round(o.uretim / o.gunler.size) : 0
+          ...o,
+          gunSayisi: o.gunler.size,
+          gunlukOrt: o.gunler.size > 0 ? Math.round(o.uretim / o.gunler.size) : 0,
+          fireOran: (o.uretim + o.fire) > 0 ? Math.round(o.fire / (o.uretim + o.fire) * 1000) / 10 : 0,
         })).sort((a, b) => b.uretim - a.uretim)
+
+        // En iyi / en kötü 3 — fire oranına göre, min 5 toplam üretim
+        const rankable = oprData.filter(o => (o.uretim + o.fire) >= 5)
+        const byFire = [...rankable].sort((a, b) => a.fireOran !== b.fireOran ? a.fireOran - b.fireOran : b.uretim - a.uretim)
+        const enIyi3 = new Set(byFire.slice(0, 3).map(o => o.ad))
+        const enKotu3 = new Set(byFire.slice(-3).map(o => o.ad))
+        const showBadge = rankable.length >= 4
+
         return (
           <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">Operatör Performansı ({oprData.length} operatör)</h3>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <h3 className="text-sm font-semibold">Operatör Performansı ({oprData.length} operatör)</h3>
+              <span className="flex-1" />
+              <label className="text-[10px] text-zinc-500">Başlangıç</label>
+              <input type="date" value={oprBaslangic} onChange={e => setOprBaslangic(e.target.value)}
+                className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
+              <label className="text-[10px] text-zinc-500">Bitiş</label>
+              <input type="date" value={oprBitis} onChange={e => setOprBitis(e.target.value)}
+                className="px-2 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300" />
+            </div>
             {oprData.length ? (
               <>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={oprData.slice(0, 15)} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis type="number" tick={{ fontSize: 10, fill: '#888' }} /><YAxis dataKey="ad" type="category" width={100} tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Bar dataKey="uretim" fill="#06b6d4" name="Üretim" radius={[0, 3, 3, 0]} /></BarChart>
+                <BarChart data={oprData.slice(0, 15)} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis type="number" tick={{ fontSize: 10, fill: '#888' }} />
+                  <YAxis dataKey="ad" type="category" width={100} tick={{ fontSize: 10, fill: '#888' }} />
+                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
+                  <Bar dataKey="uretim" fill="#06b6d4" name="Üretim" radius={[0, 3, 3, 0]} />
+                  <Bar dataKey="fire" fill="#ef4444" name="Fire" radius={[0, 3, 3, 0]} />
+                </BarChart>
               </ResponsiveContainer>
-              <table className="w-full text-xs mt-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operatör</th><th className="text-right px-4 py-2">Üretim</th><th className="text-right px-4 py-2">Fire</th><th className="text-right px-4 py-2">Gün</th><th className="text-right px-4 py-2">Günlük Ort.</th><th className="text-right px-4 py-2">Fire %</th></tr></thead>
-              <tbody>{oprData.map(o => (<tr key={o.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{o.ad}</td><td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td><td className="px-4 py-1.5 text-right font-mono text-red">{o.fire}</td><td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td><td className="px-4 py-1.5 text-right font-mono text-accent">{o.gunlukOrt}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{(o.uretim + o.fire) > 0 ? Math.round(o.fire / (o.uretim + o.fire) * 100) : 0}%</td></tr>))}</tbody></table>
+              <table className="w-full text-xs mt-3">
+                <thead>
+                  <tr className="border-b border-border text-zinc-500">
+                    <th className="text-left px-4 py-2">Operatör</th>
+                    <th className="text-right px-4 py-2">Üretim</th>
+                    <th className="text-right px-4 py-2">Fire</th>
+                    <th className="text-right px-4 py-2">Fire %</th>
+                    <th className="text-right px-4 py-2">Gün</th>
+                    <th className="text-right px-4 py-2">Günlük Ort.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {oprData.map(o => {
+                    const isEnIyi = showBadge && enIyi3.has(o.ad) && !enKotu3.has(o.ad)
+                    const isEnKotu = showBadge && enKotu3.has(o.ad) && !enIyi3.has(o.ad)
+                    return (
+                      <tr key={o.ad} className={`border-b border-border/30 ${isEnIyi ? 'bg-green/5' : isEnKotu ? 'bg-red/5' : ''}`}>
+                        <td className="px-4 py-1.5 text-zinc-300">
+                          {o.ad}
+                          {isEnIyi && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-green/20 text-green border border-green/30 font-semibold">En İyi</span>}
+                          {isEnKotu && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-red/20 text-red border border-red/30 font-semibold">En Kötü</span>}
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td>
+                        <td className="px-4 py-1.5 text-right font-mono text-red">{o.fire}</td>
+                        <td className="px-4 py-1.5 text-right font-mono">
+                          <span className={o.fireOran >= 5 ? 'text-red font-semibold' : o.fireOran >= 2 ? 'text-amber' : 'text-green'}>
+                            {o.fireOran.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td>
+                        <td className="px-4 py-1.5 text-right font-mono text-accent">{o.gunlukOrt}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
               </>
-            ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+            ) : <div className="p-8 text-center text-zinc-600">Seçilen dönemde veri yok</div>}
           </div>
         )
       })()}
