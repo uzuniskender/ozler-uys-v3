@@ -42,6 +42,8 @@ export function Warehouse() {
   const [cikisMalkod, setCikisMalkod] = useState<{ malkod: string; malad: string } | null>(null)
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [detayHam, setDetayHam] = useState<string | null>(null)  // v15.34 — açık bar detay modal
+  const [secilenKritik, setSecilenKritik] = useState<Set<string>>(new Set())
+  const [showKritik, setShowKritik] = useState(true)
 
   // Malzeme tipleri
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
@@ -90,12 +92,56 @@ export function Warehouse() {
     return days
   }, [stokHareketler])
 
+  const kritikStok = useMemo(() => {
+    return stokMap
+      .filter(s => {
+        const mat = materials.find(m => m.kod === s.malkod)
+        return mat?.minStok && s.miktar < mat.minStok
+          && mat.tip !== 'Mamul' && mat.tip !== 'mamul'
+          && mat.tip !== 'YariMamul' && mat.tip !== 'yari_mamul'
+      })
+      .map(s => {
+        const mat = materials.find(m => m.kod === s.malkod)!
+        return {
+          malkod: s.malkod,
+          malad: s.malad,
+          stok: Math.round(s.miktar),
+          minStok: mat.minStok,
+          eksik: Math.max(mat.minStok - Math.round(s.miktar), 1),
+          birim: mat.birim || 'Ad',
+        }
+      })
+      .sort((a, b) => (a.stok / a.minStok) - (b.stok / b.minStok))
+  }, [stokMap, materials])
+
   const filteredHareketler = useMemo(() => {
     const sorted = [...stokHareketler].sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
     if (!search) return sorted.slice(0, 200)
     const q = search.toLowerCase()
     return sorted.filter(h => (h.malkod + h.malad + h.aciklama).toLowerCase().includes(q)).slice(0, 200)
   }, [stokHareketler, search])
+
+  async function topluTedarikOlustur() {
+    const seciliList = kritikStok.filter(k => secilenKritik.has(k.malkod))
+    if (!seciliList.length) return
+    if (!await showConfirm(`${seciliList.length} malzeme için tedarik kaydı oluşturulsun mu?`)) return
+    const rows = seciliList.map(k => ({
+      id: uid(),
+      tarih: today(),
+      malkod: k.malkod,
+      malad: k.malad,
+      miktar: k.eksik,
+      birim: k.birim,
+      durum: 'bekliyor',
+      geldi: false,
+      not_: 'Toplu tedarik — kritik stok',
+    }))
+    const { error } = await supabase.from('uys_tedarikler').insert(rows)
+    if (error) { toast.error('Tedarik oluşturulamadı: ' + error.message); return }
+    toast.success(`${seciliList.length} tedarik kaydı oluşturuldu`)
+    setSecilenKritik(new Set())
+    navigate('/procurement')
+  }
 
   // #30: Stok Onarım — negatif stokları sıfırla
   async function stokOnar() {
@@ -228,6 +274,78 @@ export function Warehouse() {
           options={tipler}
           selected={tipFilter} onChange={setTipFilter} />
       </div>
+
+      {kritikStok.length > 0 && can('ted_add') && (
+        <div className="bg-bg-2 border border-amber/30 rounded-lg mb-4 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-amber/5 border-b border-amber/20">
+            <button
+              onClick={() => setShowKritik(v => !v)}
+              className="flex items-center gap-2 text-xs text-amber font-semibold select-none"
+            >
+              <span className={`transition-transform text-[10px] ${showKritik ? 'rotate-90' : ''}`}>▶</span>
+              Kritik Stok — {kritikStok.length} malzeme
+            </button>
+            {showKritik && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSecilenKritik(new Set(kritikStok.map(k => k.malkod)))}
+                  className="text-[11px] text-zinc-400 hover:text-white"
+                >Tümünü Seç</button>
+                <span className="text-zinc-600">·</span>
+                <button
+                  onClick={() => setSecilenKritik(new Set())}
+                  className="text-[11px] text-zinc-400 hover:text-white"
+                >Temizle</button>
+                <button
+                  onClick={topluTedarikOlustur}
+                  disabled={secilenKritik.size === 0}
+                  className="flex items-center gap-1 px-3 py-1 bg-accent hover:bg-accent-hover disabled:bg-bg-3 disabled:text-zinc-600 text-white rounded text-[11px] font-semibold"
+                >
+                  <Plus size={11} /> Toplu Tedarik Oluştur ({secilenKritik.size})
+                </button>
+              </div>
+            )}
+          </div>
+          {showKritik && (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/50 text-zinc-500">
+                  <th className="w-8 px-3 py-1.5"></th>
+                  <th className="text-left px-3 py-1.5">Kod</th>
+                  <th className="text-left px-3 py-1.5">Malzeme</th>
+                  <th className="text-right px-3 py-1.5">Stok</th>
+                  <th className="text-right px-3 py-1.5">Min</th>
+                  <th className="text-right px-3 py-1.5 text-amber">Eksik</th>
+                  <th className="text-left px-3 py-1.5">Birim</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kritikStok.map(k => (
+                  <tr key={k.malkod} className={`border-b border-border/30 hover:bg-bg-3/20 ${secilenKritik.has(k.malkod) ? 'bg-accent/5' : ''}`}>
+                    <td className="px-3 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={secilenKritik.has(k.malkod)}
+                        onChange={() => {
+                          const n = new Set(secilenKritik)
+                          n.has(k.malkod) ? n.delete(k.malkod) : n.add(k.malkod)
+                          setSecilenKritik(n)
+                        }}
+                      />
+                    </td>
+                    <td className="px-3 py-1.5 font-mono text-accent text-[11px]">{k.malkod}</td>
+                    <td className="px-3 py-1.5 text-zinc-300">{k.malad}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono font-semibold ${k.stok < 0 ? 'text-red' : 'text-amber'}`}>{k.stok}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-zinc-500">{k.minStok}</td>
+                    <td className="px-3 py-1.5 text-right font-mono font-semibold text-amber">+{k.eksik}</td>
+                    <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{k.birim}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
         {tab === 'stok' && (
