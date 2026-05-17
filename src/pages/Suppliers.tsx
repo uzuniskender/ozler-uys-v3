@@ -5,15 +5,18 @@ import { useWarehouseStore } from '@/store'
 import { deleteTedarikci, createTedarikci, updateTedarikci } from '@/services/tedarikciService'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
+import { today } from '@/lib/utils'
+import { Search, Plus, Pencil, Trash2, ChevronRight, X, Package, Clock, TrendingDown } from 'lucide-react'
 
 export function Suppliers() {
   const tedarikciler = useWarehouseStore(s => s.tedarikciler)
+  const tedarikler = useWarehouseStore(s => s.tedarikler)
   const loadOwn = useWarehouseStore(s => s.loadOwn)
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<typeof tedarikciler[0] | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (!search) return tedarikciler
@@ -21,10 +24,43 @@ export function Suppliers() {
     return tedarikciler.filter(t => (t.kod + t.ad + t.email).toLowerCase().includes(q))
   }, [tedarikciler, search])
 
+  // Per-supplier istatistik hesabı
+  const istatistikler = useMemo(() => {
+    const map: Record<string, { toplam: number; geciken: number; teslimGunleri: number[] }> = {}
+    for (const t of tedarikler) {
+      if (!t.tedarikcId) continue
+      if (!map[t.tedarikcId]) map[t.tedarikcId] = { toplam: 0, geciken: 0, teslimGunleri: [] }
+      const s = map[t.tedarikcId]
+      s.toplam++
+      if (!t.geldi && t.teslimTarihi && t.teslimTarihi < today()) s.geciken++
+      // Ort. teslim: sipariş tarihinden planlı teslim tarihine kadar gün (geldi olanlar için)
+      if (t.geldi && t.tarih && t.teslimTarihi) {
+        const gun = Math.round((new Date(t.teslimTarihi).getTime() - new Date(t.tarih).getTime()) / 86400000)
+        if (gun >= 0) s.teslimGunleri.push(gun)
+      }
+    }
+    return map
+  }, [tedarikler])
+
+  // Seçili tedarikçinin son 5 tedariki
+  const selectedTed = selectedId ? tedarikciler.find(t => t.id === selectedId) : null
+  const sonTedarikler = useMemo(() => {
+    if (!selectedId) return []
+    return tedarikler
+      .filter(t => t.tedarikcId === selectedId)
+      .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
+      .slice(0, 5)
+  }, [tedarikler, selectedId])
+
+  function toggleSelected(id: string) {
+    setSelectedId(prev => prev === id ? null : id)
+  }
+
   async function del(id: string) {
     if (!await showConfirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')) return
     try {
       await deleteTedarikci(id)
+      if (selectedId === id) setSelectedId(null)
       loadOwn(); toast.success('Tedarikçi silindi')
     } catch { toast.error('Silinemedi') }
   }
@@ -53,28 +89,149 @@ export function Suppliers() {
       </div>
       <div className="relative max-w-xs mb-4"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
-      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
-        {filtered.length ? (
-          <table className="w-full text-xs">
-            <thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Firma Adı</th><th className="text-left px-4 py-2.5">Telefon</th><th className="text-left px-4 py-2.5">Email</th><th className="text-left px-4 py-2.5">Not</th><th className="px-4 py-2.5"></th></tr></thead>
-            <tbody>
-              {filtered.map(t => (
-                <tr key={t.id} className="border-b border-border/30 hover:bg-bg-3/30">
-                  <td className="px-4 py-2 font-mono text-accent">{t.kod}</td>
-                  <td className="px-4 py-2 text-zinc-300">{t.ad}</td>
-                  <td className="px-4 py-2 text-zinc-500">{t.tel || '—'}</td>
-                  <td className="px-4 py-2 text-zinc-500">{t.email || '—'}</td>
-                  <td className="px-4 py-2 text-zinc-600 max-w-[150px] truncate">{t.not || '—'}</td>
-                  <td className="px-4 py-2 text-right">
-                    {can('tedci_edit') && <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>}
-                    {can('tedci_delete') && <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz tedarikçi yok</div>}
+
+      <div className="flex gap-4 items-start">
+        {/* Ana tablo */}
+        <div className="flex-1 min-w-0 bg-bg-2 border border-border rounded-lg overflow-hidden">
+          {filtered.length ? (
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-border text-zinc-500">
+                <th className="text-left px-4 py-2.5">Kod</th>
+                <th className="text-left px-4 py-2.5">Firma Adı</th>
+                <th className="text-right px-4 py-2.5">Toplam</th>
+                <th className="text-right px-4 py-2.5">Ort. Teslim</th>
+                <th className="text-right px-4 py-2.5">Gecikme</th>
+                <th className="text-left px-4 py-2.5">Telefon</th>
+                <th className="px-4 py-2.5"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map(t => {
+                  const ist = istatistikler[t.id]
+                  const toplam = ist?.toplam ?? 0
+                  const geciken = ist?.geciken ?? 0
+                  const gunler = ist?.teslimGunleri ?? []
+                  const ortGun = gunler.length ? Math.round(gunler.reduce((a, b) => a + b, 0) / gunler.length) : null
+                  const gecikmeOrani = toplam > 0 ? Math.round(geciken / toplam * 100) : 0
+                  const isSelected = selectedId === t.id
+                  return (
+                    <tr key={t.id}
+                      onClick={() => toggleSelected(t.id)}
+                      className={`border-b border-border/30 cursor-pointer transition-colors ${isSelected ? 'bg-accent/8 border-l-2 border-l-accent' : 'hover:bg-bg-3/30'}`}>
+                      <td className="px-4 py-2.5 font-mono text-accent">{t.kod}</td>
+                      <td className="px-4 py-2.5 text-zinc-300 font-medium">{t.ad}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {toplam > 0
+                          ? <span className="font-mono text-zinc-300">{toplam}</span>
+                          : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {ortGun !== null
+                          ? <span className="font-mono text-zinc-400">{ortGun} gün</span>
+                          : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {geciken > 0
+                          ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-red/10 text-red font-semibold">{gecikmeOrani}%</span>
+                          : toplam > 0
+                            ? <span className="text-zinc-600 text-[10px]">0%</span>
+                            : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-500">{t.tel || '—'}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex gap-1 justify-end items-center">
+                          {can('tedci_edit') && <button onClick={e => { e.stopPropagation(); setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent"><Pencil size={12} /></button>}
+                          {can('tedci_delete') && <button onClick={e => { e.stopPropagation(); del(t.id) }} className="p-1 text-zinc-500 hover:text-red"><Trash2 size={12} /></button>}
+                          <ChevronRight size={12} className={`text-zinc-600 transition-transform ${isSelected ? 'rotate-90 text-accent' : ''}`} />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          ) : <div className="p-8 text-center text-zinc-600 text-sm">Henüz tedarikçi yok</div>}
+        </div>
+
+        {/* Detay paneli */}
+        {selectedId && selectedTed && (() => {
+          const ist = istatistikler[selectedId]
+          const toplam = ist?.toplam ?? 0
+          const geciken = ist?.geciken ?? 0
+          const gunler = ist?.teslimGunleri ?? []
+          const ortGun = gunler.length ? Math.round(gunler.reduce((a, b) => a + b, 0) / gunler.length) : null
+          const gecikmeOrani = toplam > 0 ? Math.round(geciken / toplam * 100) : 0
+          return (
+            <div className="w-72 shrink-0 bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-bg-3/30">
+                <div>
+                  <div className="font-semibold text-sm text-zinc-200">{selectedTed.ad}</div>
+                  <div className="text-[10px] text-zinc-600 font-mono">{selectedTed.kod}</div>
+                </div>
+                <button onClick={() => setSelectedId(null)} className="p-1 text-zinc-500 hover:text-zinc-200"><X size={14} /></button>
+              </div>
+
+              {/* İstatistik kartları */}
+              <div className="grid grid-cols-3 divide-x divide-border border-b border-border">
+                <div className="px-3 py-3 text-center">
+                  <Package size={13} className="text-zinc-500 mx-auto mb-1" />
+                  <div className="text-base font-semibold font-mono text-zinc-200">{toplam}</div>
+                  <div className="text-[9px] text-zinc-600 uppercase tracking-wide">Toplam</div>
+                </div>
+                <div className="px-3 py-3 text-center">
+                  <Clock size={13} className="text-zinc-500 mx-auto mb-1" />
+                  <div className="text-base font-semibold font-mono text-zinc-200">{ortGun !== null ? `${ortGun}g` : '—'}</div>
+                  <div className="text-[9px] text-zinc-600 uppercase tracking-wide">Ort. Teslim</div>
+                </div>
+                <div className="px-3 py-3 text-center">
+                  <TrendingDown size={13} className={`mx-auto mb-1 ${geciken > 0 ? 'text-red' : 'text-zinc-500'}`} />
+                  <div className={`text-base font-semibold font-mono ${geciken > 0 ? 'text-red' : 'text-zinc-200'}`}>{gecikmeOrani}%</div>
+                  <div className="text-[9px] text-zinc-600 uppercase tracking-wide">Gecikme</div>
+                </div>
+              </div>
+
+              {/* İletişim bilgisi */}
+              {(selectedTed.tel || selectedTed.email) && (
+                <div className="px-4 py-2.5 border-b border-border space-y-1">
+                  {selectedTed.tel && <div className="text-[11px] text-zinc-400">{selectedTed.tel}</div>}
+                  {selectedTed.email && <div className="text-[11px] text-zinc-400">{selectedTed.email}</div>}
+                  {selectedTed.adres && <div className="text-[10px] text-zinc-600">{selectedTed.adres}</div>}
+                </div>
+              )}
+
+              {/* Son 5 tedarik */}
+              <div className="px-4 py-2.5">
+                <div className="text-[10px] text-zinc-600 uppercase tracking-wide font-semibold mb-2">Son 5 Tedarik</div>
+                {sonTedarikler.length ? (
+                  <div className="space-y-2">
+                    {sonTedarikler.map(t => {
+                      const gecikti = !t.geldi && t.teslimTarihi && t.teslimTarihi < today()
+                      return (
+                        <div key={t.id} className="flex items-start gap-2 py-1.5 border-b border-border/30 last:border-0">
+                          <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${t.geldi ? 'bg-green' : gecikti ? 'bg-red' : 'bg-amber'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-mono text-[10px] text-accent truncate">{t.malkod}</div>
+                            <div className="text-[10px] text-zinc-500 truncate">{t.malad}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[9px] text-zinc-700 font-mono">{t.tarih}</span>
+                              <span className="text-[9px] font-mono text-zinc-500">{t.miktar} {t.birim}</span>
+                            </div>
+                          </div>
+                          <span className={`text-[9px] shrink-0 px-1 py-0.5 rounded ${t.geldi ? 'bg-green/10 text-green' : gecikti ? 'bg-red/10 text-red' : 'bg-amber/10 text-amber'}`}>
+                            {t.geldi ? 'Geldi' : gecikti ? 'Gecikti' : 'Bekliyor'}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-zinc-600 py-3 text-center">Tedarik kaydı yok</div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
       </div>
+
       {showForm && <SupplierFormModal initial={editItem} onClose={() => { setShowForm(false); setEditItem(null) }} onSave={save} />}
     </div>
   )
