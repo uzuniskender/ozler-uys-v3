@@ -682,6 +682,25 @@ function WODetailModal({ wo, onClose, logs, orders, operators, recipes, cuttingP
                 <td className="px-3 py-1.5 text-zinc-500 text-[11px]">{l.not || ''}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap">
                   <button onClick={() => editLog(l)} className="text-zinc-600 hover:text-amber text-[10px] mr-1">Düz.</button>
+                  {/* İstek #18 — Fire → sipariş dışı telafi İE */}
+                  {l.fire > 0 && can('wo_add') && (
+                    <button
+                      onClick={async () => {
+                        if (!await showConfirm(
+                          `${wo.ieNo}: ${l.fire} adet fire için telafi İE açılacak.\nYeni İE: ${wo.ieNo}-FT (Sipariş Dışı · Bağımsız)\nDevam?`
+                        )) return
+                        const r = await wos.createFireTelafisiIE({ wo, fireQty: l.fire, logId: l.id })
+                        if (r.ok) {
+                          toast.success(`Fire telafi İE oluşturuldu: ${r.ieNo}`)
+                          loadAllStores()
+                        } else {
+                          toast.error('İE oluşturulamadı: ' + r.error)
+                        }
+                      }}
+                      className="text-zinc-600 hover:text-orange-400 text-[10px] mr-1"
+                      title={`${l.fire} adet fire için telafi İE aç (${wo.ieNo}-FT)`}
+                    >🔁</button>
+                  )}
                   <button onClick={() => deleteLog(l)} className="text-zinc-600 hover:text-red text-[10px]">×</button>
                 </td>
               </tr>)

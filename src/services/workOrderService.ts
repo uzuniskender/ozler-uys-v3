@@ -208,3 +208,63 @@ export async function deleteLog(logId: string): Promise<void> {
   await supabase.from('uys_stok_hareketler').delete().eq('log_id', logId)
   await supabase.from('uys_fire_logs').delete().eq('log_id', logId)
 }
+
+// ─── createFireTelafisiIE ─────────────────────────────────────────────────────
+// İstek #18 — Fire logunu "Sipariş Dışı / Bağımsız" telafi İE'sine dönüştürür.
+// Yeni İE: orijinal ieNo-FT{sira}, bagimsiz=true, siparisDisi=true, hedef=fireQty
+export async function createFireTelafisiIE(params: {
+  wo: WorkOrder
+  fireQty: number
+  logId: string
+}): Promise<{ ok: boolean; ieNo?: string; error?: string }> {
+  const { wo, fireQty, logId } = params
+
+  const _schema = z.number().int().min(1, 'Fire miktarı en az 1 olmalı').max(99999)
+  const pv = _schema.safeParse(fireQty)
+  if (!pv.success) return { ok: false, error: pv.error.issues[0]?.message }
+
+  // Mevcut FT İE sayısını bul → sıra belirle (idempotency için)
+  const { data: mevcut } = await supabase
+    .from('uys_work_orders')
+    .select('ie_no')
+    .like('ie_no', `${wo.ieNo}-FT%`)
+  const sira = (mevcut?.length || 0) + 1
+  const yeniIeNo = `${wo.ieNo}-FT${sira}`
+
+  // En yüksek sira'yı bul
+  const { data: maxSiraData } = await supabase
+    .from('uys_work_orders')
+    .select('sira')
+    .order('sira', { ascending: false })
+    .limit(1)
+  const yeniSira = ((maxSiraData?.[0]?.sira as number) || 0) + 1
+
+  const { error } = await supabase.from('uys_work_orders').insert({
+    id: uid(),
+    order_id: null,
+    rc_id: wo.rcId || null,
+    sira: yeniSira,
+    kirno: '1',
+    op_id: wo.opId, op_kod: wo.opKod, op_ad: wo.opAd,
+    ist_id: wo.istId, ist_kod: wo.istKod, ist_ad: wo.istAd,
+    malkod: wo.malkod, malad: wo.malad,
+    hedef: fireQty,
+    mpm: wo.mpm || 1,
+    hm: wo.hm || [],
+    ie_no: yeniIeNo,
+    wh_alloc: 0,
+    hazirlik_sure: wo.hazirlikSure || 0,
+    islem_sure: wo.islemSure || 0,
+    durum: 'bekliyor',
+    bagimsiz: true,
+    siparis_disi: true,
+    mamul_kod: wo.mamulKod || wo.malkod,
+    mamul_ad: wo.mamulAd || wo.malad,
+    mamul_auto: false,
+    not_: `Fire Telafisi — ${wo.ieNo} (log: ${logId.slice(0, 8)}, ${fireQty} adet)`,
+    olusturma: today(),
+  })
+
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, ieNo: yeniIeNo }
+}
