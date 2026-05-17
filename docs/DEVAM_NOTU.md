@@ -643,3 +643,18 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 - `d7817f7` — Procurement tedarikci bazlı gruplama / Liste+Tedarikçi toggle v17.08
 - `50df278` — src/lib dead code temizliği (kullanılmayan export + constants.ts silindi) v17.09
 - `a70af58` — Dashboard haftalık üretim trendi mini widget v17.09
+
+---
+
+### 17 Mayıs 2026 — Gece Oturumu (v17.08 devamı)
+
+**Dashboard "Bugün İzinli Operatörler" widget** (commit `5a0d24f`)
+- `bugunIzinliGruplanmis` useMemo: bugün onaylı (`onaylandi`) izinleri bölüm bazında gruplar, alfabetik sıralar
+- KPI grid `lg:grid-cols-7` → `lg:grid-cols-8`; 8. KPI kartı: 🏖 Bugün İzinli — izinli sayısı, `N bölüm` / `tam kadro` alt satırı, `/operators` link
+- "Bugün İzinli / Raporlu" panel → "Bugün İzinli Operatörler": flat liste → bölüm başlıklı gruplu layout (bölüm chip + kişi sayısı + tür badge + saat aralığı)
+- Commit anomalisi: Dashboard.tsx değişiklikleri bu makinede `git add` + `git commit` beklerken ikinci makine aynı diff'i `5a0d24f` içinde push etti; pre-commit hook pull yaptı → local diff temizlendi
+
+**İkinci makine commit'leri (aynı gece, origin/main'e geldi)**
+- `5a4d8bc` — Operations istatistik kolonları + detay paneli v17.08
+- `5a0d24f` — Reports OEE tab: haftalık trend + istasyon bar chart + %85 hedef çizgisi v17.10
+- `31b5c02` — Stations kapasite istatistikleri + detay paneli v17.12
