@@ -531,3 +531,16 @@ Etkilenen dosyalar: `productionService/autoChain.ts`, `productionService/cutting
 - Tek takip dosyası: docs/DEVAM_NOTU.md — her oturum başında Claude Supabase den okur
 - DevSync aktif: Claude repo dosyalarını Supabase den okur (uys_dev_files tablosu)
 - Supabase MCP bağlantısı: geliştirme oturumu başında aç, bitince kapat
+
+---
+
+### 17 Mayıs 2026 — Paralel Oturum (7 Terminal)
+
+- v17.00 — Servis katmani Zod dogrulama: tedarikciService, orderCrud, workOrderService, productionEntryService, sevkService
+- v16.88 — ALI EKBER AYYILDIZ (op_090) Supabase Auth baglandı — 89/89 operator tam
+- RLS PROD: 4 tablo zaten uygulanmis (v16.86+v16.87)
+- T5 MRP#19 stoktan ver: Orders.tsx'de zaten tamamlanmis
+- T6 src/features/: zaten silinmis
+
+#### Bekleyen
+- Normalize veri gecisi (kapsam belirsiz — ertelendi)
