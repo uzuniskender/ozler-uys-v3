@@ -2,12 +2,11 @@ import { useAuth } from '@/hooks/useAuth'
 import { useState, useRef, useMemo } from 'react'
 import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
-import { autoChainSubBoms } from '@/services/productionService/autoChainSubBoms'
 import { uid } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
 import type { BomTree, Recipe } from '@/types'
-import { Plus, Trash2, Pencil, Download, Upload, Search, Copy } from 'lucide-react'
+import { Plus, Trash2, Pencil, Download, Upload, Search, Copy, Network } from 'lucide-react'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { MaterialSearchModal, type MaterialSearchFilter } from '@/components/MaterialSearchModal'
 import { RecipeEditor } from './Recipes'
@@ -48,9 +47,9 @@ export function BomTrees() {
   function changeDensity(d: 'compact'|'normal'|'comfortable') {
     setDensity(d); localStorage.setItem('uys_table_density', d)
   }
-  const rowStyle = { paddingTop: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px', paddingBottom: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px' }
   const [sortCol, setSortCol] = useState<'mamulKod' | 'ad' | 'bilesen'>('mamulKod')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [whereUsed, setWhereUsed] = useState<{ malkod: string; malad: string } | null>(null)
 
   function toggleSort(col: typeof sortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -355,6 +354,7 @@ export function BomTrees() {
                   <button onClick={() => createRecipeFromBom(bt)} className={`px-2 py-0.5 rounded text-[10px] mr-1 ${receteKodSet.has(bt.mamulKod) ? 'bg-green/10 text-green hover:bg-green/20' : 'bg-red/10 text-red hover:bg-red/20 font-semibold'}`}>
                     {receteKodSet.has(bt.mamulKod) ? '📋 Reçete Güncelle' : '⚠ Reçete Oluştur'}
                   </button>
+                  <button onClick={() => setWhereUsed({ malkod: bt.mamulKod, malad: bt.ad || bt.mamulAd || bt.mamulKod })} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px] hover:bg-purple-500/20 mr-1" title="Hangi reçete/ürün ağaçlarında kullanıldığını göster"><Network size={10} className="inline mr-0.5" />Kullanıldığı Yerler</button>
                   {can('bom_add') && <button onClick={() => copyBom(bt)} className="px-2 py-0.5 bg-amber/10 text-amber rounded text-[10px] hover:bg-amber/20 mr-1"><Copy size={10} className="inline" /> Kopyala</button>}
                   {can('bom_edit') && <button onClick={() => setSelected(bt)} className="px-2 py-0.5 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-white mr-1"><Pencil size={10} className="inline" /> Düzenle</button>}
                   {can('bom_delete') && <button onClick={() => deleteBom(bt.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>}
@@ -367,20 +367,131 @@ export function BomTrees() {
       {selected && <BomEditor bom={selected} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); loadAllStores(); toast.success('Ürün ağacı güncellendi') }} />}
       {showNew && <NewBomModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadAllStores(); toast.success('Ürün ağacı oluşturuldu') }} />}
       {editingRecipe && <RecipeEditor recipe={editingRecipe} operations={operations} onClose={() => setEditingRecipe(null)} onSaved={() => { setEditingRecipe(null); loadAllStores(); toast.success('Reçete güncellendi') }} />}
+      {whereUsed && <WhereUsedModal malkod={whereUsed.malkod} malad={whereUsed.malad} recipes={recipes} bomTrees={bomTrees} onClose={() => setWhereUsed(null)} />}
+    </div>
+  )
+}
+
+function WhereUsedModal({ malkod, malad, recipes, bomTrees, onClose }: {
+  malkod: string; malad: string
+  recipes: Recipe[]; bomTrees: BomTree[]
+  onClose: () => void
+}) {
+  // Reçetelerde komponent olarak kullanılan satırlar (kirno==='1' kök satır değil)
+  const usedInRecipes = useMemo(() =>
+    recipes.filter(r => (r.satirlar || []).some(s => s.malkod === malkod && s.kirno !== '1')),
+    [recipes, malkod]
+  )
+  // Ürün ağaçlarında komponent olarak kullanılan (kendi kök satırı hariç)
+  const usedInBoms = useMemo(() =>
+    bomTrees.filter(bt => bt.mamulKod !== malkod && (bt.rows || []).some(r => r.malkod === malkod && r.kirno !== '1')),
+    [bomTrees, malkod]
+  )
+  const toplamKullanim = usedInRecipes.length + usedInBoms.length
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Başlık */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-border">
+          <div>
+            <div className="flex items-center gap-2">
+              <Network size={14} className="text-purple-400" />
+              <h2 className="text-sm font-semibold">Kullanıldığı Yerler</h2>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 font-mono border border-purple-500/20">{toplamKullanim}</span>
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5 font-mono">{malkod}{malad && malad !== malkod ? ` — ${malad}` : ''}</div>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-lg leading-none mt-0.5">✕</button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+          {toplamKullanim === 0 && (
+            <div className="text-center py-8 text-zinc-500 text-sm">
+              <Network size={32} className="mx-auto mb-2 text-zinc-700" />
+              Bu mamul kodu hiçbir reçete veya ürün ağacında bileşen olarak kullanılmıyor.
+            </div>
+          )}
+
+          {/* Reçeteler */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Reçeteler</span>
+              <span className="text-[10px] font-mono text-zinc-500">{usedInRecipes.length}</span>
+            </div>
+            {usedInRecipes.length === 0 ? (
+              <div className="text-[11px] text-zinc-600 py-1">Hiçbir reçetede kullanılmıyor</div>
+            ) : (
+              <div className="space-y-1.5">
+                {usedInRecipes.map(r => {
+                  const satir = (r.satirlar || []).find(s => s.malkod === malkod && s.kirno !== '1')
+                  return (
+                    <div key={r.id} className="flex items-center gap-2.5 px-3 py-2 bg-bg-2 rounded-lg border border-border/60">
+                      <span className="font-mono text-accent text-[11px] shrink-0">{r.mamulKod}</span>
+                      <span className="text-zinc-300 text-[11px] flex-1 truncate">{r.ad || r.mamulAd}</span>
+                      {satir && (
+                        <>
+                          <span className="text-[10px] font-mono text-zinc-400 shrink-0">{satir.miktar} {satir.birim}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-bg-3 text-zinc-500 rounded font-mono shrink-0">k{satir.kirno}</span>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Ürün Ağaçları */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Ürün Ağaçları</span>
+              <span className="text-[10px] font-mono text-zinc-500">{usedInBoms.length}</span>
+            </div>
+            {usedInBoms.length === 0 ? (
+              <div className="text-[11px] text-zinc-600 py-1">Hiçbir ürün ağacında kullanılmıyor</div>
+            ) : (
+              <div className="space-y-1.5">
+                {usedInBoms.map(bt => {
+                  const bilesenler = (bt.rows || []).filter(r => r.malkod === malkod && r.kirno !== '1')
+                  return (
+                    <div key={bt.id} className="flex items-center gap-2.5 px-3 py-2 bg-bg-2 rounded-lg border border-border/60">
+                      <span className="font-mono text-accent text-[11px] shrink-0">{bt.mamulKod}</span>
+                      <span className="text-zinc-300 text-[11px] flex-1 truncate">{bt.ad || bt.mamulAd}</span>
+                      {bilesenler[0] && (
+                        <>
+                          <span className="text-[10px] font-mono text-zinc-400 shrink-0">{bilesenler[0].miktar} {bilesenler[0].birim}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-bg-3 text-zinc-500 rounded font-mono shrink-0">k{bilesenler[0].kirno}</span>
+                        </>
+                      )}
+                      {bilesenler.length > 1 && (
+                        <span className="text-[9px] text-zinc-600">+{bilesenler.length - 1}</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-border">
+          <button onClick={onClose} className="w-full px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">Kapat</button>
+        </div>
+      </div>
     </div>
   )
 }
 
 function NewBomModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const materials = useWarehouseStore(s => s.materials)
-  const { can } = useAuth()
   const [mamulKod, setMamulKod] = useState('')
   const [ad, setAd] = useState('')
   const [showSearch, setShowSearch] = useState(false)
 
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
 
-  function onMamulKodChange(kod: string, label: string) {
+  function onMamulKodChange(kod: string, _label: string) {
     setMamulKod(kod)
     const mat = materials.find(m => m.kod === kod)
     if (mat) setAd(mat.ad)
@@ -438,7 +549,6 @@ function BomEditor({ bom, onClose, onSaved }: { bom: BomTree; onClose: () => voi
   const materials = useWarehouseStore(s => s.materials)
   const recipes = useProductionStore(s => s.recipes)
   const storeLoadAll = loadAllStores
-  const { can } = useAuth()
   const [dimFixList, setDimFixList] = useState<{ kod: string; ad: string; id: string; boy: number; en: number; kalinlik: number; uzunluk: number; cap: number; hmTipi: string }[] | null>(null)
   const matOptions = materials.map(m => ({ value: m.kod, label: `${m.kod} — ${m.ad}`, sub: m.tip }))
   const [searchModalIdx, setSearchModalIdx] = useState<number | null>(null)
