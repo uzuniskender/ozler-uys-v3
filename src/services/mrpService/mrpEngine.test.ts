@@ -6,8 +6,9 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { explodeBOM, aggregateBOM, netting } from '@/services/mrpService/mrpEngine'
+import { explodeBOM, aggregateBOM, netting, hesaplaMRPv2 } from '@/services/mrpService/mrpEngine'
 import type { Recipe, StokHareket, Tedarik } from '@/types'
+import type { HesaplaMRPParams } from '@/services/mrpService/mrp'
 
 // ─── Yardımcı factory'ler ─────────────────────────────────────────
 
@@ -333,5 +334,152 @@ describe('netting', () => {
     // Gelen tedarik sayılmamalı, tüm ihtiyaç net olarak kalmalı
     expect(result[0].acikTedarik).toBe(0)
     expect(result[0].net).toBe(20)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════
+// hesaplaMRPv2 — HesaplaMRPParams wrapper
+// ═══════════════════════════════════════════════════════════════════
+
+function makeOrder(
+  id: string,
+  mamulKod: string,
+  adet: number,
+  termin = '2026-06-01',
+): HesaplaMRPParams['orders'][0] {
+  return { id, mamulKod, adet, receteId: '', durum: 'aktif', termin }
+}
+
+const BASE_PARAMS: Omit<HesaplaMRPParams, 'orders' | 'ordIds'> = {
+  workOrders: [],
+  recipes: [],
+  stokHareketler: [],
+  tedarikler: [],
+  cuttingPlans: [],
+  materials: [],
+}
+
+describe('hesaplaMRPv2', () => {
+  it('Reçetesi olmayan sipariş → boş MRPRow[] döner', () => {
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: null,
+      orders: [makeOrder('ORD-1', 'MAMUL-YOK', 5)],
+    })
+    expect(result).toEqual([])
+  })
+
+  it('Tek sipariş, stok yok → MRPRow net>0, durum=eksik', () => {
+    const rc = makeRecipe('MAMUL-V2', [satir('HM-V2-001', 2)])
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: null,
+      orders: [makeOrder('ORD-2', 'MAMUL-V2', 3, '2026-06-01')],
+      recipes: [rc],
+    })
+    // 2 × 3 = 6 brüt, stok yok → net=6
+    expect(result).toHaveLength(1)
+    expect(result[0].malkod).toBe('HM-V2-001')
+    expect(result[0].brut).toBe(6)
+    expect(result[0].net).toBe(6)
+    expect(result[0].durum).toBe('eksik')
+    expect(result[0].rezerve).toBe(0)
+  })
+
+  it('Tek sipariş, stok yeterli → net=0, durum=yeterli', () => {
+    const rc = makeRecipe('MAMUL-V3', [satir('HM-V3-001', 4)])
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: null,
+      orders: [makeOrder('ORD-3', 'MAMUL-V3', 2, '2026-06-01')],
+      recipes: [rc],
+      stokHareketler: [giris('HM-V3-001', 10)],
+    })
+    // 4 × 2 = 8 brüt, stok=10 → net=0
+    expect(result[0].net).toBe(0)
+    expect(result[0].durum).toBe('yeterli')
+    expect(result[0].stok).toBe(8)
+  })
+
+  it('ordIds filtresi: sadece belirtilen sipariş hesaplanır', () => {
+    const rc1 = makeRecipe('MAMUL-F1', [satir('HM-F1', 3)])
+    const rc2 = makeRecipe('MAMUL-F2', [satir('HM-F2', 5)])
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: ['ORD-F1'],  // sadece F1
+      orders: [
+        makeOrder('ORD-F1', 'MAMUL-F1', 2, '2026-06-01'),
+        makeOrder('ORD-F2', 'MAMUL-F2', 2, '2026-06-01'),
+      ],
+      recipes: [rc1, rc2],
+    })
+    // HM-F2 dahil edilmemeli
+    expect(result.some(r => r.malkod === 'HM-F2')).toBe(false)
+    expect(result.some(r => r.malkod === 'HM-F1')).toBe(true)
+    expect(result.find(r => r.malkod === 'HM-F1')?.brut).toBe(6) // 3 × 2
+  })
+
+  it('ordIds=null → tüm siparişler hesaplanır', () => {
+    const rc1 = makeRecipe('MAMUL-A1', [satir('HM-A1', 2)])
+    const rc2 = makeRecipe('MAMUL-A2', [satir('HM-A2', 3)])
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: null,
+      orders: [
+        makeOrder('ORD-A1', 'MAMUL-A1', 1, '2026-06-01'),
+        makeOrder('ORD-A2', 'MAMUL-A2', 1, '2026-06-01'),
+      ],
+      recipes: [rc1, rc2],
+    })
+    expect(result.some(r => r.malkod === 'HM-A1')).toBe(true)
+    expect(result.some(r => r.malkod === 'HM-A2')).toBe(true)
+  })
+
+  it('Çok ürünlü sipariş (urunler): her ürün ayrı BOM olarak patlar', () => {
+    const rc1 = makeRecipe('MAMUL-U1', [satir('HM-U1', 2)])
+    const rc2 = makeRecipe('MAMUL-U2', [satir('HM-U2', 3)])
+    const orderWithUrunler: HesaplaMRPParams['orders'][0] = {
+      id: 'ORD-MULTI',
+      mamulKod: '',
+      adet: 0,
+      receteId: '',
+      durum: 'aktif',
+      termin: '2026-06-01',
+      urunler: [
+        { mamulKod: 'MAMUL-U1', adet: 2, termin: '2026-05-01' },
+        { mamulKod: 'MAMUL-U2', adet: 1, termin: '2026-06-01' },
+      ],
+    }
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: null,
+      orders: [orderWithUrunler],
+      recipes: [rc1, rc2],
+    })
+    const u1 = result.find(r => r.malkod === 'HM-U1')
+    const u2 = result.find(r => r.malkod === 'HM-U2')
+    expect(u1?.brut).toBe(4)   // 2 × 2
+    expect(u2?.brut).toBe(3)   // 3 × 1
+    expect(u1?.termin).toBe('2026-05-01')
+    expect(u2?.termin).toBe('2026-06-01')
+  })
+
+  it('MRPRow yapısı: rezerve=0, durum tipini doğru üretir', () => {
+    const rc = makeRecipe('MAMUL-S', [satir('HM-S', 10)])
+    const result = hesaplaMRPv2({
+      ...BASE_PARAMS,
+      ordIds: null,
+      orders: [makeOrder('ORD-S', 'MAMUL-S', 1, '2026-06-01')],
+      recipes: [rc],
+      stokHareketler: [giris('HM-S', 5)],
+    })
+    const row = result[0]
+    expect(row.rezerve).toBe(0)
+    expect(['yeterli', 'eksik', 'yok']).toContain(row.durum)
+    expect(row.brut).toBeDefined()
+    expect(row.stok).toBeDefined()
+    expect(row.acikTedarik).toBeDefined()
+    expect(row.net).toBeDefined()
+    expect(row.termin).toBeDefined()
   })
 })
