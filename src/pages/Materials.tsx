@@ -1,5 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, Fragment } from 'react'
 import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -185,7 +185,9 @@ export function Materials() {
   const recipes = useProductionStore(s => s.recipes)
   const bomTrees = useProductionStore(s => s.bomTrees)
   const workOrders = useProductionStore(s => s.workOrders)
-  const { can, isGuest } = useAuth()
+  const { can } = useAuth()
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [stokCache, setStokCache] = useState<Record<string, { loading: boolean; rows: { id: string; tarih: string; miktar: number; tip: string; aciklama: string }[] }>>({})
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set())
   const [hmTipFilter, setHmTipFilter] = useState<Set<string>>(new Set())
   const [dimBoyUz, setDimBoyUz] = useState('')
@@ -199,7 +201,6 @@ export function Materials() {
   function changeDensity(d: 'compact'|'normal'|'comfortable') {
     setDensity(d); localStorage.setItem('uys_table_density', d)
   }
-  const rowStyle = { paddingTop: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px', paddingBottom: density === 'compact' ? '2px' : density === 'normal' ? '6px' : '10px' }
   const [sortCol, setSortCol] = useState<'kod'|'ad'|'tip'|'uzunluk'>('kod')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
 
@@ -413,7 +414,7 @@ export function Materials() {
         const existing = materials.find(m => (m.kod || '').toLocaleUpperCase('tr-TR').trim() === kod.toLocaleUpperCase('tr-TR').trim())
         if (existing) {
           const { error } = await supabase.from('uys_malzemeler').update(dataRow).eq('id', existing.id)
-          if (error) { errors++; if (errors === 1) console.error('Update hatası:', error.message) }
+          if (error) { errors++ }
           else {
             updated++
             const adChanged = existing.ad !== ad
@@ -455,7 +456,7 @@ export function Materials() {
           }
         } else {
           const { error } = await supabase.from('uys_malzemeler').insert({ id: uid(), ...dataRow })
-          if (error) { errors++; if (errors === 1) { console.error('Insert hatası:', error.message); toast.error('Hata: ' + error.message) } }
+          if (error) { errors++; if (errors === 1) { toast.error('Hata: ' + error.message) } }
           else created++
         }
       }
@@ -464,6 +465,20 @@ export function Materials() {
       toast.success(`${created} yeni · ${updated} güncellendi${cascadeInfo}` + (errors > 0 ? ` · ${errors} hata` : ''))
     }
     input.click()
+  }
+
+  async function toggleExpand(malkod: string, matId: string) {
+    if (expandedId === matId) { setExpandedId(null); return }
+    setExpandedId(matId)
+    if (stokCache[malkod] !== undefined) return
+    setStokCache(prev => ({ ...prev, [malkod]: { loading: true, rows: [] } }))
+    const { data } = await supabase
+      .from('uys_stok_hareketler')
+      .select('id, tarih, miktar, tip, aciklama')
+      .eq('malkod', malkod)
+      .order('tarih', { ascending: false })
+      .limit(5)
+    setStokCache(prev => ({ ...prev, [malkod]: { loading: false, rows: (data || []) as { id: string; tarih: string; miktar: number; tip: string; aciklama: string }[] } }))
   }
 
   function exportExcel() {
@@ -551,9 +566,11 @@ export function Materials() {
             <tbody>
               {filtered.slice(0, 300).map(m => {
                 const op = operations.find(o => o.id === m.opId)
+                const isExpanded = expandedId === m.id
                 return (
-                  <tr key={m.id} className={`border-b border-border/20 hover:bg-bg-3/30 group/row ${m.aktif === false ? 'opacity-40' : ''}`}>
-                    <td className="px-3 py-[5px] cursor-pointer whitespace-nowrap" onClick={async () => {
+                  <Fragment key={m.id}>
+                  <tr className={`border-b border-border/20 hover:bg-bg-3/30 group/row cursor-pointer select-none ${m.aktif === false ? 'opacity-40' : ''} ${isExpanded ? 'bg-accent/5' : ''}`} onClick={e => { if ((e.target as HTMLElement).closest('button')) return; toggleExpand(m.kod, m.id) }}>
+                    <td className="px-3 py-[5px] cursor-pointer whitespace-nowrap" onClick={async e => { e.stopPropagation()
                       const yeni = await showPrompt('Malzeme kodu değiştir', 'Yeni kod', m.kod)
                       if (yeni) await recodeMaterial(m, yeni)
                     }}>
@@ -561,7 +578,7 @@ export function Materials() {
                       {m.revizyon > 0 && <span className="ml-1 px-1 py-0.5 bg-purple-500/15 text-purple-400 rounded text-[8px] font-mono">R{m.revizyon}</span>}
                       {m.aktif === false && <span className="ml-1 px-1 py-0.5 bg-zinc-600/20 text-zinc-500 rounded text-[8px]">PASİF</span>}
                     </td>
-                    <td className="px-2 py-[5px] text-zinc-300 cursor-pointer hover:text-accent truncate max-w-0" onClick={async () => {
+                    <td className="px-2 py-[5px] text-zinc-300 cursor-pointer hover:text-accent truncate max-w-0" onClick={async e => { e.stopPropagation()
                       const yeni = await showPrompt('Malzeme adı değiştir', 'Yeni ad', m.ad)
                       if (yeni) await renameMaterial(m, yeni)
                     }}><span className="truncate block">{m.ad}</span></td>
@@ -592,6 +609,52 @@ export function Materials() {
                       {can('mat_delete') && <button onClick={() => deleteMat(m.id)} className="p-0.5 text-zinc-600 hover:text-red"><Trash2 size={11} /></button>}
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-2.5 bg-bg-3/50 border-b border-accent/10">
+                        {(() => {
+                          const cache = stokCache[m.kod]
+                          if (!cache || cache.loading) return <span className="text-[10px] text-zinc-600">Yükleniyor...</span>
+                          return (
+                            <>
+                              <p className="text-[9px] text-zinc-600 uppercase tracking-wider font-semibold mb-1.5">Son Stok Hareketleri</p>
+                              {cache.rows.length === 0 ? (
+                                <span className="text-[10px] text-zinc-600">Bu malzeme için stok hareketi yok.</span>
+                              ) : (
+                                <table className="text-[10px]">
+                                  <thead>
+                                    <tr className="text-zinc-600">
+                                      <th className="text-left pr-6 pb-1 font-normal">Tarih</th>
+                                      <th className="text-left pr-6 pb-1 font-normal">Tip</th>
+                                      <th className="text-right pr-6 pb-1 font-normal">Miktar</th>
+                                      <th className="text-left pb-1 font-normal">Açıklama</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {cache.rows.map(h => (
+                                      <tr key={h.id} className="border-t border-border/20">
+                                        <td className="pr-6 py-0.5 font-mono text-zinc-500 whitespace-nowrap">{h.tarih}</td>
+                                        <td className="pr-6 py-0.5">
+                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${h.tip === 'giris' ? 'bg-green/15 text-green' : h.tip === 'cikis' ? 'bg-red/15 text-red' : 'bg-amber/15 text-amber'}`}>
+                                            {h.tip === 'giris' ? 'Giriş' : h.tip === 'cikis' ? 'Çıkış' : 'Bar Açılış'}
+                                          </span>
+                                        </td>
+                                        <td className={`pr-6 py-0.5 text-right font-mono font-semibold ${h.tip === 'giris' ? 'text-green' : h.tip === 'cikis' ? 'text-red' : 'text-amber'}`}>
+                                          {h.tip === 'cikis' ? '-' : '+'}{h.miktar}
+                                        </td>
+                                        <td className="py-0.5 text-zinc-500 max-w-xs truncate">{h.aciklama || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 )
               })}
             </tbody>
@@ -633,7 +696,7 @@ function getAlanConfig(hmTip: string): AlanConfig {
   return { boy: 'Uzun Kenar (mm)', en: 'Kısa Kenar (mm)', kalinlik: 'Kalınlık (mm)', uzunluk: true }
 }
 
-function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved }: {
+function MatFormModal({ initial, operations, tipler: _tipler, hmTipler, onClose, onSaved }: {
   initial: Material | null; operations: { id: string; kod: string; ad: string }[]
   tipler: string[]; hmTipler: string[]; onClose: () => void; onSaved: () => void
 }) {
@@ -655,9 +718,7 @@ function MatFormModal({ initial, operations, tipler, hmTipler, onClose, onSaved 
   const [saving, setSaving] = useState(false)
 
   const allMaterials = useWarehouseStore(s => s.materials)
-  const bomTrees = useProductionStore(s => s.bomTrees)
   const recipes = useProductionStore(s => s.recipes)
-  const workOrders = useProductionStore(s => s.workOrders)
 
   const alan = useMemo(() => getAlanConfig(hammaddeTipi), [hammaddeTipi])
 
