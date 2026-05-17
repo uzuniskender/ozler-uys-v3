@@ -54,6 +54,8 @@ export function WorkOrders() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(['bekliyor', 'uretimde', 'kismi', 'kismi_tamam', 'beklemede', 'PlanBekliyor']))
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['siparis', 'ym']))
+  const [siparisNoFilter, setSiparisNoFilter] = useState('')
+  const [mamulKodFilter, setMamulKodFilter] = useState('')
   const [groupBy, setGroupBy] = useState('siparis')
   const [detailWO, setDetailWO] = useState<string | null>(null)
   const [highlightLogId, setHighlightLogId] = useState<string | null>(null)
@@ -242,10 +244,18 @@ export function WorkOrders() {
         const q = search.toLowerCase(); const ord = orders.find(o => o.id === w.orderId)
         if (!(w.ieNo + w.malad + w.malkod + w.opAd + (ord?.siparisNo || '')).toLowerCase().includes(q)) return false
       }
+      if (siparisNoFilter) {
+        const q = siparisNoFilter.toLowerCase()
+        const ord = orders.find(o => o.id === w.orderId)
+        if (!(ord?.siparisNo || '').toLowerCase().includes(q)) return false
+      }
+      if (mamulKodFilter) {
+        if (!(w.malkod || '').toLowerCase().includes(mamulKodFilter.toLowerCase())) return false
+      }
       return true
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workOrders, logs, search, statusFilter, tipFilter, orders])
+  }, [workOrders, logs, search, statusFilter, tipFilter, orders, siparisNoFilter, mamulKodFilter])
 
   const grouped = useMemo(() => {
     const map: Record<string, typeof filtered> = {}
@@ -360,6 +370,14 @@ export function WorkOrders() {
       <div className="flex gap-2 mb-4 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="İE no, malzeme, sipariş ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
+        <div className="relative">
+          <input value={siparisNoFilter} onChange={e => setSiparisNoFilter(e.target.value)} placeholder="Sipariş No..." className="w-32 px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+          {siparisNoFilter && <button onClick={() => setSiparisNoFilter('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-[10px]">✕</button>}
+        </div>
+        <div className="relative">
+          <input value={mamulKodFilter} onChange={e => setMamulKodFilter(e.target.value)} placeholder="Mamul Kod..." className="w-32 px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" />
+          {mamulKodFilter && <button onClick={() => setMamulKodFilter('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-[10px]">✕</button>}
+        </div>
         <MultiCheckDropdown label="Durum" options={[
           { value: 'bekliyor', label: 'Başlamadı', color: 'text-zinc-400' },
           { value: 'uretimde', label: 'Üretimde', color: 'text-accent' },
