@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown';
+import { Download } from 'lucide-react';
 
 interface AuditRow {
   id: string;
@@ -62,11 +64,12 @@ export default function AuditLog() {
   const [baslangic, setBaslangic]     = useState('');
   const [bitis, setBitis]             = useState('');
   const [kullaniciAd, setKullaniciAd] = useState('');
-  const [olayTipi, setOlayTipi]       = useState('');
+  const [secilenOlaylar, setSecilenOlaylar] = useState<Set<string>>(new Set());
   const [tablo, setTablo]             = useState('');
 
-  const [olayTipleri, setOlayTipleri] = useState<string[]>([]);
-  const [tablolar, setTablolar]       = useState<string[]>([]);
+  const [olayTipleri, setOlayTipleri]   = useState<string[]>([]);
+  const [kullanicilar, setKullanicilar] = useState<string[]>([]);
+  const [tablolar, setTablolar]         = useState<string[]>([]);
 
   useEffect(() => {
     if (!canView) return;
@@ -80,6 +83,11 @@ export default function AuditLog() {
       data?.forEach((r: { tablo: string | null }) => { if (r.tablo) set.add(r.tablo); });
       setTablolar([...set].sort());
     });
+    supabase.from('uys_audit_log').select('kullanici_ad').not('kullanici_ad', 'is', null).then(({ data }) => {
+      const set = new Set<string>();
+      data?.forEach((r: { kullanici_ad: string | null }) => { if (r.kullanici_ad) set.add(r.kullanici_ad); });
+      setKullanicilar([...set].sort());
+    });
   }, [canView]);
 
   const fetchData = useCallback(async (p: number) => {
@@ -91,11 +99,11 @@ export default function AuditLog() {
       .order('zaman', { ascending: false })
       .range(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE - 1);
 
-    if (baslangic)   q = q.gte('zaman', baslangic + 'T00:00:00');
-    if (bitis)       q = q.lte('zaman', bitis + 'T23:59:59');
-    if (kullaniciAd) q = q.ilike('kullanici_ad', `%${kullaniciAd}%`);
-    if (olayTipi)    q = q.eq('olay_tipi', olayTipi);
-    if (tablo)       q = q.eq('tablo', tablo);
+    if (baslangic)               q = q.gte('zaman', baslangic + 'T00:00:00');
+    if (bitis)                   q = q.lte('zaman', bitis + 'T23:59:59');
+    if (kullaniciAd)             q = q.eq('kullanici_ad', kullaniciAd);
+    if (secilenOlaylar.size > 0) q = q.in('olay_tipi', [...secilenOlaylar]);
+    if (tablo)                   q = q.eq('tablo', tablo);
 
     const { data, count, error } = await q;
     if (!error && data) {
@@ -103,10 +111,42 @@ export default function AuditLog() {
       setTotal(count ?? 0);
     }
     setLoading(false);
-  }, [canView, baslangic, bitis, kullaniciAd, olayTipi, tablo]);
+  }, [canView, baslangic, bitis, kullaniciAd, secilenOlaylar, tablo]);
 
-  useEffect(() => { setPage(0); }, [baslangic, bitis, kullaniciAd, olayTipi, tablo]);
+  useEffect(() => { setPage(0); }, [baslangic, bitis, kullaniciAd, secilenOlaylar, tablo]);
   useEffect(() => { fetchData(page); }, [fetchData, page]);
+
+  async function exportExcel() {
+    let q = supabase
+      .from('uys_audit_log')
+      .select('zaman, kullanici_ad, olay_tipi, tablo, kayit_id, alan, eski_deger, yeni_deger, aciklama')
+      .order('zaman', { ascending: false })
+      .limit(5000);
+    if (baslangic)               q = q.gte('zaman', baslangic + 'T00:00:00');
+    if (bitis)                   q = q.lte('zaman', bitis + 'T23:59:59');
+    if (kullaniciAd)             q = q.eq('kullanici_ad', kullaniciAd);
+    if (secilenOlaylar.size > 0) q = q.in('olay_tipi', [...secilenOlaylar]);
+    if (tablo)                   q = q.eq('tablo', tablo);
+    const { data } = await q;
+    if (!data?.length) return;
+    import('xlsx').then(XLSX => {
+      const exRows = data.map((r: Record<string, unknown>) => ({
+        'Zaman':      r.zaman ? new Date(r.zaman as string).toLocaleString('tr-TR') : '',
+        'Kullanıcı':  (r.kullanici_ad as string) ?? '',
+        'Olay Tipi':  (r.olay_tipi as string) ?? '',
+        'Tablo':      (r.tablo as string) ?? '',
+        'Kayıt ID':   (r.kayit_id as string) ?? '',
+        'Alan':       (r.alan as string) ?? '',
+        'Eski Değer': (r.eski_deger as string) ?? '',
+        'Yeni Değer': (r.yeni_deger as string) ?? '',
+        'Açıklama':   (r.aciklama as string) ?? '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(exRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Audit Log');
+      XLSX.writeFile(wb, `audit_log_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    });
+  }
 
   if (!canView) {
     return (
@@ -122,48 +162,47 @@ export default function AuditLog() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-zinc-200">🔍 Audit Log</h1>
-        <span className="text-sm text-zinc-500">Toplam: {total.toLocaleString('tr-TR')} kayıt</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-zinc-500">Toplam: {total.toLocaleString('tr-TR')} kayıt</span>
+          <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">
+            <Download size={13} /> Excel
+          </button>
+        </div>
       </div>
 
       {/* Filtreler */}
-      <div className="bg-bg-1 border border-border rounded-lg p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Başlangıç', type: 'date', value: baslangic, set: setBaslangic },
-          { label: 'Bitiş',     type: 'date', value: bitis,     set: setBitis },
-        ].map(f => (
-          <div key={f.label} className="flex flex-col gap-1">
-            <label className="text-xs text-zinc-500">{f.label}</label>
-            <input type={f.type} value={f.value}
-              onChange={e => f.set(e.target.value)}
-              className="bg-bg-2 border border-border rounded px-2 py-1 text-sm text-zinc-200" />
-          </div>
-        ))}
+      <div className="bg-bg-1 border border-border rounded-lg p-4 flex flex-wrap gap-3 items-end">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-zinc-500">Başlangıç</label>
+          <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)}
+            className="bg-bg-2 border border-border rounded px-2 py-1 text-xs text-zinc-200" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-zinc-500">Bitiş</label>
+          <input type="date" value={bitis} onChange={e => setBitis(e.target.value)}
+            className="bg-bg-2 border border-border rounded px-2 py-1 text-xs text-zinc-200" />
+        </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-zinc-500">Kullanıcı</label>
-          <input type="text" value={kullaniciAd} placeholder="Ad ara..."
-            onChange={e => setKullaniciAd(e.target.value)}
-            className="bg-bg-2 border border-border rounded px-2 py-1 text-sm text-zinc-200" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-zinc-500">Olay Tipi</label>
-          <select value={olayTipi} onChange={e => setOlayTipi(e.target.value)}
-            className="bg-bg-2 border border-border rounded px-2 py-1 text-sm text-zinc-200">
+          <select value={kullaniciAd} onChange={e => setKullaniciAd(e.target.value)}
+            className="bg-bg-2 border border-border rounded px-2 py-1 text-xs text-zinc-200">
             <option value="">Tümü</option>
-            {olayTipleri.map(t => <option key={t} value={t}>{t}</option>)}
+            {kullanicilar.map(k => <option key={k} value={k}>{k}</option>)}
           </select>
         </div>
+        <MultiCheckDropdown label="Olay Tipi" options={olayTipleri} selected={secilenOlaylar} onChange={setSecilenOlaylar} />
         <div className="flex flex-col gap-1">
           <label className="text-xs text-zinc-500">Tablo</label>
           <select value={tablo} onChange={e => setTablo(e.target.value)}
-            className="bg-bg-2 border border-border rounded px-2 py-1 text-sm text-zinc-200">
+            className="bg-bg-2 border border-border rounded px-2 py-1 text-xs text-zinc-200">
             <option value="">Tümü</option>
             {tablolar.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
       </div>
 
-      {(baslangic || bitis || kullaniciAd || olayTipi || tablo) && (
-        <button onClick={() => { setBaslangic(''); setBitis(''); setKullaniciAd(''); setOlayTipi(''); setTablo(''); }}
+      {(baslangic || bitis || kullaniciAd || secilenOlaylar.size > 0 || tablo) && (
+        <button onClick={() => { setBaslangic(''); setBitis(''); setKullaniciAd(''); setSecilenOlaylar(new Set()); setTablo(''); }}
           className="text-xs text-accent hover:underline">
           ✕ Filtreleri temizle
         </button>
