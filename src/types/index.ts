@@ -139,6 +139,7 @@ export interface Material {
   oncekiId: string
   aktif: boolean
   birimKgMetre?: number  // v16.78 — birim_kg_metre (kg/m)
+  malzemeCinsi?: string  // v16.xx — malzeme_cinsi (LEVHA, BORU vb. alt sınıf)
 }
 
 export interface HmTip {
