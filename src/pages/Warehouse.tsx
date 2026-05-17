@@ -8,6 +8,7 @@ import { uid, today } from '@/lib/utils'
 import { showPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
 import { Search, Download, Plus, Upload } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { z } from 'zod'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
@@ -76,6 +77,18 @@ export function Warehouse() {
     if (search) { const q = search.toLowerCase(); result = result.filter(s => (s.malkod + s.malad).toLowerCase().includes(q)) }
     return result
   }, [stokMap, search, tipFilter, materials])
+
+  const hareketOzeti = useMemo(() => {
+    const days: { gun: string; giris: number; cikis: number }[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      const giris = stokHareketler.filter(h => h.tarih === key && h.tip === 'giris').reduce((a, h) => a + (h.miktar || 0), 0)
+      const cikis = stokHareketler.filter(h => h.tarih === key && (h.tip === 'cikis' || h.tip === 'bar_acilis')).reduce((a, h) => a + (h.miktar || 0), 0)
+      days.push({ gun: key.slice(5), giris: Math.round(giris * 100) / 100, cikis: Math.round(cikis * 100) / 100 })
+    }
+    return days
+  }, [stokHareketler])
 
   const filteredHareketler = useMemo(() => {
     const sorted = [...stokHareketler].sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
@@ -180,6 +193,31 @@ export function Warehouse() {
           <option value="tuketildi">Tüketilmiş Bar</option>
         </select>
       </div>
+
+      {hareketOzeti.some(d => d.giris > 0 || d.cikis > 0) && (
+        <div className="bg-bg-2 border border-border rounded-lg px-4 pt-3 pb-2 mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-semibold text-zinc-400">Son 7 Gün Stok Hareketi</span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1 text-[10px] text-zinc-500"><span className="w-2 h-2 bg-green rounded-sm inline-block" />Giriş</span>
+              <span className="flex items-center gap-1 text-[10px] text-zinc-500"><span className="w-2 h-2 bg-red rounded-sm inline-block" />Çıkış</span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={80}>
+            <BarChart data={hareketOzeti} barSize={14} barGap={2} margin={{ top: 2, right: 4, left: -28, bottom: 0 }}>
+              <XAxis dataKey="gun" tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
+              <YAxis hide allowDecimals={false} />
+              <Tooltip
+                contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 6, fontSize: 11 }}
+                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                formatter={(v: number, name: string) => [v, name === 'giris' ? 'Giriş' : 'Çıkış']}
+              />
+              <Bar dataKey="giris" fill="#22c55e" radius={[3, 3, 0, 0]} name="giris" />
+              <Bar dataKey="cikis" fill="#ef4444" radius={[3, 3, 0, 0]} name="cikis" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-4">
         <div className="relative flex-1 max-w-xs">
