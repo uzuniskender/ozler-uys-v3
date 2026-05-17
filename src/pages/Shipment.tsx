@@ -5,7 +5,7 @@ import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { createSevk as createSevkService, updateSevk as updateSevkService, deleteSevk as deleteSevkService } from '@/services/sevkService'
 import { showConfirm } from '@/lib/prompt'
-import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive } from 'lucide-react'
+import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive, ChevronRight, ChevronDown } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { z } from 'zod'
 
@@ -36,6 +36,16 @@ export function Shipment() {
   const [editId, setEditId] = useState<string | null>(null)
   const [listSearch, setListSearch] = useState('')   // S6 — liste araması
   const [showArsiv, setShowArsiv] = useState(false)  // S3 — arşiv toggle
+  const [expandedMusteriler, setExpandedMusteriler] = useState<Set<string>>(new Set())
+
+  function toggleMusteri(musteri: string) {
+    setExpandedMusteriler(prev => {
+      const next = new Set(prev)
+      if (next.has(musteri)) next.delete(musteri)
+      else next.add(musteri)
+      return next
+    })
+  }
 
   // Sipariş tamamen sevk edilmiş mi? → arşiv kriteri
   function isTamamSevk(orderId: string | undefined): boolean {
@@ -60,6 +70,25 @@ export function Shipment() {
   }, [sorted, listSearch, showArsiv, orders])
 
   const arsivSayisi = useMemo(() => sorted.filter(s => isTamamSevk(s.orderId)).length, [sorted, orders])
+
+  // Müşteri bazlı gruplama
+  const grouped = useMemo(() => {
+    const map = new Map<string, typeof filtered>()
+    for (const s of filtered) {
+      const key = s.musteri || '—'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(s)
+    }
+    return Array.from(map.entries()).map(([musteri, sevkList]) => ({
+      musteri,
+      sevkList,
+      toplamSevk: sevkList.length,
+      toplamMiktar: sevkList.reduce((a, s) => a + (s.kalemler || []).reduce((b: number, k: any) => b + (k.miktar || 0), 0), 0),
+      toplamKalem: sevkList.reduce((a, s) => a + (s.kalemler?.length || 0), 0),
+    }))
+  }, [filtered])
+
+  const genelToplamMiktar = useMemo(() => grouped.reduce((a, g) => a + g.toplamMiktar, 0), [grouped])
 
   async function deleteSevk(id: string) {
     if (!await showConfirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) return
@@ -106,7 +135,7 @@ export function Shipment() {
         <div>
           <h1 className="text-xl font-semibold">Sevkiyat</h1>
           <p className="text-xs text-zinc-500">
-            {filtered.length} sevkiyat
+            {filtered.length} sevkiyat · {grouped.length} müşteri · {genelToplamMiktar} adet
             {arsivSayisi > 0 && ` · ${arsivSayisi} arşivde`}
           </p>
         </div>
@@ -139,47 +168,92 @@ export function Shipment() {
         />
       </div>
 
-      {/* Liste */}
+      {/* Liste — müşteri bazlı gruplu */}
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-zinc-500">
                 <th className="text-left px-4 py-2.5">Sipariş No</th>
-                <th className="text-left px-4 py-2.5">Müşteri</th>
                 <th className="text-left px-4 py-2.5">Tarih</th>
                 <th className="text-right px-4 py-2.5">Kalem</th>
-                <th className="text-right px-4 py-2.5">Toplam</th>
+                <th className="text-right px-4 py-2.5">Toplam Adet</th>
                 <th className="text-left px-4 py-2.5">Not</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(s => {
-                const topMiktar = (s.kalemler || []).reduce((a, k) => a + (k.miktar || 0), 0)
+              {grouped.map(({ musteri, sevkList, toplamSevk, toplamMiktar, toplamKalem }) => {
+                const expanded = expandedMusteriler.has(musteri)
                 return (
-                  <tr key={s.id} className="border-b border-border/30 hover:bg-bg-3/30">
-                    <td className="px-4 py-2 font-mono text-accent">{s.siparisNo || '—'}</td>
-                    <td className="px-4 py-2 text-zinc-300">{s.musteri || '—'}</td>
-                    <td className="px-4 py-2 font-mono text-zinc-500">{s.tarih}</td>
-                    <td className="px-4 py-2 text-right font-mono">{s.kalemler?.length || 0}</td>
-                    <td className="px-4 py-2 text-right font-mono text-green">{topMiktar}</td>
-                    <td className="px-4 py-2 text-zinc-500 max-w-[200px] truncate">{s.not || '—'}</td>
-                    <td className="px-4 py-2 flex gap-1 justify-end">
-                      <button onClick={() => indirSevkBelgePDF(s)} className="p-1 text-zinc-500 hover:text-accent" title="Sevk Belgesi PDF"><FileText size={12} /></button>
-                      <button onClick={() => setDetailId(s.id)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={12} /></button>
-                      {/* S7 — Düzenleme butonu */}
-                      {can('sevk_edit') && (
-                        <button onClick={() => setEditId(s.id)} className="p-1 text-zinc-500 hover:text-accent" title="Düzenle"><Edit2 size={12} /></button>
-                      )}
-                      {can('sevk_delete') && (
-                        <button onClick={() => deleteSevk(s.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
-                      )}
-                    </td>
-                  </tr>
+                  <>
+                    {/* Grup başlığı */}
+                    <tr
+                      key={`g-${musteri}`}
+                      className="border-b border-border/50 bg-bg-3/40 hover:bg-bg-3/70 cursor-pointer select-none"
+                      onClick={() => toggleMusteri(musteri)}
+                    >
+                      <td colSpan={6} className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {expanded
+                            ? <ChevronDown size={13} className="text-zinc-400 shrink-0" />
+                            : <ChevronRight size={13} className="text-zinc-400 shrink-0" />}
+                          <span className="font-semibold text-zinc-200">{musteri}</span>
+                          <span className="text-zinc-500 ml-1 text-[11px]">{toplamSevk} sevkiyat · {toplamKalem} kalem</span>
+                          <span className="ml-auto font-mono font-semibold text-green">{toplamMiktar} adet</span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Grup satırları */}
+                    {expanded && sevkList.map(s => {
+                      const topMiktar = (s.kalemler || []).reduce((a, k) => a + (k.miktar || 0), 0)
+                      return (
+                        <tr key={s.id} className="border-b border-border/20 hover:bg-bg-3/20">
+                          <td className="pl-9 pr-4 py-2 font-mono text-accent">{s.siparisNo || '—'}</td>
+                          <td className="px-4 py-2 font-mono text-zinc-500">{s.tarih}</td>
+                          <td className="px-4 py-2 text-right font-mono text-zinc-400">{s.kalemler?.length || 0}</td>
+                          <td className="px-4 py-2 text-right font-mono text-green">{topMiktar}</td>
+                          <td className="px-4 py-2 text-zinc-500 max-w-[200px] truncate">{s.not || '—'}</td>
+                          <td className="px-4 py-2">
+                            <div className="flex gap-1 justify-end">
+                              <button onClick={() => indirSevkBelgePDF(s)} className="p-1 text-zinc-500 hover:text-accent" title="Sevk Belgesi PDF"><FileText size={12} /></button>
+                              <button onClick={() => setDetailId(s.id)} className="p-1 text-zinc-500 hover:text-accent" title="Detay"><Eye size={12} /></button>
+                              {can('sevk_edit') && (
+                                <button onClick={() => setEditId(s.id)} className="p-1 text-zinc-500 hover:text-accent" title="Düzenle"><Edit2 size={12} /></button>
+                              )}
+                              {can('sevk_delete') && (
+                                <button onClick={() => deleteSevk(s.id)} className="px-2 py-0.5 bg-bg-3 text-zinc-500 rounded text-[10px] hover:text-red">Sil</button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+
+                    {/* Özet satırı — sadece açık ve birden fazla sevkiyat varsa */}
+                    {expanded && toplamSevk > 1 && (
+                      <tr key={`sum-${musteri}`} className="border-b border-border/50 bg-bg-3/10">
+                        <td colSpan={3} className="pl-9 pr-4 py-1.5 text-zinc-600 text-[11px]">Grup toplamı</td>
+                        <td className="px-4 py-1.5 text-right font-mono font-semibold text-green text-[11px]">{toplamMiktar}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    )}
+                  </>
                 )
               })}
             </tbody>
+
+            {/* Genel özet — birden fazla müşteri varsa */}
+            {grouped.length > 1 && (
+              <tfoot>
+                <tr className="border-t-2 border-border bg-bg-3/30">
+                  <td colSpan={3} className="px-4 py-2 text-zinc-400 text-[11px] font-semibold">Genel Toplam</td>
+                  <td className="px-4 py-2 text-right font-mono font-semibold text-green">{genelToplamMiktar}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         ) : (
           <div className="p-8 text-center text-zinc-600 text-sm">

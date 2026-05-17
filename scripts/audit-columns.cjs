@@ -141,8 +141,8 @@ function readTableColumns() {
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql'))
   for (const f of files) {
     const content = fs.readFileSync(path.join(dir, f), 'utf-8')
-    // CREATE TABLE IF NOT EXISTS public.xxx ( ... );
-    const tableRegex = /CREATE TABLE IF NOT EXISTS public\.(\w+)\s*\(([\s\S]*?)\n\s*\);/g
+    // CREATE TABLE [IF NOT EXISTS] public.xxx ( ... );
+    const tableRegex = /CREATE TABLE (?:IF NOT EXISTS )?public\.(\w+)\s*\(([\s\S]*?)\n\s*\);/g
     let m
     while ((m = tableRegex.exec(content)) !== null) {
       const [, tableName, body] = m

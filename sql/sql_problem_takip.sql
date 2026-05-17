@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS public.pt_problemler (
   son_degistiren    text,
   son_degistirme    timestamptz,
   kapatma_tarihi    date,                           -- Durum='Kapandı' yapıldığında otomatik set
+  kok_neden         text,                           -- v17.06 — 8D D4: Kök Neden analizi
+  kalici_cozum      text,                           -- v17.06 — 8D D5: Kalıcı Çözüm
   __client          text                            -- realtime echo filtreleme için
 );
 

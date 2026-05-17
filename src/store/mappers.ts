@@ -189,6 +189,7 @@ export const M = {
     notlar: (r.notlar || '') as string, olusturan: (r.olusturan || '') as string,
     olusturma: (r.olusturma || '') as string, sonDegistiren: (r.son_degistiren || '') as string,
     sonDegistirme: (r.son_degistirme || '') as string, kapatmaTarihi: (r.kapatma_tarihi || '') as string,
+    kokNeden: (r.kok_neden || '') as string, kaliciCozum: (r.kalici_cozum || '') as string,
   }),
   kullanici: (r: Record<string, unknown>): Kullanici => ({
     id: r.id as string, ad: (r.ad || '') as string,

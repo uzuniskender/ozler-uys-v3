@@ -19,6 +19,8 @@ const problemFormSchema = z.object({
   durum: z.enum(['Açık', 'Devam', 'Kapandı'] as const, { message: 'Geçersiz durum' }),
   yapilanlar: z.string(),
   notlar: z.string(),
+  kokNeden: z.string(),
+  kaliciCozum: z.string(),
 })
 
 function fmtDate(iso: string): string {
@@ -42,6 +44,14 @@ function fmtDT(iso: string): string {
 function isOverdue(p: Problem): boolean {
   if (p.durum === 'Kapandı' || !p.termin) return false
   return p.termin < today()
+}
+
+// Geciken: açılış tarihinden 30 gün geçmiş, hâlâ açık
+function isGeciken30(p: Problem): boolean {
+  if (p.durum === 'Kapandı' || !p.olusturma) return false
+  const d = new Date(p.olusturma)
+  d.setDate(d.getDate() + 30)
+  return today() > d.toISOString().slice(0, 10)
 }
 
 function durumBadge(d: string) {
@@ -75,9 +85,9 @@ export function ProblemTakip() {
         (p.problem + ' ' + p.sorumlu + ' ' + p.yapilanlar + ' ' + p.notlar)
           .toLowerCase().includes(q))
     }
-    // Sıralama: geciken üstte, sonra durum öncelik (Açık → Devam → Kapandı), sonra termin
+    // Sıralama: geciken (30 gün) üstte, sonra durum öncelik (Açık → Devam → Kapandı), sonra termin
     return items.sort((a, b) => {
-      const aOver = isOverdue(a), bOver = isOverdue(b)
+      const aOver = isGeciken30(a), bOver = isGeciken30(b)
       if (aOver !== bOver) return aOver ? -1 : 1
       const order: Record<string, number> = { 'Açık': 0, 'Devam': 1, 'Kapandı': 2 }
       const ao = order[a.durum] ?? 9, bo = order[b.durum] ?? 9
@@ -93,7 +103,7 @@ export function ProblemTakip() {
   const kpi = useMemo(() => ({
     total: problemler.length,
     acik: problemler.filter(p => p.durum !== 'Kapandı').length,
-    geciken: problemler.filter(p => isOverdue(p)).length,
+    geciken: problemler.filter(p => isGeciken30(p)).length,
   }), [problemler])
 
   const lastChange = useMemo(() => {
@@ -124,6 +134,8 @@ export function ProblemTakip() {
       notlar: data.notlar || '',
       son_degistiren: username,
       son_degistirme: now,
+      kok_neden: data.kokNeden ?? '',
+      kalici_cozum: data.kaliciCozum ?? '',
       __client: CLIENT_ID,
     }
 
@@ -245,12 +257,20 @@ export function ProblemTakip() {
               <tbody>
                 {filtered.map((p, i) => {
                   const overdue = isOverdue(p)
+                  const geciken30 = isGeciken30(p)
                   const clickable = can('pt_edit')
+                  const satirRenk = geciken30
+                    ? 'bg-amber/5 border-l-2 border-l-amber/60'
+                    : p.durum === 'Kapandı'
+                      ? 'bg-green/5 border-l-2 border-l-green/30'
+                      : p.durum === 'Açık'
+                        ? 'bg-red/5 border-l-2 border-l-red/30'
+                        : ''
                   return (
                     <tr
                       key={p.id}
                       onClick={() => { if (clickable) { setEditItem(p); setShowForm(true) } }}
-                      className={`border-b border-border/30 hover:bg-bg-3/30 ${clickable ? 'cursor-pointer' : ''}`}
+                      className={`border-b border-border/30 hover:bg-bg-3/30 ${satirRenk} ${clickable ? 'cursor-pointer' : ''}`}
                     >
                       <td className="px-3 py-2 font-mono text-zinc-500">{i + 1}</td>
                       <td className="px-3 py-2 text-zinc-200 max-w-[500px]">
@@ -333,6 +353,8 @@ function ProblemFormModal({
   const [durum, setDurum] = useState(initial?.durum || 'Açık')
   const [yapilanlar, setYapilanlar] = useState(initial?.yapilanlar || '')
   const [notlar, setNotlar] = useState(initial?.notlar || '')
+  const [kokNeden, setKokNeden] = useState(initial?.kokNeden || '')
+  const [kaliciCozum, setKaliciCozum] = useState(initial?.kaliciCozum || '')
 
   function eklYeniAksiyon() {
     const t = new Date()
@@ -355,7 +377,7 @@ function ProblemFormModal({
   }
 
   function submit() {
-    const parsed = problemFormSchema.safeParse({ problem, termin, sorumlu, durum, yapilanlar, notlar })
+    const parsed = problemFormSchema.safeParse({ problem, termin, sorumlu, durum, yapilanlar, notlar, kokNeden, kaliciCozum })
     if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz form'); return }
     onSave({
       problem: parsed.data.problem,
@@ -364,6 +386,8 @@ function ProblemFormModal({
       durum: parsed.data.durum,
       yapilanlar: parsed.data.yapilanlar,
       notlar: parsed.data.notlar,
+      kokNeden: parsed.data.kokNeden,
+      kaliciCozum: parsed.data.kaliciCozum,
     }, initial?.id)
   }
 
@@ -444,6 +468,44 @@ function ProblemFormModal({
               className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent resize-y font-mono text-[12px] leading-relaxed"
             />
           </div>
+
+          {/* D4 — Kök Neden */}
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">D4 — Kök Neden</label>
+            <textarea
+              value={kokNeden}
+              onChange={e => setKokNeden(e.target.value)}
+              rows={2}
+              placeholder="Gerçek kök neden analizi (5-Neden, Balık Kılçığı vb.)"
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent resize-y"
+            />
+          </div>
+
+          {/* D5 — Kalıcı Çözüm */}
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">D5 — Kalıcı Çözüm</label>
+            <textarea
+              value={kaliciCozum}
+              onChange={e => setKaliciCozum(e.target.value)}
+              rows={2}
+              placeholder="Kalıcı düzeltici aksiyon"
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent resize-y"
+            />
+          </div>
+
+          {/* D4+D5 dolu → kapatma tarihi önerisi */}
+          {kokNeden.trim() && kaliciCozum.trim() && durum !== 'Kapandı' && (
+            <div className="flex items-center gap-3 bg-green/10 border border-green/30 rounded-lg px-3 py-2 text-xs text-green">
+              <span>D4 ve D5 dolu — Kapatma tarihi önerisi: <strong>{fmtDate(today())}</strong></span>
+              <button
+                type="button"
+                onClick={() => setDurum('Kapandı')}
+                className="ml-auto px-3 py-1 bg-green/20 hover:bg-green/30 rounded text-[10px] font-semibold whitespace-nowrap"
+              >
+                Kapandı olarak işaretle
+              </button>
+            </div>
+          )}
 
           <div>
             <label className="text-[11px] text-zinc-500 mb-1 block">Notlar (opsiyonel)</label>

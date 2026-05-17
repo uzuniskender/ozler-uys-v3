@@ -465,6 +465,8 @@ export interface Problem {
   sonDegistiren: string
   sonDegistirme: string    // ISO datetime
   kapatmaTarihi: string    // ISO date
+  kokNeden: string         // D4 — Kök Neden analizi
+  kaliciCozum: string      // D5 — Kalıcı Çözüm
 }
 
 // v15.36 — Yarım İş Takibi
