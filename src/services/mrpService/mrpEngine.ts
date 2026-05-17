@@ -337,3 +337,150 @@ export function hesaplaMRPEngine(params: {
 
   return nettingRows
 }
+
+// ─── FAZ 2: Cutting Plan Override ────────────────────────────────────────────
+/**
+ * Kesim planı override — mevcut `hesaplaMRP`'deki mantığın saf fonksiyon versiyonu.
+ * BOM'dan gelen brüt ihtiyacı kesim planının gerçek bar sayısıyla değiştirir.
+ * LEVHA tipi malzemeleri atlar (1D plan güvenilmez).
+ *
+ * @param brutMap   aggregateBOM çıktısı — bu fonksiyon içinde mutate edilir (yeni map döner)
+ * @param cuttingPlans  mevcut kesim planları (durum !== 'tamamlandi' olanlar)
+ * @param workOrders    WO listesi (termin için)
+ * @param materials     Malzeme listesi (LEVHA kontrolü için)
+ * @param secilenWoIds  Kapsam filtresi; null = genel hesap
+ */
+export function applyCuttingPlanOverride(
+  brutMap: AggregatedBOM,
+  cuttingPlans: { hamMalkod: string; hamMalad: string; durum: string; satirlar: any[]; hamBoy?: number }[],
+  workOrders: any[],
+  materials: Material[],
+  secilenWoIds: Set<string> | null,
+): AggregatedBOM {
+  const result: AggregatedBOM = { ...brutMap }
+
+  const aktifPlanlar = cuttingPlans.filter(p => p.durum !== 'tamamlandi')
+
+  for (const plan of aktifPlanlar) {
+    const hmk = plan.hamMalkod
+    if (!hmk) continue
+
+    const hmM = materials.find(m => (m.kod || '').toLowerCase().trim() === hmk.toLowerCase().trim())
+
+    // LEVHA tipi → BOM override'ı güvenilmez (2D problem), atla
+    if ((hmM as any)?.hammaddeTipi === 'LEVHA') continue
+
+    let planAdet: number
+
+    if (secilenWoIds) {
+      // Seçili WO'ların kesimlerine düşen pay
+      let toplamPay = 0
+      for (const s of (plan.satirlar || [])) {
+        if ((s as any).havuzBarId) continue
+        const kesimler: any[] = (s as any).kesimler || []
+        const toplamKesimAdet = kesimler.reduce((a: number, k: any) => a + (k.adet || 0), 0)
+        if (toplamKesimAdet === 0) continue
+        const kapsamKesimAdet = kesimler
+          .filter((k: any) => k.woId && secilenWoIds.has(k.woId))
+          .reduce((a: number, k: any) => a + (k.adet || 0), 0)
+        if (kapsamKesimAdet === 0) continue
+        toplamPay += ((s as any).hamAdet || 0) * (kapsamKesimAdet / toplamKesimAdet)
+      }
+      planAdet = Math.ceil(toplamPay)
+      if (planAdet <= 0) continue
+    } else {
+      // Genel hesap — havuz satırları hariç
+      planAdet = (plan.satirlar || [])
+        .filter((s: any) => !s.havuzBarId)
+        .reduce((a: number, s: any) => a + (s.hamAdet || 0), 0)
+      if (!planAdet) continue
+    }
+
+    // Plan termini — kesime giren WO'ların en erken termini
+    const planWoIds = new Set<string>()
+    for (const s of (plan.satirlar || [])) {
+      for (const k of ((s as any).kesimler || [])) {
+        if (k.woId) planWoIds.add(k.woId)
+      }
+    }
+    const planTermin = workOrders
+      .filter(w => planWoIds.has(w.id) && (w as any).termin)
+      .map(w => (w as any).termin as string)
+      .sort()[0] || ''
+
+    const malkodLower = hmk.toLowerCase().trim()
+
+    // BOM'dan bu malkoda ait tüm termin gruplarını sil
+    let bomToplam = 0
+    for (const key of Object.keys(result)) {
+      if (key.startsWith(malkodLower + '__')) {
+        bomToplam += result[key].brut
+        delete result[key]
+      }
+    }
+
+    // max(BOM, plan) — v16.07 mantığı
+    const finalBrut = Math.max(planAdet, bomToplam)
+
+    const grupKey = `${malkodLower}__${planTermin}`
+    result[grupKey] = {
+      malkod: hmk,
+      malad: hmM?.ad || plan.hamMalad || hmk,
+      tip: hmM?.tip || 'Hammadde',
+      birim: hmM?.birim || 'Adet',
+      miktar: finalBrut,
+      brut: finalBrut,
+      termin: planTermin,
+    }
+  }
+
+  return result
+}
+
+// ─── FAZ 2: Çoklu Sipariş Orkestrasyonu ──────────────────────────────────────
+/**
+ * Birden fazla sipariş için MRP — mevcut `hesaplaMRP`'nin engine versiyonu.
+ * Termin-FIFO: erken termin önce stoktan alır.
+ *
+ * @param siparisler  [{mamulKod, adet, termin, orderId}] listesi
+ * @param cuttingPlans  kesim planları (cutting override için)
+ * @param secilenWoIds  kapsam filtresi
+ */
+export function hesaplaMRPEngineMulti(params: {
+  siparisler: { mamulKod: string; adet: number; termin?: string; orderId?: string }[]
+  recipes: Recipe[]
+  materials: Material[]
+  stokHareketler: StokHareket[]
+  tedarikler: Tedarik[]
+  workOrders?: any[]
+  cuttingPlans?: any[]
+  secilenWoIds?: Set<string> | null
+}): NettingResult[] {
+  const {
+    siparisler, recipes, materials, stokHareketler, tedarikler,
+    workOrders = [], cuttingPlans = [], secilenWoIds = null,
+  } = params
+
+  // 1. Tüm siparişler için BOM patlat + termin ekle
+  const tumLines: (BOMLine & { termin: string })[] = []
+
+  for (const sp of siparisler) {
+    const bomLines = explodeBOM(sp.mamulKod, sp.adet, recipes, materials)
+    for (const line of bomLines) {
+      tumLines.push({ ...line, termin: sp.termin || '' })
+    }
+  }
+
+  // 2. Aggregate
+  let brutMap = aggregateBOM(tumLines)
+
+  // 3. Cutting plan override (Faz 2)
+  if (cuttingPlans.length > 0) {
+    brutMap = applyCuttingPlanOverride(
+      brutMap, cuttingPlans, workOrders, materials, secilenWoIds
+    )
+  }
+
+  // 4. Netting
+  return netting(brutMap, stokHareketler, tedarikler)
+}
