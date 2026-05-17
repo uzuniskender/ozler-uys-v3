@@ -1,6 +1,37 @@
+// src/services/orderService/orderCrud.ts
+// v17.00 — Servis katmanı Zod giriş doğrulama eklendi
+
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { today, uid } from '@/lib/utils'
 import type { Order } from '@/types'
+
+// ─── Servis katmanı giriş şemaları ───────────────────────────────────────────
+
+const _newOrderRowSchema = z.object({
+  siparis_no: z.string().trim().min(1, 'Sipariş no boş olamaz').max(50),
+  musteri:    z.string().trim().min(1, 'Müşteri boş olamaz').max(100),
+  termin:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Termin YYYY-MM-DD formatında olmalı'),
+  mamul_kod:  z.string().trim().min(1, 'Mamul kod boş olamaz').max(100),
+  mamul_ad:   z.string().trim().min(1, 'Mamul ad boş olamaz').max(200),
+  adet:       z.number().int().min(1, 'Adet en az 1 olmalı'),
+  recete_id:  z.string().nullable().optional(),
+  not_:       z.string().max(500, 'Not 500 karakter geçemez').optional(),
+  urunler:    z.array(z.unknown()).optional(),
+})
+
+const _createTedarikParamsSchema = z.object({
+  malkod:            z.string().trim().min(1, 'Malzeme kodu boş olamaz').max(50),
+  malad:             z.string().max(200),
+  miktar:            z.number().positive('Miktar sıfırdan büyük olmalı'),
+  birim:             z.string().max(20),
+  siparisNo:         z.string().min(1),
+  orderId:           z.string().min(1),
+  termin:            z.string().nullable().optional(),
+  mrpCalculationId:  z.string().nullable().optional(),
+})
+
+// ─── Public interface'ler ─────────────────────────────────────────────────────
 
 export interface NewOrderRow {
   siparis_no: string
@@ -51,7 +82,12 @@ export interface CreateTedarikParams {
   mrpCalculationId?: string | null
 }
 
+// ─── CRUD fonksiyonları ───────────────────────────────────────────────────────
+
 export async function createOrder(newId: string, row: NewOrderRow): Promise<void> {
+  const parsed = _newOrderRowSchema.safeParse(row)
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message)
+
   const { error } = await supabase.from('uys_orders').insert({
     id: newId, ...row, tarih: today(), mrp_durum: 'bekliyor', olusturma: today(),
   })
@@ -84,11 +120,13 @@ export async function updateOrderMrpDurum(orderId: string, durum: 'bekliyor' | '
 }
 
 export async function updateOrderOncelik(orderId: string, oncelik: number): Promise<void> {
+  if (!Number.isFinite(oncelik) || oncelik < 0) throw new Error('Öncelik geçersiz')
   const { error } = await supabase.from('uys_orders').update({ oncelik }).eq('id', orderId)
   if (error) throw new Error(error.message)
 }
 
 export async function updateOrderDurum(orderId: string, durum: string): Promise<void> {
+  if (!durum?.trim()) throw new Error('Durum boş olamaz')
   const { error } = await supabase.from('uys_orders').update({ durum }).eq('id', orderId)
   if (error) throw new Error(error.message)
 }
@@ -115,6 +153,9 @@ export async function deleteWorkOrders(ids: string[]): Promise<void> {
 }
 
 export async function createTedarikFromMrp(params: CreateTedarikParams): Promise<void> {
+  const parsed = _createTedarikParamsSchema.safeParse(params)
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message)
+
   const { error } = await supabase.from('uys_tedarikler').insert({
     id: uid(),
     malkod: params.malkod,

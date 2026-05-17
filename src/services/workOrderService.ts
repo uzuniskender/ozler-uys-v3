@@ -1,9 +1,27 @@
+// src/services/workOrderService.ts
+// v17.00 — Servis katmanı Zod giriş doğrulama eklendi
+
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { auditWoDurum } from '@/services/auditService'
 import { isBarMaterialByKod } from '@/services/productionService/barModel'
 import type { WorkOrder } from '@/types'
+
+// ─── Servis katmanı giriş şemaları ───────────────────────────────────────────
+
+const _iptalNedenSchema = z
+  .string()
+  .trim()
+  .min(3, 'İptal nedeni en az 3 karakter olmalı')
+  .max(500, 'İptal nedeni 500 karakter geçemez')
+
+const _hedefSchema = z
+  .number()
+  .int('Hedef tam sayı olmalı')
+  .min(1, 'Hedef en az 1 olmalı')
+  .max(999999, 'Hedef 999.999 geçemez')
 
 // ─── setWoDurum ───────────────────────────────────────────────────────────────
 // İptal yolunda stok ters kayıtları yazar + WO günceller.
@@ -22,6 +40,12 @@ export async function setWoDurum(
   const { wo, siparisNo, neden = '', prod = 0, stokHareketler = [] } = opts
 
   if (durum === 'iptal') {
+    // İptal nedeni doğrulama — boş geçilebilir (eski çağrı uyumu için), 3+ karakter gerekirse UI zorunlu kılar
+    if (neden) {
+      const p = _iptalNedenSchema.safeParse(neden)
+      if (!p.success) throw new Error(p.error.issues[0]?.message)
+    }
+
     if (prod > 0) {
       await addStokHareketi({
         malkod: wo.malkod, malad: wo.malad, miktar: prod, tip: 'cikis',
@@ -103,6 +127,8 @@ export async function topluKopyala(ids: string[], workOrders: WorkOrder[]): Prom
 
 // ─── updateHedef ──────────────────────────────────────────────────────────────
 export async function updateHedef(id: string, hedef: number): Promise<void> {
+  const p = _hedefSchema.safeParse(hedef)
+  if (!p.success) throw new Error(p.error.issues[0]?.message)
   await supabase.from('uys_work_orders').update({ hedef }).eq('id', id)
 }
 
@@ -141,6 +167,9 @@ export async function editLog(
   stokHareketler: any[],
   materials: any[]
 ): Promise<{ hmUpdated: boolean; delta: number }> {
+  if (!Number.isFinite(yeniQty) || yeniQty < 0) throw new Error('Yeni miktar geçersiz')
+  if (!Number.isFinite(yeniFire) || yeniFire < 0) throw new Error('Yeni fire geçersiz')
+
   const delta = yeniQty - (l.qty || 0)
   const rc = wo.rcId
     ? recipes.find((r: any) => r.id === wo.rcId)

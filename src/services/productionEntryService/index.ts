@@ -4,14 +4,31 @@
  * ProductionEntry.tsx (EntryModal) ve OperatorPanel.tsx (OprEntryModal)
  * tarafından paylaşılan DB yazma akışı: log → mamul stok → HM tüketim →
  * fire log → WO durum → active_work kapama → audit.
+ *
+ * v17.00 — Servis katmanı Zod giriş doğrulama eklendi
  */
 
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { uid } from '@/lib/utils'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { auditUretimLog } from '@/services/auditService'
 import { isBarMaterialByKod } from '@/services/productionService/barModel'
 import type { Material } from '@/types'
+
+// ─── Servis katmanı giriş şemaları ───────────────────────────────────────────
+
+// Üretim girişinin temel sayısal alanları — yüksek etkili işlem öncesi kalkan
+const _uretimGirisiSchema = z.object({
+  qty:  z.number().int('Miktar tam sayı olmalı').min(0, 'Miktar negatif olamaz'),
+  fire: z.number().int('Fire tam sayı olmalı').min(0, 'Fire negatif olamaz'),
+  tarih: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD formatında olmalı'),
+  saat:  z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM formatında olmalı'),
+  not_:  z.string().max(500, 'Not 500 karakter geçemez'),
+}).refine(d => d.qty + d.fire > 0, {
+  message: 'Üretim ve fire toplamı sıfır olamaz',
+  path: ['qty'],
+})
 
 // ─── Arayüzler ───────────────────────────────────────────────────────────────
 
@@ -136,6 +153,12 @@ export async function kaydetUretimGirisi(p: UretimGirisiParams): Promise<UretimG
   const { woId, wo, tarih, saat, qty: q, fire: f, oprList, duruslar, not_, hmSatirlar, materials, freshProd, freshFire, siparisNo } = p
   const logId = uid()
 
+  // Giriş doğrulama — yüksek etkili DB akışı öncesi kalkan
+  const validation = _uretimGirisiSchema.safeParse({ qty: q, fire: f, tarih, saat, not_: not_ || '' })
+  if (!validation.success) {
+    return { ok: false, logId, autoKapatildi: false, error: validation.error.issues[0]?.message }
+  }
+
   try {
     const { error: logErr } = await supabase.from('uys_logs').insert({
       id: logId, wo_id: woId, tarih, saat, qty: q, fire: f,
@@ -175,6 +198,12 @@ export async function kaydetUretimGirisi(p: UretimGirisiParams): Promise<UretimG
 /** Mevcut üretim girişini düzenle — UPDATE log + stok yeniden oluştur + fire güncelle. */
 export async function duzenleUretimGirisi(editLogId: string, p: UretimGirisiParams): Promise<UretimGirisiSonuc> {
   const { woId, wo, tarih, qty: q, fire: f, oprList, duruslar, not_, hmSatirlar, materials, freshProd, freshFire, siparisNo } = p
+
+  // Giriş doğrulama
+  const validation = _uretimGirisiSchema.safeParse({ qty: q, fire: f, tarih, saat: p.saat || '00:00', not_: not_ || '' })
+  if (!validation.success) {
+    return { ok: false, logId: editLogId, autoKapatildi: false, error: validation.error.issues[0]?.message }
+  }
 
   try {
     await supabase.from('uys_logs').update({

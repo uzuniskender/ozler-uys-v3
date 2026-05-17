@@ -2,8 +2,10 @@
  * v15.54 — Sevkiyat Servisi
  * Faz 1: nextSevkNo, isValidSevkNo
  * Faz 2: calcSevkDurum, deleteSevk, createSevk, updateSevk
+ * v17.00 — Servis katmanı Zod giriş doğrulama eklendi
  */
 
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { wrap } from '@/services/_base/errors'
 import { uid, today } from '@/lib/utils'
@@ -11,6 +13,24 @@ import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
 import { auditLog } from '@/services/auditService'
 import type { StokHareket } from '@/types'
+
+// ─── Servis katmanı giriş şemaları ───────────────────────────────────────────
+
+const _sevkKalemSchema = z.object({
+  malkod: z.string().trim().min(1, 'Malzeme kodu boş olamaz').max(50),
+  malad:  z.string().trim().min(1, 'Malzeme adı boş olamaz').max(200),
+  miktar: z.number().positive('Miktar sıfırdan büyük olmalı'),
+})
+
+const _kalemlerSchema = z
+  .array(_sevkKalemSchema)
+  .min(1, 'En az bir kalem gerekli')
+
+const _sevkNotSchema = z.string().max(500, 'Not 500 karakter geçemez')
+
+const _tarihSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-MM-DD formatında olmalı')
+
+// ─── Tipler ───────────────────────────────────────────────────────────────────
 
 type SevkDurum = 'sevk_yok' | 'kismi_sevk' | 'tamamen_sevk'
 type SevkKalem = { malkod: string; malad: string; miktar: number }
@@ -109,6 +129,17 @@ export async function createSevk(params: {
   mamulKod?: string
 }): Promise<{ id: string; sevkDurum: SevkDurum | null }> {
   const { orderId, siparisNo, musteri, kalemler, tarih, not_, doStokCikis, stokHareketler, ordAdet, mamulKod } = params
+
+  // Giriş doğrulama
+  const kalemParsed = _kalemlerSchema.safeParse(kalemler)
+  if (!kalemParsed.success) throw new Error(kalemParsed.error.issues[0]?.message)
+
+  const notParsed = _sevkNotSchema.safeParse(not_)
+  if (!notParsed.success) throw new Error(notParsed.error.issues[0]?.message)
+
+  const tarihParsed = _tarihSchema.safeParse(tarih)
+  if (!tarihParsed.success) throw new Error(tarihParsed.error.issues[0]?.message)
+
   if (doStokCikis) {
     const stokYetersiz = kalemler.filter(k => getStok(k.malkod, stokHareketler) < k.miktar)
     if (stokYetersiz.length > 0) {
@@ -150,6 +181,14 @@ export async function updateSevk(params: {
   mamulKod?: string
 }): Promise<void> {
   const { sevkId, orderId, kalemler, not_, doStokCikis, stokHareketler, tarih, ordAdet, mamulKod } = params
+
+  // Giriş doğrulama
+  const kalemParsed = _kalemlerSchema.safeParse(kalemler)
+  if (!kalemParsed.success) throw new Error(kalemParsed.error.issues[0]?.message)
+
+  const notParsed = _sevkNotSchema.safeParse(not_)
+  if (!notParsed.success) throw new Error(notParsed.error.issues[0]?.message)
+
   const { error: e1 } = await supabase.from('uys_sevkler').update({ kalemler, not_ }).eq('id', sevkId)
   if (e1) throw wrap(e1, { table: 'uys_sevkler', op: 'update' })
   if (doStokCikis) {

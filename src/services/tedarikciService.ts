@@ -7,7 +7,10 @@
 //
 // not_ ↔ not: DB kolonu `not_`'tır (reserved word kaçışı); JS tipi `not` kullanır.
 // Servis bu köprüyü dahili olarak kurar — çağıran her zaman `not` alanıyla çalışır.
+//
+// v17.00 — Servis katmanı Zod şemaları eklendi (tedarikci + tedarik CRUD giriş doğrulama)
 
+import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
 import { wrap } from '@/services/_base/errors'
 import { applyIlikeArama, norm } from '@/services/_base/query'
@@ -17,6 +20,38 @@ import type { Tedarikci } from '@/types'
 import type { TedarikciInsert, TedarikciUpdate } from '@/types/tedarikci'
 
 const TABLO = 'uys_tedarikciler'
+
+// ─── Servis katmanı giriş şemaları ───────────────────────────────────────────
+
+const _tedarikciInsertSchema = z.object({
+  ad:    z.string().trim().min(1, 'Firma adı boş olamaz').max(100, 'Firma adı 100 karakter geçemez'),
+  kod:   z.string().trim().max(20, 'Kod 20 karakter geçemez').optional(),
+  adres: z.string().max(200, 'Adres 200 karakter geçemez').optional(),
+  tel:   z.string().max(20, 'Tel 20 karakter geçemez').optional(),
+  email: z.string().max(100, 'E-posta 100 karakter geçemez').optional(),
+  not:   z.string().max(500, 'Not 500 karakter geçemez').optional(),
+})
+
+const _tedarikciUpdateSchema = _tedarikciInsertSchema.partial()
+
+// uys_tedarikler (procurement order) giriş şeması
+const _tedarikDbRowSchema = z.object({
+  malkod:       z.string().trim().min(1, 'Malzeme kodu boş olamaz').max(50),
+  malad:        z.string().max(200).optional(),
+  miktar:       z.number().positive('Miktar sıfırdan büyük olmalı'),
+  birim:        z.string().max(20).optional(),
+  order_id:     z.string().nullable().optional(),
+  siparis_no:   z.string().max(50).nullable().optional(),
+  durum:        z.string().optional(),
+  geldi:        z.boolean().optional(),
+  teslim_tarihi: z.string().nullable().optional(),
+  tedarikci_id: z.string().nullable().optional(),
+  tedarikci_ad: z.string().max(100).nullable().optional(),
+  not_:         z.string().max(500).nullable().optional(),
+  tarih:        z.string().optional(),
+})
+
+// ─── Dahili yardımcılar ───────────────────────────────────────────────────────
 
 // DB satırı → Tedarikci (store tipiyle uyumlu)
 function toTedarikci(r: Record<string, unknown>): Tedarikci {
@@ -70,12 +105,13 @@ export async function getTedarikciByKod(kod: string): Promise<Tedarikci | null> 
 
 /** Yeni tedarikçi oluştur. */
 export async function createTedarikci(payload: TedarikciInsert): Promise<Tedarikci> {
-  if (!payload.ad?.trim()) throw new Error('Firma adı boş olamaz')
+  const parsed = _tedarikciInsertSchema.safeParse(payload)
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message)
 
   const insertData = {
     id: payload.id ?? uid(),
     kod: norm.optStr(payload.kod),
-    ad: norm.ad(payload.ad),
+    ad: norm.ad(parsed.data.ad),
     adres: norm.optStr(payload.adres),
     tel: norm.optStr(payload.tel),
     email: norm.optStr(payload.email),
@@ -97,6 +133,9 @@ export async function updateTedarikci(
   id: string,
   payload: TedarikciUpdate,
 ): Promise<Tedarikci> {
+  const parsed = _tedarikciUpdateSchema.safeParse(payload)
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message)
+
   const updateData: Record<string, unknown> = {}
   if (payload.kod !== undefined) updateData.kod = norm.optStr(payload.kod)
   if (payload.ad !== undefined) {
@@ -232,6 +271,9 @@ export async function getTedarik(id: string): Promise<{ id: string; order_id: st
 
 /** Yeni tedarik oluştur. */
 export async function createTedarik(payload: TedarikDbRow): Promise<{ id: string }> {
+  const parsed = _tedarikDbRowSchema.safeParse(payload)
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message)
+
   const id = payload.id ?? uid()
   const row = { ...payload, id, tarih: payload.tarih ?? today() }
   const { error } = await supabase.from(TED_TABLO).insert(row)
@@ -242,6 +284,14 @@ export async function createTedarik(payload: TedarikDbRow): Promise<{ id: string
 /** Toplu tedarik insert (Excel import için). */
 export async function createTedariklerBulk(list: TedarikDbRow[]): Promise<number> {
   if (!list.length) return 0
+  // Her satırı doğrula — hata varsa satır bilgisiyle birlikte fırlat
+  for (let i = 0; i < list.length; i++) {
+    const p = _tedarikDbRowSchema.safeParse(list[i])
+    if (!p.success) {
+      const kod = list[i].malkod || `satır ${i + 1}`
+      throw new Error(`Veri hatası (${kod}): ${p.error.issues[0]?.message}`)
+    }
+  }
   const today_ = today()
   const rows = list.map(p => ({ ...p, id: p.id ?? uid(), tarih: p.tarih ?? today_ }))
   const { error } = await supabase.from(TED_TABLO).insert(rows)
@@ -251,6 +301,7 @@ export async function createTedariklerBulk(list: TedarikDbRow[]): Promise<number
 
 /** Mevcut tedariki güncelle. */
 export async function updateTedarik(id: string, patch: Partial<TedarikDbRow>): Promise<void> {
+  if (patch.miktar !== undefined && patch.miktar <= 0) throw new Error('Miktar sıfırdan büyük olmalı')
   const { error } = await supabase.from(TED_TABLO).update(patch).eq('id', id)
   wrap(error, { table: TED_TABLO, op: 'update' })
 }
