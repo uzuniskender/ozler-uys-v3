@@ -658,3 +658,40 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 - `5a4d8bc` — Operations istatistik kolonları + detay paneli v17.08
 - `5a0d24f` — Reports OEE tab: haftalık trend + istasyon bar chart + %85 hedef çizgisi v17.10
 - `31b5c02` — Stations kapasite istatistikleri + detay paneli v17.12
+
+---
+
+### 17 Mayıs 2026 — Gece/Sabah Oturumu (v17.09–v17.14)
+
+#### T1 commit'leri (bu oturum sırasında origin/main'e geldi)
+
+| Commit | Değişiklik |
+|--------|-----------|
+| `c9e6346` | AuditLog kullanıcı dropdown + çoklu olay filtresi + Excel export v17.09 |
+| `84bb0c2` | Reports DuruşAnalizi tab — pie chart + istasyon bar chart + haftalık trend v17.10 |
+| `6773f09` | Logs aktivite özeti — son 7 gün v17.06 |
+| `6bdf696` | Logs aktivite özeti — üretim/fire tip dağılımı + operators dep v17.10 |
+| `0499982` | Backup sayfası — boyut ort, zamanlama durumu kartı, son 5 yedek paneli v17.12 |
+| `0a45ca1` | HmTipleri malzeme sayısı + toplam stok + min stok altı istatistiği v17.13 |
+| `6915285` | OperatorPanel Günlük Hedef göstergesi + ilerleme bar v17.13 |
+| `2dc06ee` | OperatorPanel günlük hedef göstergesi — ilerleme bar + tahmini bitiş saati v17.13 |
+| `d72fc2e` | ProductionEntry Şablondan Yükle — son 3 giriş şablon listesi v17.13 |
+| `ba5b2f5` | DowntimeCodes kodId eşleşmesi düzelt + son 5 kullanım detay paneli v17.14 |
+| `cd51246` | Reports İstasyonPerf tab — OEE karşılaştırma + fire oranı + haftalık trend v17.10 |
+| `7918281` | Reports istperf — OEE bileşenler bar + kalite trend + mini bar v17.07 |
+
+#### Bu oturumda yapılanlar (T0)
+
+**DowntimeCodes detay paneli** (`6e99bf0`)
+- `DowntimeCodes.tsx` — sağdan kayan sabit panel: Kullanım/Toplam/Ort. KPI kartları + istasyon dağılımı progress barları
+- Satır tıklandığında `selectedKod` state ile panel açılır, X ile kapanır
+
+**AuditLog React Fragment fix** (`28bf273`)
+- `rows.map()` içinde anonim `<>` → `<Fragment key={row.id}>` — React key uyarısı giderildi
+- Dört özellik (kullanıcı filtre, çoklu olay seçim, tarih aralığı, Excel export) önceden tam uygulanmıştı
+
+#### Doğrulanan "zaten uygulanmış" özellikler
+
+- **Procurement.tsx** tedarikçi gruplama — Liste ↔ Tedarikçi toggle, geciken/bekleyen badge, miktarOzet (`d7817f7`)
+- **Reports.tsx İstasyon Perf.** tab — OEE bileşen bar, fire oranı bar, haftalık trend LineChart, tıklanabilir karşılaştırma tablosu (`cd51246` + `7918281`)
+- **AuditLog.tsx** filtreler + Excel export (`c9e6346`)
