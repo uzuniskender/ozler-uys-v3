@@ -610,3 +610,36 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 
 #### Bekleyen
 - Normalize veri geçişi (kapsam belirsiz — ertelendi)
+
+---
+
+### 17 Mayıs 2026 — Akşam Oturumu (v17.08–v17.09)
+
+#### Bu oturumda tamamlananlar
+
+**Procurement gecikme kolonu**
+- `Procurement.tsx` — `teslimTarihi < today() && !geldi` koşulunda kırmızı `⚠ Gecikti` badge
+- Filtre listesine "Geciken" seçeneği (`text-red`) eklendi
+- Tablo başlığına "Gecikme" kolonu eklendi (Teslim ile Durum arasında)
+
+**Operators bölüm gruplama**
+- `Operators.tsx` — toggle buton: liste ↔ bölüm görünümü
+- `bolumStats` useMemo: `activeWork.tarih === today()` cross-reference ile o gün çalışan sayısı
+- Bölüm görünümünde her kart: toplam / aktif / bugün çalışan operatör sayısı
+- **Operators izin takvimi** (`cee1f74`): bu hafta onaylı izinli operatörler amber badge + bölüm kart vurgusu
+
+**E2E spec 03-problem-takip**
+- `tests/e2e/specs/03-problem-takip.spec.ts` oluşturuldu
+- Akış: problem oluştur → D4 kök neden + D5 kalıcı çözüm → "Kapandı olarak işaretle" → satır yeşil doğrula
+- `tests/e2e/helpers/cleanup.ts` — `pt_problemler` için iki temizleme satırı: `col: 'id'` + `col: 'problem'` (UI kayıtları UUID id alıyor)
+- Fix: `getByRole('button', { name: 'Ekle', exact: true })` — has-text case-insensitive false match düzeltildi
+
+**Chat PDF inline önizleme (v15.20)** (`cee1f74`)
+- `AttachmentView` — `application/pdf` için `<embed>` ile 320px inline önizleme
+- Resim/diğer dosya davranışı değişmedi; PDF'e indir ikonu eklendi
+
+**Diğer commitler (kullanıcı)**
+- `81ad35e` — Reports Gecikme tab genişletme v17.08
+- `d7817f7` — Procurement tedarikci bazlı gruplama / Liste+Tedarikçi toggle v17.08
+- `50df278` — src/lib dead code temizliği (kullanılmayan export + constants.ts silindi) v17.09
+- `a70af58` — Dashboard haftalık üretim trendi mini widget v17.09
