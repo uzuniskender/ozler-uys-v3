@@ -31,6 +31,7 @@ export function Reports() {
   const [tab, setTab] = useState('ozet')
   const [telafiRunning, setTelafiRunning] = useState(false)
   const [stokKritikOnly, setStokKritikOnly] = useState(false)
+  const [selectedIst, setSelectedIst] = useState('')
 
   // Detaylı Rapor filtreleri
   const [dBaslangic, setDBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
@@ -1426,28 +1427,207 @@ export function Reports() {
 
       {/* İstasyon Performans */}
       {tab === 'istperf' && (() => {
-        const istMap: Record<string, { ad: string; uretim: number; woCount: number }> = {}
+        // İstasyon veri toplama
+        type IstBucket = { ad: string; uretim: number; woCount: number; hedef: number; calismaDk: number; durusDk: number; opAds: Set<string> }
+        const istMap: Record<string, IstBucket> = {}
         workOrders.forEach(w => {
           const key = w.istAd || w.opAd || 'Tanımsız'
-          if (!istMap[key]) istMap[key] = { ad: key, uretim: 0, woCount: 0 }
+          if (!istMap[key]) istMap[key] = { ad: key, uretim: 0, woCount: 0, hedef: 0, calismaDk: 0, durusDk: 0, opAds: new Set() }
           istMap[key].uretim += uretimByWo.get(w.id) ?? 0
           istMap[key].woCount++
+          istMap[key].hedef += w.hedef || 0
+          if (w.opAd) istMap[key].opAds.add(w.opAd)
         })
-        const data = Object.values(istMap).sort((a, b) => b.uretim - a.uretim)
-        return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">İstasyon/Operasyon Performansı ({data.length})</h3>
-            {data.length ? (
-              <>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={data.slice(0, 15)}><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis dataKey="ad" tick={{ fontSize: 9, fill: '#888' }} /><YAxis tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Bar dataKey="uretim" fill="#22c55e" name="Üretim" radius={[3, 3, 0, 0]} /></BarChart>
-              </ResponsiveContainer>
-              <table className="w-full text-xs mt-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">İstasyon</th><th className="text-right px-4 py-2">İE Sayısı</th><th className="text-right px-4 py-2">Toplam Üretim</th></tr></thead>
-              <tbody>{data.map(d => (<tr key={d.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{d.ad}</td><td className="px-4 py-1.5 text-right font-mono">{d.woCount}</td><td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td></tr>))}</tbody></table>
-              </>
-            ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+        logs.forEach(l => {
+          const wo = woMap[l.woId]
+          const key = wo?.istAd || wo?.opAd || 'Tanımsız'
+          if (!istMap[key]) return
+          ;(Array.isArray(l.operatorlar) ? l.operatorlar : []).forEach((o: { bas?: string; bit?: string }) => {
+            if (o.bas && o.bit && o.bit >= o.bas) {
+              const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
+              const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
+              istMap[key].calismaDk += Math.max(0, e - b)
+            }
+          })
+          if (Array.isArray(l.duruslar)) {
+            l.duruslar.forEach((d: { sure?: number }) => { istMap[key].durusDk += d.sure || 0 })
+          }
+        })
+
+        // opAd → fire toplam (O(n) önbellek)
+        const opAdFireMap: Record<string, number> = {}
+        parcaFireLogs.forEach(f => { const k = f.opAd || ''; opAdFireMap[k] = (opAdFireMap[k] || 0) + f.qty })
+
+        const data = Object.values(istMap).map(d => {
+          const durusCapped = Math.min(d.durusDk, d.calismaDk)
+          const avail = d.calismaDk > 0 ? Math.max(0, Math.round((d.calismaDk - durusCapped) / d.calismaDk * 100)) : 100
+          const perf = d.hedef > 0 ? Math.min(100, Math.round(d.uretim / d.hedef * 100)) : 0
+          const fire = [...d.opAds].reduce((a, op) => a + (opAdFireMap[op] || 0), 0)
+          const quality = d.uretim > 0 ? Math.max(0, Math.round((d.uretim - fire) / d.uretim * 100)) : 100
+          const oee = Math.round(avail * perf * quality / 10000)
+          const fireOran = (d.uretim + fire) > 0 ? Math.round(fire / (d.uretim + fire) * 1000) / 10 : 0
+          return { ad: d.ad, woCount: d.woCount, uretim: d.uretim, hedef: d.hedef, calismaDk: d.calismaDk, avail, perf, quality, oee, fire, fireOran }
+        }).sort((a, b) => b.uretim - a.uretim)
+
+        const istListesi = data.map(d => d.ad)
+        const aktifIst = selectedIst || istListesi[0] || ''
+
+        // Haftalık trend — seçili istasyon (son 8 hafta)
+        const getWeekStart = (dateStr: string): string => {
+          const d = new Date(dateStr)
+          const day = d.getDay()
+          d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+          return d.toISOString().slice(0, 10)
+        }
+        const haftaMap: Record<string, { uretim: number; fire: number }> = {}
+        logs.forEach(l => {
+          if (!l.tarih) return
+          const wo = woMap[l.woId]
+          if ((wo?.istAd || wo?.opAd || 'Tanımsız') !== aktifIst) return
+          const wb = getWeekStart(l.tarih)
+          if (!haftaMap[wb]) haftaMap[wb] = { uretim: 0, fire: 0 }
+          haftaMap[wb].uretim += l.qty
+          haftaMap[wb].fire += l.fire || 0
+        })
+        const haftaData = Object.entries(haftaMap)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .slice(-8)
+          .map(([wb, v]) => ({ hafta: wb.slice(5), ...v }))
+
+        const oeeBarData = [...data].filter(d => d.oee > 0).sort((a, b) => b.oee - a.oee).slice(0, 12)
+        const fireBarData = [...data].filter(d => d.uretim + d.fire > 0).sort((a, b) => b.fireOran - a.fireOran).slice(0, 12)
+        const topOee = oeeBarData[0]
+
+        return data.length ? (
+          <div className="space-y-4">
+            {/* KPI */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono text-accent">{data.length}</div>
+                <div className="text-[11px] text-zinc-500">Aktif İstasyon</div>
+              </div>
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono text-green">{data.reduce((a, d) => a + d.uretim, 0)}</div>
+                <div className="text-[11px] text-zinc-500">Toplam Üretim</div>
+              </div>
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className={`text-2xl font-light font-mono ${(topOee?.oee ?? 0) >= 85 ? 'text-green' : 'text-amber'}`}>{topOee?.oee ?? '—'}%</div>
+                <div className="text-[11px] text-zinc-500 truncate">En Yüksek OEE — {topOee?.ad ?? ''}</div>
+              </div>
+            </div>
+
+            {/* OEE + Fire grafikleri */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">İstasyon OEE Karşılaştırması</h3>
+                {oeeBarData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={oeeBarData} margin={{ left: 4, right: 20, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="ad" tick={{ fontSize: 8, fill: '#888' }} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} unit="%" />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'OEE']} />
+                      <ReferenceLine y={85} stroke="#22c55e" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: '%85', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
+                      <Bar dataKey="oee" radius={[3, 3, 0, 0]} name="OEE">
+                        {oeeBarData.map((d, i) => <Cell key={i} fill={d.oee >= 85 ? COLORS[3] : d.oee >= 60 ? COLORS[1] : COLORS[2]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-60 flex items-center justify-center text-zinc-600 text-xs">Veri yok</div>}
+              </div>
+
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">İstasyon Fire Oranı</h3>
+                {fireBarData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={fireBarData} margin={{ left: 4, right: 20, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="ad" tick={{ fontSize: 8, fill: '#888' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#888' }} unit="%" />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'Fire Oranı']} />
+                      <Bar dataKey="fireOran" radius={[3, 3, 0, 0]} name="Fire %">
+                        {fireBarData.map((d, i) => <Cell key={i} fill={d.fireOran <= 2 ? COLORS[3] : d.fireOran <= 5 ? COLORS[1] : COLORS[2]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-60 flex items-center justify-center text-zinc-600 text-xs">Fire verisi yok</div>}
+              </div>
+            </div>
+
+            {/* Haftalık trend — seçili istasyon */}
+            <div className="bg-bg-2 border border-border rounded-lg p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <h3 className="text-sm font-semibold">Haftalık Üretim Trendi</h3>
+                <select
+                  value={aktifIst}
+                  onChange={e => setSelectedIst(e.target.value)}
+                  className="ml-auto px-2.5 py-1.5 bg-bg-1 border border-border rounded text-xs text-zinc-300"
+                >
+                  {istListesi.map(ist => <option key={ist} value={ist}>{ist}</option>)}
+                </select>
+              </div>
+              {haftaData.length > 1 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={haftaData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                    <XAxis dataKey="hafta" tick={{ fontSize: 9, fill: '#888' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                    <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
+                    <Line type="monotone" dataKey="uretim" stroke={COLORS[3]} strokeWidth={2} dot={{ r: 3, fill: COLORS[3] }} name="Üretim" />
+                    <Line type="monotone" dataKey="fire" stroke={COLORS[2]} strokeWidth={1.5} strokeDasharray="4 2" dot={{ r: 2, fill: COLORS[2] }} name="Fire" />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-52 flex items-center justify-center text-zinc-600 text-xs">
+                  {aktifIst ? `"${aktifIst}" için yeterli haftalık veri yok` : 'İstasyon seçin'}
+                </div>
+              )}
+            </div>
+
+            {/* Karşılaştırma tablosu */}
+            <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <div className="px-4 py-2 border-b border-border">
+                <h3 className="text-sm font-semibold">İstasyon Detayı — satıra tıklayarak trend seç</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="border-b border-border text-zinc-500 bg-bg-1/50">
+                    <th className="text-left px-4 py-2">İstasyon</th>
+                    <th className="text-right px-4 py-2">İE</th>
+                    <th className="text-right px-4 py-2">Üretim</th>
+                    <th className="text-right px-4 py-2">Fire</th>
+                    <th className="text-right px-4 py-2">Fire %</th>
+                    <th className="text-right px-4 py-2">Kullan.</th>
+                    <th className="text-right px-4 py-2">Perf.</th>
+                    <th className="text-right px-4 py-2">Kalite</th>
+                    <th className="text-right px-4 py-2 font-semibold">OEE</th>
+                  </tr></thead>
+                  <tbody>{data.map(d => (
+                    <tr
+                      key={d.ad}
+                      onClick={() => setSelectedIst(d.ad)}
+                      className={`border-b border-border/30 cursor-pointer hover:bg-bg-1/40 transition-colors ${d.ad === aktifIst ? 'bg-accent/5 border-l-2 border-l-accent' : ''}`}
+                    >
+                      <td className="px-4 py-1.5 text-zinc-300">{d.ad}</td>
+                      <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{d.woCount}</td>
+                      <td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td>
+                      <td className="px-4 py-1.5 text-right font-mono text-red">{d.fire > 0 ? d.fire : '—'}</td>
+                      <td className={`px-4 py-1.5 text-right font-mono ${d.fireOran > 5 ? 'text-red' : d.fireOran > 2 ? 'text-amber' : 'text-zinc-500'}`}>
+                        {d.uretim + d.fire > 0 ? `${d.fireOran}%` : '—'}
+                      </td>
+                      <td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.calismaDk > 0 ? `${d.avail}%` : '—'}</td>
+                      <td className="px-4 py-1.5 text-right font-mono">{d.perf > 0 ? `${d.perf}%` : '—'}</td>
+                      <td className="px-4 py-1.5 text-right font-mono">{d.quality}%</td>
+                      <td className={`px-4 py-1.5 text-right font-mono font-semibold ${d.oee >= 85 ? 'text-green' : d.oee >= 60 ? 'text-amber' : 'text-red'}`}>
+                        {d.oee > 0 ? `${d.oee}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
           </div>
-        )
+        ) : <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600">Veri yok</div>
       })()}
 
       {/* Stok Durumu */}
