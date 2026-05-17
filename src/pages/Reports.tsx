@@ -7,7 +7,7 @@ import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { topluFireTelafi, fireTelafiIeOlustur } from '@/services/productionService/fireTelafi'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, ReferenceLine } from 'recharts'
 
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
@@ -698,6 +698,7 @@ export function Reports() {
 
       {/* OEE */}
       {tab === 'oee' && (() => {
+        // Operasyon bazlı OEE (mevcut)
         const oeeData = opData.map(d => {
           const calismaDk = opTimeMap.calisma.get(d.op) ?? 0
           const durusDk = Math.min(opTimeMap.durus.get(d.op) ?? 0, calismaDk)
@@ -711,23 +712,170 @@ export function Reports() {
         const avgOEE = totalUretimOEE > 0
           ? Math.round(oeeData.reduce((s, d) => s + d.oee * d.uretim, 0) / totalUretimOEE)
           : oeeData.length ? Math.round(oeeData.reduce((a, d) => a + d.oee, 0) / oeeData.length) : 0
+
+        // Haftalık OEE trend (son 8 hafta)
+        const getWeekStart = (dateStr: string): string => {
+          const d = new Date(dateStr)
+          const day = d.getDay()
+          d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+          return d.toISOString().slice(0, 10)
+        }
+        const weekBuckets: Record<string, { uretim: number; fire: number; calismaDk: number; durusDk: number; woIds: Set<string> }> = {}
+        logs.forEach(l => {
+          if (!l.tarih) return
+          const wb = getWeekStart(l.tarih)
+          if (!weekBuckets[wb]) weekBuckets[wb] = { uretim: 0, fire: 0, calismaDk: 0, durusDk: 0, woIds: new Set() }
+          const bk = weekBuckets[wb]
+          bk.uretim += l.qty
+          bk.fire += (l.fire || 0)
+          bk.woIds.add(l.woId)
+          ;(Array.isArray(l.operatorlar) ? l.operatorlar : []).forEach((o: { bas?: string; bit?: string }) => {
+            if (o.bas && o.bit && o.bit >= o.bas) {
+              const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
+              const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
+              bk.calismaDk += Math.max(0, e - b)
+            }
+          })
+          if (Array.isArray(l.duruslar)) {
+            l.duruslar.forEach((d: { sure?: number }) => { bk.durusDk += d.sure || 0 })
+          }
+        })
+        const haftaOEE = Object.entries(weekBuckets)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .slice(-8)
+          .map(([wb, bk]) => {
+            const woHedef = [...bk.woIds].reduce((s, id) => s + (woMap[id]?.hedef || 0), 0)
+            const avail = bk.calismaDk > 0 ? Math.max(0, Math.round((bk.calismaDk - Math.min(bk.durusDk, bk.calismaDk)) / bk.calismaDk * 100)) : 100
+            const perf = woHedef > 0 ? Math.min(100, Math.round(bk.uretim / woHedef * 100)) : 100
+            const quality = (bk.uretim + bk.fire) > 0 ? Math.max(0, Math.round(bk.uretim / (bk.uretim + bk.fire) * 100)) : 100
+            const oee = Math.round(avail * perf * quality / 10000)
+            return { hafta: wb.slice(5), oee }
+          })
+
+        // İstasyon bazlı OEE
+        const istOpAds = new Map<string, Set<string>>()
+        const istHedef = new Map<string, number>()
+        const istUretim = new Map<string, number>()
+        workOrders.forEach(w => {
+          const key = w.istAd || w.opAd || 'Tanımsız'
+          if (!istOpAds.has(key)) { istOpAds.set(key, new Set()); istHedef.set(key, 0); istUretim.set(key, 0) }
+          if (w.opAd) istOpAds.get(key)!.add(w.opAd)
+          istHedef.set(key, (istHedef.get(key) ?? 0) + (w.hedef || 0))
+          istUretim.set(key, (istUretim.get(key) ?? 0) + (uretimByWo.get(w.id) ?? 0))
+        })
+        const istCalisma = new Map<string, number>()
+        const istDurus = new Map<string, number>()
+        logs.forEach(l => {
+          const wo = woMap[l.woId]
+          const key = wo?.istAd || wo?.opAd || 'Tanımsız'
+          ;(Array.isArray(l.operatorlar) ? l.operatorlar : []).forEach((o: { bas?: string; bit?: string }) => {
+            if (o.bas && o.bit && o.bit >= o.bas) {
+              const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
+              const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
+              istCalisma.set(key, (istCalisma.get(key) ?? 0) + Math.max(0, e - b))
+            }
+          })
+          if (Array.isArray(l.duruslar)) {
+            l.duruslar.forEach((d: { sure?: number }) => { istDurus.set(key, (istDurus.get(key) ?? 0) + (d.sure || 0)) })
+          }
+        })
+        const istOEE = [...istOpAds.keys()]
+          .map(key => {
+            const calisma = istCalisma.get(key) ?? 0
+            const durus = Math.min(istDurus.get(key) ?? 0, calisma)
+            const hedef = istHedef.get(key) ?? 0
+            const uretim = istUretim.get(key) ?? 0
+            const avail = calisma > 0 ? Math.max(0, Math.round((calisma - durus) / calisma * 100)) : 100
+            const perf = hedef > 0 ? Math.min(100, Math.round(uretim / hedef * 100)) : 0
+            const fire = parcaFireLogs.filter(f => istOpAds.get(key)?.has(f.opAd || '')).reduce((a, f) => a + f.qty, 0)
+            const quality = uretim > 0 ? Math.max(0, Math.round((uretim - fire) / uretim * 100)) : 100
+            const oee = Math.round(avail * perf * quality / 10000)
+            return { ist: key, oee }
+          })
+          .filter(d => d.oee > 0)
+          .sort((a, b) => b.oee - a.oee)
+          .slice(0, 12)
+
         return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
+          <div className="space-y-4">
+            {/* KPI */}
+            <div className="flex items-center justify-between bg-bg-2 border border-border rounded-lg px-5 py-4">
               <h3 className="text-sm font-semibold">OEE — Genel Ekipman Etkinliği</h3>
-              <div className={`text-2xl font-mono font-light ${avgOEE >= 85 ? 'text-green' : avgOEE >= 60 ? 'text-amber' : 'text-red'}`}>{avgOEE}%</div>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-zinc-500">Ağırlıklı Ortalama</span>
+                <div className={`text-3xl font-mono font-light ${avgOEE >= 85 ? 'text-green' : avgOEE >= 60 ? 'text-amber' : 'text-red'}`}>{avgOEE}%</div>
+                <span className={`text-xs px-2 py-0.5 rounded border ${avgOEE >= 85 ? 'text-green border-green/30 bg-green/10' : 'text-zinc-500 border-border'}`}>Hedef ≥85%</span>
+              </div>
             </div>
-            <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operasyon</th><th className="text-right px-4 py-2">Kullanılabilirlik</th><th className="text-right px-4 py-2">Performans</th><th className="text-right px-4 py-2">Kalite</th><th className="text-right px-4 py-2 font-semibold">OEE</th></tr></thead>
-            <tbody>{oeeData.map(d => (
-              <tr key={d.op} className="border-b border-border/30">
-                <td className="px-4 py-1.5 text-zinc-300">{d.op}</td>
-                <td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.calismaDk > 0 ? `${d.avail}%` : '—'}</td>
-                <td className="px-4 py-1.5 text-right font-mono">{d.perf}%</td>
-                <td className="px-4 py-1.5 text-right font-mono">{d.quality}%</td>
-                <td className={`px-4 py-1.5 text-right font-mono font-semibold ${d.oee >= 85 ? 'text-green' : d.oee >= 60 ? 'text-amber' : 'text-red'}`}>{d.oee}%</td>
-              </tr>
-            ))}</tbody></table>
-            <div className="mt-3 text-[10px] text-zinc-600">OEE = Kullanılabilirlik × Performans × Kalite | Hedef: ≥85% | K=(Çalışma−Duruş)/Çalışma | P=Üretilen/Hedef | Q=(Üretilen−Fire)/Üretilen | K: operatör süresi girilmemişse 100%</div>
+
+            {/* Grafikler */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Haftalık OEE trend */}
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Haftalık OEE Trendi (son 8 hafta)</h3>
+                {haftaOEE.length > 1 ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={haftaOEE} margin={{ left: 4, right: 20, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="hafta" tick={{ fontSize: 9, fill: '#888' }} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} unit="%" />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'OEE']} />
+                      <ReferenceLine y={85} stroke="#22c55e" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: '%85 Hedef', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
+                      <Line type="monotone" dataKey="oee" stroke={COLORS[0]} strokeWidth={2} dot={{ r: 3, fill: COLORS[0] }} name="OEE" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-56 flex items-center justify-center text-zinc-600 text-xs">Yeterli haftalık veri yok</div>}
+              </div>
+
+              {/* İstasyon bazlı OEE */}
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">İstasyon Bazlı OEE</h3>
+                {istOEE.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={istOEE} margin={{ left: 4, right: 20, top: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="ist" tick={{ fontSize: 8, fill: '#888' }} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} unit="%" />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'OEE']} />
+                      <ReferenceLine y={85} stroke="#22c55e" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: '%85', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
+                      <Bar dataKey="oee" radius={[3, 3, 0, 0]} name="OEE">
+                        {istOEE.map((d, i) => (
+                          <Cell key={i} fill={d.oee >= 85 ? COLORS[3] : d.oee >= 60 ? COLORS[1] : COLORS[2]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-56 flex items-center justify-center text-zinc-600 text-xs">Veri yok</div>}
+              </div>
+            </div>
+
+            {/* Operasyon detay tablosu */}
+            <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <div className="px-4 py-2 border-b border-border">
+                <h3 className="text-sm font-semibold">Operasyon Detayı</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="border-b border-border text-zinc-500 bg-bg-1/50">
+                    <th className="text-left px-4 py-2">Operasyon</th>
+                    <th className="text-right px-4 py-2">Kullanılabilirlik</th>
+                    <th className="text-right px-4 py-2">Performans</th>
+                    <th className="text-right px-4 py-2">Kalite</th>
+                    <th className="text-right px-4 py-2 font-semibold">OEE</th>
+                  </tr></thead>
+                  <tbody>{oeeData.map(d => (
+                    <tr key={d.op} className="border-b border-border/30">
+                      <td className="px-4 py-1.5 text-zinc-300">{d.op}</td>
+                      <td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.calismaDk > 0 ? `${d.avail}%` : '—'}</td>
+                      <td className="px-4 py-1.5 text-right font-mono">{d.perf}%</td>
+                      <td className="px-4 py-1.5 text-right font-mono">{d.quality}%</td>
+                      <td className={`px-4 py-1.5 text-right font-mono font-semibold ${d.oee >= 85 ? 'text-green' : d.oee >= 60 ? 'text-amber' : 'text-red'}`}>{d.oee}%</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+            <div className="text-[10px] text-zinc-600 px-1">OEE = Kullanılabilirlik × Performans × Kalite | Hedef: ≥85% | K=(Çalışma−Duruş)/Çalışma | P=Üretilen/Hedef | Q=(Üretilen−Fire)/Üretilen | K: operatör süresi girilmemişse 100% | Haftalık trend: WO hedefi o hafta aktif tüm WO'lardan hesaplanır</div>
           </div>
         )
       })()}

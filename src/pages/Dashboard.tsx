@@ -250,6 +250,18 @@ export function Dashboard() {
   )
   const bekleyenIzinler = (izinler || []).filter(iz => iz.durum === 'bekliyor')
 
+  // Bugün izinli operatörler — bölüm bazında grupla (widget + KPI için)
+  const bugunIzinliGruplanmis = useMemo(() => {
+    const map = new Map<string, typeof bugunIzinli>()
+    for (const iz of bugunIzinli) {
+      const bolum = operators.find(o => o.id === iz.opId)?.bolum || '—'
+      const arr = map.get(bolum)
+      if (arr) arr.push(iz)
+      else map.set(bolum, [iz])
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'tr'))
+  }, [bugunIzinli, operators])
+
   const durusIstSet = new Set<string>()
   const durusDetay: { istAd: string; durusAd: string; woAd: string }[] = []
   logs.filter(l => l.tarih === todayStr && Array.isArray(l.duruslar) && l.duruslar.length > 0).forEach(l => {
@@ -435,12 +447,13 @@ export function Dashboard() {
 
       {/* KPI Row */}
       <SectionTitle>Anahtar Göstergeler</SectionTitle>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
         <Kpi icon="📋" label="Aktif Sipariş" value={aktifOrders.length} sub={`${acikWOs.length} açık İE`} onClick={() => navigate('/orders')} />
         <Kpi icon="⚙" label="Açık İş Emri" value={acikWOs.length} sub={ieBekleyenCount > 0 ? `${ieBekleyenCount} oluşturulmadı` : 'tüm sipariş İE\'li'} tone={ieBekleyenCount > 0 ? 'warn' : 'neutral'} onClick={() => navigate('/work-orders')} />
         <Kpi icon="🔧" label="Aktif Çalışma" value={uretimCount} sub={uretimCount > 0 ? 'canlı · 30sn' : 'bekliyor'} onClick={() => navigate('/production')} />
         <Kpi icon="🏭" label="Bugün Üretim" value={bugunUretim || '—'} sub="adet · bugün" onClick={() => navigate('/production')} />
         <Kpi icon="🔥" label="Bugün Fire" value={toplamFire || '—'} sub={bekleyenTelafiAdet > 0 ? `${bekleyenTelafiAdet} telafi bekliyor` : 'temiz'} tone={toplamFire > 0 ? 'warn' : 'neutral'} onClick={() => navigate('/reports')} />
+        <Kpi icon="🏖" label="Bugün İzinli" value={bugunIzinli.length || '—'} sub={bugunIzinli.length > 0 ? `${bugunIzinliGruplanmis.length} bölüm` : 'tam kadro'} tone={bugunIzinli.length > 0 ? 'warn' : 'neutral'} onClick={() => navigate('/operators')} />
         <Kpi icon="📦" label="Min Stok Altı" value={minStokUyari.length || '—'} sub={minStokUyari.length > 0 ? 'tedarik oluştur →' : 'temiz'} tone={minStokUyari.length > 0 ? 'alert' : 'neutral'} onClick={() => navigate('/warehouse')} />
         <Kpi icon="🚚" label="Bu Hafta Sevk" value={sevkBekleyenCount || '—'} sub={`${monStr.slice(5)}–${sunStr.slice(5)}`} onClick={() => navigate('/shipment')} />
       </div>
@@ -724,22 +737,30 @@ export function Dashboard() {
 
       {/* Personnel + Duruş + InactiveOps */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
-        <Panel title="Bugün İzinli / Raporlu" count={bugunIzinli.length || '—'} onTitleClick={() => navigate('/operators')}>
-          {bugunIzinli.length > 0 ? (
+        <Panel title="Bugün İzinli Operatörler" count={bugunIzinli.length || '—'} onTitleClick={() => navigate('/operators')}>
+          {bugunIzinliGruplanmis.length > 0 ? (
             <div>
-              {bugunIzinli.map(iz => {
-                const tagCls = iz.tip === 'rapor' ? 'bg-red-100 text-red-700' : iz.tip === 'mesai' ? 'bg-cyan-100 text-cyan-700' : 'bg-amber-100 text-amber-700'
-                return (
-                  <ListRow key={iz.id}>
-                    <CalendarX2 size={12} className="text-gray-400" />
-                    <span className="text-gray-900 font-medium">{iz.opAd}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${tagCls}`}>{iz.tip}</span>
-                    <span className="ml-auto font-mono text-gray-500 text-[11px]">
-                      {iz.saatBaslangic && iz.saatBitis ? `${iz.saatBaslangic}–${iz.saatBitis}` : `${iz.baslangic}–${iz.bitis}`}
-                    </span>
-                  </ListRow>
-                )
-              })}
+              {bugunIzinliGruplanmis.map(([bolum, izler]) => (
+                <div key={bolum}>
+                  <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{bolum}</span>
+                    <span className="text-[10px] font-mono text-gray-400">{izler.length} kişi</span>
+                  </div>
+                  {izler.map(iz => {
+                    const tagCls = iz.tip === 'rapor' ? 'bg-red-100 text-red-700' : iz.tip === 'mesai' ? 'bg-cyan-100 text-cyan-700' : 'bg-amber-100 text-amber-700'
+                    return (
+                      <ListRow key={iz.id}>
+                        <CalendarX2 size={12} className="text-gray-400" />
+                        <span className="text-gray-900 font-medium">{iz.opAd}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${tagCls}`}>{iz.tip}</span>
+                        <span className="ml-auto font-mono text-gray-500 text-[11px]">
+                          {iz.saatBaslangic && iz.saatBitis ? `${iz.saatBaslangic}–${iz.saatBitis}` : `${iz.baslangic}–${iz.bitis}`}
+                        </span>
+                      </ListRow>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-center text-[12px] text-gray-500 py-6">Bugün izinli kimse yok</div>
