@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo } from 'react'
-import { buildIhtiyacMap, getStok, buildStokMap } from '@/lib/hammaddeHesap'
+import { useNavigate } from 'react-router-dom'
+import { buildIhtiyacMap, buildStokMap } from '@/lib/hammaddeHesap'
 import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
@@ -32,6 +33,7 @@ export function Warehouse() {
   const cuttingPlans = useProductionStore(s => s.cuttingPlans)
   const orders = useOrderStore(s => s.orders)
   const { can, user } = useAuth()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
   const [showGiris, setShowGiris] = useState(false)
@@ -229,6 +231,15 @@ export function Warehouse() {
                         title="Mamul cikis (rezerv kontrol)"
                       >
                         📤 Çıkış
+                      </button>
+                    )}
+                    {!kartYok && !isMamul && minStokAlt && can('ted_add') && (
+                      <button
+                        onClick={() => navigate(`/procurement?malkod=${s.malkod}`)}
+                        className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded text-[10px] hover:bg-cyan-500/20"
+                        title="Min stok altında — tedarik önerisi oluştur"
+                      >
+                        Tedarik Öner
                       </button>
                     )}
                   </td>
@@ -599,7 +610,7 @@ function StokGirisModal({ materials, onClose, onSaved }: {
   const [aciklama, setAciklama] = useState('')
   const [search, setSearch] = useState('')
   const [showMatSearch, setShowMatSearch] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [submitting, _setSubmitting] = useState(false)
 
   const filteredMats = materials.filter(m => !search || (m.kod + m.ad).toLowerCase().includes(search.toLowerCase())).slice(0, 20)
   const selectedMat = materials.find(m => m.kod === malkod)
@@ -744,7 +755,7 @@ function AcikBarHurdaModal({
         })
         .in('id', secilenBarlar.map(b => b.id))
 
-      if (e1) { console.error('[hurda] acikBar update:', e1); toast.error('Hurda işlemi başarısız: ' + e1.message); return }
+      if (e1) { toast.error('Hurda işlemi başarısız: ' + e1.message); return }
 
       // 2. uys_fire_logs: her hurda bar için bir fire kaydı (tip='bar_hurda')
       //    Rapor takibi için. qty=1 (bar adedi), uzunluk_mm dolu.
@@ -770,7 +781,6 @@ function AcikBarHurdaModal({
         .upsert(fireRows, { onConflict: 'id' })   // upsert: geri al + tekrar hurda senaryosunda idempotent
       if (e2) {
         // Hurda zaten kaydedildi, fire log başarısız ise uyar ama geri alma
-        console.error('[hurda] fire_log insert:', e2)
         toast.warning('Hurda kaydedildi, fire log yazılamadı: ' + e2.message)
       }
 
@@ -781,7 +791,6 @@ function AcikBarHurdaModal({
       // Kalan açık bar yoksa modal'ı kapat
       if (aktifSayi - secilenBarlar.length <= 0) onClose()
     } catch (e: any) {
-      console.error('[hurda] exception:', e)
       toast.error('Hurda işlemi başarısız: ' + (e?.message || 'bilinmeyen hata'))
     } finally {
       setLoading(false)

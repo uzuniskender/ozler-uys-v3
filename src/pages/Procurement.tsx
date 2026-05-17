@@ -20,23 +20,20 @@ import { isProcurementPending } from '@/lib/statusUtils'
 export function Procurement() {
   const tedarikler = useWarehouseStore(s => s.tedarikler)
   const tedarikciler = useWarehouseStore(s => s.tedarikciler)
-  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const materials = useWarehouseStore(s => s.materials)
   const orders = useOrderStore(s => s.orders)
-  const workOrders = useProductionStore(s => s.workOrders)
-  const recipes = useProductionStore(s => s.recipes)
-  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
   const pendingFlows = useProductionStore(s => s.pendingFlows)
   const { can } = useAuth()
   const [searchParams] = useSearchParams()
   const activeFlowId = searchParams.get('flow') || ''
+  const urlMalkod = searchParams.get('malkod') || ''
   // v15.36 — Bu flow tamamlanmış mı? (Procurement'a tedarik sonrası yönlenildi)
   const tamamlananFlow = activeFlowId
     ? pendingFlows.find(f => f.id === activeFlowId && f.durum === 'tamamlandi')
     : null
   const [search, setSearch] = useState('')
   const [durumFilter, setDurumFilter] = useState('bekliyor')
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(() => !!urlMalkod)
   const [editItem, setEditItem] = useState<typeof tedarikler[0] | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -304,7 +301,14 @@ export function Procurement() {
         ) : <div className="p-8 text-center text-zinc-600 text-sm">Tedarik kaydı yok</div>}
       </div>
 
-      {showForm && <TedarikFormModal initial={editItem as unknown as Record<string, unknown>} tedarikciler={tedarikciler} orders={orders} onClose={() => { setShowForm(false); setEditItem(null) }} onSave={save} />}
+      {showForm && <TedarikFormModal
+        initial={editItem
+          ? (editItem as unknown as Record<string, unknown>)
+          : urlMalkod
+            ? { malkod: urlMalkod, malad: materials.find(m => m.kod === urlMalkod)?.ad || '' }
+            : null
+        }
+        tedarikciler={tedarikciler} orders={orders} onClose={() => { setShowForm(false); setEditItem(null) }} onSave={save} />}
     </div>
   )
 }
