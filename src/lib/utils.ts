@@ -13,15 +13,6 @@ export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
-export function esc(s: string | null | undefined): string {
-  if (!s) return ''
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-export function formatNumber(n: number): string {
-  return new Intl.NumberFormat('tr-TR').format(n)
-}
-
 export function pctColor(pct: number): string {
   if (pct >= 100) return 'text-green'
   if (pct >= 50) return 'text-amber'

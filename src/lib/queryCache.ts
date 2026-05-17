@@ -29,12 +29,3 @@ export function markFresh(key: string, ttlMs: number = DEFAULT_TTL_MS): void {
   _expiry.set(key, Date.now() + ttlMs)
 }
 
-/** Tek key'i temizle — bir sonraki isFresh çağrısı false döner. */
-export function invalidate(key: string): void {
-  _expiry.delete(key)
-}
-
-/** Tüm cache'i temizle (örn. logout sonrası manuel reset için). */
-export function invalidateAll(): void {
-  _expiry.clear()
-}

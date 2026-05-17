@@ -61,25 +61,7 @@ export function buildIhtiyacMap(
   return map
 }
 
-// ─── 3. TEK MALKOD NET DURUM ──────────────────────────────────────────────────
-export function getNetDurum(
-  malkod: string,
-  stokHareketler: any[],
-  allWos: any[],
-  cuttingPlans: any[],
-  tedarikler: any[],
-  materials?: any[]
-): { stok: number; ihtiyac: number; yolda: number; net: number } {
-  const stok = getStok(malkod, stokHareketler)
-  const ihtiyacMapResult = buildIhtiyacMap(allWos, cuttingPlans, materials)
-  const ihtiyac = Math.ceil(ihtiyacMapResult[malkod]?.ihtiyac || 0)
-  const yolda = (tedarikler || [])
-    .filter((t: any) => t.malkod === malkod && !t.geldi)
-    .reduce((a: number, t: any) => a + Number(t.miktar || 0), 0)
-  return { stok, ihtiyac, yolda, net: Math.max(0, ihtiyac - stok - yolda) }
-}
-
-// ─── 4. SİPARİŞ BAZINDA EKSİK ────────────────────────────────────────────────
+// ─── 3. SİPARİŞ BAZINDA EKSİK ────────────────────────────────────────────────
 export function computeOrderEksik(
   orders: any[],
   allWos: any[],
@@ -139,7 +121,7 @@ export function computeOrderEksik(
   return result
 }
 
-// ─── 5. TOPLU STOK MAP ───────────────────────────────────────────────────────
+// ─── 4. TOPLU STOK MAP ───────────────────────────────────────────────────────
 // Tüm stokHareketler'den malkod → net stok haritası (tek geçiş, O(n))
 // KURAL: getStok ile bire bir aynı semantik — bilinmeyen tip ignore.
 // (Önceden else branch'ı bilinmeyen tipi çıkış sayıyordu → getStok ile uyumsuzdu.)
@@ -158,7 +140,7 @@ export function buildStokMap(stokHareketler: any[]): Record<string, number> {
   return map
 }
 
-// ─── 6. TEDARİK YOLDA ────────────────────────────────────────────────────────
+// ─── 5. TEDARİK YOLDA ────────────────────────────────────────────────────────
 // Malkod için açık (gelmemiş) tedarik toplamı
 export function getYolda(malkod: string, tedarikler: any[]): number {
   return (tedarikler || [])

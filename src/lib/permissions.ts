@@ -7,7 +7,6 @@ let _overrides: Record<string, AdminRole[]> | null = null
 // F-1: Override yüklenene kadar deny-by-default (race condition guard)
 let _overridesLoaded = false
 export function setYetkiOverrides(o: Record<string, AdminRole[]> | null) { _overrides = o; _overridesLoaded = true }
-export function getYetkiOverrides() { return _overrides }
 
 // F-3: Override'a bakılmaksızın her zaman sadece admin erişebilir
 const HARDCODED_ADMIN_ONLY = new Set([
