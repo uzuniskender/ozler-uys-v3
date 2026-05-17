@@ -91,6 +91,13 @@ export async function topluDurumGuncelle(
   }
 }
 
+// ─── topluTerminGuncelle ──────────────────────────────────────────────────────
+export async function topluTerminGuncelle(ids: string[], termin: string): Promise<void> {
+  for (const id of ids) {
+    await supabase.from('uys_work_orders').update({ termin }).eq('id', id)
+  }
+}
+
 // ─── deleteWO ─────────────────────────────────────────────────────────────────
 export async function deleteWO(id: string): Promise<void> {
   await supabase.from('uys_work_orders').delete().eq('id', id)

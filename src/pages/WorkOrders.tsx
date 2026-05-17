@@ -6,7 +6,7 @@ import { today, pctColor } from '@/lib/utils'
 import * as wos from '@/services/workOrderService'
 import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText } from 'lucide-react'
+import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText, Calendar } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { getPlanliWoIds, isKesimWO, getEffectiveStatus, type StatusReason , isWorkOrderOpen} from '@/lib/statusUtils'
 import { computeOrderEksik } from '@/lib/hammaddeHesap'
@@ -137,6 +137,8 @@ export function WorkOrders() {
   }, [workOrders.length])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [terminModal, setTerminModal] = useState(false)
+  const [terminInput, setTerminInput] = useState('')
 
   function toggleCollapse(key: string) { setCollapsed(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s }) }
 
@@ -183,6 +185,17 @@ export function WorkOrders() {
     } catch (e: any) {
       toast.error('Silme hatası: ' + (e?.message || e))
     }
+  }
+
+  async function topluTerminGuncelle() {
+    if (!terminInput) { toast.error('Tarih seçin'); return }
+    await wos.topluTerminGuncelle([...selected], terminInput)
+    const cnt = selected.size
+    setTerminModal(false)
+    setTerminInput('')
+    setSelected(new Set())
+    loadAllStores()
+    toast.success(`${cnt} İE termini "${terminInput}" olarak güncellendi`)
   }
 
   async function topluKopyala() {
@@ -338,7 +351,6 @@ export function WorkOrders() {
       toast.success(w.ieNo + ' PDF indirildi')
     } catch (e: any) {
       toast.error('PDF olusturulamadi: ' + (e?.message || 'bilinmeyen hata'))
-      console.error('[v16.29] PDF generation failed:', e)
     }
   }
 
@@ -410,6 +422,7 @@ export function WorkOrders() {
           <button onClick={() => topluDurumGuncelle('beklemede')} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-[10px] hover:bg-purple-500/30">→ Beklemede</button>
           {can('wo_status') && <button onClick={() => topluDurumGuncelle('iptal')} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">→ İptal</button>}
           {can('wo_copy') && <button onClick={topluKopyala} className="px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded text-[10px] hover:bg-cyan-500/20 flex items-center gap-1"><Copy size={10} /> Kopyala</button>}
+          {can('wo_edit') && <button onClick={() => { setTerminInput(''); setTerminModal(true) }} className="px-2 py-1 bg-zinc-500/10 text-zinc-300 rounded text-[10px] hover:bg-zinc-500/20 flex items-center gap-1"><Calendar size={10} /> Termin</button>}
           {can('wo_delete') && <button onClick={topluSil} className="px-2 py-1 bg-red/10 text-red rounded text-[10px] hover:bg-red/20">🗑 Sil</button>}
           <span className="flex-1" />
           <button onClick={selectAll} className="text-[10px] text-zinc-500 hover:text-white">Tümünü Seç</button>
@@ -523,6 +536,27 @@ export function WorkOrders() {
       {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
 
       {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} materials={materials} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAllStores} />}
+
+      {terminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTerminModal(false)}>
+          <div className="bg-bg-1 border border-border rounded-xl p-6 w-80" onClick={e => e.stopPropagation()}>
+            <h2 className="text-sm font-semibold mb-1">Toplu Termin Güncelle</h2>
+            <p className="text-xs text-zinc-500 mb-4">{selected.size} İE'nin termini değiştirilecek.</p>
+            <label className="text-[11px] text-zinc-400 block mb-1">Yeni Termin Tarihi</label>
+            <input
+              type="date"
+              value={terminInput}
+              onChange={e => setTerminInput(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent mb-5"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setTerminModal(false)} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white">İptal</button>
+              <button onClick={topluTerminGuncelle} disabled={!terminInput} className="px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed">Onayla</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* v15.57 — NewIEModal render kaldırıldı (madde 1: Yeni İE butonu Sipariş üzerinden) */}
 
       {/* v15.64 (madde 17) — Yarım kalan akış karar modalı */}
