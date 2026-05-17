@@ -8,7 +8,7 @@ import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { showConfirm } from '@/lib/prompt'
-import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, Check, Download, Upload, X, ChevronDown, Building2, List } from 'lucide-react'
 import {
   markTedarikGeldi, markTedarikGelmedi,
   createTedarik, updateTedarik, deleteTedarik, createTedariklerBulk,
@@ -36,6 +36,8 @@ export function Procurement() {
   const [showForm, setShowForm] = useState(() => !!urlMalkod)
   const [editItem, setEditItem] = useState<typeof tedarikler[0] | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<'liste' | 'tedarikcisi'>('liste')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const filtered = useMemo(() => {
     return tedarikler.filter(t => {
@@ -52,6 +54,39 @@ export function Procurement() {
       return true
     }).sort((a, b) => (b.tarih || '').localeCompare(a.tarih || ''))
   }, [tedarikler, search, durumFilter])
+
+  const tedarikciGruplari = useMemo(() => {
+    const map: Record<string, typeof filtered> = {}
+    for (const t of filtered) {
+      const key = t.tedarikcAd?.trim() || '(Tedarikçi Belirtilmemiş)'
+      if (!map[key]) map[key] = []
+      map[key].push(t)
+    }
+    return Object.entries(map).sort(([aKey, aItems], [bKey, bItems]) => {
+      const aGec = aItems.some(t => t.teslimTarihi && t.teslimTarihi < today() && !t.geldi)
+      const bGec = bItems.some(t => t.teslimTarihi && t.teslimTarihi < today() && !t.geldi)
+      if (aGec !== bGec) return aGec ? -1 : 1
+      const aBek = aItems.some(isProcurementPending)
+      const bBek = bItems.some(isProcurementPending)
+      if (aBek !== bBek) return aBek ? -1 : 1
+      return aKey.localeCompare(bKey, 'tr')
+    })
+  }, [filtered])
+
+  function toggleGroup(key: string) {
+    setCollapsedGroups(prev => {
+      const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n
+    })
+  }
+
+  function miktarOzet(items: typeof filtered): string {
+    const map: Record<string, number> = {}
+    for (const t of items) {
+      const b = t.birim || 'Adet'
+      map[b] = (map[b] || 0) + t.miktar
+    }
+    return Object.entries(map).map(([b, m]) => `${m.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${b}`).join(' · ')
+  }
 
   async function markGeldi(id: string) {
     const ted = tedarikler.find(t => t.id === id)
@@ -227,7 +262,7 @@ export function Procurement() {
         </div>
       </div>
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
         <div className="relative flex-1 max-w-xs"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Malzeme veya sipariş ara..." className="w-full pl-8 pr-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent" /></div>
         <div className="flex gap-3 items-center">
@@ -243,63 +278,142 @@ export function Procurement() {
             </label>
           ))}
         </div>
+        <div className="ml-auto flex rounded overflow-hidden border border-border">
+          <button onClick={() => setViewMode('liste')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs ${viewMode === 'liste' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
+            <List size={12} /> Liste
+          </button>
+          <button onClick={() => setViewMode('tedarikcisi')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs ${viewMode === 'tedarikcisi' ? 'bg-accent text-white' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
+            <Building2 size={12} /> Tedarikçi
+          </button>
+        </div>
       </div>
 
-      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
-        {filtered.length ? (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-2 z-10"><tr className="border-b border-border text-zinc-500">
-              <th className="w-8 px-3 py-2.5">
-                {can('ted_geldi') && filtered.some(isProcurementPending) && (
-                  <input type="checkbox"
-                    checked={filtered.filter(isProcurementPending).length > 0 && filtered.filter(isProcurementPending).every(t => selectedIds.has(t.id))}
-                    onChange={toggleSelectAll}
-                    className="accent-accent"
-                    title="Bekleyen tüm tedarikleri seç/bırak"
-                  />
+      {viewMode === 'tedarikcisi' ? (
+        <div className="space-y-3 max-h-[65vh] overflow-y-auto">
+          {tedarikciGruplari.length ? tedarikciGruplari.map(([tedAd, items]) => {
+            const bekleyen = items.filter(isProcurementPending)
+            const geciken = items.filter(t => t.teslimTarihi && t.teslimTarihi < today() && !t.geldi)
+            const isExpanded = !collapsedGroups.has(tedAd)
+            return (
+              <div key={tedAd} className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+                <button onClick={() => toggleGroup(tedAd)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bg-3/30 transition-colors text-left">
+                  <Building2 size={14} className="text-zinc-500 shrink-0" />
+                  <span className="font-semibold text-sm flex-1 text-zinc-200">{tedAd}</span>
+                  {geciken.length > 0 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-red/10 text-red font-semibold">⚠ {geciken.length} Geciken</span>
+                  )}
+                  {bekleyen.length > 0 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-amber/10 text-amber font-semibold">{bekleyen.length} Bekleyen</span>
+                  )}
+                  <span className="text-xs text-zinc-500 font-mono">{miktarOzet(items)}</span>
+                  <ChevronDown size={14} className={`text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                </button>
+                {isExpanded && (
+                  <div className="border-t border-border">
+                    <table className="w-full text-xs">
+                      <thead><tr className="border-b border-border/50 text-zinc-600 bg-bg-3/20">
+                        <th className="text-left px-4 py-2">Malzeme</th>
+                        <th className="text-right px-4 py-2">Miktar</th>
+                        <th className="text-left px-4 py-2">Sipariş</th>
+                        <th className="text-left px-4 py-2">Teslim</th>
+                        <th className="text-left px-4 py-2">Durum</th>
+                        <th className="px-4 py-2"></th>
+                      </tr></thead>
+                      <tbody>
+                        {items.map(t => (
+                          <tr key={t.id} className={`border-b border-border/20 hover:bg-bg-3/20 ${t.geldi ? 'opacity-60' : ''}`}>
+                            <td className="px-4 py-2"><div className="font-mono text-accent text-[11px]">{t.malkod}</div><div className="text-zinc-400 text-[10px]">{t.malad}</div></td>
+                            <td className="px-4 py-2 text-right font-mono">{t.miktar} <span className="text-zinc-600">{t.birim}</span></td>
+                            <td className="px-4 py-2 font-mono text-zinc-500 text-[11px]">{t.siparisNo || '—'}</td>
+                            <td className="px-4 py-2 font-mono text-zinc-500">
+                              {t.teslimTarihi || '—'}
+                              {t.teslimTarihi && t.teslimTarihi < today() && !t.geldi && (
+                                <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] bg-red/10 text-red">⚠</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${t.geldi ? 'bg-green/10 text-green' : 'bg-amber/10 text-amber'}`}>
+                                {t.geldi ? '✓ Geldi' : 'Bekliyor'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <div className="flex gap-1 justify-end">
+                                {can('ted_geldi') && !t.geldi && <button onClick={() => markGeldi(t.id)} className="p-1 text-zinc-500 hover:text-green" title="Geldi işaretle (stok girişi yazılır)"><Check size={12} /></button>}
+                                {can('ted_geldi') && t.geldi && <button onClick={() => markGelmedi(t.id)} className="p-1 text-zinc-500 hover:text-amber" title="Geri al"><ChevronDown size={12} className="rotate-180" /></button>}
+                                {can('ted_edit') && <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent" title="Düzenle"><Pencil size={12} /></button>}
+                                {can('ted_delete') && <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={12} /></button>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </th>
-              <th className="text-left px-4 py-2.5">Malzeme</th><th className="text-right px-4 py-2.5">Miktar</th><th className="text-left px-4 py-2.5">Sipariş</th><th className="text-left px-4 py-2.5">Tedarikçi</th><th className="text-left px-4 py-2.5">Teslim</th><th className="text-left px-4 py-2.5">Gecikme</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th>
-            </tr></thead>
-            <tbody>
-              {filtered.map(t => (
-                <tr key={t.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${t.geldi ? 'opacity-60' : ''} ${selectedIds.has(t.id) ? 'bg-accent/5' : ''}`}>
-                  <td className="px-3 py-2">
-                    {can('ted_geldi') && !t.geldi && (
-                      <input type="checkbox" checked={selectedIds.has(t.id)}
-                        onChange={() => toggleSelect(t.id)}
-                        className="accent-accent" />
-                    )}
-                  </td>
-                  <td className="px-4 py-2"><div className="font-mono text-accent text-[11px]">{t.malkod}</div><div className="text-zinc-400 text-[10px]">{t.malad}</div></td>
-                  <td className="px-4 py-2 text-right font-mono">{t.miktar} <span className="text-zinc-600">{t.birim}</span></td>
-                  <td className="px-4 py-2 font-mono text-zinc-500 text-[11px]">{t.siparisNo || '—'}</td>
-                  <td className="px-4 py-2 text-zinc-400">{t.tedarikcAd || '—'}</td>
-                  <td className="px-4 py-2 font-mono text-zinc-500">{t.teslimTarihi || '—'}</td>
-                  <td className="px-4 py-2">
-                    {t.teslimTarihi && t.teslimTarihi < today() && !t.geldi && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-red/10 text-red">⚠ Gecikti</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${t.geldi ? 'bg-green/10 text-green' : 'bg-amber/10 text-amber'}`}>
-                      {t.geldi ? '✓ Geldi' : 'Bekliyor'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex gap-1 justify-end">
-                      {can('ted_geldi') && !t.geldi && <button onClick={() => markGeldi(t.id)} className="p-1 text-zinc-500 hover:text-green" title="Geldi işaretle (stok girişi yazılır)"><Check size={12} /></button>}
-                      {can('ted_geldi') && t.geldi && <button onClick={() => markGelmedi(t.id)} className="p-1 text-zinc-500 hover:text-amber" title="Geri al (stok girişi silinir)"><ChevronDown size={12} className="rotate-180" /></button>}
-                      {can('ted_edit') && <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent" title="Düzenle"><Pencil size={12} /></button>}
-                      {can('ted_delete') && <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={12} /></button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <div className="p-8 text-center text-zinc-600 text-sm">Tedarik kaydı yok</div>}
-      </div>
+              </div>
+            )
+          }) : <div className="p-8 text-center text-zinc-600 text-sm">Tedarik kaydı yok</div>}
+        </div>
+      ) : (
+        <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
+          {filtered.length ? (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-bg-2 z-10"><tr className="border-b border-border text-zinc-500">
+                <th className="w-8 px-3 py-2.5">
+                  {can('ted_geldi') && filtered.some(isProcurementPending) && (
+                    <input type="checkbox"
+                      checked={filtered.filter(isProcurementPending).length > 0 && filtered.filter(isProcurementPending).every(t => selectedIds.has(t.id))}
+                      onChange={toggleSelectAll}
+                      className="accent-accent"
+                      title="Bekleyen tüm tedarikleri seç/bırak"
+                    />
+                  )}
+                </th>
+                <th className="text-left px-4 py-2.5">Malzeme</th><th className="text-right px-4 py-2.5">Miktar</th><th className="text-left px-4 py-2.5">Sipariş</th><th className="text-left px-4 py-2.5">Tedarikçi</th><th className="text-left px-4 py-2.5">Teslim</th><th className="text-left px-4 py-2.5">Gecikme</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map(t => (
+                  <tr key={t.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${t.geldi ? 'opacity-60' : ''} ${selectedIds.has(t.id) ? 'bg-accent/5' : ''}`}>
+                    <td className="px-3 py-2">
+                      {can('ted_geldi') && !t.geldi && (
+                        <input type="checkbox" checked={selectedIds.has(t.id)}
+                          onChange={() => toggleSelect(t.id)}
+                          className="accent-accent" />
+                      )}
+                    </td>
+                    <td className="px-4 py-2"><div className="font-mono text-accent text-[11px]">{t.malkod}</div><div className="text-zinc-400 text-[10px]">{t.malad}</div></td>
+                    <td className="px-4 py-2 text-right font-mono">{t.miktar} <span className="text-zinc-600">{t.birim}</span></td>
+                    <td className="px-4 py-2 font-mono text-zinc-500 text-[11px]">{t.siparisNo || '—'}</td>
+                    <td className="px-4 py-2 text-zinc-400">{t.tedarikcAd || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-zinc-500">{t.teslimTarihi || '—'}</td>
+                    <td className="px-4 py-2">
+                      {t.teslimTarihi && t.teslimTarihi < today() && !t.geldi && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-red/10 text-red">⚠ Gecikti</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${t.geldi ? 'bg-green/10 text-green' : 'bg-amber/10 text-amber'}`}>
+                        {t.geldi ? '✓ Geldi' : 'Bekliyor'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex gap-1 justify-end">
+                        {can('ted_geldi') && !t.geldi && <button onClick={() => markGeldi(t.id)} className="p-1 text-zinc-500 hover:text-green" title="Geldi işaretle (stok girişi yazılır)"><Check size={12} /></button>}
+                        {can('ted_geldi') && t.geldi && <button onClick={() => markGelmedi(t.id)} className="p-1 text-zinc-500 hover:text-amber" title="Geri al (stok girişi silinir)"><ChevronDown size={12} className="rotate-180" /></button>}
+                        {can('ted_edit') && <button onClick={async () => { setEditItem(t); setShowForm(true) }} className="p-1 text-zinc-500 hover:text-accent" title="Düzenle"><Pencil size={12} /></button>}
+                        {can('ted_delete') && <button onClick={() => del(t.id)} className="p-1 text-zinc-500 hover:text-red" title="Sil"><Trash2 size={12} /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <div className="p-8 text-center text-zinc-600 text-sm">Tedarik kaydı yok</div>}
+        </div>
+      )}
 
       {showForm && <TedarikFormModal
         initial={editItem
