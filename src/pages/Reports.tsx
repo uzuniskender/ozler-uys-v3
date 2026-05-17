@@ -882,29 +882,168 @@ export function Reports() {
 
       {/* Duruş Analizi */}
       {tab === 'durus' && (() => {
-        const durusMap: Record<string, { kod: string; ad: string; toplamDk: number; adet: number }> = {}
+        // Kod bazlı toplam
+        const durusMap: Record<string, { ad: string; toplamDk: number; adet: number }> = {}
         logs.forEach(l => l.duruslar?.forEach(d => {
           const key = d.sebep || 'Tanımsız'
-          if (!durusMap[key]) durusMap[key] = { kod: '', ad: key, toplamDk: 0, adet: 0 }
-          // Süre hesabı: bas-bit arasından dk
-          const sure = (d as unknown as Record<string, unknown>).sure as number || 0
-          durusMap[key].toplamDk += sure
+          if (!durusMap[key]) durusMap[key] = { ad: key, toplamDk: 0, adet: 0 }
+          durusMap[key].toplamDk += (d as unknown as Record<string, unknown>).sure as number || 0
           durusMap[key].adet++
         }))
         const durusData = Object.values(durusMap).sort((a, b) => b.toplamDk - a.toplamDk)
         const toplamDurus = durusData.reduce((a, d) => a + d.toplamDk, 0)
+        const toplamAdet = durusData.reduce((a, d) => a + d.adet, 0)
+
+        // Pie chart — top 6 + Diğer
+        const pieData = durusData.length <= 7
+          ? durusData.map(d => ({ name: d.ad, value: d.toplamDk }))
+          : [
+              ...durusData.slice(0, 6).map(d => ({ name: d.ad, value: d.toplamDk })),
+              { name: 'Diğer', value: durusData.slice(6).reduce((s, d) => s + d.toplamDk, 0) },
+            ]
+
+        // İstasyon bazlı duruş
+        const istDurusMap: Record<string, number> = {}
+        logs.forEach(l => {
+          const wo = woMap[l.woId]
+          const key = wo?.istAd || wo?.opAd || 'Tanımsız'
+          if (Array.isArray(l.duruslar)) {
+            l.duruslar.forEach((d: { sure?: number }) => {
+              istDurusMap[key] = (istDurusMap[key] || 0) + (d.sure || 0)
+            })
+          }
+        })
+        const istDurusData = Object.entries(istDurusMap)
+          .map(([ist, toplamDk]) => ({ ist, toplamDk }))
+          .filter(d => d.toplamDk > 0)
+          .sort((a, b) => b.toplamDk - a.toplamDk)
+          .slice(0, 12)
+
+        // Haftalık trend (son 8 hafta)
+        const getWeekStart = (dateStr: string): string => {
+          const d = new Date(dateStr)
+          const day = d.getDay()
+          d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+          return d.toISOString().slice(0, 10)
+        }
+        const haftaMap: Record<string, number> = {}
+        logs.forEach(l => {
+          if (!l.tarih) return
+          const wb = getWeekStart(l.tarih)
+          if (Array.isArray(l.duruslar)) {
+            l.duruslar.forEach((d: { sure?: number }) => {
+              haftaMap[wb] = (haftaMap[wb] || 0) + (d.sure || 0)
+            })
+          }
+        })
+        const haftaData = Object.entries(haftaMap)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .slice(-8)
+          .map(([wb, toplamDk]) => ({ hafta: wb.slice(5), toplamDk }))
+
         return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">Duruş Analizi — Toplam: {toplamDurus} dk</h3>
+          <div className="space-y-4">
+            {/* KPI */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono text-amber">{toplamDurus}</div>
+                <div className="text-[11px] text-zinc-500">Toplam Duruş (dk)</div>
+              </div>
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono">{toplamAdet}</div>
+                <div className="text-[11px] text-zinc-500">Toplam Duruş Sayısı</div>
+              </div>
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-base font-mono text-zinc-200 truncate">{durusData[0]?.ad || '—'}</div>
+                <div className="text-[11px] text-zinc-500">En Sık Neden</div>
+              </div>
+            </div>
+
             {durusData.length ? (
               <>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={durusData}><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis dataKey="ad" tick={{ fontSize: 10, fill: '#888' }} /><YAxis tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Bar dataKey="toplamDk" fill="#f59e0b" name="Toplam (dk)" radius={[3, 3, 0, 0]} /></BarChart>
-              </ResponsiveContainer>
-              <table className="w-full text-xs mt-3"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Duruş Kodu</th><th className="text-right px-4 py-2">Adet</th><th className="text-right px-4 py-2">Toplam dk</th><th className="text-right px-4 py-2">Oran</th></tr></thead>
-              <tbody>{durusData.map(d => (<tr key={d.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{d.ad}</td><td className="px-4 py-1.5 text-right font-mono">{d.adet}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{d.toplamDk}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-500">{toplamDurus > 0 ? Math.round(d.toplamDk / toplamDurus * 100) : 0}%</td></tr>))}</tbody></table>
+                {/* Pie + Haftalık trend */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Duruş kodu pie chart */}
+                  <div className="bg-bg-2 border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-semibold mb-3">Duruş Kodu Dağılımı</h3>
+                    <div className="flex gap-3 items-center">
+                      <ResponsiveContainer width="55%" height={200}>
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="50%" innerRadius={48} outerRadius={85} dataKey="value" paddingAngle={2}>
+                            {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v} dk`, '']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                        {pieData.map((d, i) => (
+                          <div key={d.name} className="flex items-center gap-2 min-w-0">
+                            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                            <span className="text-[10px] text-zinc-300 truncate flex-1">{d.name}</span>
+                            <span className="text-[10px] font-mono text-zinc-500 flex-shrink-0">{toplamDurus > 0 ? Math.round(d.value / toplamDurus * 100) : 0}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Haftalık duruş trendi */}
+                  <div className="bg-bg-2 border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-semibold mb-3">Haftalık Duruş Trendi (son 8 hafta)</h3>
+                    {haftaData.length > 1 ? (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={haftaData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                          <XAxis dataKey="hafta" tick={{ fontSize: 9, fill: '#888' }} />
+                          <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                          <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v} dk`, 'Duruş']} />
+                          <Line type="monotone" dataKey="toplamDk" stroke={COLORS[1]} strokeWidth={2} dot={{ r: 3, fill: COLORS[1] }} name="Duruş (dk)" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : <div className="h-48 flex items-center justify-center text-zinc-600 text-xs">Yeterli haftalık veri yok</div>}
+                  </div>
+                </div>
+
+                {/* İstasyon bazlı duruş */}
+                <div className="bg-bg-2 border border-border rounded-lg p-4">
+                  <h3 className="text-sm font-semibold mb-3">İstasyon Bazlı Duruş Süresi</h3>
+                  {istDurusData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={Math.max(180, istDurusData.length * 28)}>
+                      <BarChart data={istDurusData} layout="vertical" margin={{ left: 4, right: 24, top: 4, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: '#888' }} unit=" dk" />
+                        <YAxis type="category" dataKey="ist" width={90} tick={{ fontSize: 9, fill: '#ccc' }} />
+                        <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v} dk`, 'Duruş']} />
+                        <Bar dataKey="toplamDk" fill={COLORS[2]} radius={[0, 3, 3, 0]} name="Duruş (dk)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <div className="h-24 flex items-center justify-center text-zinc-600 text-xs">İstasyon verisi yok</div>}
+                </div>
+
+                {/* Detay tablo */}
+                <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+                  <div className="px-4 py-2 border-b border-border">
+                    <h3 className="text-sm font-semibold">Detay ({durusData.length} kod)</h3>
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead><tr className="border-b border-border text-zinc-500 bg-bg-1/50">
+                      <th className="text-left px-4 py-2">Duruş Kodu</th>
+                      <th className="text-right px-4 py-2">Adet</th>
+                      <th className="text-right px-4 py-2">Toplam dk</th>
+                      <th className="text-right px-4 py-2">Oran</th>
+                    </tr></thead>
+                    <tbody>{durusData.map(d => (
+                      <tr key={d.ad} className="border-b border-border/30">
+                        <td className="px-4 py-1.5 text-zinc-300">{d.ad}</td>
+                        <td className="px-4 py-1.5 text-right font-mono">{d.adet}</td>
+                        <td className="px-4 py-1.5 text-right font-mono text-amber">{d.toplamDk}</td>
+                        <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{toplamDurus > 0 ? Math.round(d.toplamDk / toplamDurus * 100) : 0}%</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
               </>
-            ) : <div className="p-8 text-center text-zinc-600">Duruş kaydı yok</div>}
+            ) : <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600">Duruş kaydı yok</div>}
           </div>
         )
       })()}
