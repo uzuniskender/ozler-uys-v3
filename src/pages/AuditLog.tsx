@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown';
@@ -225,8 +225,8 @@ export default function AuditLog() {
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map(row => (
-                <>
-                  <tr key={row.id} className="hover:bg-bg-2">
+                <Fragment key={row.id}>
+                  <tr className="hover:bg-bg-2">
                     <td className="px-3 py-2 whitespace-nowrap text-zinc-400 font-mono text-xs">{formatZaman(row.zaman)}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-zinc-300">{row.kullanici_ad ?? <span className="text-zinc-600">—</span>}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{olayBadge(row.olay_tipi)}</td>
@@ -253,7 +253,7 @@ export default function AuditLog() {
                     </td>
                   </tr>
                   {expandedId === row.id && row.ek_veri && (
-                    <tr key={`${row.id}-exp`} className="bg-bg-0">
+                    <tr className="bg-bg-0">
                       <td colSpan={9} className="px-4 py-3">
                         <pre className="text-xs text-zinc-300 overflow-x-auto whitespace-pre-wrap">
                           {JSON.stringify(row.ek_veri, null, 2)}
@@ -261,7 +261,7 @@ export default function AuditLog() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
