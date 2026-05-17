@@ -6,7 +6,7 @@ import { today, pctColor } from '@/lib/utils'
 import * as wos from '@/services/workOrderService'
 import { showPrompt, showMultiPrompt, showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText, Calendar } from 'lucide-react'
+import { Search, Download, Eye, CheckSquare, Plus, ChevronRight, Copy, FileText, Calendar, LayoutGrid } from 'lucide-react'
 import { MultiCheckDropdown } from '@/components/ui/MultiCheckDropdown'
 import { getPlanliWoIds, isKesimWO, getEffectiveStatus, type StatusReason , isWorkOrderOpen} from '@/lib/statusUtils'
 import { computeOrderEksik } from '@/lib/hammaddeHesap'
@@ -57,6 +57,7 @@ export function WorkOrders() {
   const [siparisNoFilter, setSiparisNoFilter] = useState('')
   const [mamulKodFilter, setMamulKodFilter] = useState('')
   const [groupBy, setGroupBy] = useState('siparis')
+  const [viewMode, setViewMode] = useState<'liste' | 'kapasite'>('liste')
   const [detailWO, setDetailWO] = useState<string | null>(null)
   const [highlightLogId, setHighlightLogId] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -356,6 +357,26 @@ export function WorkOrders() {
 
   const detailW = detailWO ? workOrders.find(w => w.id === detailWO) : null
 
+  const istasyonKapasite = useMemo(() => {
+    const map: Record<string, { istAd: string; ieCount: number; toplamHedef: number; toplamUretim: number }> = {}
+    filtered.forEach(w => {
+      const key = w.istAd || 'Tanımsız'
+      if (!map[key]) map[key] = { istAd: key, ieCount: 0, toplamHedef: 0, toplamUretim: 0 }
+      map[key].ieCount++
+      map[key].toplamHedef += w.hedef || 0
+      map[key].toplamUretim += wProd(w.id)
+    })
+    const maxHedef = Math.max(...Object.values(map).map(v => v.toplamHedef), 1)
+    return Object.values(map)
+      .map(v => ({
+        ...v,
+        ilerleme: v.toplamHedef > 0 ? Math.min(100, Math.round(v.toplamUretim / v.toplamHedef * 100)) : 0,
+        yukPct: Math.round(v.toplamHedef / maxHedef * 100),
+      }))
+      .sort((a, b) => b.toplamHedef - a.toplamHedef)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, logs])
+
   function grpStats(wos: typeof workOrders) {
     const topHedef = wos.reduce((a, w) => a + (w.hedef || 0), 0)
     const topProd = wos.reduce((a, w) => a + wProd(w.id), 0)
@@ -404,13 +425,22 @@ export function WorkOrders() {
           { value: 'siparis', label: 'Siparişten', color: 'text-accent' },
           { value: 'ym', label: 'Manuel YM', color: 'text-amber' },
         ]} selected={tipFilter} onChange={setTipFilter} />
-        <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
-          <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option><option value="urun">Malzemeye Göre</option>
-        </select>
-        {grouped.length > 1 && <>
+        {viewMode === 'liste' && (
+          <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+            <option value="siparis">Siparişe Göre</option><option value="operasyon">Operasyona Göre</option><option value="urun">Malzemeye Göre</option>
+          </select>
+        )}
+        {viewMode === 'liste' && grouped.length > 1 && <>
           <button onClick={() => setCollapsed(new Set())} className="text-[10px] text-zinc-500 hover:text-white">▼ Aç</button>
           <button onClick={() => setCollapsed(new Set(grouped.map(([k]) => k)))} className="text-[10px] text-zinc-500 hover:text-white">▲ Kapat</button>
         </>}
+        <button
+          onClick={() => setViewMode(v => v === 'liste' ? 'kapasite' : 'liste')}
+          className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs transition-colors ${viewMode === 'kapasite' ? 'bg-accent/15 border-accent/40 text-accent' : 'bg-bg-2 border-border text-zinc-400 hover:text-white'}`}
+          title="Kapasite görünümüne geç"
+        >
+          <LayoutGrid size={13} /> Kapasite
+        </button>
       </div>
 
       {selected.size > 0 && (
@@ -430,7 +460,63 @@ export function WorkOrders() {
         </div>
       )}
 
-      {grouped.map(([group, wos]) => {
+      {viewMode === 'kapasite' && (
+        <div>
+          <div className="text-xs text-zinc-500 mb-3">
+            {istasyonKapasite.length} istasyon · {filtered.length} İE · {istasyonKapasite.reduce((a, v) => a + v.toplamHedef, 0).toLocaleString('tr-TR')} toplam hedef adet
+          </div>
+          {istasyonKapasite.length === 0 ? (
+            <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İstasyon bulunamadı</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {istasyonKapasite.map(ist => (
+                <div key={ist.istAd} className="bg-bg-2 border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-zinc-200 truncate pr-2">{ist.istAd}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-mono border border-accent/20 whitespace-nowrap">{ist.ieCount} İE</span>
+                  </div>
+                  {/* İş yükü — hedef adet, max istasyona oranla */}
+                  <div className="mb-1">
+                    <div className="flex items-center justify-between text-[10px] mb-1">
+                      <span className="text-zinc-500">İş Yükü</span>
+                      <span className="font-mono text-zinc-400">{ist.toplamHedef.toLocaleString('tr-TR')} adet hedef</span>
+                    </div>
+                    <div className="h-2 bg-bg-3 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-accent/70"
+                        style={{ width: `${Math.max(4, ist.yukPct)}%` }}
+                      />
+                    </div>
+                  </div>
+                  {/* Üretim ilerlemesi */}
+                  <div className="mt-2.5">
+                    <div className="flex items-center justify-between text-[10px] mb-1">
+                      <span className="text-zinc-500">Üretim İlerlemesi</span>
+                      <span className="font-mono text-zinc-400">
+                        <b className="text-zinc-300">{ist.toplamUretim.toLocaleString('tr-TR')}</b>
+                        <span className="text-zinc-600">/{ist.toplamHedef.toLocaleString('tr-TR')}</span>
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-bg-3 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${ist.ilerleme >= 100 ? 'bg-green' : ist.ilerleme >= 60 ? 'bg-accent' : ist.ilerleme > 0 ? 'bg-amber' : 'bg-zinc-700'}`}
+                        style={{ width: `${Math.max(ist.ilerleme > 0 ? 4 : 0, ist.ilerleme)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-end mt-1">
+                      <span className={`text-[11px] font-mono font-semibold ${ist.ilerleme >= 100 ? 'text-green' : ist.ilerleme >= 60 ? 'text-accent' : ist.ilerleme > 0 ? 'text-amber' : 'text-zinc-600'}`}>
+                        %{ist.ilerleme}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === 'liste' && grouped.map(([group, wos]) => {
         const stats = grpStats(wos)
         const isCollapsed = collapsed.has(group)
         const ord = groupBy === 'siparis' ? orders.find(o => o.siparisNo === group) : null
@@ -533,7 +619,7 @@ export function WorkOrders() {
           </div>
         )
       })}
-      {!grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
+      {viewMode === 'liste' && !grouped.length && <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-zinc-600 text-sm">İş emri bulunamadı</div>}
 
       {detailW && <WODetailModal wo={detailW} onClose={() => { setDetailWO(null); setHighlightLogId(null) }} highlightLogId={highlightLogId} logs={logs} orders={orders} operators={operators} recipes={recipes} cuttingPlans={cuttingPlans} stokHareketler={stokHareketler} tedarikler={tedarikler} materials={materials} wProd={wProd} wPct={wPct} getStokDurum={getStokDurum} setDurum={setDurum} deleteWO={deleteWO} updateHedef={updateHedef} loadAll={loadAllStores} />}
 
