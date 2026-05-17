@@ -5,8 +5,9 @@ import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { createSevk as createSevkService, updateSevk as updateSevkService, deleteSevk as deleteSevkService } from '@/services/sevkService'
 import { showConfirm } from '@/lib/prompt'
-import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive, ChevronRight, ChevronDown } from 'lucide-react'
+import { Plus, Truck, Download, Eye, Search, FileText, Edit2, Archive, ChevronRight, ChevronDown, Printer } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
+import { OZLER } from '@/lib/sirket-bilgileri'
 import { z } from 'zod'
 
 const _sevkKalemSchema = z.object({
@@ -37,6 +38,7 @@ export function Shipment() {
   const [listSearch, setListSearch] = useState('')   // S6 — liste araması
   const [showArsiv, setShowArsiv] = useState(false)  // S3 — arşiv toggle
   const [expandedMusteriler, setExpandedMusteriler] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   function toggleMusteri(musteri: string) {
     setExpandedMusteriler(prev => {
@@ -45,6 +47,121 @@ export function Shipment() {
       else next.add(musteri)
       return next
     })
+  }
+
+  function toggleSevk(id: string) {
+    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+
+  function toggleGrup(sevkList: typeof filtered) {
+    const ids = sevkList.map(s => s.id)
+    const allSel = ids.every(id => selected.has(id))
+    setSelected(prev => {
+      const s = new Set(prev)
+      if (allSel) ids.forEach(id => s.delete(id))
+      else ids.forEach(id => s.add(id))
+      return s
+    })
+  }
+
+  function printPaketlemeListesi() {
+    const seciliSevkler = filtered.filter(s => selected.has(s.id))
+    if (!seciliSevkler.length) return
+
+    function getBirim(k: any): string {
+      return k.birim || materials.find(m => m.kod === k.malkod)?.birim || 'Adet'
+    }
+
+    const sections = seciliSevkler.map(s => {
+      const kalemRows = (s.kalemler || []).map((k: any) => `
+        <tr>
+          <td class="malkod">${k.malkod || '—'}</td>
+          <td>${k.malad || '—'}</td>
+          <td class="right">${k.miktar}</td>
+          <td>${getBirim(k)}</td>
+        </tr>`).join('')
+      const toplam = (s.kalemler || []).reduce((a: number, k: any) => a + (k.miktar || 0), 0)
+      return `
+        <div class="sevkiyat">
+          <div class="sevk-header">
+            <div class="sevk-title">
+              <span class="siparis-no">${s.siparisNo || '—'}</span>
+              <span class="musteri">${s.musteri || ''}</span>
+              <span class="tarih">Tarih: ${s.tarih || ''}</span>
+            </div>
+            ${s.not ? `<div class="not">Not: ${s.not}</div>` : ''}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:110px">Malzeme Kodu</th>
+                <th>Malzeme Adı</th>
+                <th style="width:65px;text-align:right">Miktar</th>
+                <th style="width:60px">Birim</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${kalemRows}
+              <tr class="toplam-row">
+                <td colspan="2" style="text-align:right;padding-right:12px">Toplam</td>
+                <td style="text-align:right;font-weight:700">${toplam}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>`
+    }).join('')
+
+    const toplamKalem = seciliSevkler.reduce((a, s) => a + (s.kalemler?.length || 0), 0)
+    const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Paketleme Listesi — ${today()}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;background:#fff;padding:20px 25px}
+    .doc-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:18px}
+    .doc-header h1{font-size:18px;font-weight:700;letter-spacing:.5px;margin-top:4px}
+    .sirket{font-size:13px;font-weight:600}
+    .meta{font-size:10px;color:#666;margin-top:3px}
+    .date{font-size:11px;color:#555;text-align:right}
+    .sevkiyat{margin-bottom:22px;page-break-inside:avoid}
+    .sevk-header{background:#f2f2f2;border:1px solid #ccc;border-bottom:none;padding:7px 10px}
+    .sevk-title{display:flex;align-items:baseline;gap:10px}
+    .siparis-no{font-weight:700;font-size:13px}
+    .musteri{font-size:12px;color:#444}
+    .tarih{font-size:11px;color:#666;margin-left:auto}
+    .not{font-size:10px;color:#666;margin-top:3px}
+    table{width:100%;border-collapse:collapse}
+    th{background:#e2e2e2;text-align:left;padding:5px 8px;border:1px solid #ccc;font-size:11px;font-weight:600}
+    td{padding:5px 8px;border:1px solid #ddd;font-size:12px}
+    .malkod{font-family:monospace;font-size:11px;color:#333}
+    .right{text-align:right}
+    .toplam-row td{background:#f5f5f5;border-top:1px solid #aaa}
+    .footer{margin-top:16px;font-size:10px;color:#aaa;border-top:1px solid #ddd;padding-top:6px;text-align:right}
+    @media print{body{padding:8mm 12mm}.no-print{display:none!important}}
+  </style>
+</head>
+<body>
+  <div class="doc-header">
+    <div>
+      <div class="sirket">${OZLER.kisaUnvan}</div>
+      <h1>PAKETLEMELİSTESİ</h1>
+      <div class="meta">${seciliSevkler.length} sevkiyat · ${toplamKalem} kalem</div>
+    </div>
+    <div><div class="date">Çıktı Tarihi: ${today()}</div></div>
+  </div>
+  ${sections}
+  <div class="footer">UYS v3 · ${OZLER.kisaUnvan}</div>
+  <script>window.onload=function(){window.print()}<\/script>
+</body>
+</html>`
+
+    const win = window.open('', '_blank', 'width=820,height=700')
+    if (!win) { toast.error('Popup engelleyici açık. Tarayıcı ayarlarından popup iznini verin.'); return }
+    win.document.write(html)
+    win.document.close()
   }
 
   // Sipariş tamamen sevk edilmiş mi? → arşiv kriteri
@@ -168,12 +285,28 @@ export function Shipment() {
         />
       </div>
 
+      {/* Seçim çubuğu */}
+      {selected.size > 0 && (
+        <div className="mb-3 p-2 bg-accent/5 border border-accent/20 rounded-lg flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-accent">{selected.size} sevkiyat seçili</span>
+          <button
+            onClick={printPaketlemeListesi}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-hover"
+          >
+            <Printer size={13} /> Paketleme Listesi Yazdır
+          </button>
+          <span className="flex-1" />
+          <button onClick={() => setSelected(new Set())} className="text-[10px] text-zinc-500 hover:text-white">Seçimi Kaldır</button>
+        </div>
+      )}
+
       {/* Liste — müşteri bazlı gruplu */}
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border text-zinc-500">
+                <th className="px-3 py-2.5 w-8"></th>
                 <th className="text-left px-4 py-2.5">Sipariş No</th>
                 <th className="text-left px-4 py-2.5">Tarih</th>
                 <th className="text-right px-4 py-2.5">Kalem</th>
@@ -193,8 +326,15 @@ export function Shipment() {
                       className="border-b border-border/50 bg-bg-3/40 hover:bg-bg-3/70 cursor-pointer select-none"
                       onClick={() => toggleMusteri(musteri)}
                     >
-                      <td colSpan={6} className="px-3 py-2.5">
+                      <td colSpan={7} className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={sevkList.length > 0 && sevkList.every(s => selected.has(s.id))}
+                            onClick={e => e.stopPropagation()}
+                            onChange={() => toggleGrup(sevkList)}
+                            className="accent-accent shrink-0"
+                          />
                           {expanded
                             ? <ChevronDown size={13} className="text-zinc-400 shrink-0" />
                             : <ChevronRight size={13} className="text-zinc-400 shrink-0" />}
@@ -210,7 +350,8 @@ export function Shipment() {
                       const topMiktar = (s.kalemler || []).reduce((a, k) => a + (k.miktar || 0), 0)
                       return (
                         <tr key={s.id} className="border-b border-border/20 hover:bg-bg-3/20">
-                          <td className="pl-9 pr-4 py-2 font-mono text-accent">{s.siparisNo || '—'}</td>
+                          <td className="px-3 py-2"><input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSevk(s.id)} className="accent-accent" /></td>
+                          <td className="pl-4 pr-4 py-2 font-mono text-accent">{s.siparisNo || '—'}</td>
                           <td className="px-4 py-2 font-mono text-zinc-500">{s.tarih}</td>
                           <td className="px-4 py-2 text-right font-mono text-zinc-400">{s.kalemler?.length || 0}</td>
                           <td className="px-4 py-2 text-right font-mono text-green">{topMiktar}</td>
@@ -234,7 +375,7 @@ export function Shipment() {
                     {/* Özet satırı — sadece açık ve birden fazla sevkiyat varsa */}
                     {expanded && toplamSevk > 1 && (
                       <tr key={`sum-${musteri}`} className="border-b border-border/50 bg-bg-3/10">
-                        <td colSpan={3} className="pl-9 pr-4 py-1.5 text-zinc-600 text-[11px]">Grup toplamı</td>
+                        <td colSpan={4} className="pl-9 pr-4 py-1.5 text-zinc-600 text-[11px]">Grup toplamı</td>
                         <td className="px-4 py-1.5 text-right font-mono font-semibold text-green text-[11px]">{toplamMiktar}</td>
                         <td colSpan={2}></td>
                       </tr>
@@ -248,7 +389,7 @@ export function Shipment() {
             {grouped.length > 1 && (
               <tfoot>
                 <tr className="border-t-2 border-border bg-bg-3/30">
-                  <td colSpan={3} className="px-4 py-2 text-zinc-400 text-[11px] font-semibold">Genel Toplam</td>
+                  <td colSpan={4} className="px-4 py-2 text-zinc-400 text-[11px] font-semibold">Genel Toplam</td>
                   <td className="px-4 py-2 text-right font-mono font-semibold text-green">{genelToplamMiktar}</td>
                   <td colSpan={2}></td>
                 </tr>
