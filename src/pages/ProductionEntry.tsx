@@ -268,6 +268,35 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [duruslar, setDuruslar] = useState<{ kodId: string; kodAd: string; sure: number; bas: string; bit: string }[]>([])
   const writtenIds = useRef<Set<string>>(new Set())
+  const [showSablon, setShowSablon] = useState(false)
+
+  // Son 3 anlamlı kayıt — aynı WO için şablon olarak kullanılır
+  const sonKayitlar = useMemo(() =>
+    logs
+      .filter(l => l.woId === woId && (
+        (l.operatorlar as any[] || []).length > 0 ||
+        (l.duruslar as any[] || []).length > 0 ||
+        !!(l as any).not
+      ))
+      .sort((a, b) => b.tarih.localeCompare(a.tarih))
+      .slice(0, 3),
+    [logs, woId]
+  )
+
+  function uygulaŞablon(log: typeof sonKayitlar[number]) {
+    const nowStr = (() => { const n = new Date(); return String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0') })()
+    const opers = (log.operatorlar as any[] || [])
+      .filter((o: any) => operators.find(op => op.id === o.id && op.aktif !== false))
+      .map((o: any) => ({ id: o.id, ad: o.ad, bas: nowStr, bit: nowStr }))
+    if (opers.length > 0) setOprList(opers)
+    setDuruslar((log.duruslar as any[] || [])
+      .filter((d: any) => d.kodId)
+      .map((d: any) => ({ kodId: d.kodId || '', kodAd: d.kodAd || '', sure: d.sure || 0, bas: nowStr, bit: nowStr }))
+    )
+    setNot((log as any).not || '')
+    setShowSablon(false)
+    toast.success('Şablon yüklendi')
+  }
 
   // ═══ ACTIVE WORK ═══
   // Modal açılınca uys_active_work'a kayıt yaz, kapanınca (kaydet veya iptal) sil
@@ -453,8 +482,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
       // Freshly yazılan log store'a henüz gelmediyse hesaba katmak için manuel ekle
       const freshLogs2 = [...logState, { id: sonuc.logId, woId, qty: q, fire: f } as any]
       await barModelSync(woId, cpState, woState, freshLogs2, materials)
-    } catch (err) {
-      console.error('[barModel] Sync hatası:', err)
+    } catch {
     }
 
     // Fire kaydedildi — telafi İE otomatik açılmaz, yönetim Reports → Fire'dan onaylayacak
@@ -486,7 +514,7 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {
       await reloadTablesDispatched(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar', 'uys_kesim_planlari'])
-    } catch (e) { console.error('Post-save reload:', e) }
+    } catch { }
     onSaved()
     } catch (e: any) {
       toast.error('Üretim girişi kaydedilemedi: ' + (e?.message || e))
@@ -550,6 +578,40 @@ function EntryModal({ woId, operators, defaultOprId, onClose, onSaved }: {
         )}
 
         <div className="space-y-3">
+          {/* Şablondan Yükle */}
+          {sonKayitlar.length > 0 && (
+            <div>
+              <button type="button" onClick={() => setShowSablon(s => !s)}
+                className="flex items-center gap-1 text-[11px] text-accent hover:underline">
+                📋 Şablondan Yükle ({sonKayitlar.length})
+                <span className="text-zinc-600 text-[9px]">{showSablon ? '▲' : '▼'}</span>
+              </button>
+              {showSablon && (
+                <div className="mt-2 space-y-1.5">
+                  {sonKayitlar.map((log, i) => {
+                    const opers = log.operatorlar as any[] || []
+                    const durs = log.duruslar as any[] || []
+                    return (
+                      <button key={(log as any).id || i} type="button" onClick={() => uygulaŞablon(log)}
+                        className="w-full text-left px-3 py-2 bg-bg-2 border border-border rounded-lg hover:border-accent/50 hover:bg-accent/5 transition-colors">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-[10px] font-mono text-zinc-400">{log.tarih}</span>
+                          <span className="text-[10px] text-green font-semibold">+{log.qty} adet</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {opers.map((o: any) => (
+                            <span key={o.id} className="text-[10px] px-1.5 py-0.5 bg-bg-3 text-zinc-300 rounded">{o.ad}</span>
+                          ))}
+                          {durs.length > 0 && <span className="text-[10px] px-1.5 py-0.5 bg-red/10 text-red rounded">{durs.length} duruş</span>}
+                          {(log as any).not && <span className="text-[10px] text-zinc-600 italic truncate max-w-[120px]">"{(log as any).not}"</span>}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <label className="text-[11px] text-zinc-500">Kayıt Tarihi</label>
             <input type="date" value={tarih} onChange={e => setTarih(e.target.value)}
@@ -727,8 +789,7 @@ function TopluUretimModal({ acikWOs, operators, onClose, onSaved }: {
       try {
         const freshLogs = [...logs, { id: logId, woId: r.woId, qty: q, fire: f } as any]
         await barModelSync(r.woId, cuttingPlans, workOrders, freshLogs, materials)
-      } catch (err) {
-        console.error('[barModel] Toplu sync hatası:', err)
+      } catch {
       }
 
       if (f > 0) {
