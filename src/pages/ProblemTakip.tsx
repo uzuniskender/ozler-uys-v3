@@ -6,7 +6,8 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { CLIENT_ID } from '@/hooks/useRealtime'
-import { Search, Plus, Pencil, Trash2, AlertCircle } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, AlertCircle, Download, LayoutGrid, List } from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { z } from 'zod'
 import type { Problem } from '@/types'
 
@@ -75,6 +76,7 @@ export function ProblemTakip() {
   const [filterDurum, setFilterDurum] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editItem, setEditItem] = useState<Problem | null>(null)
+  const [viewMode, setViewMode] = useState<'liste' | 'ozet'>('liste')
 
   const filtered = useMemo(() => {
     let items = [...problemler]
@@ -112,6 +114,32 @@ export function ProblemTakip() {
       .sort((a, b) => b.sonDegistirme.localeCompare(a.sonDegistirme))
     return sorted[0]
   }, [problemler])
+
+  async function exportExcel() {
+    const xlsx = await import('xlsx')
+    const rows = filtered.map((p, i) => ({
+      '#': i + 1,
+      'D1 — Problem': p.problem,
+      'D2 — Sorumlu': p.sorumlu || '',
+      'Durum': p.durum,
+      'Termin': p.termin ? fmtDate(p.termin) : '',
+      'Termin Gecikme': isOverdue(p) ? 'Evet' : 'Hayır',
+      'Geciken (30 gün+)': isGeciken30(p) ? 'Evet' : 'Hayır',
+      'D3 — Yapılanlar / Aksiyon Tarihçesi': p.yapilanlar || '',
+      'D4 — Kök Neden': p.kokNeden || '',
+      'D5 — Kalıcı Çözüm': p.kaliciCozum || '',
+      'D6-D8 — Notlar': p.notlar || '',
+      'Oluşturan': p.olusturan || '',
+      'Oluşturma': p.olusturma ? fmtDT(p.olusturma) : '',
+      'Son Değiştiren': p.sonDegistiren || '',
+      'Son Değiştirme': p.sonDegistirme ? fmtDT(p.sonDegistirme) : '',
+      'Kapatma Tarihi': p.kapatmaTarihi ? fmtDate(p.kapatmaTarihi) : '',
+    }))
+    const ws = xlsx.utils.json_to_sheet(rows)
+    const wb = xlsx.utils.book_new()
+    xlsx.utils.book_append_sheet(wb, ws, 'Problemler')
+    xlsx.writeFile(wb, `problem-listesi-${today()}.xlsx`)
+  }
 
   async function del(id: string) {
     if (!await showConfirm('Bu problemi silmek istediğinize emin misiniz?')) return
@@ -172,14 +200,39 @@ export function ProblemTakip() {
           <h1 className="text-xl font-semibold">Problem Takip</h1>
           <p className="text-xs text-zinc-500">{problemler.length} kayıt</p>
         </div>
-        {can('pt_add') && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => { setEditItem(null); setShowForm(true) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"
+            onClick={exportExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-3 hover:bg-bg-2 border border-border text-zinc-300 rounded-lg text-xs font-semibold"
+            title="Excel olarak indir"
           >
-            <Plus size={13} /> Yeni Problem
+            <Download size={13} /> Excel
           </button>
-        )}
+          <div className="flex border border-border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('liste')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs ${viewMode === 'liste' ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-zinc-200'}`}
+              title="Liste görünümü"
+            >
+              <List size={12} />
+            </button>
+            <button
+              onClick={() => setViewMode('ozet')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs ${viewMode === 'ozet' ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-zinc-200'}`}
+              title="Özet görünümü"
+            >
+              <LayoutGrid size={12} />
+            </button>
+          </div>
+          {can('pt_add') && (
+            <button
+              onClick={() => { setEditItem(null); setShowForm(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"
+            >
+              <Plus size={13} /> Yeni Problem
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPI */}
@@ -238,8 +291,10 @@ export function ProblemTakip() {
         </div>
       </div>
 
+      {viewMode === 'ozet' && <OzetView problemler={problemler} />}
+
       {/* Table */}
-      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+      {viewMode === 'liste' && <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
         {filtered.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -324,7 +379,7 @@ export function ProblemTakip() {
             {search || filterDurum ? 'Filtreye uyan kayıt yok' : 'Henüz problem yok'}
           </div>
         )}
-      </div>
+      </div>}
 
       {showForm && (
         <ProblemFormModal
@@ -334,6 +389,111 @@ export function ProblemTakip() {
           onSave={save}
         />
       )}
+    </div>
+  )
+}
+
+// ═══ ÖZET GÖRÜNÜMÜ ═══
+function OzetView({ problemler }: { problemler: Problem[] }) {
+  const acik = problemler.filter(p => p.durum === 'Açık').length
+  const devam = problemler.filter(p => p.durum === 'Devam').length
+  const kapandi = problemler.filter(p => p.durum === 'Kapandı').length
+  const geciken = problemler.filter(p => isGeciken30(p)).length
+  const terminGecen = problemler.filter(p => isOverdue(p)).length
+
+  const pieData = [
+    { name: 'Açık', value: acik, color: '#ef4444' },
+    { name: 'Devam', value: devam, color: '#f59e0b' },
+    { name: 'Kapandı', value: kapandi, color: '#22c55e' },
+  ].filter(d => d.value > 0)
+
+  // Son 30 gün kapanan problemler sayısı
+  const son30 = (() => {
+    const sinir = new Date(); sinir.setDate(sinir.getDate() - 30)
+    const sinirStr = sinir.toISOString().slice(0, 10)
+    return problemler.filter(p => p.durum === 'Kapandı' && p.kapatmaTarihi && p.kapatmaTarihi >= sinirStr).length
+  })()
+
+  return (
+    <div className="space-y-4">
+      {/* Özet kartlar */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {[
+          { label: 'Açık', val: acik, color: 'text-red' },
+          { label: 'Devam', val: devam, color: 'text-amber' },
+          { label: 'Kapandı', val: kapandi, color: 'text-green' },
+          { label: 'Termin Gecikme', val: terminGecen, color: terminGecen > 0 ? 'text-red' : 'text-zinc-500' },
+          { label: '30 Gün+ Geciken', val: geciken, color: geciken > 0 ? 'text-amber' : 'text-zinc-500' },
+        ].map(c => (
+          <div key={c.label} className="bg-bg-2 border border-border rounded-lg p-3 text-center">
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">{c.label}</div>
+            <div className={`text-2xl font-bold font-mono ${c.color}`}>{c.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Pie chart + açıklama */}
+      <div className="bg-bg-2 border border-border rounded-xl p-4">
+        <div className="text-xs font-semibold text-zinc-400 mb-3">Durum Dağılımı</div>
+        {pieData.length === 0 ? (
+          <div className="py-12 text-center text-zinc-600 text-sm">Kayıt yok</div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div style={{ width: 260, height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${Math.round(percent * 100)}%`}
+                    labelLine={false}
+                  >
+                    {pieData.map((d, i) => (
+                      <Cell key={i} fill={d.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8, fontSize: 12 }}
+                    formatter={(v: number, name: string) => [`${v} problem`, name]}
+                  />
+                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2 text-xs text-zinc-400 min-w-[160px]">
+              <div className="flex items-center justify-between gap-6">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red/70 inline-block" />Açık</span>
+                <span className="font-mono font-semibold text-zinc-200">{acik}</span>
+              </div>
+              <div className="flex items-center justify-between gap-6">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber/70 inline-block" />Devam</span>
+                <span className="font-mono font-semibold text-zinc-200">{devam}</span>
+              </div>
+              <div className="flex items-center justify-between gap-6">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green/70 inline-block" />Kapandı</span>
+                <span className="font-mono font-semibold text-zinc-200">{kapandi}</span>
+              </div>
+              <div className="border-t border-border/50 pt-2 mt-2">
+                <div className="flex items-center justify-between gap-6">
+                  <span>Son 30 günde kapanan</span>
+                  <span className="font-mono font-semibold text-green">{son30}</span>
+                </div>
+                <div className="flex items-center justify-between gap-6 mt-1">
+                  <span>Kapatılma oranı</span>
+                  <span className="font-mono font-semibold text-zinc-200">
+                    {problemler.length > 0 ? Math.round(kapandi / problemler.length * 100) : 0}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
