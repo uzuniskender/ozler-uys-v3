@@ -7,7 +7,7 @@ import { today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { topluFireTelafi, fireTelafiIeOlustur } from '@/services/productionService/fireTelafi'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, ReferenceLine, Legend } from 'recharts'
 
 const COLORS = ['#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
@@ -1492,7 +1492,12 @@ export function Reports() {
         const haftaData = Object.entries(haftaMap)
           .sort((a, b) => a[0].localeCompare(b[0]))
           .slice(-8)
-          .map(([wb, v]) => ({ hafta: wb.slice(5), ...v }))
+          .map(([wb, v]) => ({
+            hafta: wb.slice(5),
+            uretim: v.uretim,
+            fire: v.fire,
+            kalite: (v.uretim + v.fire) > 0 ? Math.round(v.uretim / (v.uretim + v.fire) * 100) : 100,
+          }))
 
         const oeeBarData = [...data].filter(d => d.oee > 0).sort((a, b) => b.oee - a.oee).slice(0, 12)
         const fireBarData = [...data].filter(d => d.uretim + d.fire > 0).sort((a, b) => b.fireOran - a.fireOran).slice(0, 12)
@@ -1521,16 +1526,18 @@ export function Reports() {
               <div className="bg-bg-2 border border-border rounded-lg p-4">
                 <h3 className="text-sm font-semibold mb-3">İstasyon OEE Karşılaştırması</h3>
                 {oeeBarData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={oeeBarData} margin={{ left: 4, right: 20, top: 8, bottom: 4 }}>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={oeeBarData.slice(0, 8)} margin={{ left: 4, right: 8, top: 8, bottom: 4 }} barCategoryGap="25%" barGap={2}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                       <XAxis dataKey="ad" tick={{ fontSize: 8, fill: '#888' }} />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} unit="%" />
-                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v}%`, 'OEE']} />
-                      <ReferenceLine y={85} stroke="#22c55e" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: '%85', fill: '#22c55e', fontSize: 9, position: 'insideTopRight' }} />
-                      <Bar dataKey="oee" radius={[3, 3, 0, 0]} name="OEE">
-                        {oeeBarData.map((d, i) => <Cell key={i} fill={d.oee >= 85 ? COLORS[3] : d.oee >= 60 ? COLORS[1] : COLORS[2]} />)}
-                      </Bar>
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number, name: string) => [`${v}%`, name]} />
+                      <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+                      <ReferenceLine y={85} stroke="#22c55e" strokeDasharray="5 3" strokeWidth={1} />
+                      <Bar dataKey="avail" name="Kullanılabilirlik" fill="#06b6d4" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="perf" name="Performans" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="quality" name="Kalite" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="oee" name="OEE" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : <div className="h-60 flex items-center justify-center text-zinc-600 text-xs">Veri yok</div>}
@@ -1567,14 +1574,17 @@ export function Reports() {
                 </select>
               </div>
               {haftaData.length > 1 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={haftaData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={haftaData} margin={{ left: 4, right: 40, top: 4, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis dataKey="hafta" tick={{ fontSize: 9, fill: '#888' }} />
-                    <YAxis tick={{ fontSize: 10, fill: '#888' }} />
-                    <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
-                    <Line type="monotone" dataKey="uretim" stroke={COLORS[3]} strokeWidth={2} dot={{ r: 3, fill: COLORS[3] }} name="Üretim" />
-                    <Line type="monotone" dataKey="fire" stroke={COLORS[2]} strokeWidth={1.5} strokeDasharray="4 2" dot={{ r: 2, fill: COLORS[2] }} name="Fire" />
+                    <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#888' }} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} unit="%" />
+                    <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number, name: string) => [name === 'Kalite %' ? `${v}%` : v, name]} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="uretim" stroke={COLORS[3]} strokeWidth={2} dot={{ r: 3, fill: COLORS[3] }} name="Üretim" />
+                    <Line yAxisId="left" type="monotone" dataKey="fire" stroke={COLORS[2]} strokeWidth={1.5} strokeDasharray="4 2" dot={{ r: 2, fill: COLORS[2] }} name="Fire" />
+                    <Line yAxisId="right" type="monotone" dataKey="kalite" stroke={COLORS[0]} strokeWidth={1.5} strokeDasharray="2 4" dot={{ r: 2, fill: COLORS[0] }} name="Kalite %" />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -1613,13 +1623,27 @@ export function Reports() {
                       <td className="px-4 py-1.5 text-right font-mono text-green">{d.uretim}</td>
                       <td className="px-4 py-1.5 text-right font-mono text-red">{d.fire > 0 ? d.fire : '—'}</td>
                       <td className={`px-4 py-1.5 text-right font-mono ${d.fireOran > 5 ? 'text-red' : d.fireOran > 2 ? 'text-amber' : 'text-zinc-500'}`}>
-                        {d.uretim + d.fire > 0 ? `${d.fireOran}%` : '—'}
+                        {d.uretim + d.fire > 0 ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <div className="w-10 h-1 bg-bg-3 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${d.fireOran > 5 ? 'bg-red' : d.fireOran > 2 ? 'bg-amber' : 'bg-green'}`} style={{ width: `${Math.min(100, d.fireOran * 10)}%` }} />
+                            </div>
+                            {d.fireOran}%
+                          </div>
+                        ) : '—'}
                       </td>
                       <td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.calismaDk > 0 ? `${d.avail}%` : '—'}</td>
                       <td className="px-4 py-1.5 text-right font-mono">{d.perf > 0 ? `${d.perf}%` : '—'}</td>
                       <td className="px-4 py-1.5 text-right font-mono">{d.quality}%</td>
                       <td className={`px-4 py-1.5 text-right font-mono font-semibold ${d.oee >= 85 ? 'text-green' : d.oee >= 60 ? 'text-amber' : 'text-red'}`}>
-                        {d.oee > 0 ? `${d.oee}%` : '—'}
+                        {d.oee > 0 ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <div className="w-12 h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${d.oee >= 85 ? 'bg-green' : d.oee >= 60 ? 'bg-amber' : 'bg-red'}`} style={{ width: `${d.oee}%` }} />
+                            </div>
+                            {d.oee}%
+                          </div>
+                        ) : '—'}
                       </td>
                     </tr>
                   ))}</tbody>
