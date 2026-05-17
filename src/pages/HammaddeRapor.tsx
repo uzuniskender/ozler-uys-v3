@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { fmtDate } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useEffect } from 'react'
-import { Download, BarChart2, Package, Weight, Calendar, Filter, AlertTriangle } from 'lucide-react'
+import { Download, BarChart2, Package, Weight, Calendar, Filter, AlertTriangle, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface TuketimRow {
@@ -13,9 +13,13 @@ interface TuketimRow {
   toplam_metre: number
   toplam_kg: number
   kg_eksik: boolean
+  hammadde_tipi: string | null
+  op_kod: string
+  op_ad: string
 }
 
 type Granularite = 'gunluk' | 'haftalik' | 'aylik'
+type GruplamaModu = 'tarih' | 'operasyon'
 
 function startOfWeek(d: Date) {
   const day = d.getDay()
@@ -41,7 +45,7 @@ function grupLabel(key: string, gran: Granularite): string {
   if (gran === 'haftalik') {
     const d = new Date(key)
     const end = new Date(d); end.setDate(d.getDate() + 6)
-    return `${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} \u2013 ${fmtDate(end)}`
+    return `${d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} – ${fmtDate(isoDate(end))}`
   }
   const [y, m] = key.split('-')
   return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })
@@ -56,6 +60,7 @@ export function HammaddeRapor() {
   const [baslangic, setBaslangic] = useState(firstOfMonth)
   const [bitis, setBitis] = useState(today)
   const [gran, setGran] = useState<Granularite>('gunluk')
+  const [gruplamaModu, setGruplamaModu] = useState<GruplamaModu>('tarih')
   const [malkodFiltre, setMalkodFiltre] = useState('')
   const [grupFiltre, setGrupFiltre] = useState('')
 
@@ -69,10 +74,12 @@ export function HammaddeRapor() {
         .lte('tarih', bitis)
         .order('tarih', { ascending: false })
       if (error) { toast.error('Veri yuklenemedi: ' + error.message); setLoading(false); return }
-      // Supabase numeric alanlari string dondurebilir, Number() ile normalize et
       setRows((data || []).map(r => ({
         ...r,
         malad: r.malad ?? r.malkod ?? '',
+        hammadde_tipi: r.hammadde_tipi ?? null,
+        op_kod: r.op_kod ?? '',
+        op_ad: r.op_ad ?? '',
         adet: Number(r.adet),
         toplam_metre: Number(r.toplam_metre),
         toplam_kg: Number(r.toplam_kg),
@@ -95,10 +102,21 @@ export function HammaddeRapor() {
   }), [rows, malkodFiltre, grupFiltre])
 
   const grouped = useMemo(() => {
-    const map: Record<string, { tarihLabel: string; malkodler: Record<string, TuketimRow & { key: string }> }> = {}
+    const map: Record<string, { label: string; malkodler: Record<string, TuketimRow & { key: string }> }> = {}
+
     for (const r of filtrelenmis) {
-      const gk = grupKey(r.tarih, gran)
-      if (!map[gk]) map[gk] = { tarihLabel: grupLabel(gk, gran), malkodler: {} }
+      let gk: string
+      let label: string
+
+      if (gruplamaModu === 'operasyon') {
+        gk = r.op_kod || '—'
+        label = r.op_ad ? `${r.op_ad} (${r.op_kod || '—'})` : '(Operasyon Yok)'
+      } else {
+        gk = grupKey(r.tarih, gran)
+        label = grupLabel(gk, gran)
+      }
+
+      if (!map[gk]) map[gk] = { label, malkodler: {} }
       const mk = r.malkod
       if (!map[gk].malkodler[mk]) {
         map[gk].malkodler[mk] = { ...r, key: gk, adet: 0, toplam_metre: 0, toplam_kg: 0 }
@@ -108,8 +126,11 @@ export function HammaddeRapor() {
       map[gk].malkodler[mk].toplam_kg += r.toplam_kg
       if (r.kg_eksik) map[gk].malkodler[mk].kg_eksik = true
     }
-    return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
-  }, [filtrelenmis, gran])
+
+    return Object.entries(map).sort(([a], [b]) =>
+      gruplamaModu === 'operasyon' ? a.localeCompare(b, 'tr') : b.localeCompare(a)
+    )
+  }, [filtrelenmis, gran, gruplamaModu])
 
   const toplamlar = useMemo(() => ({
     adet: filtrelenmis.reduce((a, r) => a + r.adet, 0),
@@ -122,8 +143,11 @@ export function HammaddeRapor() {
     const XLSX = await import('xlsx')
     const exportRows = filtrelenmis.map(r => ({
       'Tarih': r.tarih,
+      'Operasyon Kodu': r.op_kod || '—',
+      'Operasyon': r.op_ad || '—',
       'Malzeme Kodu': r.malkod,
       'Malzeme Adi': r.malad,
+      'Hammadde Tipi': r.hammadde_tipi || '',
       'Bar Adedi': r.adet,
       'Toplam (m)': r.toplam_metre,
       'Toplam (kg)': r.toplam_kg,
@@ -131,15 +155,21 @@ export function HammaddeRapor() {
     }))
     exportRows.push({
       'Tarih': 'TOPLAM',
+      'Operasyon Kodu': '',
+      'Operasyon': '',
       'Malzeme Kodu': '',
       'Malzeme Adi': '',
+      'Hammadde Tipi': '',
       'Bar Adedi': toplamlar.adet,
       'Toplam (m)': Math.round(toplamlar.metre * 1000) / 1000,
       'Toplam (kg)': Math.round(toplamlar.kg),
       'kg/m Eksik': toplamlar.kgEksikSayisi > 0 ? `${toplamlar.kgEksikSayisi} malzeme eksik` : '',
     })
     const ws = XLSX.utils.json_to_sheet(exportRows)
-    ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 48 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 20 }, { wch: 48 },
+      { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+    ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Hammadde Tuketim')
     XLSX.writeFile(wb, `hammadde_tuketim_${baslangic}_${bitis}.xlsx`)
@@ -165,7 +195,9 @@ export function HammaddeRapor() {
         </button>
       </div>
 
+      {/* Filtreler */}
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4 flex flex-wrap gap-3 items-end">
+        {/* Tarih aralığı */}
         <div className="flex flex-col gap-1">
           <label className="text-[10px] text-zinc-500 uppercase">Baslangic</label>
           <input type="date" value={baslangic} onChange={e => setBaslangic(e.target.value)}
@@ -176,17 +208,38 @@ export function HammaddeRapor() {
           <input type="date" value={bitis} onChange={e => setBitis(e.target.value)}
             className="px-2 py-1.5 bg-bg-3 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent" />
         </div>
+
+        {/* Gruplama modu */}
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-zinc-500 uppercase">Granularite</label>
+          <label className="text-[10px] text-zinc-500 uppercase">Gruplama</label>
           <div className="flex rounded overflow-hidden border border-border">
-            {(['gunluk', 'haftalik', 'aylik'] as Granularite[]).map(g => (
-              <button key={g} onClick={() => setGran(g)}
-                className={`px-3 py-1.5 text-xs ${gran === g ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
-                {g === 'gunluk' ? 'Gunluk' : g === 'haftalik' ? 'Haftalik' : 'Aylik'}
-              </button>
-            ))}
+            <button onClick={() => setGruplamaModu('tarih')}
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs ${gruplamaModu === 'tarih' ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
+              <Calendar size={11} /> Tarih
+            </button>
+            <button onClick={() => setGruplamaModu('operasyon')}
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs ${gruplamaModu === 'operasyon' ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
+              <Wrench size={11} /> Operasyon
+            </button>
           </div>
         </div>
+
+        {/* Granularite — sadece tarih modunda göster */}
+        {gruplamaModu === 'tarih' && (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-zinc-500 uppercase">Granularite</label>
+            <div className="flex rounded overflow-hidden border border-border">
+              {(['gunluk', 'haftalik', 'aylik'] as Granularite[]).map(g => (
+                <button key={g} onClick={() => setGran(g)}
+                  className={`px-3 py-1.5 text-xs ${gran === g ? 'bg-accent text-white' : 'bg-bg-3 text-zinc-400 hover:text-white'}`}>
+                  {g === 'gunluk' ? 'Gunluk' : g === 'haftalik' ? 'Haftalik' : 'Aylik'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Malzeme grubu */}
         <div className="flex flex-col gap-1">
           <label className="text-[10px] text-zinc-500 uppercase">Malzeme Grubu</label>
           <select value={grupFiltre} onChange={e => setGrupFiltre(e.target.value)}
@@ -195,6 +248,8 @@ export function HammaddeRapor() {
             {gruplar.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
+
+        {/* Malzeme ara */}
         <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
           <label className="text-[10px] text-zinc-500 uppercase">Malzeme Ara</label>
           <div className="relative">
@@ -205,13 +260,14 @@ export function HammaddeRapor() {
         </div>
       </div>
 
+      {/* KPI */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <Package size={14} className="text-accent" />
             <span className="text-[10px] text-zinc-500 uppercase">Bar Adedi</span>
           </div>
-          <div className="text-2xl font-bold">{loading ? '\u2014' : toplamlar.adet.toLocaleString('tr-TR')}</div>
+          <div className="text-2xl font-bold">{loading ? '—' : toplamlar.adet.toLocaleString('tr-TR')}</div>
           <div className="text-[10px] text-zinc-500 mt-1">secili donem</div>
         </div>
         <div className="bg-bg-2 border border-border rounded-lg p-4">
@@ -219,7 +275,10 @@ export function HammaddeRapor() {
             <BarChart2 size={14} className="text-blue-400" />
             <span className="text-[10px] text-zinc-500 uppercase">Toplam Metre</span>
           </div>
-          <div className="text-2xl font-bold">{loading ? '\u2014' : toplamlar.metre.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-zinc-400">m</span></div>
+          <div className="text-2xl font-bold">
+            {loading ? '—' : toplamlar.metre.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}
+            {' '}<span className="text-sm font-normal text-zinc-400">m</span>
+          </div>
           <div className="text-[10px] text-zinc-500 mt-1">secili donem</div>
         </div>
         <div className="bg-bg-2 border border-border rounded-lg p-4">
@@ -228,7 +287,7 @@ export function HammaddeRapor() {
             <span className="text-[10px] text-zinc-500 uppercase">Toplam Agirlik</span>
           </div>
           <div className="text-2xl font-bold">
-            {loading ? '\u2014' : toplamlar.kg >= 1000
+            {loading ? '—' : toplamlar.kg >= 1000
               ? `${(toplamlar.kg / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} t`
               : `${Math.round(toplamlar.kg).toLocaleString('tr-TR')} kg`}
           </div>
@@ -240,6 +299,7 @@ export function HammaddeRapor() {
         </div>
       </div>
 
+      {/* Tablo */}
       {loading ? (
         <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-xs text-zinc-500">Yukleniyor...</div>
       ) : grouped.length === 0 ? (
@@ -253,12 +313,13 @@ export function HammaddeRapor() {
             const topMetre = satirlar.reduce((a, r) => a + r.toplam_metre, 0)
             const topKg = satirlar.reduce((a, r) => a + r.toplam_kg, 0)
             const topAdet = satirlar.reduce((a, r) => a + r.adet, 0)
+            const GrupIcon = gruplamaModu === 'operasyon' ? Wrench : Calendar
             return (
               <div key={gk} className="bg-bg-2 border border-border rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 bg-bg-3 border-b border-border">
                   <div className="flex items-center gap-2">
-                    <Calendar size={13} className="text-accent" />
-                    <span className="text-xs font-semibold">{gv.tarihLabel}</span>
+                    <GrupIcon size={13} className="text-accent" />
+                    <span className="text-xs font-semibold">{gv.label}</span>
                   </div>
                   <div className="flex items-center gap-4 text-[11px] text-zinc-400">
                     <span>{topAdet} bar</span>
