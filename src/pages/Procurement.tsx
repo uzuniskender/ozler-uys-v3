@@ -47,6 +47,7 @@ export function Procurement() {
       // ile birebir eşleşir; iptal edilenler 'bekliyor' filtresinden de düşer.
       if (durumFilter === 'bekliyor' && !isProcurementPending(t)) return false
       if (durumFilter === 'geldi' && !t.geldi) return false
+      if (durumFilter === 'geciken' && !(t.teslimTarihi && t.teslimTarihi < today() && !t.geldi)) return false
       if (search) {
         const q = search.toLowerCase()
         return (t.malkod + t.malad + t.siparisNo + t.tedarikcAd).toLowerCase().includes(q)
@@ -237,6 +238,7 @@ export function Procurement() {
             { id: 'all', label: 'Tümü', color: 'text-zinc-400' },
             { id: 'bekliyor', label: 'Bekleyen', color: 'text-amber' },
             { id: 'geldi', label: 'Teslim Alınan', color: 'text-green' },
+            { id: 'geciken', label: 'Geciken', color: 'text-red' },
           ].map(s => (
             <label key={s.id} className={`flex items-center gap-1 text-xs cursor-pointer ${durumFilter === s.id ? s.color : 'text-zinc-600'}`}>
               <input type="radio" name="durumFilter" checked={durumFilter === s.id} onChange={() => setDurumFilter(s.id)} className="accent-accent" />
@@ -260,7 +262,7 @@ export function Procurement() {
                   />
                 )}
               </th>
-              <th className="text-left px-4 py-2.5">Malzeme</th><th className="text-right px-4 py-2.5">Miktar</th><th className="text-left px-4 py-2.5">Sipariş</th><th className="text-left px-4 py-2.5">Tedarikçi</th><th className="text-left px-4 py-2.5">Teslim</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th>
+              <th className="text-left px-4 py-2.5">Malzeme</th><th className="text-right px-4 py-2.5">Miktar</th><th className="text-left px-4 py-2.5">Sipariş</th><th className="text-left px-4 py-2.5">Tedarikçi</th><th className="text-left px-4 py-2.5">Teslim</th><th className="text-left px-4 py-2.5">Gecikme</th><th className="text-left px-4 py-2.5">Durum</th><th className="px-4 py-2.5"></th>
             </tr></thead>
             <tbody>
               {filtered.map(t => (
@@ -277,6 +279,11 @@ export function Procurement() {
                   <td className="px-4 py-2 font-mono text-zinc-500 text-[11px]">{t.siparisNo || '—'}</td>
                   <td className="px-4 py-2 text-zinc-400">{t.tedarikcAd || '—'}</td>
                   <td className="px-4 py-2 font-mono text-zinc-500">{t.teslimTarihi || '—'}</td>
+                  <td className="px-4 py-2">
+                    {t.teslimTarihi && t.teslimTarihi < today() && !t.geldi && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-red/10 text-red">⚠ Gecikti</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${t.geldi ? 'bg-green/10 text-green' : 'bg-amber/10 text-amber'}`}>
                       {t.geldi ? '✓ Geldi' : 'Bekliyor'}
