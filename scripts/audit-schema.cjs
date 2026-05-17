@@ -97,7 +97,7 @@ function readSchemaTables() {
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.sql'))
   for (const f of files) {
     const content = fs.readFileSync(path.join(dir, f), 'utf-8')
-    const matches = content.matchAll(/CREATE TABLE IF NOT EXISTS public\.(\w+)/g)
+    const matches = content.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? public\.(\w+)/g)
     for (const m of matches) tables.add(m[1])
   }
   return tables

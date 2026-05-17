@@ -2054,7 +2054,7 @@ function HmTipleriPanel() {
     setSaving(true)
     const maxSira = Math.max(0, ...hmTipler.map(t => t.sira))
     await supabase.from('uys_hm_tipleri').insert({
-      id: uid(), kod, ad, aciklama: '', sira: maxSira + 1, olusturma: today()
+      id: uid(), kod, ad, aciklama: '', sira: maxSira + 1
     })
     setYeniKod(''); setYeniAd(''); setSaving(false)
     loadAllStores(); toast.success(`${kod} eklendi`)

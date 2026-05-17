@@ -7,7 +7,7 @@ import { supabase, fetchAll } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight, Check, X, Pencil, LayoutGrid, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Download, CheckSquare, Square, History, ChevronRight, Check, X, Pencil, LayoutGrid, AlertTriangle, Copy } from 'lucide-react'
 import { z } from 'zod'
 
 const _birimAdetSchema = z.coerce.number().int('Tam sayı girin').min(1, 'En az 1 olmalı')
@@ -572,6 +572,23 @@ export function IeHazirlama() {
     toast.success(yeni ? 'UYS Sipariş No kaydedildi' : 'UYS Sipariş No temizlendi')
   }
 
+  async function kopyalaIe(ie: IeBaslik) {
+    const { data, error } = await supabase.from('uys_ie_hazirlama_kalemler')
+      .select('*').eq('ie_id', ie.id).order('olusturma')
+    if (error || !data?.length) { toast.error('Kalemler yüklenemedi'); return }
+    const yeniKalemler: Kalem[] = (data as IeKalem[]).map(k => ({
+      id: uid(), urun_kodu: k.urun_kodu, urun_adi: k.urun_adi || k.urun_kodu,
+      siparis_adeti: Number(k.siparis_adeti),
+    }))
+    setKalemler(yeniKalemler)
+    setMusteri(ie.musteri || '')
+    setSiparisNo('')
+    setTeslimTarihi('')
+    setSiparisTarihi(today())
+    setTab('yeni')
+    toast.success(`${yeniKalemler.length} kalem kopyalandı — sipariş no ve teslim tarihini girin`)
+  }
+
   async function tamamlandiYap(ie: IeBaslik) {
     setIslemYapiliyor(true)
     try {
@@ -976,7 +993,14 @@ export function IeHazirlama() {
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <button
+                          onClick={e => { e.stopPropagation(); kopyalaIe(ie) }}
+                          className="p-1 text-zinc-500 hover:text-cyan-400"
+                          title="Bu siparişin ürünlerini yeni forma kopyala"
+                        >
+                          <Copy size={12} />
+                        </button>
                         <button
                           onClick={e => { e.stopPropagation(); setDuzenleIe(ie) }}
                           className="p-1 text-zinc-500 hover:text-accent"
