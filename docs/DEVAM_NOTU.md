@@ -577,5 +577,20 @@ Etkilenen dosyalar: `productionService/autoChain.ts`, `productionService/cutting
 - Tamamlanmaya yakın kartlar yeşil-emerald border/bg ile ayrıştırıldı; progress bar emerald renk
 - KPI grid'e "Bugün Üretim" kartı eklendi (`logs.tarih === today` toplam adet); grid `lg:grid-cols-7`'ye genişletildi
 
+#### sql/ ve master_schema.sql güncelleme (bu oturum)
+
+**sql/ migration durumu:**
+Bugün (17 Mayıs) DB şema değişikliği YOK — v17.01–v17.06 tamamen TypeScript katmanında.
+Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
+
+**master_schema.sql yenilendi (2026-04-17 → 2026-05-17):**
+`backups/2026-05-17/schema.sql` (pg_dump 17.10) bazlı tam yeniden yazım:
+- 50 tablo (önceki 25 → chat, MRP cache, IE hazırlama, DevSync, audit, vb.)
+- 22 public fonksiyon (set_updated_at, compute_order_state, invalidate_mrp_*, fn_stok_*, cascade, vb.)
+- 30+ updated_at trigger + iş mantığı triggerları
+- 2 view (v_stok_anlik, v_hammadde_tuketim)
+- order_state enum tipi
+- RLS policy'ler (allow_all, admin_only, authenticated_select, admin_write grupları)
+
 #### Bekleyen
 - Normalize veri geçişi (kapsam belirsiz — ertelendi)
