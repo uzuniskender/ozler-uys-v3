@@ -773,13 +773,129 @@ export function Reports() {
           const gun = Math.ceil((new Date().getTime() - new Date(o.termin).getTime()) / 86400000)
           return { ...o, pct, gun, woCount: wos.length }
         }).filter(o => o.pct < 100).sort((a, b) => b.gun - a.gun)
+
+        // Müşteri bazlı özet
+        const musteriOzet = Object.values(
+          geciken.reduce<Record<string, { musteri: string; siparisSayisi: number; maxGun: number; toplamGun: number }>>((acc, o) => {
+            const k = o.musteri || 'Belirsiz'
+            if (!acc[k]) acc[k] = { musteri: k, siparisSayisi: 0, maxGun: 0, toplamGun: 0 }
+            acc[k].siparisSayisi++
+            acc[k].toplamGun += o.gun
+            if (o.gun > acc[k].maxGun) acc[k].maxGun = o.gun
+            return acc
+          }, {})
+        ).sort((a, b) => b.siparisSayisi - a.siparisSayisi || b.maxGun - a.maxGun)
+
+        // Gecikme süresi dağılımı
+        const dagılım = [
+          { label: '1–7 gün', count: geciken.filter(o => o.gun <= 7).length, fill: '#22c55e' },
+          { label: '8–30 gün', count: geciken.filter(o => o.gun > 7 && o.gun <= 30).length, fill: '#f59e0b' },
+          { label: '30+ gün', count: geciken.filter(o => o.gun > 30).length, fill: '#ef4444' },
+        ]
+
+        const exportGecikme = () => {
+          import('xlsx').then(XLSX => {
+            const wb = XLSX.utils.book_new()
+            const sipRows = geciken.map(o => ({
+              'Sipariş No': o.siparisNo, 'Müşteri': o.musteri || '',
+              'Termin': o.termin, 'Gecikme (gün)': o.gun, 'İlerleme %': o.pct,
+            }))
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sipRows), 'Geciken Siparişler')
+            const mRows = musteriOzet.map(m => ({
+              'Müşteri': m.musteri, 'Geciken Sipariş': m.siparisSayisi,
+              'Max Gecikme (gün)': m.maxGun,
+              'Ort Gecikme (gün)': Math.round(m.toplamGun / m.siparisSayisi),
+            }))
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mRows), 'Müşteri Özeti')
+            XLSX.writeFile(wb, `gecikme_raporu_${todayStr}.xlsx`)
+            toast.success('Gecikme raporu Excel indirildi')
+          })
+        }
+
         return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3 text-red">Geciken Siparişler ({geciken.length})</h3>
-            {geciken.length ? (
-              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Sipariş No</th><th className="text-left px-4 py-2">Müşteri</th><th className="text-left px-4 py-2">Termin</th><th className="text-right px-4 py-2">Gecikme</th><th className="text-right px-4 py-2">İlerleme</th></tr></thead>
-              <tbody>{geciken.map(o => (<tr key={o.id} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-accent">{o.siparisNo}</td><td className="px-4 py-1.5 text-zinc-300">{o.musteri}</td><td className="px-4 py-1.5 font-mono text-red">{o.termin}</td><td className="px-4 py-1.5 text-right font-mono text-red font-semibold">{o.gun} gün</td><td className="px-4 py-1.5 text-right font-mono text-amber">{o.pct}%</td></tr>))}</tbody></table>
-            ) : <div className="p-8 text-center text-green">Geciken sipariş yok!</div>}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold text-red">Geciken Siparişler ({geciken.length})</h3>
+              <span className="flex-1" />
+              {geciken.length > 0 && (
+                <button onClick={exportGecikme} className="px-3 py-1.5 bg-green/20 border border-green/30 rounded text-xs text-green hover:bg-green/30">📥 Excel</button>
+              )}
+            </div>
+            {geciken.length === 0 ? (
+              <div className="bg-bg-2 border border-border rounded-lg p-8 text-center text-green">Geciken sipariş yok!</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Gecikme süresi dağılımı */}
+                  <div className="bg-bg-2 border border-border rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-zinc-400 mb-3">Gecikme Süresi Dağılımı</h4>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={dagılım} barSize={44}>
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#888' }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#888' }} />
+                        <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v} sipariş`, 'Adet']} />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                          {dagılım.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Müşteri bazlı özet */}
+                  <div className="bg-bg-2 border border-border rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-zinc-400 mb-3">Müşteri Bazlı Özet</h4>
+                    <div className="overflow-y-auto max-h-[160px]">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border text-zinc-500">
+                            <th className="text-left pb-1.5">Müşteri</th>
+                            <th className="text-right pb-1.5">Sipariş</th>
+                            <th className="text-right pb-1.5">Max Gecikme</th>
+                            <th className="text-right pb-1.5">Ort Gecikme</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {musteriOzet.map((m, i) => (
+                            <tr key={i} className="border-b border-border/20">
+                              <td className="py-1 text-zinc-300 pr-2">{m.musteri}</td>
+                              <td className="py-1 text-right font-mono text-red">{m.siparisSayisi}</td>
+                              <td className="py-1 text-right font-mono text-red">{m.maxGun} gün</td>
+                              <td className="py-1 text-right font-mono text-amber">{Math.round(m.toplamGun / m.siparisSayisi)} gün</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Geciken siparişler tablosu */}
+                <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-zinc-500">
+                        <th className="text-left px-4 py-2">Sipariş No</th>
+                        <th className="text-left px-4 py-2">Müşteri</th>
+                        <th className="text-left px-4 py-2">Termin</th>
+                        <th className="text-right px-4 py-2">Gecikme</th>
+                        <th className="text-right px-4 py-2">İlerleme</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {geciken.map(o => (
+                        <tr key={o.id} className="border-b border-border/30">
+                          <td className="px-4 py-1.5 font-mono text-accent">{o.siparisNo}</td>
+                          <td className="px-4 py-1.5 text-zinc-300">{o.musteri}</td>
+                          <td className="px-4 py-1.5 font-mono text-red">{o.termin}</td>
+                          <td className="px-4 py-1.5 text-right font-mono text-red font-semibold">{o.gun} gün</td>
+                          <td className="px-4 py-1.5 text-right font-mono text-amber">{o.pct}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )
       })()}
