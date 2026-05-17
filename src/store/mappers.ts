@@ -72,6 +72,7 @@ export const M = {
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     bolum: (r.bolum || '') as string, aktif: r.aktif !== false, sifre: (r.sifre || '') as string,
     durum: (r.durum || '') as string,
+    bolumler: r.bolumler ? (r.bolumler as string[]) : undefined,
   }),
   recipe: (r: Record<string, unknown>): Recipe => ({
     id: r.id as string, rcKod: (r.rc_kod || '') as string, ad: (r.ad || '') as string,
@@ -86,7 +87,7 @@ export const M = {
   stokHareket: (r: Record<string, unknown>): StokHareket => ({
     id: r.id as string, tarih: (r.tarih || '') as string, malkod: (r.malkod || '') as string,
     malad: (r.malad || '') as string, miktar: (r.miktar as number) || 0,
-    tip: (r.tip || 'giris') as 'giris' | 'cikis',
+    tip: (r.tip || 'giris') as StokHareket['tip'],
     logId: (r.log_id || '') as string, woId: (r.wo_id || '') as string,
     aciklama: (r.aciklama || '') as string,
     rezervOrderId: (r.rezerv_order_id || null) as string | null,
@@ -172,7 +173,7 @@ export const M = {
   hmTip: (r: Record<string, unknown>): HmTip => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
     aciklama: (r.aciklama || '') as string, sira: (r.sira as number) || 0,
-    olusturma: (r.olusturma || '') as string,
+    olusturma: (r.created_at || '') as string,
   }),
   testRun: (r: Record<string, unknown>): TestRun => ({
     id: r.id as string, baslangic: (r.baslangic || '') as string,
