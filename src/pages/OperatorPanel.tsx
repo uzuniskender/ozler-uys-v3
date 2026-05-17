@@ -6,9 +6,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore, useProductionStore, useWarehouseStore, useOrderStore, loadAllStores, reloadTablesDispatched } from '@/store'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { uid, today, pctColor } from '@/lib/utils'
+import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
-import { LogOut, Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Play, Square, Send, CheckCircle, AlertTriangle } from 'lucide-react'
 import { OPERATOR_NOTE_KATEGORILER, type OperatorNoteKategori, type OperatorNoteOncelik } from '@/types'
 import { createIzin, onaylaIzin, reddetIzin } from '@/services/izinlerService'
 import type { IzinTip } from '@/types/izin'
@@ -34,7 +34,6 @@ const uretimGirisSchema = z.object({
 
 export function OperatorPanel() {
   const operators = useAuthStore(s => s.operators)
-  const loading = useAuthStore(s => s.loading)
   const operations = useProductionStore(s => s.operations)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -189,6 +188,8 @@ export function OperatorPanel() {
   return <OperatorMain oprId={oprId} opr={opr} tab={tab} setTab={setTab} isAdmin={!!isAdmin} onLogout={() => { signOut(); window.location.hash = '#/'; window.location.reload() }} onBack={() => navigate('/')} />
 }
 
+const VARDIYA_DK = 480 // 8 saatlik standart vardiya
+
 function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   oprId: string; opr: { id: string; ad: string; bolum: string; bolumler?: string[] }
   tab: string; setTab: (t: 'isler'|'mesaj'|'ozet'|'izin') => void; isAdmin: boolean; onLogout: () => void; onBack: () => void
@@ -222,8 +223,6 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     // v16.85 — bolumler array varsa tüm bölümleri kullan
     const myBolumler = (opr.bolumler?.length ? opr.bolumler : [opr.bolum])
       .map(b => (b || '').trim().toUpperCase()).filter(Boolean)
-    const bolumUpper = myBolumler[0] || ''  // geriye uyum
-
     function isOperatable(w: typeof workOrders[number]): boolean {
       if (w.hedef <= 0) return false
       const prod = logs.filter(l => l.woId === w.id).reduce((a, l) => a + l.qty, 0)
@@ -283,6 +282,25 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     }
     return { engel: false, mesaj: '', saatlik: false, iz: null }
   })()
+
+  const gunlukHedefInfo = useMemo(() => {
+    const bugunLogs = logs.filter(l => l.tarih === todayStr && (l.operatorlar as any[] || []).some((o: any) => o.id === oprId))
+    const uretim = bugunLogs.reduce((s, l) => s + l.qty, 0)
+    let hedef = 0
+    let varIslemSure = false
+    for (const w of acikWOs) {
+      const wToplam = logs.filter(l => l.woId === w.id).reduce((s, l) => s + l.qty, 0)
+      const kalan = Math.max(0, w.hedef - wToplam)
+      if (w.islemSure > 0) {
+        hedef += Math.min(kalan, Math.floor(VARDIYA_DK / w.islemSure))
+        varIslemSure = true
+      } else {
+        hedef += kalan
+      }
+    }
+    const pct = hedef > 0 ? Math.min(100, Math.round((uretim / hedef) * 100)) : uretim > 0 ? 100 : 0
+    return { uretim, hedef, pct, varIslemSure }
+  }, [logs, todayStr, oprId, acikWOs])
 
   async function startWork(woId: string) {
     if (izinEngel.engel) { toast.error(izinEngel.mesaj); return }
@@ -363,6 +381,36 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
 
         {tab === 'isler' && (
           <div className="space-y-3">
+            {/* Günlük Hedef Göstergesi */}
+            {(gunlukHedefInfo.hedef > 0 || gunlukHedefInfo.uretim > 0) && (
+              <div className="bg-bg-1 border border-border rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">🎯 Günlük Hedef</div>
+                  <div className="text-[10px] text-zinc-500">{gunlukHedefInfo.varIslemSure ? 'işlem süresi bazlı tahmin' : 'kalan İE hedefleri'}</div>
+                </div>
+                <div className="flex items-end gap-4 mb-2">
+                  <div>
+                    <div className="text-2xl font-bold text-green leading-none">{gunlukHedefInfo.uretim}</div>
+                    <div className="text-[9px] text-zinc-500 mt-0.5">üretilen</div>
+                  </div>
+                  <div className="text-zinc-600 text-sm pb-3">/</div>
+                  <div>
+                    <div className="text-2xl font-bold text-zinc-200 leading-none">{gunlukHedefInfo.hedef}</div>
+                    <div className="text-[9px] text-zinc-500 mt-0.5">hedef</div>
+                  </div>
+                  <div className="ml-auto">
+                    <div className={`text-2xl font-bold leading-none ${gunlukHedefInfo.pct >= 100 ? 'text-green' : gunlukHedefInfo.pct >= 70 ? 'text-amber' : 'text-accent'}`}>{gunlukHedefInfo.pct}%</div>
+                    <div className="text-[9px] text-zinc-500 mt-0.5 text-right">ilerleme</div>
+                  </div>
+                </div>
+                <div className="w-full h-2 bg-bg-3 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${gunlukHedefInfo.pct >= 100 ? 'bg-green' : gunlukHedefInfo.pct >= 70 ? 'bg-amber' : 'bg-accent'}`}
+                    style={{ width: `${Math.max(2, gunlukHedefInfo.pct)}%` }}
+                  />
+                </div>
+              </div>
+            )}
             {/* Aktif İşler */}
             {myActiveList.length > 0 && (
               <div className="bg-green/5 border border-green/20 rounded-xl p-3 mb-2">
@@ -656,7 +704,6 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
                     {myIzinler.slice(0, 15).map(iz => {
                       const durumColor = iz.durum === 'onaylandi' ? 'text-green' : iz.durum === 'reddedildi' ? 'text-red' : iz.durum === 'duzenlendi' ? 'text-cyan-400' : 'text-amber'
                       const durumIcon = iz.durum === 'onaylandi' ? '✅' : iz.durum === 'reddedildi' ? '❌' : iz.durum === 'duzenlendi' ? '✏️' : '⏳'
-                      const canEdit = iz.olusturan === 'operator' && iz.durum === 'bekliyor'
                       const isApproved = iz.durum === 'onaylandi'
                       return (
                         <div key={iz.id} className="px-3 py-2 text-xs">
@@ -840,7 +887,6 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
 
   if (!w) return null
   const prod = logs.filter(l => l.woId === woId).reduce((a, l) => a + l.qty, 0)
-  const editQtyDelta = editLog ? (parseInt(qty) || 0) - editLog.qty : 0
   const kalan = Math.max(0, w.hedef - prod + (editLog?.qty || 0)) // Düzenlemede mevcut qty'yi geri ekle
   const rc = recipes.find(r => r.id === w.receteId) || recipes.find(r => r.mamulKod === w.malkod)
   const hmSatirlar = (rc?.satirlar || []).filter((s: any) =>
@@ -1003,7 +1049,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
     // Garantili UI güncelleme — realtime/reload beklemeden direkt store'u yenile
     try {
       await reloadTablesDispatched(['uys_work_orders', 'uys_logs', 'uys_fire_logs', 'uys_stok_hareketler', 'uys_active_work', 'uys_acik_barlar'])
-    } catch (e) { console.error('Post-save reload:', e) }
+    } catch { }
     // v15.32: Bar Model tetikleyici — kesim planı satırı tamamlandıysa
     // bar_acilis + acik_bar_giris yaz. İdempotent (deterministik id).
     try {
@@ -1013,8 +1059,7 @@ export function OprEntryModal({ woId, oprId, oprAd, allOperators, durusKodlari, 
         // Bar kayıtları yazıldıysa açık barları tekrar yükle
         try { await reloadTablesDispatched(['uys_stok_hareketler', 'uys_acik_barlar']) } catch {}
       }
-    } catch (err) {
-      console.error('[barModel] OperatorPanel sync hatası:', err)
+    } catch {
     }
     setSaving(false); clearDraft(); onSaved()
   }
