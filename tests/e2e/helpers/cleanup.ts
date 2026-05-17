@@ -30,7 +30,8 @@ const CLEANUP_ORDER: Array<{ table: string; col: string }> = [
   { table: 'uys_operators', col: 'ad' },
   { table: 'uys_kullanicilar', col: 'kullanici_ad' },
   { table: 'uys_tedarikciler', col: 'ad' },
-  { table: 'pt_problemler', col: 'id' },
+  { table: 'pt_problemler', col: 'id' },      // supabaseAdmin ile oluşturulanlar
+  { table: 'pt_problemler', col: 'problem' }, // UI üzerinden oluşturulanlar (id = uuid)
 ]
 
 /**
