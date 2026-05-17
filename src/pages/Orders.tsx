@@ -3,7 +3,7 @@ import { logAction } from '@/services/activityLogService'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/services/productionService/autoChain'
-import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, cuttingPlanTemizle, siparisDelta, siparisRevizeUygula } from '@/services/mrpService'
+import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, siparisDelta, siparisRevizeUygula } from '@/services/mrpService'
 import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditLog } from '@/services/auditService'
@@ -16,10 +16,10 @@ import type { Order, OrderItem } from '@/types'
 import { SearchSelect } from '@/components/ui/SearchSelect'
 import { RecipeSearchModal } from '@/components/RecipeSearchModal'
 import { startFlow, advanceFlow } from '@/services/pendingFlowService'
-import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen, getPlanliWoIds } from '@/lib/statusUtils'
+import { getKesimEksikWoIds, isKesimWO , isWorkOrderOpen} from '@/lib/statusUtils'
 import { getStok } from '@/lib/hammaddeHesap'
 import { addStokHareketi } from '@/lib/stokHelper'
-import { stateLabel, stateBadgeClass, isActive as isStateActive, createOrder as createOrderInDb, copyOrder as copyOrderInDb, updateOrderMrpDurum, updateOrderOncelik, updateOrderDurum, saveMrpCalculationSnapshot, deleteWorkOrders, createTedarikFromMrp, getOrderWorkOrderIds, insertOrderRow } from '@/services/orderService'
+import { stateLabel, stateBadgeClass, createOrder as createOrderInDb, copyOrder as copyOrderInDb, updateOrderMrpDurum, updateOrderOncelik, updateOrderDurum, saveMrpCalculationSnapshot, deleteWorkOrders, createTedarikFromMrp, getOrderWorkOrderIds, insertOrderRow } from '@/services/orderService'
 import { z } from 'zod'
 
 export function Orders() {
@@ -751,8 +751,7 @@ function OrderFormModal({ initial, recipes, materials, onClose, onSaved }: {
           } else {
             toast.success('İlave eklendi — MRP yeniden hesaplanmalı', { duration: 5000 })
           }
-        } catch (e) {
-          console.error('[ilave flow]', e)
+        } catch {
           // Hata olsa da kaydetme devam eder
         }
       }
@@ -1062,12 +1061,15 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   const allOrders = useOrderStore(s => s.orders)
   const mrpRezerve = useOrderStore(s => s.mrpRezerve)
   const { can, user } = useAuth()
-  const [tab, setTab] = useState<'ie' | 'mrp'>('ie')
+  const [tab, setTab] = useState<'ie' | 'mrp' | 'revizyon'>('ie')
   const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
   const [mrpDone, setMrpDone] = useState(false)
   // v15.50b — Son MRP run snapshot id (uys_mrp_calculations.id).
   // Tedarik insert'lerinde mrp_calculation_id alanına yazılır → audit/raporlama için bağ.
   const [lastCalcId, setLastCalcId] = useState<string | null>(null)
+  const [auditRows, setAuditRows] = useState<{ id: string; zaman: string; kullanici_ad: string | null; olay_tipi: string; alan: string | null; eski_deger: string | null; yeni_deger: string | null; aciklama: string | null }[]>([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const auditLoadedRef = useRef(false)
 
   const kalemler = order.urunler || []
   const cokKalem = kalemler.length > 1
@@ -1103,9 +1105,8 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
         brutIhtiyac: brut, stokDurumu: stok, acikTedarik: acik, netIhtiyac: net,
       })
       setLastCalcId(calcId)
-    } catch (e) {
-      // Snapshot insert sessiz başarısız olursa MRP akışı bozulmamalı; sadece konsola yaz
-      console.warn('[v15.50b] uys_mrp_calculations insert failed:', e)
+    } catch {
+      // Snapshot insert sessiz başarısız olursa MRP akışı bozulmamalı
     }
 
     const yeniDurum = rows.some(r => r.net > 0) ? 'eksik' : 'tamam'
@@ -1123,8 +1124,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
           mrpCalculationId: calcId || undefined,
           auto: true,
         })
-      } catch (e) {
-        console.warn('[v15.56 runMRP] Otomatik tedarik açma hatası:', e)
+      } catch {
       }
     }
 
@@ -1136,8 +1136,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
       const dz = await mrpTedarikDuzelt(order.id, rows)
       dzAzaltilan = dz.azaltilan
       dzIptal = dz.iptalEdilen
-    } catch (e) {
-      console.warn('[v15.67 runMRP] Tedarik düzeltme hatası:', e)
+    } catch {
     }
 
     loadAllStores()
@@ -1196,6 +1195,35 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     const adet = kalemler[0]?.adet || order.adet
     const { count } = await buildWorkOrders(order.id, order.siparisNo, rcId, adet, fullRecipes, kalemler[0]?.termin || order.termin)
     loadAllStores(); toast.success(count + ' eksik İE oluşturuldu')
+  }
+
+  async function loadRevizyon() {
+    if (auditLoadedRef.current) return
+    auditLoadedRef.current = true
+    setAuditLoading(true)
+    const ids = [order.id, ...workOrders.map(w => w.id)]
+    const { data } = await supabase
+      .from('uys_audit_log')
+      .select('id, zaman, kullanici_ad, olay_tipi, alan, eski_deger, yeni_deger, aciklama')
+      .in('kayit_id', ids)
+      .order('zaman', { ascending: false })
+      .limit(200)
+    setAuditRows(data || [])
+    setAuditLoading(false)
+  }
+
+  function olayLabel(olay: string): { label: string; color: string } {
+    const map: Record<string, { label: string; color: string }> = {
+      siparis_durum: { label: 'Durum Değişikliği', color: 'text-amber' },
+      siparis_kapat: { label: 'Sipariş Kapatıldı', color: 'text-zinc-400' },
+      wo_durum:      { label: 'İE Durum', color: 'text-cyan-400' },
+      wo_olustur:    { label: 'İE Açıldı', color: 'text-green' },
+      wo_sil:        { label: 'İE Silindi', color: 'text-red' },
+      silme:         { label: 'Silindi', color: 'text-red' },
+      mrp_calistir:  { label: 'MRP Çalıştı', color: 'text-blue-400' },
+      uretim_log:    { label: 'Üretim Kaydı', color: 'text-green' },
+    }
+    return map[olay] || { label: olay, color: 'text-zinc-500' }
   }
 
   return (
@@ -1265,9 +1293,10 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
         )}
 
         <div className="flex gap-1 mb-3">
-          <select value={tab} onChange={e => { const v = e.target.value as 'ie' | 'mrp'; if (v === 'mrp' && !mrpDone) runMRP(); setTab(v) }} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+          <select value={tab} onChange={e => { const v = e.target.value as 'ie' | 'mrp' | 'revizyon'; if (v === 'mrp' && !mrpDone) runMRP(); if (v === 'revizyon') loadRevizyon(); setTab(v) }} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
             <option value="ie">İş Emirleri ({workOrders.length})</option>
             <option value="mrp">MRP {mrpDone ? `(${mrpRows.length})` : ''}</option>
+            <option value="revizyon">Revizyon Geçmişi</option>
           </select>
           <span className="flex-1" />
           {(kalemler.some(k => k.rcId) || order.receteId) && <button onClick={yenidenCalistir} className="px-3 py-1.5 bg-amber/10 text-amber rounded-lg text-xs hover:bg-amber/20">⛓ Yeniden Çalıştır</button>}
@@ -1365,12 +1394,59 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
             )}
           </>
         )}
+
+        {tab === 'revizyon' && (
+          <>
+            {auditLoading ? (
+              <div className="p-6 text-center text-xs text-zinc-500">Yükleniyor...</div>
+            ) : auditRows.length === 0 ? (
+              <div className="p-6 text-center text-xs text-zinc-600">Bu siparişe ait revizyon kaydı yok.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-zinc-500">
+                      <th className="text-left px-3 py-2 whitespace-nowrap">Tarih / Saat</th>
+                      <th className="text-left px-3 py-2">Kullanıcı</th>
+                      <th className="text-left px-3 py-2">Olay</th>
+                      <th className="text-left px-3 py-2">Değişiklik</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditRows.map(r => {
+                      const { label, color } = olayLabel(r.olay_tipi)
+                      const d = new Date(r.zaman)
+                      const tarihStr = d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                      const saatStr = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+                      const degisiklik = r.alan && (r.eski_deger || r.yeni_deger)
+                        ? `${r.alan}: ${r.eski_deger ?? '—'} → ${r.yeni_deger ?? '—'}`
+                        : r.aciklama || '—'
+                      return (
+                        <tr key={r.id} className="border-b border-border/40 hover:bg-bg-2/30">
+                          <td className="px-3 py-1.5 font-mono text-zinc-400 whitespace-nowrap">
+                            {tarihStr}<br /><span className="text-[10px] text-zinc-600">{saatStr}</span>
+                          </td>
+                          <td className="px-3 py-1.5 text-zinc-300">{r.kullanici_ad || '—'}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap">
+                            <span className={`${color} font-medium`}>{label}</span>
+                          </td>
+                          <td className="px-3 py-1.5 text-zinc-400 max-w-xs break-words">{degisiklik}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <div className="px-3 py-2 text-[10px] text-zinc-600">{auditRows.length} kayıt</div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-function TamZincirButton({ order, workOrders, onClose }: { order: Order; workOrders: any[]; onClose: () => void }) {
+function TamZincirButton({ order, workOrders: _workOrders, onClose: _onClose }: { order: Order; workOrders: any[]; onClose: () => void }) {
   // v15.51 — Faz 4: RBAC + concurrent lock + hesaplayan + hata sonrası kapatma butonu
   const { can, user } = useAuth()
   const [running, setRunning] = useState(false)
