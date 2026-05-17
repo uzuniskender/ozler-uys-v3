@@ -18,6 +18,7 @@ import {
   kodVarMi,
 } from '@/services/hmTipleriService'
 import { useAuth } from '@/hooks/useAuth'
+import { useWarehouseStore } from '@/store'
 
 // =============================================================
 // SAYFA
@@ -26,12 +27,35 @@ import { useAuth } from '@/hooks/useAuth'
 export function HmTipleri() {
   const { can, user } = useAuth()
   const kullaniciAd = user?.username ?? null
+  const materials = useWarehouseStore(s => s.materials)
+  const stokHareketler = useWarehouseStore(s => s.stokHareketler)
 
   const [tipler, setTipler] = useState<HmTipi[]>([])
   const [yukleniyor, setYukleniyor] = useState(true)
   const [hata, setHata] = useState<string | null>(null)
   const [arama, setArama] = useState('')
   const [sadeceAktif, setSadeceAktif] = useState(false)
+
+  // HM tipi başına istatistik (materials + stok store'dan)
+  const tipIstatistikleri = useMemo(() => {
+    const stokByMalkod: Record<string, number> = {}
+    for (const h of stokHareketler) {
+      if (!stokByMalkod[h.malkod]) stokByMalkod[h.malkod] = 0
+      if (h.tip === 'giris' || h.tip === 'bar_acilis') stokByMalkod[h.malkod] += h.miktar
+      else if (h.tip === 'cikis') stokByMalkod[h.malkod] -= h.miktar
+    }
+    const result: Record<string, { malzemeSayisi: number; toplamStok: number; minStokAlti: number }> = {}
+    for (const mat of materials) {
+      if (!mat.hammaddeTipi) continue
+      if (!result[mat.hammaddeTipi]) result[mat.hammaddeTipi] = { malzemeSayisi: 0, toplamStok: 0, minStokAlti: 0 }
+      const s = result[mat.hammaddeTipi]
+      s.malzemeSayisi++
+      const netStok = stokByMalkod[mat.kod] ?? 0
+      s.toplamStok += Math.max(0, netStok)
+      if (mat.minStok > 0 && netStok < mat.minStok) s.minStokAlti++
+    }
+    return result
+  }, [materials, stokHareketler])
 
   const [modalAcik, setModalAcik] = useState(false)
   const [duzenlenen, setDuzenlenen] = useState<HmTipi | null>(null)
@@ -164,6 +188,9 @@ export function HmTipleri() {
                 <th className="text-left font-medium px-3 py-2.5 w-24">Kod</th>
                 <th className="text-left font-medium px-3 py-2.5 w-40">Ad</th>
                 <th className="text-left font-medium px-3 py-2.5">Açıklama</th>
+                <th className="text-right font-medium px-3 py-2.5 w-20">Malzeme</th>
+                <th className="text-right font-medium px-3 py-2.5 w-28">Toplam Stok</th>
+                <th className="text-center font-medium px-3 py-2.5 w-24">Min Stok Altı</th>
                 <th className="text-left font-medium px-3 py-2.5 w-28">Birim</th>
                 <th className="text-center font-medium px-3 py-2.5 w-16">Sıra</th>
                 <th className="text-center font-medium px-3 py-2.5 w-20">Durum</th>
@@ -173,65 +200,84 @@ export function HmTipleri() {
             <tbody>
               {goruntulenen.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-zinc-500">
+                  <td colSpan={10} className="text-center py-8 text-zinc-500">
                     {arama || sadeceAktif ? 'Eşleşen kayıt yok' : 'Henüz kayıt yok'}
                   </td>
                 </tr>
               ) : (
-                goruntulenen.map((t) => (
-                  <tr key={t.id} className="border-t border-border">
-                    <td className="px-3 py-2.5 font-mono text-xs text-zinc-200">{t.kod}</td>
-                    <td className="px-3 py-2.5 text-zinc-200">{t.ad}</td>
-                    <td className="px-3 py-2.5 text-zinc-500">{t.aciklama ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-zinc-400">
-                      {VARSAYILAN_BIRIM_SECENEKLERI.find((b) => b.value === t.varsayilan_birim)?.label}
-                    </td>
-                    <td className="px-3 py-2.5 text-center text-zinc-500">{t.sira}</td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span
-                        className={
-                          'inline-block px-2 py-0.5 rounded-md text-xs ' +
-                          (t.aktif
-                            ? 'bg-green/15 text-green'
-                            : 'bg-zinc-700/40 text-zinc-400')
-                        }
-                      >
-                        {t.aktif ? 'Aktif' : 'Pasif'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {can('hmt_edit') && (
-                          <>
+                goruntulenen.map((t) => {
+                  const ist = tipIstatistikleri[t.kod] ?? { malzemeSayisi: 0, toplamStok: 0, minStokAlti: 0 }
+                  const birimLabel = VARSAYILAN_BIRIM_SECENEKLERI.find((b) => b.value === t.varsayilan_birim)?.label ?? t.varsayilan_birim
+                  return (
+                    <tr key={t.id} className="border-t border-border hover:bg-bg-2/50 transition-colors">
+                      <td className="px-3 py-2.5 font-mono text-xs text-zinc-200">{t.kod}</td>
+                      <td className="px-3 py-2.5 text-zinc-200">{t.ad}</td>
+                      <td className="px-3 py-2.5 text-zinc-500">{t.aciklama ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        {ist.malzemeSayisi > 0
+                          ? <span className="font-mono text-zinc-300">{ist.malzemeSayisi}</span>
+                          : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {ist.malzemeSayisi > 0
+                          ? <span className="font-mono text-zinc-400">{ist.toplamStok.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} <span className="text-zinc-600 text-[10px]">{birimLabel}</span></span>
+                          : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {ist.minStokAlti > 0
+                          ? <span className="inline-block px-2 py-0.5 rounded-md text-xs bg-red/15 text-red font-semibold">⚠ {ist.minStokAlti}</span>
+                          : ist.malzemeSayisi > 0
+                            ? <span className="text-zinc-600 text-xs">✓</span>
+                            : <span className="text-zinc-700">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-zinc-400 text-sm">{birimLabel}</td>
+                      <td className="px-3 py-2.5 text-center text-zinc-500">{t.sira}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span
+                          className={
+                            'inline-block px-2 py-0.5 rounded-md text-xs ' +
+                            (t.aktif
+                              ? 'bg-green/15 text-green'
+                              : 'bg-zinc-700/40 text-zinc-400')
+                          }
+                        >
+                          {t.aktif ? 'Aktif' : 'Pasif'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-1">
+                          {can('hmt_edit') && (
+                            <>
+                              <button
+                                onClick={() => { setDuzenlenen(t); setModalAcik(true) }}
+                                title="Düzenle"
+                                className="p-1.5 rounded hover:bg-bg-2 text-zinc-400"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => aktifPasifDegistir(t)}
+                                title={t.aktif ? 'Pasife al' : 'Aktif yap'}
+                                className="p-1.5 rounded hover:bg-bg-2 text-zinc-400"
+                              >
+                                <Power size={14} />
+                              </button>
+                            </>
+                          )}
+                          {can('hmt_delete') && (
                             <button
-                              onClick={() => { setDuzenlenen(t); setModalAcik(true) }}
-                              title="Düzenle"
-                              className="p-1.5 rounded hover:bg-bg-2 text-zinc-400"
+                              onClick={() => setSilmeOnay(t)}
+                              title="Sil"
+                              className="p-1.5 rounded hover:bg-red/10 text-red"
                             >
-                              <Pencil size={14} />
+                              <Trash2 size={14} />
                             </button>
-                            <button
-                              onClick={() => aktifPasifDegistir(t)}
-                              title={t.aktif ? 'Pasife al' : 'Aktif yap'}
-                              className="p-1.5 rounded hover:bg-bg-2 text-zinc-400"
-                            >
-                              <Power size={14} />
-                            </button>
-                          </>
-                        )}
-                        {can('hmt_delete') && (
-                          <button
-                            onClick={() => setSilmeOnay(t)}
-                            title="Sil"
-                            className="p-1.5 rounded hover:bg-red/10 text-red"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
