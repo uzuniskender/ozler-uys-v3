@@ -2,14 +2,15 @@ import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
+import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Download, ArrowRight } from 'lucide-react'
-import { hesaplaMRP, mrpTedarikOlustur, type MRPRow } from '@/services/mrpService'
-import { getStok, buildIhtiyacMap, getYolda } from '@/lib/hammaddeHesap'
+import { Download, ArrowRight, History, ChevronDown, ChevronRight } from 'lucide-react'
+import { hesaplaMRP, mrpTedarikOlustur, type MRPRow, hesaplaMRPCached } from '@/services/mrpService'
+import { loadAllStores } from '@/store'
+import { getStok } from '@/lib/hammaddeHesap'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
 import { hesaplaHammaddeTahsisi, siparisTahsisOzeti } from '@/services/productionService/hammaddeTahsis'
 import { isOrderArchived , isWorkOrderOpen} from '@/lib/statusUtils'
@@ -41,13 +42,24 @@ export function MRP() {
   const activeFlowId = searchParams.get('flow') || ''  // v15.36 — flow akışı
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
   const [sonuc, setSonuc] = useState<MRPRow[]>([])
-  const [rezervModal, setRezervModal] = useState<{ malkod: string; malad: string; max: number; oneri: number } | null>(null)
-  const [rezervMiktar, setRezervMiktar] = useState('')
   const [hesaplandi, setHesaplandi] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [flowAutoDone, setFlowAutoDone] = useState(false)  // v15.36
   // v16.71 — Flow kilitlenme önleme: aktif flow'un bağlı olduğu sipariş ID'si
   const [activeFlowOrderId, setActiveFlowOrderId] = useState<string | null>(null)
+
+  // Ana tab: hesap / tarihce
+  const [mainTab, setMainTab] = useState<'hesap' | 'tarihce'>('hesap')
+
+  // Tarihçe tab state
+  type TarihceRow = {
+    id: string; order_id: string | null; hesaplandi: string; hesaplayan: string
+    net_ihtiyac: Record<string, number>; durum: string
+  }
+  const [tarihceRows, setTarihceRows] = useState<TarihceRow[]>([])
+  const [tarihceLoading, setTarihceLoading] = useState(false)
+  const [tarihceSearch, setTarihceSearch] = useState('')
+  const [expandedCalcId, setExpandedCalcId] = useState<Set<string>>(new Set())
 
   // v16.71 — Kümülatif / Sipariş Bazlı toggle
   const [viewMode, setViewMode] = useState<'kumülatif' | 'sipariş'>('kumülatif')
@@ -82,6 +94,20 @@ export function MRP() {
       .single()
       .then(({ data }) => setActiveFlowOrderId(data?.order_id || null))
   }, [activeFlowId])
+
+  useEffect(() => {
+    if (mainTab !== 'tarihce') return
+    setTarihceLoading(true)
+    supabase.from('uys_mrp_calculations')
+      .select('id, order_id, hesaplandi, hesaplayan, net_ihtiyac, durum')
+      .order('hesaplandi', { ascending: false })
+      .limit(200)
+      .then(({ data, error }) => {
+        if (error) toast.error('Tarihçe yüklenemedi: ' + error.message)
+        else setTarihceRows((data || []) as TarihceRow[])
+        setTarihceLoading(false)
+      })
+  }, [mainTab])
 
   // v15.50a.5 — TEK KURAL:
   // Sipariş MRP listesinde görünür ⇔ kilit açık VE hesaplaMRP sonucunda net > 0 var.
@@ -125,19 +151,6 @@ export function MRP() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, workOrders, orderAllWosDone, activeFlowOrderId])
 
-  // v16.80 — Sadece aktifOrders üzerinde hesaplaMRP çalıştır; terminal/arşiv siparişler zaten dışarıda.
-  const orderHasEksik = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const o of aktifOrders) {
-      try {
-        const sonuc = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, null, mrpRezerve, o.id, logs)
-        map[o.id] = sonuc.some(r => r.net > 0)
-      } catch {
-        map[o.id] = false
-      }
-    }
-    return map
-  }, [aktifOrders, orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   // v16.71 fix2 — Arşiv = sadece terminal state (tamamlandi/kapali/iptal) + tüm WO'ları biten
   const arsivOrders = useMemo(() => {
@@ -172,8 +185,7 @@ export function MRP() {
         materials,
         logs.map(l => ({ woId: l.woId, qty: l.qty })),
       )
-    } catch (e) {
-      console.error('[v15.95] hammaddeTahsis hesabi hata:', e)
+    } catch {
       return {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,19 +216,6 @@ export function MRP() {
     w.durum !== 'tamamlandi'
   ), [workOrders])
 
-  // Her manuel İE için "eksik var mı?" — explicit seçimle çağırırsak ordIdSet bypass.
-  const manualIeHasEksik = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const w of aktifManualIesAll) {
-      try {
-        const sonuc = hesaplaMRP([], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, new Set([w.id]), mrpRezerve, undefined, logs)
-        map[w.id] = sonuc.some(r => r.net > 0)
-      } catch {
-        map[w.id] = false
-      }
-    }
-    return map
-  }, [aktifManualIesAll, orders, workOrders, recipes, stokHareketler, tedarikler, cpMappedAll, materials, mrpRezerve])
 
   const aktifManualIes = useMemo(() => {
     // v16.71 fix2 — Açık tüm manuel IE'ler gösterilir (eksik filtresi kaldırıldı)
@@ -224,7 +223,6 @@ export function MRP() {
       .sort((a, b) => (a.termin || '').localeCompare(b.termin || ''))
   }, [aktifManualIesAll])
 
-  const arsivManualIes = 0  // v16.71 fix2: manuel IE'ler hepsi aktif listede
 
   const arsivSayisi = arsivOrders.length
 
@@ -470,7 +468,6 @@ export function MRP() {
       const yeniDurum = tekResult.some(r => r.net > 0) ? 'eksik' : 'tamam'
       const { error: updErr, data: updData } = await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', oid).select('id')
       if (updErr) toast.error(`MRP UPDATE hatası: ${updErr.message}`)
-      else if (!updData || updData.length === 0) console.error('[MRP] UPDATE 0 rows:', oid)
     }
     setSonucPerOrder(perOrderResults)
     // Seçili YM İE'leri MRP tamamlandı olarak işaretle
@@ -510,8 +507,7 @@ export function MRP() {
             olusturan: 'sistem',
           })
         }
-      } catch (e) {
-        console.warn('[v15.96] Bildirim olustururken hata:', e)
+      } catch {
       }
     }
 
@@ -677,6 +673,25 @@ export function MRP() {
           }} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber/10 border border-amber/25 text-amber rounded-lg text-xs hover:bg-amber/20"><Download size={13} /> Tedarik Şablonu ({eksikler.length})</button>}
         </div>}
       </div>
+
+      {/* Tab navigasyonu */}
+      <div className="flex gap-1 mb-4 border-b border-border">
+        <button
+          onClick={() => setMainTab('hesap')}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors -mb-px ${mainTab === 'hesap' ? 'border-accent text-accent' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+        >
+          Hesap
+        </button>
+        <button
+          onClick={() => { setMainTab('tarihce') }}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors -mb-px flex items-center gap-1.5 ${mainTab === 'tarihce' ? 'border-accent text-accent' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+        >
+          <History size={12} /> Tarihçe
+        </button>
+      </div>
+
+      {/* ═══ HESAP TAB ═══ */}
+      {mainTab === 'hesap' && <>
 
       {/* Sipariş Seçimi */}
       <div className="bg-bg-2 border border-border rounded-lg p-4 mb-4">
@@ -1227,6 +1242,185 @@ export function MRP() {
         </div>
       )}
 
+      </> /* hesap tab sonu */}
+
+      {/* ═══ TARİHÇE TAB ═══ */}
+      {mainTab === 'tarihce' && (
+        <MrpTarihceTab
+          rows={tarihceRows}
+          loading={tarihceLoading}
+          search={tarihceSearch}
+          onSearch={setTarihceSearch}
+          expanded={expandedCalcId}
+          onToggle={id => setExpandedCalcId(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })}
+          onRefresh={() => {
+            setTarihceLoading(true)
+            supabase.from('uys_mrp_calculations')
+              .select('id, order_id, hesaplandi, hesaplayan, net_ihtiyac, durum')
+              .order('hesaplandi', { ascending: false })
+              .limit(200)
+              .then(({ data, error }) => {
+                if (error) toast.error('Tarihçe yüklenemedi: ' + error.message)
+                else setTarihceRows((data || []) as any)
+                setTarihceLoading(false)
+              })
+          }}
+          orders={orders as any}
+        />
+      )}
+
+    </div>
+  )
+}
+
+// ═══ MRP TARİHÇE BİLEŞENİ ═══
+type TarihceRow = {
+  id: string; order_id: string | null; hesaplandi: string; hesaplayan: string
+  net_ihtiyac: Record<string, number>; durum: string
+}
+
+function MrpTarihceTab({ rows, loading, search, onSearch, expanded, onToggle, onRefresh, orders }: {
+  rows: TarihceRow[]
+  loading: boolean
+  search: string
+  onSearch: (s: string) => void
+  expanded: Set<string>
+  onToggle: (id: string) => void
+  onRefresh: () => void
+  orders: { id: string; siparisNo: string; musteri: string }[]
+}) {
+  const filtered = rows.filter(r => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    const ord = orders.find(o => o.id === r.order_id)
+    return (ord?.siparisNo || '').toLowerCase().includes(q) ||
+           (ord?.musteri || '').toLowerCase().includes(q) ||
+           (r.hesaplayan || '').toLowerCase().includes(q)
+  })
+
+  function fmtTs(ts: string) {
+    if (!ts) return '—'
+    const d = new Date(ts)
+    return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  function netOzet(net: Record<string, number>) {
+    const eksikler = Object.entries(net).filter(([, v]) => v > 0)
+    const toplam = eksikler.reduce((a, [, v]) => a + v, 0)
+    return { eksikSayi: eksikler.length, toplamNet: Math.round(toplam) }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          placeholder="Sipariş no, müşteri veya hesaplayan ara..."
+          value={search}
+          onChange={e => onSearch(e.target.value)}
+          className="flex-1 px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-accent"
+        />
+        <button onClick={onRefresh} disabled={loading}
+          className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white disabled:opacity-50">
+          {loading ? '⏳' : '↺ Yenile'}
+        </button>
+      </div>
+
+      <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-zinc-500 text-sm">Yükleniyor...</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-8 text-center text-zinc-600 text-sm">
+            {search ? 'Aramayla eşleşen kayıt yok' : 'Henüz MRP hesabı kaydedilmemiş'}
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-zinc-500">
+                <th className="text-left px-4 py-2.5 w-6"></th>
+                <th className="text-left px-4 py-2.5">Sipariş</th>
+                <th className="text-left px-4 py-2.5">Hesap Tarihi</th>
+                <th className="text-left px-4 py-2.5">Hesaplayan</th>
+                <th className="text-right px-4 py-2.5">Eksik Kalem</th>
+                <th className="text-right px-4 py-2.5">Toplam Net</th>
+                <th className="text-left px-4 py-2.5">Durum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(r => {
+                const ord = orders.find(o => o.id === r.order_id)
+                const { eksikSayi, toplamNet } = netOzet(r.net_ihtiyac || {})
+                const isExpanded = expanded.has(r.id)
+                const eksikKalemler = Object.entries(r.net_ihtiyac || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+
+                return (
+                  <>
+                    <tr key={r.id}
+                      className="border-b border-border/30 hover:bg-bg-3/20 cursor-pointer"
+                      onClick={() => onToggle(r.id)}
+                    >
+                      <td className="px-4 py-2.5 text-zinc-600">
+                        {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {ord ? (
+                          <>
+                            <span className="font-mono text-accent">{ord.siparisNo}</span>
+                            <span className="text-zinc-500 ml-2 text-[11px]">{ord.musteri}</span>
+                          </>
+                        ) : (
+                          <span className="text-zinc-600 text-[11px] italic">{r.order_id ? r.order_id.slice(0, 8) + '…' : '—'}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-zinc-400 text-[11px]">{fmtTs(r.hesaplandi)}</td>
+                      <td className="px-4 py-2.5 text-zinc-300">{r.hesaplayan || '—'}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">
+                        {eksikSayi > 0
+                          ? <span className="text-red font-semibold">⚠ {eksikSayi}</span>
+                          : <span className="text-green">✓ 0</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono">
+                        {toplamNet > 0 ? <span className="text-amber font-semibold">{toplamNet}</span> : <span className="text-green">0</span>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${r.durum === 'tamamlandi' ? 'bg-green/10 text-green' : 'bg-zinc-700 text-zinc-400'}`}>
+                          {r.durum}
+                        </span>
+                      </td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr key={r.id + '-detail'} className="border-b border-border/30 bg-bg-3/10">
+                        <td colSpan={7} className="px-6 py-3">
+                          {eksikKalemler.length === 0 ? (
+                            <div className="text-xs text-zinc-500 italic">Bu hesapta net ihtiyaç bulunamadı.</div>
+                          ) : (
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-2">Net İhtiyaç Özeti ({eksikKalemler.length} kalem)</div>
+                              <div className="flex flex-wrap gap-2">
+                                {eksikKalemler.map(([malkod, net]) => (
+                                  <div key={malkod} className="flex items-center gap-1.5 px-2 py-1 bg-bg-2 border border-border rounded text-[11px]">
+                                    <span className="font-mono text-accent">{malkod}</span>
+                                    <span className="text-red font-semibold">{Math.round(net)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+        {!loading && rows.length > 0 && (
+          <div className="px-4 py-2 border-t border-border/30 text-[11px] text-zinc-600">
+            {filtered.length} kayıt{rows.length !== filtered.length ? ` (toplam ${rows.length})` : ''}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
