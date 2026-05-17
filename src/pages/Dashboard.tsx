@@ -445,6 +445,37 @@ export function Dashboard() {
         <Kpi icon="🚚" label="Bu Hafta Sevk" value={sevkBekleyenCount || '—'} sub={`${monStr.slice(5)}–${sunStr.slice(5)}`} onClick={() => navigate('/shipment')} />
       </div>
 
+      {/* Haftalık Üretim Trendi */}
+      {chartData.length > 0 && (
+        <div className="mb-6">
+          <Panel
+            title={<span className="flex items-center gap-1.5"><BarChart2 size={13} /> Haftalık Üretim Trendi</span>}
+            count={
+              <span className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-[10px]"><span className="w-2 h-2 bg-emerald-500 rounded-sm inline-block" />üretim</span>
+                <span className="flex items-center gap-1 text-[10px]"><span className="w-2 h-2 bg-red-500 rounded-sm inline-block" />fire</span>
+              </span>
+            }
+            onTitleClick={() => navigate('/reports')}
+          >
+            <div className="px-4 pt-2 pb-3">
+              <ResponsiveContainer width="100%" height={90}>
+                <BarChart data={chartData} barSize={20} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                  <XAxis dataKey="gun" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis hide allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 11, boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}
+                    cursor={{ fill: '#f3f4f6' }}
+                  />
+                  <Bar dataKey="uretim" fill="#10b981" radius={[3, 3, 0, 0]} name="Üretim" />
+                  <Bar dataKey="fire" fill="#ef4444" radius={[3, 3, 0, 0]} name="Fire" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+        </div>
+      )}
+
       {/* Workflow + Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2">
