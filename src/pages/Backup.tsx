@@ -26,7 +26,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { takeBackup, listBackups, getBackup, deleteBackup, type Backup } from '@/services/backupService'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
-import { Save, Download, Trash2, Loader2, Database, Clock, HardDrive, RotateCcw } from 'lucide-react'
+import { Save, Download, Trash2, Loader2, Database, Clock, HardDrive, RotateCcw, Zap, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { BackupRestoreModal } from '@/components/BackupRestoreModal'
 
 export function Backup() {
@@ -61,11 +61,22 @@ export function Backup() {
   const stats = useMemo(() => {
     const sonYedek = backups[0]
     const toplamBoyutKb = backups.reduce((sum, b) => sum + (b.boyutKb || 0), 0)
+    const boyutluSayi = backups.filter(b => b.boyutKb).length
+    const ortBoyutKb = boyutluSayi > 0 ? Math.round(toplamBoyutKb / boyutluSayi) : 0
+    const sonOtomatik = backups.find(b => b.tip === 'otomatik')
+    let zamanlamaDurum: 'aktif' | 'gecikmis' | 'belirsiz' | 'yok' = 'yok'
+    if (sonOtomatik?.alindiTarih) {
+      const gunFarki = Math.floor((Date.now() - new Date(sonOtomatik.alindiTarih).getTime()) / 86400000)
+      zamanlamaDurum = gunFarki <= 1 ? 'aktif' : gunFarki <= 3 ? 'gecikmis' : 'belirsiz'
+    }
     return {
       toplamSayi: backups.length,
       sonTarih: sonYedek?.alindiTarih || null,
       sonTip: sonYedek?.tip || null,
       toplamBoyutMb: (toplamBoyutKb / 1024).toFixed(1),
+      ortBoyutKb,
+      zamanlamaDurum,
+      sonOtomatikTarih: sonOtomatik?.alindiTarih || null,
     }
   }, [backups])
 
@@ -150,8 +161,8 @@ export function Backup() {
         </div>
       </div>
 
-      {/* Üst özet (3 kart) */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      {/* Üst özet (4 kart) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <div className="bg-bg-2 border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 text-zinc-500 text-[11px] mb-2">
             <Database size={12} /> TOPLAM YEDEK
@@ -178,8 +189,69 @@ export function Backup() {
           <div className="text-2xl font-mono text-zinc-100">
             {stats.toplamBoyutMb} <span className="text-sm text-zinc-500">MB</span>
           </div>
+          {stats.ortBoyutKb > 0 && (
+            <div className="text-[10px] text-zinc-600 mt-1">Ort: {formatBoyut(stats.ortBoyutKb)} / yedek</div>
+          )}
+        </div>
+        <div className="bg-bg-2 border border-border rounded-lg p-4">
+          <div className="flex items-center gap-2 text-zinc-500 text-[11px] mb-2">
+            <Zap size={12} /> OTO ZAMANLAMA
+          </div>
+          <div className="flex items-center gap-1.5 mt-1">
+            {stats.zamanlamaDurum === 'aktif' && (
+              <><CheckCircle2 size={14} className="text-green-400"/><span className="text-sm text-green-400 font-semibold">Aktif</span></>
+            )}
+            {stats.zamanlamaDurum === 'gecikmis' && (
+              <><AlertTriangle size={14} className="text-amber"/><span className="text-sm text-amber font-semibold">Gecikmeli</span></>
+            )}
+            {(stats.zamanlamaDurum === 'belirsiz' || stats.zamanlamaDurum === 'yok') && (
+              <span className="text-sm text-zinc-500">{stats.zamanlamaDurum === 'yok' ? 'Kayıt yok' : 'Belirsiz'}</span>
+            )}
+          </div>
+          <div className="text-[10px] text-zinc-600 mt-1">
+            {stats.sonOtomatikTarih ? `Son oto: ${formatTarih(stats.sonOtomatikTarih)}` : 'Otomatik yedek yok'}
+          </div>
         </div>
       </div>
+
+      {/* Son 5 Yedek */}
+      {backups.length > 0 && (
+        <div className="mb-5">
+          <h2 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide mb-2">Son 5 Yedek</h2>
+          <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+            <table className="w-full text-xs">
+              <tbody>
+                {backups.slice(0, 5).map(b => {
+                  const tb = tipBadge(b.tip)
+                  const isDownloading = downloadingId === b.id
+                  return (
+                    <tr key={b.id} className="border-b border-border/40 last:border-0 hover:bg-bg-3/30">
+                      <td className="px-4 py-2 font-mono text-zinc-200 w-28">{formatTarih(b.alindiTarih)}</td>
+                      <td className="px-2 py-2 text-[10px] text-zinc-500">{formatSaat(b.alindiSaat)}</td>
+                      <td className="px-2 py-2">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tb.bg} ${tb.color}`}>{tb.label}</span>
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-zinc-400 w-20">{b.boyutKb ? formatBoyut(b.boyutKb) : '—'}</td>
+                      <td className="px-3 py-2 text-zinc-500 text-[11px] truncate max-w-[200px]">{b.notlar || <span className="text-zinc-700">—</span>}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => handleIndir(b)}
+                          disabled={isDownloading}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-bg-3 border border-border rounded text-[10px] text-zinc-400 hover:text-accent disabled:opacity-40"
+                          title="İndir"
+                        >
+                          {isDownloading ? <Loader2 size={11} className="animate-spin"/> : <Download size={11}/>}
+                          {isDownloading ? 'İndiriliyor…' : 'İndir'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Filtre */}
       <div className="flex items-center gap-2 mb-4">
