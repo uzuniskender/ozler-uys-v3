@@ -731,6 +731,15 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 
 **Toplam birim testi:** 111 (önceki 78 → +33) — tümü yeşil
 
+#### Warehouse kritik stok paneli + toplu tedarik (`57ae214`)
+
+`src/pages/Warehouse.tsx` — +118 satır:
+- `kritikStok` useMemo — `stokMap` × `materials`: `minStok > 0 && stok < minStok` koşulundaki ham/yarı mamul malzemeler; eksik miktar + birim; `stok/minStok` oranına göre artan sıralı
+- `secilenKritik` Set state — checkbox ile çoklu seçim; "Tümünü Seç" kısayolu
+- `showKritik` toggle — panel görünürlüğü
+- `topluTedarikOlustur()` — seçili malzemeler için `uys_tedarikler` insert (durum: bekliyor, not: "Toplu tedarik — kritik stok"); başarı sonrası `/procurement` yönlendirme
+- UI: kırmızı "Kritik Stok" başlıklı katlanabilir panel; tablo sütunları: seç / malzeme / mevcut / min / eksik; "Tedarik Oluştur (N)" butonu
+
 #### Sıradaki görevler (güncellendi)
 
 - Normalize veri geçişi (kapsam belirsiz — ertelendi)
