@@ -592,5 +592,21 @@ Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
 - order_state enum tipi
 - RLS policy'ler (allow_all, admin_only, authenticated_select, admin_write grupları)
 
+#### v17.07 — Vitest unit testleri: barModel, fireTelafi, cutting
+
+**Eklenen test dosyaları:**
+- `src/services/productionService/barModel.test.ts` — 15 test
+  - `isBarMaterial`, `isBarMaterialByKod`, `barAcilisStokId`, `acikBarKayitId`, `acikBarHavuzuToplamMm`
+  - Supabase + utils vi.mock ile izole edildi
+- `src/services/productionService/fireTelafi.test.ts` — 10 test
+  - Guard kontrolleri: qty<1, telafiWoId, null WO → null dönüş
+  - `fireTelafiAkisi` hata mesajları + başarılı tek-WO yolu
+  - `topluFireTelafi` filtreleme mantığı
+- `src/services/productionService/cutting.pure.test.ts` — 8 test
+  - `getParcaBoy`: uzunluk / boy / min(boy,en) / fallback (regex bozuk → 0)
+  - `getHamBoy`: uzunluk / max(boy,en) / ad'dan MM parse
+
+**Toplam birim testi:** 111 (önceki 78 → +33) — tümü yeşil
+
 #### Bekleyen
 - Normalize veri geçişi (kapsam belirsiz — ertelendi)
