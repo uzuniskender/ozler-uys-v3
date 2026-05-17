@@ -1,8 +1,9 @@
-// DevSync.tsx — v1.2
+// DevSync.tsx — v1.3
 // Repo dosyalarını Supabase'e senkronize eder.
 // Claude bu tablo üzerinden dosyaları okur, değiştirir.
 // Admin-only sayfa.
 // v1.2: Kopyala → modal | Komut sync'e kadar silinmez | Remove-Item cleanup
+// v1.3: backups/ hariç tutuldu | 300 KB üstü dosyalar atlanır (data.sql/schema.sql takılması önlendi)
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -14,7 +15,8 @@ const GITHUB_TREE = `https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?re
 const GITHUB_RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}`
 
 const SYNC_EXTS = ['.tsx', '.ts', '.css', '.json', '.md', '.sql', '.cjs']
-const EXCLUDE_DIRS = ['node_modules', 'dist', '.git']
+const EXCLUDE_DIRS = ['node_modules', 'dist', '.git', 'backups']  // v1.3: backups/ eklendi
+const MAX_SYNC_SIZE_BYTES = 300_000  // v1.3: 300 KB üstü atlanır (büyük SQL dump'ları)
 
 type DevFile = { path: string; sha: string; size: number }
 type SyncedFile = { path: string; sha: string; size_bytes: number; updated_at: string; updated_by: string; committed_hash: string | null }
@@ -68,7 +70,6 @@ function GitKomutPanel({ pendingChanges }: { pendingChanges: PendingChange[] }) 
     const adds = pendingChanges.map(c => c.path).join(' ')
     const names = pendingChanges.map(c => c.path.split('/').pop()).join(', ')
 
-    // Remove-Item cleanup
     const removes = pendingChanges.map(c => {
       const fn = c.path.split('/').pop() || ''
       return `Remove-Item "$env:USERPROFILE\\Downloads\\${fn}" -ErrorAction SilentlyContinue`
@@ -90,10 +91,7 @@ function GitKomutPanel({ pendingChanges }: { pendingChanges: PendingChange[] }) 
     const cmd = buildCmd()
     navigator.clipboard.writeText(cmd)
       .then(() => setShowModal(true))
-      .catch(() => {
-        // Clipboard API çalışmazsa yine de modal aç
-        setShowModal(true)
-      })
+      .catch(() => { setShowModal(true) })
   }
 
   const cmd = buildCmd()
@@ -183,6 +181,7 @@ export function DevSync() {
       const files: DevFile[] = (data.tree || []).filter((f: any) => {
         if (f.type !== 'blob') return false
         if (EXCLUDE_DIRS.some(d => f.path.startsWith(d + '/'))) return false
+        if (f.size > MAX_SYNC_SIZE_BYTES) return false  // v1.3: büyük dosyaları atla
         return SYNC_EXTS.some(ext => f.path.endsWith(ext))
       })
       setRepoFiles(files)
@@ -203,7 +202,6 @@ export function DevSync() {
     setSyncProgress({ done: 0, total: toSync.length })
     let ok = 0; let skipped = 0
     for (const file of toSync) {
-      // v1.1 — Claude'un bekleyen değişikliklerini koru
       const mevcut = syncedMap.get(file.path)
       if (mevcut?.updated_by === 'claude') {
         skipped++
@@ -228,8 +226,6 @@ export function DevSync() {
     toast.success(msg)
   }
 
-  // v1.2 — downloadChange artık updated_by'ı DEĞİŞTİRMEZ
-  // Komut Claude değişiklikleri sekmesinde, GitHub Actions sync tamamlanana kadar kalır
   async function downloadChange(path: string) {
     const { data } = await supabase
       .from('uys_dev_files')
@@ -244,7 +240,6 @@ export function DevSync() {
     a.download = path.split('/').pop() || 'file'
     a.click()
     URL.revokeObjectURL(url)
-    // NOT: updated_by değiştirilmiyor — GitHub Actions sync tamamlanınca kaldırılır
     toast.success('İndirildi: ' + path.split('/').pop())
   }
 
@@ -280,6 +275,7 @@ export function DevSync() {
           <h1 className="text-xl font-semibold">DevSync</h1>
           <p className="text-xs text-zinc-500 mt-0.5">
             {repoFiles.length} dosya · {syncedFiles.length} senkronize · {pendingChanges.length} değişiklik bekliyor
+            <span className="ml-2 text-zinc-600">· backups/ ve &gt;300 KB dosyalar hariç</span>
           </p>
         </div>
         {pendingChanges.length > 0 && (
@@ -309,7 +305,7 @@ export function DevSync() {
             <button onClick={() => setSelectedPaths(new Set(repoFiles.map(f => f.path)))}
               className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-zinc-200">Tümünü Seç</button>
             <button onClick={() => setSelectedPaths(new Set(repoFiles.filter(f => f.path.startsWith('src/')).map(f => f.path)))}
-              className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-zinc-200">src/ Seç</button>
+              className="px-2 py-1 bg-accent/10 text-accent border border-accent/20 rounded text-[10px] font-semibold hover:bg-accent/20">src/ Seç ✓</button>
             <button onClick={() => setSelectedPaths(new Set())}
               className="px-2 py-1 bg-bg-3 text-zinc-400 rounded text-[10px] hover:text-zinc-200">Temizle</button>
             <button onClick={syncSelected} disabled={syncing || !selectedPaths.size}
