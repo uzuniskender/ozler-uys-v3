@@ -85,6 +85,7 @@ export function Logs() {
   const [tipFilter, setTipFilter] = useState<Set<string>>(new Set(['sistem', 'uretim', 'stok', 'fire']))
   const [kullaniciFilter, setKullaniciFilter] = useState<string>('')
   const [search, setSearch] = useState('')
+  const [ieNoFilter, setIeNoFilter] = useState('')
   const [selected, setSelected] = useState<LogRow | null>(null)
   const [showFilters, setShowFilters] = useState(true)
 
@@ -109,6 +110,19 @@ export function Logs() {
     setLoading(true)
     const allLogs: LogRow[] = []
 
+    // İE No filtresinden eşleşen wo_id listesi
+    const ieQ = ieNoFilter.trim().toLowerCase()
+    const matchedWoIds: string[] | null = ieQ
+      ? workOrders.filter(w => w.ieNo.toLowerCase().includes(ieQ)).map(w => w.id)
+      : null
+
+    // Filtre set ama eşleşen WO yok → boş döndür
+    if (ieQ && matchedWoIds !== null && matchedWoIds.length === 0) {
+      setLogs([])
+      setLoading(false)
+      return
+    }
+
     // 1) uys_activity_log
     if (tipFilter.has('sistem')) {
       try {
@@ -120,6 +134,7 @@ export function Logs() {
           limit: 500,
         })
         for (const r of rows as ActivityLogRow[]) {
+          if (matchedWoIds && !matchedWoIds.includes(r.wo_id || '')) continue
           allLogs.push({
             id: r.id,
             ts: r.ts,
@@ -143,12 +158,12 @@ export function Logs() {
         let q = supabase.from('uys_logs').select('*').order('tarih', { ascending: false }).limit(500)
         if (tsMin) q = q.gte('updated_at', tsMin)
         if (tsMax) q = q.lte('updated_at', tsMax)
+        if (matchedWoIds && matchedWoIds.length > 0) q = q.in('wo_id', matchedWoIds)
         const { data } = await q
         for (const r of (data || [])) {
           const wo = workOrders.find(w => w.id === r.wo_id)
           const opr = operators.find(o => o.id === r.opr_id)
           const baslik = `${wo?.ieNo || 'WO?'} → ${r.qty || 0} adet üretildi${r.fire ? ` (${r.fire} fire)` : ''}`
-          // search filter
           if (search && !baslik.toLowerCase().includes(search.toLowerCase()) && (!wo?.ieNo || !wo.ieNo.toLowerCase().includes(search.toLowerCase()))) continue
           if (kullaniciFilter && opr?.ad !== kullaniciFilter) continue
           allLogs.push({
@@ -175,6 +190,7 @@ export function Logs() {
         let q = supabase.from('uys_stok_hareketler').select('*').order('updated_at', { ascending: false }).limit(500)
         if (tsMin) q = q.gte('updated_at', tsMin)
         if (tsMax) q = q.lte('updated_at', tsMax)
+        if (matchedWoIds && matchedWoIds.length > 0) q = q.in('wo_id', matchedWoIds)
         const { data } = await q
         for (const r of (data || [])) {
           const wo = r.wo_id ? workOrders.find(w => w.id === r.wo_id) : null
@@ -207,6 +223,7 @@ export function Logs() {
         let q = supabase.from('uys_fire_logs').select('*').order('updated_at', { ascending: false }).limit(500)
         if (tsMin) q = q.gte('updated_at', tsMin)
         if (tsMax) q = q.lte('updated_at', tsMax)
+        if (matchedWoIds && matchedWoIds.length > 0) q = q.in('wo_id', matchedWoIds)
         const { data } = await q
         for (const r of (data || [])) {
           const wo = workOrders.find(w => w.id === r.wo_id)
@@ -233,7 +250,7 @@ export function Logs() {
     allLogs.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''))
     setLogs(allLogs)
     setLoading(false)
-  }, [tipFilter, tsMin, tsMax, kullaniciFilter, search, workOrders, materials, operators])
+  }, [tipFilter, tsMin, tsMax, kullaniciFilter, search, ieNoFilter, workOrders, materials, operators])
 
   useEffect(() => { loadLogs() }, [loadLogs])
 
@@ -361,6 +378,29 @@ export function Logs() {
                 <option value="">Tüm Kullanıcılar</option>
                 {kullaniciOpts.map(k => <option key={k} value={k}>{k}</option>)}
               </select>
+
+              {/* İE No filtresi */}
+              <div className="relative">
+                <input
+                  value={ieNoFilter}
+                  onChange={e => setIeNoFilter(e.target.value)}
+                  placeholder="İE No..."
+                  className={`w-32 px-2 py-1 bg-bg-2 border rounded text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-accent ${ieNoFilter ? 'border-accent/60' : 'border-border'}`}
+                />
+                {ieNoFilter && (
+                  <button onClick={() => setIeNoFilter('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              {ieNoFilter && (() => {
+                const cnt = workOrders.filter(w => w.ieNo.toLowerCase().includes(ieNoFilter.trim().toLowerCase())).length
+                return (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${cnt > 0 ? 'bg-accent/10 text-accent border-accent/20' : 'bg-red/10 text-red border-red/20'}`}>
+                    {cnt > 0 ? `${cnt} İE` : 'eşleşme yok'}
+                  </span>
+                )
+              })()}
 
               {/* Arama */}
               <div className="flex-1 min-w-[200px] relative">
