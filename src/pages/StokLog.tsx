@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useProductionStore, useOrderStore, useWarehouseStore } from '@/store'
 import { toast } from 'sonner'
-import { Search, X, Download, RefreshCw, ChevronDown, ChevronUp, Edit2, Check, ArrowUpCircle, ArrowDownCircle, Package, Truck, Wrench, AlertCircle } from 'lucide-react'
+import { Search, X, Download, RefreshCw, ChevronDown, ChevronUp, Edit2, Check, ArrowUpCircle, ArrowDownCircle, Package, Truck, Wrench, AlertCircle, Plus } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { z } from 'zod'
+import { today } from '@/lib/utils'
+import { addStokHareketi } from '@/lib/stokHelper'
 
 const _malkodSecimSchema = z.object({
   kod: z.string().trim().min(1, 'Malzeme kodu zorunlu').max(50, 'Malzeme kodu en fazla 50 karakter')
@@ -13,6 +15,15 @@ const _malkodSecimSchema = z.object({
 })
 
 const _aciklamaSchema = z.string().trim().max(500, 'Açıklama en fazla 500 karakter')
+
+const manuelHareketSchema = z.object({
+  malkod:   z.string().trim().min(1, 'Malzeme seçimi zorunlu'),
+  malad:    z.string().trim(),
+  miktar:   z.number({ invalid_type_error: 'Geçersiz miktar' }).positive('Miktar 0\'dan büyük olmalı').finite('Geçersiz miktar'),
+  tip:      z.enum(['giris', 'cikis'] as const),
+  aciklama: z.string().trim().max(500, 'Açıklama en fazla 500 karakter'),
+  tarih:    z.string().min(1, 'Tarih zorunlu'),
+})
 
 /* ───────── tipler ───────── */
 interface StokHareket {
@@ -92,6 +103,7 @@ export function StokLog() {
   const [editMalkodMode, setEditMalkodMode] = useState(false)
   const [malkodSearch, setMalkodSearch] = useState('')
   const [saving, setSaving]             = useState(false)
+  const [showManuelModal, setShowManuelModal] = useState(false)
   const [sortCol, setSortCol]     = useState<'tarih' | 'malkod' | 'miktar'>('tarih')
   const [sortDir, setSortDir]     = useState<'desc' | 'asc'>('desc')
   // v17.05 — sayfalama
@@ -462,6 +474,9 @@ export function StokLog() {
           <p className="text-xs text-zinc-500">Tüm stok hareketleri — arama, filtreleme ve düzeltme</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowManuelModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded text-xs hover:bg-accent/90">
+            <Plus size={13}/> Manuel Hareket Ekle
+          </button>
           <button onClick={load} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 text-zinc-400 hover:text-zinc-200 rounded text-xs border border-border">
             <RefreshCw size={13}/> Yenile
           </button>
@@ -616,6 +631,183 @@ export function StokLog() {
 
         {/* Detay paneli */}
         {selected && <DetailPanel />}
+      </div>
+
+      {showManuelModal && (
+        <ManuelHareketModal
+          materials={materials}
+          onClose={() => setShowManuelModal(false)}
+          onSaved={() => load(0)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ───────── Manuel Hareket Modal ───────── */
+interface ManuelHareketModalProps {
+  materials: { kod: string; ad: string; aktif?: boolean }[]
+  onClose: () => void
+  onSaved: () => void
+}
+
+function ManuelHareketModal({ materials, onClose, onSaved }: ManuelHareketModalProps) {
+  const [malkodSearch, setMalkodSearch] = useState('')
+  const [secilenMal, setSecilenMal]     = useState<{ kod: string; ad: string } | null>(null)
+  const [miktar, setMiktar]             = useState('')
+  const [tip, setTip]                   = useState<'giris' | 'cikis'>('giris')
+  const [aciklama, setAciklama]         = useState('')
+  const [tarih, setTarih]               = useState(today())
+  const [saving, setSaving]             = useState(false)
+
+  const suggestions = useMemo(() => {
+    const q = malkodSearch.trim().toLowerCase()
+    if (!q) return []
+    return materials
+      .filter(m => m.aktif !== false && (
+        m.kod.toLowerCase().includes(q) ||
+        m.ad.toLowerCase().includes(q)
+      ))
+      .slice(0, 15)
+  }, [malkodSearch, materials])
+
+  async function kaydet() {
+    const parsed = manuelHareketSchema.safeParse({
+      malkod:   secilenMal?.kod ?? '',
+      malad:    secilenMal?.ad ?? '',
+      miktar:   parseFloat(miktar),
+      tip,
+      aciklama,
+      tarih,
+    })
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return }
+    const d = parsed.data
+    setSaving(true)
+    const { error } = await addStokHareketi({
+      malkod:   d.malkod,
+      malad:    d.malad,
+      miktar:   d.miktar,
+      tip:      d.tip,
+      aciklama: d.aciklama || undefined,
+      tarih:    d.tarih,
+    })
+    setSaving(false)
+    if (error) { toast.error('Kaydedilemedi: ' + (error as any).message); return }
+    toast.success(`Manuel ${tip === 'giris' ? 'giriş' : 'çıkış'} kaydedildi — ${d.malkod}`)
+    onSaved()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-bg-1 border border-border rounded-lg shadow-xl w-full max-w-md p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-100">Manuel Hareket Ekle</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200"><X size={16}/></button>
+        </div>
+
+        {/* Malzeme arama */}
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-400">Malzeme</label>
+          {secilenMal ? (
+            <div className="flex items-center justify-between bg-bg-2 border border-accent/50 rounded px-3 py-2">
+              <div>
+                <div className="text-xs font-mono text-accent">{secilenMal.kod}</div>
+                <div className="text-[11px] text-zinc-400">{secilenMal.ad}</div>
+              </div>
+              <button onClick={() => { setSecilenMal(null); setMalkodSearch('') }}
+                className="text-zinc-500 hover:text-zinc-200"><X size={13}/></button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                autoFocus
+                value={malkodSearch}
+                onChange={e => setMalkodSearch(e.target.value)}
+                placeholder="Malzeme kodu veya adı ara…"
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent"
+              />
+              {suggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 max-h-44 overflow-y-auto border border-border rounded bg-bg-0 shadow-lg divide-y divide-border/50">
+                  {suggestions.map(m => (
+                    <button key={m.kod}
+                      onClick={() => { setSecilenMal(m); setMalkodSearch('') }}
+                      className="w-full text-left px-3 py-2 hover:bg-bg-2">
+                      <div className="text-[11px] font-mono text-accent">{m.kod}</div>
+                      <div className="text-[11px] text-zinc-400 truncate">{m.ad}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Miktar + Tip */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400">Miktar</label>
+            <input
+              type="number"
+              min="0.001"
+              step="any"
+              value={miktar}
+              onChange={e => setMiktar(e.target.value)}
+              placeholder="0"
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400">Tip</label>
+            <div className="flex rounded border border-border overflow-hidden text-xs h-[34px]">
+              <button
+                onClick={() => setTip('giris')}
+                className={`flex-1 ${tip === 'giris' ? 'bg-green-600/80 text-white font-medium' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
+                ↑ Giriş
+              </button>
+              <button
+                onClick={() => setTip('cikis')}
+                className={`flex-1 ${tip === 'cikis' ? 'bg-red-600/80 text-white font-medium' : 'bg-bg-2 text-zinc-400 hover:text-zinc-200'}`}>
+                ↓ Çıkış
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tarih */}
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-400">Tarih</label>
+          <input
+            type="date"
+            value={tarih}
+            onChange={e => setTarih(e.target.value)}
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded text-xs text-zinc-200 focus:outline-none focus:border-accent"
+          />
+        </div>
+
+        {/* Açıklama */}
+        <div className="space-y-1">
+          <label className="text-xs text-zinc-400">Açıklama <span className="text-zinc-600">(isteğe bağlı)</span></label>
+          <textarea
+            value={aciklama}
+            onChange={e => setAciklama(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="Hareket nedeni, referans no vb."
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded text-xs text-zinc-200 resize-none focus:outline-none focus:border-accent"
+          />
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <button onClick={onClose}
+            className="px-4 py-2 bg-bg-3 text-zinc-400 text-xs rounded hover:text-zinc-200">
+            İptal
+          </button>
+          <button onClick={kaydet} disabled={saving}
+            className="px-4 py-2 bg-accent text-white text-xs rounded hover:bg-accent/90 disabled:opacity-50">
+            {saving ? 'Kaydediliyor…' : 'Kaydet'}
+          </button>
+        </div>
       </div>
     </div>
   )
