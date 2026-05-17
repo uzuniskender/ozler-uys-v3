@@ -1002,19 +1002,115 @@ export function Reports() {
           if (!tuketimMap[l.malkod]) tuketimMap[l.malkod] = { malkod: l.malkod, malad: '', uretimQty: 0, stokMiktar: 0 }
           tuketimMap[l.malkod].uretimQty += l.qty
         })
-        stokHareketler.filter(h => h.tip === 'cikis' && h.logId).forEach(h => {
+        const uretimCikislar = stokHareketler.filter(h => h.tip === 'cikis' && h.logId)
+        uretimCikislar.forEach(h => {
           if (!tuketimMap[h.malkod]) tuketimMap[h.malkod] = { malkod: h.malkod, malad: h.malad, uretimQty: 0, stokMiktar: 0 }
           tuketimMap[h.malkod].malad = h.malad
           tuketimMap[h.malkod].stokMiktar += h.miktar
         })
         const data = Object.values(tuketimMap).sort((a, b) => (b.stokMiktar || b.uretimQty) - (a.stokMiktar || a.uretimQty))
+        const toplamCikis = data.reduce((a, d) => a + d.stokMiktar, 0)
+
+        // Top 10 yatay bar chart için
+        const top10 = data.slice(0, 10).map(d => ({
+          malkod: d.malkod,
+          miktar: Math.round(d.stokMiktar || d.uretimQty),
+        }))
+
+        // Ay bazlı trend (son 12 ay, üretim tüketimi — cikis+logId)
+        const ayMap: Record<string, number> = {}
+        uretimCikislar.forEach(h => {
+          const ay = typeof h.tarih === 'string' ? h.tarih.slice(0, 7) : ''
+          if (!ay) return
+          ayMap[ay] = (ayMap[ay] || 0) + h.miktar
+        })
+        const ayTrend = Object.entries(ayMap)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .slice(-12)
+          .map(([ay, miktar]) => ({ ay, miktar: Math.round(miktar) }))
+
         return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">Malzeme Tüketim ({data.length} malzeme)</h3>
-            {data.length ? (
-              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Malzeme Kodu</th><th className="text-left px-4 py-2">Malzeme Adı</th><th className="text-right px-4 py-2">Üretim (adet)</th><th className="text-right px-4 py-2">Stok Çıkış</th></tr></thead>
-              <tbody>{data.slice(0, 50).map(d => (<tr key={d.malkod} className="border-b border-border/30"><td className="px-4 py-1.5 font-mono text-accent">{d.malkod}</td><td className="px-4 py-1.5 text-zinc-300">{d.malad}</td><td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.uretimQty > 0 ? d.uretimQty : '—'}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{d.stokMiktar > 0 ? Math.round(d.stokMiktar) : '—'}</td></tr>))}</tbody></table>
-            ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+          <div className="space-y-4">
+            {/* KPI */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono text-accent">{data.length}</div>
+                <div className="text-[11px] text-zinc-500">Toplam Malzeme</div>
+              </div>
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-2xl font-light font-mono text-amber">{Math.round(toplamCikis).toLocaleString('tr')}</div>
+                <div className="text-[11px] text-zinc-500">Toplam Stok Çıkış</div>
+              </div>
+              <div className="bg-bg-2 border border-border rounded-lg p-4 text-center">
+                <div className="text-base font-mono text-zinc-200 truncate">{data[0]?.malkod || '—'}</div>
+                <div className="text-[10px] text-zinc-500 truncate">{data[0]?.malad || 'En Çok Tüketilen'}</div>
+                <div className="text-[11px] text-zinc-500">En Çok Tüketilen</div>
+              </div>
+            </div>
+
+            {/* Grafikler */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Top 10 yatay bar chart */}
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Top 10 — Malkod Bazlı Tüketim</h3>
+                {top10.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={top10} layout="vertical" margin={{ left: 4, right: 20, top: 4, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 10, fill: '#888' }} />
+                      <YAxis type="category" dataKey="malkod" width={84} tick={{ fontSize: 9, fill: '#ccc' }} />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v.toLocaleString('tr'), 'Miktar']} />
+                      <Bar dataKey="miktar" fill={COLORS[1]} radius={[0, 3, 3, 0]} name="Stok Çıkış" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-64 flex items-center justify-center text-zinc-600 text-xs">Stok çıkış verisi yok</div>}
+              </div>
+
+              {/* Ay bazlı trend */}
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Ay Bazlı Tüketim Trendi (son 12 ay)</h3>
+                {ayTrend.length > 1 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={ayTrend} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="ay" tick={{ fontSize: 9, fill: '#888' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v.toLocaleString('tr'), 'Toplam Çıkış']} />
+                      <Line type="monotone" dataKey="miktar" stroke={COLORS[0]} strokeWidth={2} dot={{ r: 3, fill: COLORS[0] }} name="Toplam Çıkış" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-64 flex items-center justify-center text-zinc-600 text-xs">Yeterli veri yok</div>}
+              </div>
+            </div>
+
+            {/* Detay tablo */}
+            <div className="bg-bg-2 border border-border rounded-lg overflow-hidden">
+              <div className="px-4 py-2 border-b border-border flex items-center gap-2">
+                <h3 className="text-sm font-semibold">Detay ({data.length} malzeme)</h3>
+              </div>
+              {data.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead><tr className="border-b border-border text-zinc-500 bg-bg-1/50">
+                      <th className="text-left px-4 py-2 w-8">#</th>
+                      <th className="text-left px-4 py-2">Malzeme Kodu</th>
+                      <th className="text-left px-4 py-2">Malzeme Adı</th>
+                      <th className="text-right px-4 py-2">Üretim (adet)</th>
+                      <th className="text-right px-4 py-2">Stok Çıkış</th>
+                    </tr></thead>
+                    <tbody>{data.slice(0, 50).map((d, i) => (
+                      <tr key={d.malkod} className="border-b border-border/30">
+                        <td className="px-4 py-1.5 text-zinc-600 font-mono">{i + 1}</td>
+                        <td className="px-4 py-1.5 font-mono text-accent">{d.malkod}</td>
+                        <td className="px-4 py-1.5 text-zinc-300">{d.malad}</td>
+                        <td className="px-4 py-1.5 text-right font-mono text-zinc-400">{d.uretimQty > 0 ? d.uretimQty : '—'}</td>
+                        <td className="px-4 py-1.5 text-right font-mono text-amber">{d.stokMiktar > 0 ? Math.round(d.stokMiktar) : '—'}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              ) : <div className="p-8 text-center text-zinc-600">Veri yok</div>}
+            </div>
           </div>
         )
       })()}
