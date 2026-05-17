@@ -288,18 +288,25 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
     const uretim = bugunLogs.reduce((s, l) => s + l.qty, 0)
     let hedef = 0
     let varIslemSure = false
+    let toplamKalanDk = 0
     for (const w of acikWOs) {
       const wToplam = logs.filter(l => l.woId === w.id).reduce((s, l) => s + l.qty, 0)
       const kalan = Math.max(0, w.hedef - wToplam)
       if (w.islemSure > 0) {
         hedef += Math.min(kalan, Math.floor(VARDIYA_DK / w.islemSure))
+        toplamKalanDk += kalan * w.islemSure
         varIslemSure = true
       } else {
         hedef += kalan
       }
     }
     const pct = hedef > 0 ? Math.min(100, Math.round((uretim / hedef) * 100)) : uretim > 0 ? 100 : 0
-    return { uretim, hedef, pct, varIslemSure }
+    let tahminiStr = ''
+    if (toplamKalanDk > 0) {
+      const finish = new Date(Date.now() + toplamKalanDk * 60000)
+      tahminiStr = String(finish.getHours()).padStart(2, '0') + ':' + String(finish.getMinutes()).padStart(2, '0')
+    }
+    return { uretim, hedef, pct, varIslemSure, tahminiStr }
   }, [logs, todayStr, oprId, acikWOs])
 
   async function startWork(woId: string) {
@@ -386,7 +393,10 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
               <div className="bg-bg-1 border border-border rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">🎯 Günlük Hedef</div>
-                  <div className="text-[10px] text-zinc-500">{gunlukHedefInfo.varIslemSure ? 'işlem süresi bazlı tahmin' : 'kalan İE hedefleri'}</div>
+                  {gunlukHedefInfo.tahminiStr
+                    ? <div className="text-[10px] text-zinc-500">⏱ Tahmini bitiş: <span className="text-accent font-mono font-semibold">{gunlukHedefInfo.tahminiStr}</span></div>
+                    : <div className="text-[10px] text-zinc-600">{gunlukHedefInfo.varIslemSure ? 'işlem süresi bazlı' : 'kalan IE hedefleri'}</div>
+                  }
                 </div>
                 <div className="flex items-end gap-4 mb-2">
                   <div>
