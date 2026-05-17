@@ -92,6 +92,7 @@ export function Logs() {
   const [aktiviteOzeti, setAktiviteOzeti] = useState<Array<{
     kullanici: string
     toplam: number
+    tipler: { sistem: number; uretim: number; fire: number }
     moduller: { ad: string; sayi: number }[]
   }>>([])
   const [aktiviteMax, setAktiviteMax] = useState(0)
@@ -261,37 +262,60 @@ export function Logs() {
 
   useEffect(() => { loadLogs() }, [loadLogs])
 
-  // 7 günlük kullanıcı aktivitesi — filtreden bağımsız, bir kez yüklenir
+  // 7 günlük kullanıcı aktivitesi — filtreden bağımsız, operators değiştiğinde yeniden yüklenir
   useEffect(() => {
     const load = async () => {
       const sinir = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      type UserData = { sistem: number; uretim: number; fire: number; moduller: Record<string, number> }
+      const byUser: Record<string, UserData> = {}
+
+      const addUser = (name: string, tip: 'sistem' | 'uretim' | 'fire', modul?: string) => {
+        if (!name || name === '?') return
+        if (!byUser[name]) byUser[name] = { sistem: 0, uretim: 0, fire: 0, moduller: {} }
+        byUser[name][tip]++
+        if (modul) byUser[name].moduller[modul] = (byUser[name].moduller[modul] || 0) + 1
+      }
+
       try {
         const rows = await getDbActivityLog({ ts_min: sinir, limit: 2000 })
-        const byUser: Record<string, Record<string, number>> = {}
         for (const r of rows as ActivityLogRow[]) {
-          const k = r.kullanici
-          if (!k || k === '?') continue
-          if (!byUser[k]) byUser[k] = {}
-          const modul = r.modul || r.aksiyon || 'diğer'
-          byUser[k][modul] = (byUser[k][modul] || 0) + 1
+          addUser(r.kullanici, 'sistem', r.modul || r.aksiyon || 'diğer')
         }
-        const result = Object.entries(byUser)
-          .map(([kullanici, modMap]) => {
-            const toplam = Object.values(modMap).reduce((a, b) => a + b, 0)
-            const moduller = Object.entries(modMap)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 4)
-              .map(([ad, sayi]) => ({ ad, sayi }))
-            return { kullanici, toplam, moduller }
-          })
-          .sort((a, b) => b.toplam - a.toplam)
-          .slice(0, 12)
-        setAktiviteMax(result[0]?.toplam || 1)
-        setAktiviteOzeti(result)
       } catch { }
+
+      try {
+        const { data } = await supabase.from('uys_logs').select('opr_id').gte('updated_at', sinir).limit(2000)
+        for (const r of (data || [])) {
+          const opr = operators.find(o => o.id === r.opr_id)
+          addUser(opr?.ad || '?', 'uretim', 'Üretim')
+        }
+      } catch { }
+
+      try {
+        const { data } = await supabase.from('uys_fire_logs').select('opr_id').gte('updated_at', sinir).limit(2000)
+        for (const r of (data || [])) {
+          const opr = operators.find(o => o.id === r.opr_id)
+          addUser(opr?.ad || '?', 'fire', 'Fire')
+        }
+      } catch { }
+
+      const result = Object.entries(byUser)
+        .map(([kullanici, d]) => ({
+          kullanici,
+          toplam: d.sistem + d.uretim + d.fire,
+          tipler: { sistem: d.sistem, uretim: d.uretim, fire: d.fire },
+          moduller: Object.entries(d.moduller)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([ad, sayi]) => ({ ad, sayi })),
+        }))
+        .sort((a, b) => b.toplam - a.toplam)
+        .slice(0, 12)
+      setAktiviteMax(result[0]?.toplam || 1)
+      setAktiviteOzeti(result)
     }
     load()
-  }, [])
+  }, [operators])
 
   // Özet kartlar
   const stats = useMemo(() => {
@@ -391,9 +415,10 @@ export function Logs() {
                   <tr className="border-b border-border/70 text-zinc-500">
                     <th className="text-left px-3 py-2 font-medium w-6">#</th>
                     <th className="text-left px-3 py-2 font-medium">Kullanıcı</th>
-                    <th className="text-left px-3 py-2 font-medium w-20">İşlem</th>
-                    <th className="text-left px-3 py-2 font-medium">Sıklık</th>
-                    <th className="text-left px-3 py-2 font-medium">Modül / Aksiyon Dağılımı</th>
+                    <th className="text-left px-3 py-2 font-medium w-16">İşlem</th>
+                    <th className="text-left px-3 py-2 font-medium w-32">Sıklık</th>
+                    <th className="text-left px-3 py-2 font-medium">Olay Tipi</th>
+                    <th className="text-left px-3 py-2 font-medium">Modül / Aksiyon</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -402,12 +427,31 @@ export function Logs() {
                       <td className="px-3 py-1.5 text-zinc-600 font-mono">{i + 1}</td>
                       <td className="px-3 py-1.5 text-zinc-200 font-medium">{u.kullanici}</td>
                       <td className="px-3 py-1.5 font-mono text-accent font-semibold">{u.toplam}</td>
-                      <td className="px-3 py-1.5 w-40">
-                        <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden w-32">
+                      <td className="px-3 py-1.5">
+                        <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden w-24">
                           <div
                             className="h-full bg-accent/60 rounded-full"
                             style={{ width: `${Math.round(u.toplam / aktiviteMax * 100)}%` }}
                           />
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex flex-wrap gap-1">
+                          {u.tipler.sistem > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-zinc-500/10 border border-zinc-500/20 rounded text-[10px] text-zinc-300">
+                              Sistem <span className="text-zinc-500">×{u.tipler.sistem}</span>
+                            </span>
+                          )}
+                          {u.tipler.uretim > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green/10 border border-green/20 rounded text-[10px] text-green">
+                              Üretim <span className="text-green/50">×{u.tipler.uretim}</span>
+                            </span>
+                          )}
+                          {u.tipler.fire > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red/10 border border-red/20 rounded text-[10px] text-red">
+                              Fire <span className="text-red/50">×{u.tipler.fire}</span>
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-1.5">
