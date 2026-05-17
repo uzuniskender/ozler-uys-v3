@@ -88,6 +88,13 @@ export function Logs() {
   const [ieNoFilter, setIeNoFilter] = useState('')
   const [selected, setSelected] = useState<LogRow | null>(null)
   const [showFilters, setShowFilters] = useState(true)
+  const [showAktivite, setShowAktivite] = useState(true)
+  const [aktiviteOzeti, setAktiviteOzeti] = useState<Array<{
+    kullanici: string
+    toplam: number
+    moduller: { ad: string; sayi: number }[]
+  }>>([])
+  const [aktiviteMax, setAktiviteMax] = useState(0)
 
   // Tarih aralığı hesapla
   const { tsMin, tsMax } = useMemo(() => {
@@ -149,7 +156,7 @@ export function Logs() {
             raw: r,
           })
         }
-      } catch (e) { console.warn('activity_log fetch fail:', e) }
+      } catch { }
     }
 
     // 2) uys_logs (üretim)
@@ -181,7 +188,7 @@ export function Logs() {
             raw: r,
           })
         }
-      } catch (e) { console.warn('uys_logs fetch fail:', e) }
+      } catch { }
     }
 
     // 3) uys_stok_hareketler
@@ -214,7 +221,7 @@ export function Logs() {
             raw: r,
           })
         }
-      } catch (e) { console.warn('uys_stok_hareketler fetch fail:', e) }
+      } catch { }
     }
 
     // 4) uys_fire_logs
@@ -243,7 +250,7 @@ export function Logs() {
             raw: r,
           })
         }
-      } catch (e) { console.warn('uys_fire_logs fetch fail:', e) }
+      } catch { }
     }
 
     // Tarihe göre sırala (yeni → eski)
@@ -253,6 +260,38 @@ export function Logs() {
   }, [tipFilter, tsMin, tsMax, kullaniciFilter, search, ieNoFilter, workOrders, materials, operators])
 
   useEffect(() => { loadLogs() }, [loadLogs])
+
+  // 7 günlük kullanıcı aktivitesi — filtreden bağımsız, bir kez yüklenir
+  useEffect(() => {
+    const load = async () => {
+      const sinir = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      try {
+        const rows = await getDbActivityLog({ ts_min: sinir, limit: 2000 })
+        const byUser: Record<string, Record<string, number>> = {}
+        for (const r of rows as ActivityLogRow[]) {
+          const k = r.kullanici
+          if (!k || k === '?') continue
+          if (!byUser[k]) byUser[k] = {}
+          const modul = r.modul || r.aksiyon || 'diğer'
+          byUser[k][modul] = (byUser[k][modul] || 0) + 1
+        }
+        const result = Object.entries(byUser)
+          .map(([kullanici, modMap]) => {
+            const toplam = Object.values(modMap).reduce((a, b) => a + b, 0)
+            const moduller = Object.entries(modMap)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 4)
+              .map(([ad, sayi]) => ({ ad, sayi }))
+            return { kullanici, toplam, moduller }
+          })
+          .sort((a, b) => b.toplam - a.toplam)
+          .slice(0, 12)
+        setAktiviteMax(result[0]?.toplam || 1)
+        setAktiviteOzeti(result)
+      } catch { }
+    }
+    load()
+  }, [])
 
   // Özet kartlar
   const stats = useMemo(() => {
@@ -333,6 +372,63 @@ export function Logs() {
             <div className="text-[10px] text-zinc-500 uppercase">Fire Logu</div>
             <div className="text-2xl font-semibold mt-1 text-red">{stats.tipler.fire}</div>
           </div>
+        </div>
+
+        {/* Kullanıcı Aktivite Özeti — Son 7 Gün */}
+        <div className="px-5 pb-3">
+          <button
+            onClick={() => setShowAktivite(v => !v)}
+            className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 mb-2 select-none"
+          >
+            <span className={`transition-transform ${showAktivite ? 'rotate-90' : ''}`}>▶</span>
+            Kullanıcı Aktivitesi — Son 7 Gün
+            <span className="ml-1 text-zinc-600">({aktiviteOzeti.length} kullanıcı)</span>
+          </button>
+          {showAktivite && aktiviteOzeti.length > 0 && (
+            <div className="bg-bg-2/50 border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/70 text-zinc-500">
+                    <th className="text-left px-3 py-2 font-medium w-6">#</th>
+                    <th className="text-left px-3 py-2 font-medium">Kullanıcı</th>
+                    <th className="text-left px-3 py-2 font-medium w-20">İşlem</th>
+                    <th className="text-left px-3 py-2 font-medium">Sıklık</th>
+                    <th className="text-left px-3 py-2 font-medium">Modül / Aksiyon Dağılımı</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aktiviteOzeti.map((u, i) => (
+                    <tr key={u.kullanici} className="border-b border-border/30 hover:bg-bg-3/20">
+                      <td className="px-3 py-1.5 text-zinc-600 font-mono">{i + 1}</td>
+                      <td className="px-3 py-1.5 text-zinc-200 font-medium">{u.kullanici}</td>
+                      <td className="px-3 py-1.5 font-mono text-accent font-semibold">{u.toplam}</td>
+                      <td className="px-3 py-1.5 w-40">
+                        <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden w-32">
+                          <div
+                            className="h-full bg-accent/60 rounded-full"
+                            style={{ width: `${Math.round(u.toplam / aktiviteMax * 100)}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex flex-wrap gap-1">
+                          {u.moduller.map(m => (
+                            <span key={m.ad} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-bg-3 border border-border/50 rounded text-[10px] text-zinc-400">
+                              <span className="text-zinc-300">{m.ad}</span>
+                              <span className="text-zinc-600">×{m.sayi}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {showAktivite && aktiviteOzeti.length === 0 && (
+            <div className="text-xs text-zinc-600 py-2">Son 7 günde kayıtlı aktivite yok.</div>
+          )}
         </div>
 
         {/* Filtreler */}
