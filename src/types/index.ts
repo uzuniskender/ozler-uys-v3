@@ -140,6 +140,18 @@ export interface Material {
   aktif: boolean
   birimKgMetre?: number  // v16.78 — birim_kg_metre (kg/m)
   malzemeCinsi?: string  // v16.xx — malzeme_cinsi (LEVHA, BORU vb. alt sınıf)
+  lokasyonKodu?: string  // v17.07 — WMS Faz 1
+}
+
+export interface Lokasyon {
+  id: string
+  kod: string
+  ad: string
+  bolum: string
+  tip: string
+  kapasite: number
+  aktif: boolean
+  olusturma: string
 }
 
 export interface HmTip {

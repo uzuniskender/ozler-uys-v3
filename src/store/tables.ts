@@ -36,6 +36,7 @@ export const TABLE_MAP: TableEntry[] = [
   { store: 'warehouse',  key: 'tedarikler',     table: 'uys_tedarikler',      mapper: M.tedarik },
   { store: 'warehouse',  key: 'tedarikciler',   table: 'uys_tedarikciler',    mapper: M.tedarikci },
   { store: 'warehouse',  key: 'hmTipler',       table: 'uys_hm_tipleri',      mapper: M.hmTip },
+  { store: 'warehouse',  key: 'lokasyonlar',    table: 'uys_lokasyonlar',     mapper: M.lokasyon },
 
   { store: 'auth',       key: 'operators',      table: 'uys_operators',       mapper: M.operator },
   { store: 'auth',       key: 'kullanicilar',   table: 'uys_kullanicilar',    mapper: M.kullanici },

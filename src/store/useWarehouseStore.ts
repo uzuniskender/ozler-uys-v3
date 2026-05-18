@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
-import type { Material, StokHareket, Tedarik, Tedarikci, HmTip } from '@/types'
+import type { Material, StokHareket, Tedarik, Tedarikci, HmTip, Lokasyon } from '@/types'
 import { M } from './mappers'
 import { entriesFor } from './tables'
 import { isFresh, markFresh } from '@/lib/queryCache'
@@ -11,6 +11,7 @@ export interface WarehouseStore {
   tedarikler: Tedarik[]
   tedarikciler: Tedarikci[]
   hmTipler: HmTip[]
+  lokasyonlar: Lokasyon[]
   loading: boolean
   synced: boolean
   loadOwn: (opts?: { force?: boolean }) => Promise<void>
@@ -45,6 +46,7 @@ export const useWarehouseStore = create<WarehouseStore>((set, get) => ({
   tedarikler: [],
   tedarikciler: [],
   hmTipler: [],
+  lokasyonlar: [],
   loading: true,
   synced: false,
 

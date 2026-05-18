@@ -3,7 +3,7 @@ import type {
   Station, Operator, Recipe, BomTree, StokHareket,
   CuttingPlan, Tedarik, Tedarikci, DurusKodu, Customer, MrpRezerve,
   Sevk, OperatorNote, ActiveWork, FireLog, ChecklistItem,
-  HmTip, TestRun, Problem, Kullanici, AcikBar, Izin, Bildirim, PendingFlow
+  HmTip, TestRun, Problem, Kullanici, AcikBar, Izin, Bildirim, PendingFlow, Lokasyon
 } from '@/types'
 
 // DB (snake_case) → JS (camelCase) mapper'lar. Slice store'lar bunu paylaşır.
@@ -58,6 +58,7 @@ export const M = {
     oncekiId: (r.onceki_id || '') as string, aktif: r.aktif !== false,
     malzemeCinsi: r.malzeme_cinsi as string | undefined,
     birimKgMetre: (r.birim_kg_metre as number | null) ?? undefined,
+    lokasyonKodu: (r.lokasyon_kodu as string | null) ?? undefined,
   }),
   operation: (r: Record<string, unknown>): Operation => ({
     id: r.id as string, kod: (r.kod || '') as string, ad: (r.ad || '') as string,
@@ -234,5 +235,15 @@ export const M = {
     baslangic: (r.baslangic || '') as string, sonAktivite: (r.son_aktivite || '') as string,
     durum: (r.durum || 'aktif') as PendingFlow['durum'],
     not: (r.not_ || '') as string,
+  }),
+  lokasyon: (r: Record<string, unknown>): Lokasyon => ({
+    id: r.id as string,
+    kod: (r.kod || '') as string,
+    ad: (r.ad || '') as string,
+    bolum: (r.bolum || '') as string,
+    tip: (r.tip || 'raf') as string,
+    kapasite: (r.kapasite as number) || 0,
+    aktif: r.aktif !== false,
+    olusturma: (r.olusturma || '') as string,
   }),
 }

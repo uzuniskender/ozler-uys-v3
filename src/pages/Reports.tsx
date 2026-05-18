@@ -46,6 +46,11 @@ export function Reports() {
   const [dSiparis, setDSiparis] = useState('')
   const contentRef = useRef<HTMLDivElement>(null)
 
+  // Operatör Saat filtreleri
+  const [osBaslangic, setOsBaslangic] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })
+  const [osBitis, setOsBitis] = useState(today())
+  const [osSecili, setOsSecili] = useState('')
+
   const tabs = [
     { id: 'ozet', label: 'Özet' },
     { id: 'detayli', label: '📋 Detaylı Üretim' },
@@ -1963,32 +1968,213 @@ export function Reports() {
 
       {/* Operatör Saat Analizi */}
       {tab === 'oprsaat' && (() => {
-        const oprSaatMap: Record<string, { ad: string; toplamDk: number; uretim: number; gunler: Set<string> }> = {}
-        logs.forEach(l => {
+        type GunVeri = { tarih: string; dk: number; uretim: number }
+        type OprVeri = { ad: string; gunler: Record<string, GunVeri>; toplamDk: number; uretim: number; fazlaGun: number }
+        const oprMap: Record<string, OprVeri> = {}
+
+        const filtredLogs = logs.filter(l => l.tarih >= osBaslangic && l.tarih <= osBitis)
+        filtredLogs.forEach(l => {
           l.operatorlar?.forEach((o: { id?: string; ad?: string; bas?: string; bit?: string }) => {
             const key = o.ad || 'Tanımsız'
-            if (!oprSaatMap[key]) oprSaatMap[key] = { ad: key, toplamDk: 0, uretim: 0, gunler: new Set() }
-            oprSaatMap[key].uretim += l.qty
-            oprSaatMap[key].gunler.add(l.tarih)
+            if (!oprMap[key]) oprMap[key] = { ad: key, gunler: {}, toplamDk: 0, uretim: 0, fazlaGun: 0 }
+            if (!oprMap[key].gunler[l.tarih]) oprMap[key].gunler[l.tarih] = { tarih: l.tarih, dk: 0, uretim: 0 }
+            oprMap[key].gunler[l.tarih].uretim += l.qty
             if (o.bas && o.bit && o.bit >= o.bas) {
               const b = parseInt(o.bas.split(':')[0]) * 60 + parseInt(o.bas.split(':')[1] || '0')
               const e = parseInt(o.bit.split(':')[0]) * 60 + parseInt(o.bit.split(':')[1] || '0')
-              oprSaatMap[key].toplamDk += Math.max(0, e - b)
+              const dk = Math.max(0, e - b)
+              oprMap[key].gunler[l.tarih].dk += dk
+              oprMap[key].toplamDk += dk
             }
           })
         })
-        const data = Object.values(oprSaatMap).map(o => ({
-          ...o, gunSayisi: o.gunler.size,
-          saatStr: Math.floor(o.toplamDk / 60) + 's ' + (o.toplamDk % 60) + 'dk',
-          adetSaat: o.toplamDk > 0 ? Math.round(o.uretim / (o.toplamDk / 60) * 10) / 10 : 0,
-        })).sort((a, b) => b.uretim - a.uretim)
+        Object.values(oprMap).forEach(opr => {
+          opr.fazlaGun = Object.values(opr.gunler).filter(g => g.dk > 480).length
+          opr.uretim = Object.values(opr.gunler).reduce((a, g) => a + g.uretim, 0)
+        })
+
+        const data = Object.values(oprMap).sort((a, b) => b.toplamDk - a.toplamDk)
+        const ozet = data.map(o => ({
+          ad: o.ad.length > 12 ? o.ad.slice(0, 11) + '…' : o.ad,
+          adTam: o.ad,
+          saat: Math.round(o.toplamDk / 60 * 10) / 10,
+          fazlaGun: o.fazlaGun,
+        }))
+
+        const secilenOpr = osSecili ? oprMap[osSecili] : null
+        const drillData = secilenOpr
+          ? Object.values(secilenOpr.gunler)
+              .sort((a, b) => a.tarih.localeCompare(b.tarih))
+              .map(g => ({
+                gun: g.tarih.slice(5).replace('-', '/'),
+                saat: Math.round(g.dk / 60 * 10) / 10,
+                uretim: g.uretim,
+                fazla: g.dk > 480,
+              }))
+          : []
+
+        const osFmtSaat = (dk: number) => Math.floor(dk / 60) + 's ' + (dk % 60) + 'dk'
+
         return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">Operatör Saat Analizi ({data.length})</h3>
-            {data.length ? (
-              <table className="w-full text-xs"><thead><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2">Operatör</th><th className="text-right px-4 py-2">Toplam Süre</th><th className="text-right px-4 py-2">Üretim</th><th className="text-right px-4 py-2">Gün</th><th className="text-right px-4 py-2">Adet/Saat</th></tr></thead>
-              <tbody>{data.map(o => (<tr key={o.ad} className="border-b border-border/30"><td className="px-4 py-1.5 text-zinc-300">{o.ad}</td><td className="px-4 py-1.5 text-right font-mono text-accent">{o.saatStr}</td><td className="px-4 py-1.5 text-right font-mono text-green">{o.uretim}</td><td className="px-4 py-1.5 text-right font-mono">{o.gunSayisi}</td><td className="px-4 py-1.5 text-right font-mono text-amber">{o.adetSaat}</td></tr>))}</tbody></table>
-            ) : <div className="p-8 text-center text-zinc-600">Operatör saat verisi yok — üretim girişinde başlama/bitiş saati girilmeli</div>}
+          <div className="space-y-4">
+            {/* Filtre */}
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Başlangıç</label>
+                <input type="date" value={osBaslangic} onChange={e => setOsBaslangic(e.target.value)}
+                  className="px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-300" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Bitiş</label>
+                <input type="date" value={osBitis} onChange={e => setOsBitis(e.target.value)}
+                  className="px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-300" />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Drill-down Operatör</label>
+                <select value={osSecili} onChange={e => setOsSecili(e.target.value)}
+                  className="px-2 py-1.5 bg-bg-2 border border-border rounded text-xs text-zinc-300 min-w-[160px]">
+                  <option value="">— Seç —</option>
+                  {data.map(o => <option key={o.ad} value={o.ad}>{o.ad}</option>)}
+                </select>
+              </div>
+              {osSecili && (
+                <button onClick={() => setOsSecili('')} className="text-[10px] text-zinc-500 hover:text-white px-2 py-1.5">✕ Temizle</button>
+              )}
+            </div>
+
+            {data.length === 0 && (
+              <div className="p-8 text-center text-zinc-600 bg-bg-2 border border-border rounded-lg">
+                Seçili aralıkta operatör saat verisi yok — üretim girişinde başlama/bitiş saati girilmeli
+              </div>
+            )}
+
+            {data.length > 0 && (
+              <>
+                {/* Özet bar chart */}
+                <div className="bg-bg-2 border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Operatör Bazlı Toplam Çalışma Saati</h3>
+                    <span className="text-[10px] text-zinc-500">Turuncu = fazla mesai günü var</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={ozet} margin={{ top: 4, right: 12, left: 0, bottom: 40 }}>
+                      <XAxis dataKey="ad" tick={{ fontSize: 10, fill: '#a1a1aa' }} angle={-30} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} unit="s" />
+                      <Tooltip
+                        formatter={(v: number, _: string, p: any) => [`${v}s`, p.payload.adTam]}
+                        contentStyle={{ background: '#1c1c24', border: '1px solid #3f3f46', fontSize: 11 }}
+                      />
+                      <Bar dataKey="saat" radius={[3, 3, 0, 0]} maxBarSize={48} onClick={(d: any) => setOsSecili(d.adTam)}>
+                        {ozet.map((entry, i) => (
+                          <Cell key={i} fill={entry.fazlaGun > 0 ? '#f59e0b' : '#06b6d4'} cursor="pointer" />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Özet tablo */}
+                <div className="bg-bg-2 border border-border rounded-lg p-4">
+                  <h3 className="text-sm font-semibold mb-3">Operatör Özeti ({data.length} kişi)</h3>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-zinc-500">
+                        <th className="text-left px-3 py-2">Operatör</th>
+                        <th className="text-right px-3 py-2">Toplam Süre</th>
+                        <th className="text-right px-3 py-2">Üretim</th>
+                        <th className="text-right px-3 py-2">Çalışma Günü</th>
+                        <th className="text-right px-3 py-2">Fazla Mesai Günü</th>
+                        <th className="text-right px-3 py-2">Ort. Adet/Saat</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map(o => {
+                        const gunSayisi = Object.keys(o.gunler).length
+                        const adetSaat = o.toplamDk > 0 ? Math.round(o.uretim / (o.toplamDk / 60) * 10) / 10 : 0
+                        return (
+                          <tr key={o.ad}
+                            onClick={() => setOsSecili(osSecili === o.ad ? '' : o.ad)}
+                            className={`border-b border-border/30 cursor-pointer transition-colors ${osSecili === o.ad ? 'bg-accent/10' : 'hover:bg-bg-3'}`}>
+                            <td className="px-3 py-1.5 text-zinc-300 font-medium">{o.ad}</td>
+                            <td className="px-3 py-1.5 text-right font-mono text-accent">{osFmtSaat(o.toplamDk)}</td>
+                            <td className="px-3 py-1.5 text-right font-mono text-green-400">{o.uretim}</td>
+                            <td className="px-3 py-1.5 text-right font-mono">{gunSayisi}</td>
+                            <td className="px-3 py-1.5 text-right font-mono">
+                              {o.fazlaGun > 0
+                                ? <span className="text-red-400 font-semibold">{o.fazlaGun} gün ⚠</span>
+                                : <span className="text-zinc-600">—</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-mono text-amber-400">{adetSaat}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Drill-down */}
+                {secilenOpr && (
+                  <div className="bg-bg-2 border border-accent/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold">
+                        Günlük Detay — <span className="text-accent">{osSecili}</span>
+                        {secilenOpr.fazlaGun > 0 && (
+                          <span className="ml-2 text-xs text-red-400">⚠ {secilenOpr.fazlaGun} fazla mesai günü</span>
+                        )}
+                      </h3>
+                      <span className="text-[10px] text-zinc-500">Kırmızı çubuk = 8 saat üzeri</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={drillData} margin={{ top: 4, right: 12, left: 0, bottom: 40 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+                        <XAxis dataKey="gun" tick={{ fontSize: 10, fill: '#a1a1aa' }} angle={-40} textAnchor="end" interval={0} />
+                        <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} unit="s" />
+                        <Tooltip
+                          formatter={(v: number, _: string, p: any) => [`${v}s / ${p.payload.uretim} adet`, 'Çalışma']}
+                          contentStyle={{ background: '#1c1c24', border: '1px solid #3f3f46', fontSize: 11 }}
+                        />
+                        <ReferenceLine y={8} stroke="#ef4444" strokeDasharray="4 3" label={{ value: '8s sınır', fill: '#ef4444', fontSize: 9, position: 'right' }} />
+                        <Bar dataKey="saat" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                          {drillData.map((entry, i) => (
+                            <Cell key={i} fill={entry.fazla ? '#ef4444' : '#06b6d4'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+
+                    {/* Drill-down tablo */}
+                    <table className="w-full text-xs mt-3">
+                      <thead>
+                        <tr className="border-b border-border text-zinc-500">
+                          <th className="text-left px-3 py-1.5">Tarih</th>
+                          <th className="text-right px-3 py-1.5">Çalışma Süresi</th>
+                          <th className="text-right px-3 py-1.5">Üretim (adet)</th>
+                          <th className="text-right px-3 py-1.5">Durum</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.values(secilenOpr.gunler)
+                          .sort((a, b) => a.tarih.localeCompare(b.tarih))
+                          .map(g => (
+                            <tr key={g.tarih} className="border-b border-border/30">
+                              <td className="px-3 py-1 font-mono text-zinc-400">{g.tarih}</td>
+                              <td className="px-3 py-1 text-right font-mono text-accent">{osFmtSaat(g.dk)}</td>
+                              <td className="px-3 py-1 text-right font-mono text-green-400">{g.uretim}</td>
+                              <td className="px-3 py-1 text-right">
+                                {g.dk > 480
+                                  ? <span className="text-red-400 text-[10px] font-semibold">FAZLA MESAİ</span>
+                                  : g.dk > 0
+                                    ? <span className="text-zinc-500 text-[10px]">Normal</span>
+                                    : <span className="text-zinc-700 text-[10px]">Süre girilmemiş</span>}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )
       })()}
