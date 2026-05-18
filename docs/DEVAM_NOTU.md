@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
-**Tarih:** 17 Mayıs 2026
-**Versiyon:** v17.14
+**Tarih:** 18 Mayıs 2026
+**Versiyon:** v17.15
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -772,5 +772,116 @@ Bu oturumda 6 özellik tamamlandı. İlk 3'ü context sıkıştırılmadan önce
 #### Build durumu
 
 Tüm commitler `npm run build` öncesi geçirildi: prebuild audits (schema + column + saglik-syntax) + `tsc --noEmit` + `vite build` — hepsi temiz.
+
+---
+
+### 18 Mayıs 2026 — Tüm Oturum Özeti + master_schema.sql Durumu
+
+#### master_schema.sql — güncel, yenileme gerekmez
+
+Son migration: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
+17–18 Mayıs arası **DB şema değişikliği yapılmadı** — tüm v17.x commit'leri TypeScript katmanında.
+`sql/master_schema.sql` 17 Mayıs'ta `backups/2026-05-17/schema.sql` (pg_dump 17.10) bazlı yenilendi; hâlâ geçerli.
+
+#### Tam commit tablosu — 17–18 Mayıs 2026
+
+Tüm makinelerden (T0 = iskender.uzun / T1 = Iskender) gelen commit'ler kronolojik sıra ile:
+
+| Commit | Makine | Özellik |
+|--------|--------|---------|
+| `fbb849a` | T1 | Reports MalzemeTüketim: top-10 bar chart + aylık trend line v17.10 |
+| `8624996` | T1 | Materials satır genişletme — Son Hareketler mini panel v17.07 |
+| `e996734` | T1 | WorkOrders kapasite görünümü toggle (İE listesi ↔ Kapasite) v17.10 |
+| `2a5ca0c` | T1 | Checklist öncelik sırala + atanan filtre + tamamlanma progress bar v17.11 |
+| `5b1ff40` | T1 | Warehouse stok hareketi özeti mini widget (son 7 gün aktif ürünler) v17.11 |
+| `759b7ff` | T1 | Shipment paketleme listesi — checkbox seçim + `window.print()` popup v17.11 |
+| `f55ca45` | T1 | StokLog Manuel Hareket Ekle modal — Zod doğrulama + `addStokHareketi` v17.11 |
+| `8b72204` | T1 | BomTrees where-used analizi (Kullanıldığı Yerler) — reçete × BOM çapraz v17.12 |
+| `5a4d8bc` | T1 | Operations istatistik kolonları + tıklanabilir detay paneli v17.08 |
+| `5a0d24f` | T1 | Reports OEE tab (haftalık trend + istasyon bar + %85 hedef); Dashboard izin widget v17.10 |
+| `31b5c02` | T1 | Stations kapasite istatistikleri + tıklanabilir detay paneli v17.12 |
+| `461bf4d` | T0 | docs: DEVAM_NOTU gece oturumu — Dashboard izin widget + T1 commitler |
+| `6e99bf0` | T0 | DowntimeCodes detay panel — istasyon dağılımı + KPI kartları v17.13 |
+| `28bf273` | T0 | fix: AuditLog Fragment key uyarısı (`<>` → `<Fragment key>`) v17.14 |
+| `0499982` | T1 | Backup sayfası — boyut ort. kartı, zamanlama durumu, son 5 yedek paneli v17.12 |
+| `0a45ca1` | T1 | HmTipleri malzeme sayısı + toplam stok + min stok altı istatistiği v17.13 |
+| `c9e6346` | T1 | AuditLog kullanıcı dropdown + çoklu olay filtresi + Excel export v17.09 |
+| `84bb0c2` | T1 | Reports DuruşAnalizi tab — pie chart + istasyon bar + haftalık trend v17.10 |
+| `6773f09` | T0 | Logs Kullanıcı Aktivite Özeti — son 7 gün, modül/aksiyon badge v17.06 |
+| `6bdf696` | T1 | Logs aktivite özeti — üretim/fire tip dağılımı + operators bağımlılık v17.10 |
+| `ba5b2f5` | T1 | DowntimeCodes kodId eşleşmesi düzelt + son 5 kullanım detay paneli v17.14 |
+| `6915285` | T0 | OperatorPanel 🎯 Günlük Hedef — islemSure bazlı ilerleme bar v17.13 |
+| `2dc06ee` | T1 | OperatorPanel günlük hedef — tahmini bitiş saati eklendi v17.13 |
+| `cd51246` | T1 | Reports İstasyonPerf tab — OEE karşılaştırma + fire oranı + haftalık trend v17.10 |
+| `7918281` | T0 | Reports istperf — OEE 4-bar bileşen + kalite trend + mini progress bar v17.07 |
+| `d72fc2e` | T0 | ProductionEntry 📋 Şablondan Yükle — son 3 giriş şablon listesi v17.13 |
+| `e42de88` | T0 | ProblemTakip Excel export + Özet pie chart (Recharts donut) v17.05 |
+| `57ae214` | T1 | Warehouse kritik stok paneli — checkbox seçim + toplu tedarik oluştur v17.11 |
+| `42ca5c5` | T0 | docs: DEVAM_NOTU Warehouse kritik stok paneli eklendi |
+| `e33efb9` | T1 | docs: DEVAM_NOTU v17.09–v17.14 T1+T0 commit özeti |
+| `f6932f1` | T0 | docs: DEVAM_NOTU Son Oturum özeti — OperatorPanel + ProductionEntry |
+| `360dbd6` | T1 | docs: DEVAM_NOTU v17.05–v17.07 oturum özeti |
+
+#### Belgelenmemiş T1 commit detayları
+
+**Materials satır genişletme** (`8624996`):
+- `Materials.tsx` — satıra tıklanınca inline panel açılır: son X stok hareketi (tarih/miktar/giriş/çıkış) mini tablo
+
+**WorkOrders kapasite toggle** (`e996734`):
+- Başlık alanına toggle buton: İş Emri listesi ↔ Kapasite görünümü
+- Kapasite görünümü: operasyon bazında toplam hedef / üretilen / kalan / %doluluk
+
+**Checklist geliştirme** (`2a5ca0c`):
+- Öncelik sıralaması: Kritik → Yüksek → Orta → Düşük filtre chip'leri
+- Atanan kişi filtresi (dropdown)
+- Başlık alanına: "N/M tamamlandı" + tamamlanma yüzdesi progress bar
+
+**Warehouse stok hareketi özeti** (`5b1ff40`):
+- Son 7 gün aktif ürünler — hareket sayısı, giriş/çıkış toplamı mini widget
+- Warehouse sayfasının üst kısmında daraltılabilir panel
+
+**StokLog Manuel Hareket Ekle** (`f55ca45`):
+- Modal: malkod seçimi + miktar (Zod: int, positive) + tür (Giriş/Çıkış) + not
+- `addStokHareketi` servis fonksiyonu çağırır; liste anlık güncellenir
+
+**BomTrees where-used** (`8b72204`):
+- "Kullanıldığı Yerler" sekmesi: seçili bileşenin hangi BOM'larda (hangi mamulde) kullanıldığını listeler
+- `uys_bom_trees` çapraz sorgu — bileşen kodu eşleşmesi
+
+**Operations detay paneli** (`5a4d8bc`):
+- Operasyon listesi satırlarına istatistik kolonları: toplam İE / açık İE / tamamlanan
+- Satır tıklandığında sağ panel: İE detayları, haftalık üretim özeti
+
+**Stations detay paneli** (`31b5c02`):
+- İstasyon satırlarına kapasite kolonları: kullanım oranı, aktif/toplam İE
+- Detay panel: haftalık trend sparkline, atanmış operatörler, aktif işler
+
+**Reports OEE tab** (`5a0d24f`):
+- Haftalık OEE trend LineChart + %85 hedef çizgisi
+- İstasyon bazlı OEE bar chart (Availability × Performance × Quality)
+
+**Reports DuruşAnalizi** (`84bb0c2`):
+- PieChart: duruş kodları dağılımı (kod bazında toplam süre)
+- İstasyon bar chart: hangi istasyonda ne kadar duruş
+- Haftalık trend: duruş süresi değişimi
+
+**AuditLog geliştirme** (`c9e6346`):
+- Kullanıcı dropdown filtresi (çoklu seçim)
+- Olay tipi çoklu seçim (checkbox)
+- Excel export (`xlsx` lazy import, tüm kolonlar)
+
+**Backup sayfası** (`0499982`):
+- KPI kartları: son yedek boyutu, ortalama boyut, zamanlama durumu (son 24 saatte yedek var mı)
+- Son 5 yedek tablosu: tarih / boyut / tür / durum
+
+**HmTipleri istatistik** (`0a45ca1`):
+- Her satıra: bu tipe bağlı malzeme sayısı, toplam stok, min stok altı sayısı
+- Kritik (min stok altı > 0) satırlar kırmızı vurgu
+
+#### Sıradaki görevler
+
+1. mrpEngine Faz 3 — karar noktaları (satın alma teklifi, acil üretim) akışı
+2. Normalize veri geçişi (kapsam belirsiz — ertelendi)
+3. E2E test kapsamı genişletme (mevcut: 03-problem-takip; önerilen: üretim girişi + sevkiyat akışı)
 
 ---
