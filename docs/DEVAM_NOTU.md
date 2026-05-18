@@ -6,6 +6,16 @@
 
 ---
 
+## 18 Mayıs 2026 — stokTuketim Atomiklik Fix (v17.27)
+
+stokTuketimIsle insert hata kontrolü eklendi.
+Insert başarısız olursa rezerv artık silinmiyor (return 0).
+Önceki: sessiz hata → rezerv boşa serbest kalırdı.
+
+Build: ✅ | E2E: 39/39
+
+---
+
 ## 18 Mayıs 2026 — Rezerv Lifecycle (v17.26)
 
 Rezerv kayıtlarının lifecycle yönetimi tamamlandı:
