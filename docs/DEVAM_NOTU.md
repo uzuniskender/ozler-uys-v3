@@ -6,6 +6,18 @@
 
 ---
 
+## 18 Mayıs 2026 — fetchAll Audit (v17.23)
+
+Supabase 1000 satır limiti riski giderildi — 4 dosya:
+- `Materials.tsx`: bom_trees/recipes/work_orders fetchAll (2 yer: Excel import + cascadeAdKod)
+- `autoChain.ts`: kesim_planlari (x3) + tedarikler fetchAll + JS filtre
+- `activityLogService.ts`: `.limit(500)` guard
+- `bildirimlerService.ts`: varsayılan limit 200
+
+E2E: 39/39 yeşil | Build: ✅ | Tag: `v17.23` (`51cab46`)
+
+---
+
 ## 18 Mayıs 2026 — Rezervasyon Oturumu (v17.22)
 
 ### Atomik Stok Rezervasyon Sistemi
