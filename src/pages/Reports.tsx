@@ -1476,18 +1476,18 @@ export function Reports() {
         const aylar = Object.keys(ayUretimMap).sort().slice(-12)
         const aylarSet = new Set(aylar)
 
-        // Ürün bazlı aylık — top 6 mamul + Diğer
+        // Ürün bazlı aylık — top 10 mamul + Diğer
         const mamulTotalMap: Record<string, number> = {}
         logs.forEach(l => {
           const wo = woMap[l.woId]
           const kod = wo?.mamulKod || wo?.malkod || 'Tanımsız'
           mamulTotalMap[kod] = (mamulTotalMap[kod] || 0) + l.qty
         })
-        const top6Mamul = Object.entries(mamulTotalMap)
+        const top10Mamul = Object.entries(mamulTotalMap)
           .sort(([, a], [, b]) => b - a)
-          .slice(0, 6)
+          .slice(0, 10)
           .map(([k]) => k)
-        const top6Set = new Set(top6Mamul)
+        const top10Set = new Set(top10Mamul)
 
         // Aylık × mamul agregasyonu (O(n))
         const mamulAyAgg: Record<string, Record<string, number>> = {}
@@ -1497,13 +1497,13 @@ export function Reports() {
           const wo = woMap[l.woId]
           const kod = wo?.mamulKod || wo?.malkod || 'Tanımsız'
           if (!mamulAyAgg[ay]) mamulAyAgg[ay] = {}
-          const target = top6Set.has(kod) ? kod : '__diger__'
+          const target = top10Set.has(kod) ? kod : '__diger__'
           mamulAyAgg[ay][target] = (mamulAyAgg[ay][target] || 0) + l.qty
         })
         const mamulAylar: Array<Record<string, string | number>> = aylar.map(ay => {
           const row: Record<string, string | number> = { ay }
           const src = mamulAyAgg[ay] || {}
-          top6Mamul.forEach(k => { row[k] = src[k] || 0 })
+          top10Mamul.forEach(k => { row[k] = src[k] || 0 })
           if (src['__diger__']) row['Diğer'] = src['__diger__']
           return row
         })
@@ -1559,23 +1559,23 @@ export function Reports() {
 
             {/* Ürün bazlı aylık stacked bar */}
             <div className="bg-bg-2 border border-border rounded-lg p-4">
-              <h3 className="text-sm font-semibold mb-3">Ürün Bazlı Aylık Üretim — Top {top6Mamul.length} Mamul (son 12 ay)</h3>
-              {mamulAylar.length > 0 && top6Mamul.length > 0 ? (
+              <h3 className="text-sm font-semibold mb-3">Ürün Bazlı Aylık Üretim — Top {top10Mamul.length} Mamul (son 12 ay)</h3>
+              {mamulAylar.length > 0 && top10Mamul.length > 0 ? (
                 <>
-                  <ResponsiveContainer width="100%" height={260}>
+                  <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={mamulAylar} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                       <XAxis dataKey="ay" tick={{ fontSize: 9, fill: '#888' }} />
                       <YAxis tick={{ fontSize: 10, fill: '#888' }} />
                       <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
-                      {top6Mamul.map((kod, i) => (
+                      {top10Mamul.map((kod, i) => (
                         <Bar key={kod} dataKey={kod} stackId="a" fill={COLORS[i % COLORS.length]} name={kod} />
                       ))}
                       {hasDiger && <Bar dataKey="Diğer" stackId="a" fill="#52525b" name="Diğer" />}
                     </BarChart>
                   </ResponsiveContainer>
                   <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2">
-                    {top6Mamul.map((kod, i) => (
+                    {top10Mamul.map((kod, i) => (
                       <div key={kod} className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
                         <span className="text-[10px] text-zinc-400 truncate max-w-[110px]" title={kod}>{kod}</span>
@@ -1595,26 +1595,26 @@ export function Reports() {
             {/* Sipariş vs gerçekleşen + Büyüme oranı */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-bg-2 border border-border rounded-lg p-4">
-                <h3 className="text-sm font-semibold mb-3">Sipariş Termin vs Gerçekleşen Üretim</h3>
+                <h3 className="text-sm font-semibold mb-3">Sipariş vs Teslim — Aylık Planlanan / Gerçekleşen</h3>
                 {siparisVsData.some(d => d.planlanan > 0 || d.gerceklesen > 0) ? (
                   <>
                     <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={siparisVsData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                      <LineChart data={siparisVsData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                         <XAxis dataKey="ay" tick={{ fontSize: 9, fill: '#888' }} />
                         <YAxis tick={{ fontSize: 10, fill: '#888' }} />
                         <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
-                        <Bar dataKey="planlanan" fill={COLORS[1]} fillOpacity={0.65} radius={[2, 2, 0, 0]} name="Planlanan (Hedef)" />
-                        <Bar dataKey="gerceklesen" fill={COLORS[3]} radius={[2, 2, 0, 0]} name="Gerçekleşen" />
-                      </BarChart>
+                        <Line type="monotone" dataKey="planlanan" stroke={COLORS[1]} strokeWidth={2} strokeDasharray="5 3" name="Planlanan (Hedef)" dot={{ r: 3, fill: COLORS[1] }} />
+                        <Line type="monotone" dataKey="gerceklesen" stroke={COLORS[3]} strokeWidth={2} name="Gerçekleşen" dot={{ r: 3, fill: COLORS[3] }} />
+                      </LineChart>
                     </ResponsiveContainer>
                     <div className="flex gap-4 mt-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS[1], opacity: 0.65 }} />
+                        <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke={COLORS[1]} strokeWidth="2" strokeDasharray="5 3" /></svg>
                         <span className="text-[10px] text-zinc-400">Planlanan</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS[3] }} />
+                        <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke={COLORS[3]} strokeWidth="2" /></svg>
                         <span className="text-[10px] text-zinc-400">Gerçekleşen</span>
                       </div>
                     </div>
