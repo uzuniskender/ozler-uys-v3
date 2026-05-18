@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProductionStore, useOrderStore, useWarehouseStore, useAuthStore, loadAllStores } from '@/store'
 import { today } from '@/lib/utils'
@@ -44,6 +44,7 @@ export function Reports() {
   const [dOperasyon, setDOperasyon] = useState('')
   const [dBolum, setDBolum] = useState('')
   const [dSiparis, setDSiparis] = useState('')
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const tabs = [
     { id: 'ozet', label: 'Özet' },
@@ -300,6 +301,54 @@ export function Reports() {
     })
   }
 
+  async function pdfIndir() {
+    if (!contentRef.current) return
+    const toastId = toast.loading('PDF hazırlanıyor...')
+    try {
+      const [{ default: html2canvas }, { newPdf, ozlerHeader, ozlerFooter }] = await Promise.all([
+        import('html2canvas'),
+        import('@/lib/pdf-utils'),
+      ])
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+      })
+      const doc = await newPdf()
+      const tabLabel = tabs.find(t => t.id === tab)?.label || tab
+      const margin = 15
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+      const imgW = pageW - 2 * margin
+      const y0 = ozlerHeader(doc, { baslik: 'RAPOR', altBaslik: tabLabel })
+      const usableH = pageH - y0 - 37
+      const scale = imgW / canvas.width
+      const sliceSrcH = Math.round(usableH / scale)
+      let srcY = 0
+      let firstPage = true
+      while (srcY < canvas.height) {
+        if (!firstPage) {
+          doc.addPage()
+          ozlerHeader(doc, { baslik: 'RAPOR', altBaslik: tabLabel + ' (devam)' })
+        }
+        const actualH = Math.min(sliceSrcH, canvas.height - srcY)
+        const sliceCanvas = document.createElement('canvas')
+        sliceCanvas.width = canvas.width
+        sliceCanvas.height = actualH
+        sliceCanvas.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, actualH, 0, 0, canvas.width, actualH)
+        doc.addImage(sliceCanvas.toDataURL('image/jpeg', 0.85), 'JPEG', margin, y0, imgW, actualH * scale)
+        srcY += actualH
+        firstPage = false
+      }
+      const totalPages = doc.getNumberOfPages()
+      for (let i = 1; i <= totalPages; i++) { doc.setPage(i); ozlerFooter(doc) }
+      doc.save(`rapor_${tab}_${today()}.pdf`)
+      toast.success('PDF indirildi', { id: toastId })
+    } catch (e: unknown) {
+      toast.error('PDF oluşturulamadı: ' + ((e as Error)?.message || ''), { id: toastId })
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
@@ -333,8 +382,10 @@ export function Reports() {
             toast.success('Rapor Excel indirildi')
           })
         }} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📥 Excel</button>
+        <button onClick={pdfIndir} className="px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white">📄 PDF</button>
       </div>
 
+      <div ref={contentRef}>
       {tab === 'ozet' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -1405,6 +1456,7 @@ export function Reports() {
 
       {/* Trend */}
       {tab === 'trend' && (() => {
+        // Günlük (son 30 gün)
         const gunMap: Record<string, { gun: string; uretim: number; fire: number }> = {}
         logs.forEach(l => {
           if (!l.tarih) return
@@ -1412,15 +1464,187 @@ export function Reports() {
           gunMap[l.tarih].uretim += l.qty
           gunMap[l.tarih].fire += l.fire || 0
         })
-        const data = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-30)
+        const gunData = Object.values(gunMap).sort((a, b) => a.gun.localeCompare(b.gun)).slice(-30)
+
+        // Aylık toplam üretim (son 12 ay)
+        const ayUretimMap: Record<string, number> = {}
+        logs.forEach(l => {
+          const ay = l.tarih?.slice(0, 7)
+          if (!ay) return
+          ayUretimMap[ay] = (ayUretimMap[ay] || 0) + l.qty
+        })
+        const aylar = Object.keys(ayUretimMap).sort().slice(-12)
+        const aylarSet = new Set(aylar)
+
+        // Ürün bazlı aylık — top 6 mamul + Diğer
+        const mamulTotalMap: Record<string, number> = {}
+        logs.forEach(l => {
+          const wo = woMap[l.woId]
+          const kod = wo?.mamulKod || wo?.malkod || 'Tanımsız'
+          mamulTotalMap[kod] = (mamulTotalMap[kod] || 0) + l.qty
+        })
+        const top6Mamul = Object.entries(mamulTotalMap)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 6)
+          .map(([k]) => k)
+        const top6Set = new Set(top6Mamul)
+
+        // Aylık × mamul agregasyonu (O(n))
+        const mamulAyAgg: Record<string, Record<string, number>> = {}
+        logs.forEach(l => {
+          const ay = l.tarih?.slice(0, 7)
+          if (!ay || !aylarSet.has(ay)) return
+          const wo = woMap[l.woId]
+          const kod = wo?.mamulKod || wo?.malkod || 'Tanımsız'
+          if (!mamulAyAgg[ay]) mamulAyAgg[ay] = {}
+          const target = top6Set.has(kod) ? kod : '__diger__'
+          mamulAyAgg[ay][target] = (mamulAyAgg[ay][target] || 0) + l.qty
+        })
+        const mamulAylar: Array<Record<string, string | number>> = aylar.map(ay => {
+          const row: Record<string, string | number> = { ay }
+          const src = mamulAyAgg[ay] || {}
+          top6Mamul.forEach(k => { row[k] = src[k] || 0 })
+          if (src['__diger__']) row['Diğer'] = src['__diger__']
+          return row
+        })
+        const hasDiger = mamulAylar.some(r => (r['Diğer'] as number || 0) > 0)
+
+        // Sipariş termin vs gerçekleşen
+        const ayPlanlananMap: Record<string, number> = {}
+        workOrders.forEach(w => {
+          const order = w.orderId ? orderMap[w.orderId] : null
+          const ay = order?.termin?.slice(0, 7)
+          if (!ay) return
+          ayPlanlananMap[ay] = (ayPlanlananMap[ay] || 0) + (w.hedef || 0)
+        })
+        const siparisVsData = aylar.map(ay => ({
+          ay,
+          planlanan: ayPlanlananMap[ay] || 0,
+          gerceklesen: ayUretimMap[ay] || 0,
+        }))
+
+        // Ay-ay büyüme oranı
+        const buyumeData = aylar
+          .map((ay, i) => {
+            if (i === 0) return null
+            const prev = ayUretimMap[aylar[i - 1]] || 0
+            const curr = ayUretimMap[ay] || 0
+            if (prev === 0) return null
+            return { ay, oran: Math.round((curr - prev) / prev * 100) }
+          })
+          .filter((d): d is { ay: string; oran: number } => d !== null)
+
+        const ortAylik = aylar.length > 0
+          ? Math.round(aylar.reduce((s, ay) => s + (ayUretimMap[ay] || 0), 0) / aylar.length)
+          : 0
+
         return (
-          <div className="bg-bg-2 border border-border rounded-lg p-4">
-            <h3 className="text-sm font-semibold mb-3">Üretim Trend (son 30 gün)</h3>
-            {data.length > 1 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="#333" /><XAxis dataKey="gun" tick={{ fontSize: 9, fill: '#888' }} /><YAxis tick={{ fontSize: 10, fill: '#888' }} /><Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} /><Line type="monotone" dataKey="uretim" stroke="#06b6d4" strokeWidth={2} name="Üretim" /><Line type="monotone" dataKey="fire" stroke="#ef4444" strokeWidth={1} name="Fire" /></LineChart>
-              </ResponsiveContainer>
-            ) : <div className="p-8 text-center text-zinc-600">Yeterli veri yok</div>}
+          <div className="space-y-4">
+            {/* Günlük trend */}
+            <div className="bg-bg-2 border border-border rounded-lg p-4">
+              <h3 className="text-sm font-semibold mb-3">Günlük Üretim Trendi (son 30 gün)</h3>
+              {gunData.length > 1 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={gunData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                    <XAxis dataKey="gun" tick={{ fontSize: 9, fill: '#888' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                    <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
+                    <Line type="monotone" dataKey="uretim" stroke={COLORS[0]} strokeWidth={2} name="Üretim" dot={false} />
+                    <Line type="monotone" dataKey="fire" stroke={COLORS[2]} strokeWidth={1} name="Fire" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : <div className="h-48 flex items-center justify-center text-zinc-600 text-xs">Yeterli veri yok</div>}
+            </div>
+
+            {/* Ürün bazlı aylık stacked bar */}
+            <div className="bg-bg-2 border border-border rounded-lg p-4">
+              <h3 className="text-sm font-semibold mb-3">Ürün Bazlı Aylık Üretim — Top {top6Mamul.length} Mamul (son 12 ay)</h3>
+              {mamulAylar.length > 0 && top6Mamul.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={mamulAylar} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="ay" tick={{ fontSize: 9, fill: '#888' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
+                      {top6Mamul.map((kod, i) => (
+                        <Bar key={kod} dataKey={kod} stackId="a" fill={COLORS[i % COLORS.length]} name={kod} />
+                      ))}
+                      {hasDiger && <Bar dataKey="Diğer" stackId="a" fill="#52525b" name="Diğer" />}
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2">
+                    {top6Mamul.map((kod, i) => (
+                      <div key={kod} className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                        <span className="text-[10px] text-zinc-400 truncate max-w-[110px]" title={kod}>{kod}</span>
+                      </div>
+                    ))}
+                    {hasDiger && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-zinc-600" />
+                        <span className="text-[10px] text-zinc-400">Diğer</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : <div className="h-56 flex items-center justify-center text-zinc-600 text-xs">Ürün verisi yok</div>}
+            </div>
+
+            {/* Sipariş vs gerçekleşen + Büyüme oranı */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <h3 className="text-sm font-semibold mb-3">Sipariş Termin vs Gerçekleşen Üretim</h3>
+                {siparisVsData.some(d => d.planlanan > 0 || d.gerceklesen > 0) ? (
+                  <>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={siparisVsData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                        <XAxis dataKey="ay" tick={{ fontSize: 9, fill: '#888' }} />
+                        <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                        <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} />
+                        <Bar dataKey="planlanan" fill={COLORS[1]} fillOpacity={0.65} radius={[2, 2, 0, 0]} name="Planlanan (Hedef)" />
+                        <Bar dataKey="gerceklesen" fill={COLORS[3]} radius={[2, 2, 0, 0]} name="Gerçekleşen" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-4 mt-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS[1], opacity: 0.65 }} />
+                        <span className="text-[10px] text-zinc-400">Planlanan</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS[3] }} />
+                        <span className="text-[10px] text-zinc-400">Gerçekleşen</span>
+                      </div>
+                    </div>
+                  </>
+                ) : <div className="h-56 flex items-center justify-center text-zinc-600 text-xs">Termin tarihi girilmiş sipariş yok</div>}
+              </div>
+
+              <div className="bg-bg-2 border border-border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">Ay-ay Büyüme Oranı</h3>
+                  <span className="text-[11px] text-zinc-500">Ort. {ortAylik.toLocaleString('tr')} adet/ay</span>
+                </div>
+                {buyumeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={buyumeData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                      <XAxis dataKey="ay" tick={{ fontSize: 9, fill: '#888' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#888' }} unit="%" />
+                      <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`${v > 0 ? '+' : ''}${v}%`, 'Büyüme']} />
+                      <ReferenceLine y={0} stroke="#555" strokeWidth={1} />
+                      <Bar dataKey="oran" radius={[3, 3, 0, 0]} name="Büyüme %">
+                        {buyumeData.map((d, i) => (
+                          <Cell key={i} fill={d.oran >= 0 ? COLORS[3] : COLORS[2]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-52 flex items-center justify-center text-zinc-600 text-xs">En az 2 aylık veri gerekli</div>}
+              </div>
+            </div>
           </div>
         )
       })()}
@@ -1768,6 +1992,7 @@ export function Reports() {
           </div>
         )
       })()}
+      </div>
     </div>
   )
 }
