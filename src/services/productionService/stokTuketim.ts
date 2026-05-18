@@ -71,7 +71,14 @@ export async function stokTuketimIsle(
   }
 
   if (rows.length) {
-    await supabase.from('uys_stok_hareketler').insert(rows)
+    const { error: insertError } = await supabase
+      .from('uys_stok_hareketler')
+      .insert(rows)
+
+    if (insertError) {
+      console.error('[stokTuketim] stok hareketi yazılamadı:', insertError.message)
+      return 0
+    }
 
     // v16.70 — Üretim girişinde bu WO'nun siparişine ait rezervleri sil
     // Her tüketilen malkod için aynı order_id'ye bağlı rezerv kaldırılır
