@@ -1,8 +1,8 @@
 -- ============================================================
 -- Migration: v17.16 — Günlük Net Stok Snapshot
 -- Tarih: 2026-05-18
--- TEST:  cowgxwmhlogmswatbltz — henüz uygulanmadı
--- PROD:  lmhcobrgrnvtprvmcito — henüz uygulanmadı
+-- TEST:  cowgxwmhlogmswatbltz — 2026-05-18
+-- PROD:  lmhcobrgrnvtprvmcito — 2026-05-18
 -- ============================================================
 -- Amaç: İstenilen tarih için malkod bazında net stoku
 --        uys_stok_snapshot tablosuna yazar.

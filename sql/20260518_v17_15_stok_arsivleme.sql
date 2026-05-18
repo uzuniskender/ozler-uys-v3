@@ -1,8 +1,8 @@
 -- ============================================================
 -- Migration: v17.15 — Stok Hareketi Arşivleme
 -- Tarih: 2026-05-18
--- TEST:  cowgxwmhlogmswatbltz — henüz uygulanmadı
--- PROD:  lmhcobrgrnvtprvmcito — henüz uygulanmadı
+-- TEST:  cowgxwmhlogmswatbltz — 2026-05-18
+-- PROD:  lmhcobrgrnvtprvmcito — 2026-05-18
 -- ============================================================
 -- Amaç: 1 yıldan eski uys_stok_hareketler kayıtlarını
 --        uys_stok_hareketler_arsiv tablosuna taşır.

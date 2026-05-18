@@ -15,6 +15,13 @@
 - Build temiz: `Reports.js` 100.84 kB, `npm run build` hatasız geçti
 - Origin ile senkron: push gerekmedi
 
+### DB Migrations — Tamamlananlar (2026-05-18 akşam)
+
+- `20260518_v17_15_stok_arsivleme.sql` — TEST ✅ + PROD ✅ (MCP ile uygulandı)
+  - `uys_stok_hareketler_arsiv` tablosu + `arsivle_stok_hareketleri()` RPC
+- `20260518_v17_16_stok_snapshot.sql` — TEST ✅ + PROD ✅ (MCP ile uygulandı)
+  - `uys_stok_snapshot` tablosu + `al_stok_snapshot()` RPC
+
 ### Bekleyen
 
 - **PROD index migration:** `sql/20260518_v17_16_performance_indexes.sql` TEST'e uygulandı (`7c3efd9`), PROD (`lmhcobrgrnvtprvmcito`) için henüz onay alınmadı.
