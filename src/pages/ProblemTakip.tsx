@@ -6,7 +6,8 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { CLIENT_ID } from '@/hooks/useRealtime'
-import { Search, Plus, Pencil, Trash2, AlertCircle, Download, LayoutGrid, List } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, AlertCircle, Download, LayoutGrid, List, FileText } from 'lucide-react'
+import { print8DPdf } from '@/lib/problem-8d-pdf'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { z } from 'zod'
 import type { Problem } from '@/types'
@@ -349,6 +350,13 @@ export function ProblemTakip() {
                         ) : '—'}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => print8DPdf(p)}
+                          className="p-1 text-zinc-500 hover:text-cyan-400"
+                          title="8D PDF Raporu"
+                        >
+                          <FileText size={12} />
+                        </button>
                         {can('pt_edit') && (
                           <button
                             onClick={() => { setEditItem(p); setShowForm(true) }}
@@ -698,19 +706,33 @@ function ProblemFormModal({
           )}
         </div>
 
-        <div className="px-5 py-4 border-t border-border flex justify-end gap-2 sticky bottom-0 bg-bg-1">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"
-          >
-            İptal
-          </button>
-          <button
-            onClick={submit}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"
-          >
-            {initial ? 'Güncelle' : 'Ekle'}
-          </button>
+        <div className="px-5 py-4 border-t border-border flex justify-between gap-2 sticky bottom-0 bg-bg-1">
+          <div>
+            {initial && (
+              <button
+                type="button"
+                onClick={() => print8DPdf(initial)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-bg-3 border border-border text-zinc-400 hover:text-cyan-400 rounded-lg text-xs"
+                title="8D PDF Raporu indir"
+              >
+                <FileText size={13} /> 8D PDF
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs hover:text-white"
+            >
+              İptal
+            </button>
+            <button
+              onClick={submit}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold"
+            >
+              {initial ? 'Güncelle' : 'Ekle'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
