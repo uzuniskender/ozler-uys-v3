@@ -885,3 +885,39 @@ Tüm makinelerden (T0 = iskender.uzun / T1 = Iskender) gelen commit'ler kronoloj
 3. E2E test kapsamı genişletme (mevcut: 03-problem-takip; önerilen: üretim girişi + sevkiyat akışı)
 
 ---
+
+### 18 Mayıs 2026 — Sabah Oturumu (v17.15)
+
+#### hesaplaMRP → hesaplaMRPv2 tam geçiş (`ea86f45`)
+
+**Amaç:** Tüm MRP hesaplama call site'larını positional-arg API'den object-param API'ye taşımak.
+
+**Değişen dosyalar (6):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `mrpEngine.ts` | `hesaplaMRPv2` body: engine pipeline yerine `hesaplaMRP`'ye delege. `import { hesaplaMRP } from './mrp'` eklendi. Tüm params (logs, retrospektif, secilenYMIds) artık geçiriliyor |
+| `mrp.ts` | `hesaplaMRP` fonksiyonuna `@deprecated` JSDoc eklendi |
+| `mrpService/index.ts` | `export { hesaplaMRPv2 } from './mrpEngine'` eklendi |
+| `Orders.tsx` | 3 çağrı v2 object syntax'a taşındı; `ReturnType<typeof hesaplaMRP>` → `MRPRow[]` |
+| `MRP.tsx` | 4 çağrı v2 object syntax'a taşındı (ymSet, retrospektif=true dahil) |
+| `audit-schema.cjs` | `CODE_AHEAD_WHITELIST` eklendi — migration bekleyen tablolar için (ilk: `uys_lokasyonlar`) |
+
+**Parametre eşlemesi (positional → object):**
+```
+hesaplaMRP(ordIds, orders, wos, recipes, stokHareketler, tedarikler, cpMapped, mats, ymSet, mrpRezerve, orderId, logs, retrospektif)
+→
+hesaplaMRPv2({ ordIds, orders, workOrders: wos, recipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials: mats, secilenYMIds: ymSet, mrpRezerve, currentOrderId: orderId, logs, retrospektif })
+```
+
+**Önemli not:** `mrpRezerve` parametresi v15.63'ten beri no-op (rezerve mantığı kaldırıldı, geriye uyumluluk için parametre tutuldu). v2'ye geçişte davranış değişikliği yok.
+
+**Yol haritası:** `hesaplaMRPv2` şu an `hesaplaMRP`'ye delege ediyor. Engine pipeline (explodeBOM → netting → buildResult) `logs`, `retrospektif`, `secilenYMIds` desteklediğinde implementasyon call site değişmeden swap edilecek.
+
+#### Sıradaki görevler (güncellendi)
+
+- mrpEngine Faz 3 — karar noktaları (satın alma teklifi, acil üretim) akışı
+- Normalize veri geçişi (kapsam belirsiz — ertelendi)
+- WMS lokasyon migration (`sql/20260518_v17_07_wms_lokasyonlar.sql`) — TEST sonra PROD uygulanacak
+
+---
