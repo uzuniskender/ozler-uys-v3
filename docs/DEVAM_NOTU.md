@@ -1,8 +1,39 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 18 Mayıs 2026
-**Versiyon:** v17.18
+**Versiyon:** v17.20
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
+
+---
+
+## 18 Mayıs 2026 — Gece Oturumu (v17.19–v17.20)
+
+### Reports — Yeni Tablar
+
+**Operatör Saat tab** (`88e5aa6`, `ed6fdeb`) — `v17.19`
+- Haftalık stacked bar chart (top5, son 8 hafta); fazla mesai tespiti (>8s kırmızı)
+- Operatör drill-down: günlük bar chart + FAZLA MESAİ etiketi, ReferenceLine y=8
+
+**Kapasite Planlama tab** (`e55f552`) — `v17.20`
+- 4 haftalık horizon (H1–H4): istasyon bazlı planlanan İE yükü vs tahmini kapasite
+- Slider: günlük kapasite ayarı (4–24 saat/gün, varsayılan 8)
+- Grouped bar chart + kırmızı ReferenceLine (kapasite sınırı)
+- Doluluk oranı matrisi (yeşil/amber/kırmızı) + gecikmiş/tarihsiz sütunları
+- Aşım uyarı banner'ı (%100 üzeri kombinasyonlar)
+- İstasyona tıklayınca İE drill-down tablosu (hafta etiketi, gecikmiş vurgu)
+
+### WMS — Lokasyon
+
+**Warehouse Lokasyon tab tamamlama** (`da24771`) — `v17.17`
+- Zod doğrulama (LokasyonFormModal), UUID bug fix, `stok_lokasyon` yetkisi
+
+### DB Migrations (her ikisi de PROD'a uygulandı)
+
+- `20260518_v17_07_wms_lokasyonlar.sql` — `uys_lokasyonlar` tablosu + `uys_malzemeler.lokasyon_kodu VARCHAR(30)` (`d0264c5`)
+
+### Dikkat: İkinci makine (Iskender) commit'leri
+
+Bazı özellikler oturumda ikinci makineden push geldi: `970c7d0` (stok snapshot), `e8582b3` (Trend tab), `770f3df` (PDF altyapısı refactor → `src/lib/pdf/`). Her görev başında `git pull` zorunlu.
 
 ---
 
