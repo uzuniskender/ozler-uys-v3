@@ -117,7 +117,7 @@ export interface ActivityLogFilter {
 
 /** DB'den filtreli sorgu. Logs.tsx ana sayfası kullanır. */
 export async function getDbActivityLog(filter: ActivityLogFilter = {}): Promise<ActivityLogRow[]> {
-  let q = supabase.from('uys_activity_log').select('*').order('ts', { ascending: false })
+  let q = supabase.from('uys_activity_log').select('*').limit(500).order('ts', { ascending: false })
   if (filter.ts_min) q = q.gte('ts', filter.ts_min)
   if (filter.ts_max) q = q.lte('ts', filter.ts_max)
   if (filter.kullanici) q = q.eq('kullanici', filter.kullanici)

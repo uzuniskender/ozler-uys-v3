@@ -231,16 +231,15 @@ export async function autoZincir(
   // 2026-05-16 08:53 6 plan ~16sn arayla 2 kez insert (21 ham_malkod mükerrer).
   let freshCuttingPlans = cuttingPlans
   try {
-    const { data: cpRows } = await supabase.from('uys_kesim_planlari').select('*').neq('durum', 'iptal')
-    if (cpRows) {
-      freshCuttingPlans = cpRows.map((r: any) => ({
-        id: r.id, hamMalkod: r.ham_malkod, hamMalad: r.ham_malad,
-        hamBoy: r.ham_boy || 0, hamEn: r.ham_en || 0,
-        kesimTip: r.kesim_tip || 'boy', durum: r.durum,
-        satirlar: r.satirlar || [], gerekliAdet: r.gerekli_adet || 0,
-        tarih: r.tarih || '',
-      }))
-    }
+    const { data: cpRowsRaw } = await fetchAll<any>('uys_kesim_planlari')
+    const cpRows = (cpRowsRaw ?? []).filter((k: any) => k.durum !== 'iptal')
+    freshCuttingPlans = cpRows.map((r: any) => ({
+      id: r.id, hamMalkod: r.ham_malkod, hamMalad: r.ham_malad,
+      hamBoy: r.ham_boy || 0, hamEn: r.ham_en || 0,
+      kesimTip: r.kesim_tip || 'boy', durum: r.durum,
+      satirlar: r.satirlar || [], gerekliAdet: r.gerekli_adet || 0,
+      tarih: r.tarih || '',
+    }))
   } catch { /* stale fallback */ }
 
   let kesimCount = 0
@@ -262,11 +261,11 @@ export async function autoZincir(
   onProgress?.(adimlar)
 
   // Re-fetch cutting plans
-  const { data: freshCP } = await supabase.from('uys_kesim_planlari').select('*')
-  const allCP = freshCP?.map((r: any) => ({
+  const { data: freshCP } = await fetchAll<any>('uys_kesim_planlari')
+  const allCP = (freshCP ?? []).map((r: any) => ({
     hamMalkod: r.ham_malkod, hamMalad: r.ham_malad, durum: r.durum,
     gerekliAdet: r.gerekli_adet, satirlar: r.satirlar || [],
-  })) || cuttingPlans
+  }))
 
   // v15.83 — Senaryo 1 modali (Faz 1 MVP): Kesim plani olusturuldu,
   // her WO icin bar cikisi hesabi yapilir; siparis adetiyle farkli (veya esit) olsa bile
@@ -331,15 +330,14 @@ export async function autoZincir(
     // Aynı oturumda art arda 2 sipariş açılırsa 2. sipariş için acikTedPool
     // 1. siparişin yeni tedarikini görür ve net=0 → çift tedarik önlenir.
     try {
-      const { data: freshTed } = await supabase.from('uys_tedarikler').select('*').eq('geldi', false)
-      if (freshTed && freshTed.length >= 0) {
-        freshTedarikler = freshTed.map((r: any): Tedarik => ({
-          id: r.id, malkod: r.malkod || '', malad: r.malad || '', miktar: r.miktar || 0,
-          birim: r.birim || 'Adet', orderId: r.order_id || '', siparisNo: r.siparis_no || '',
-          durum: r.durum || '', geldi: !!r.geldi, teslimTarihi: r.teslim_tarihi || '',
-          tarih: r.tarih || '', not: r.not_ || '', autoOlusturuldu: !!r.auto_olusturuldu,
-        }))
-      }
+      const { data: freshTedRaw } = await fetchAll<any>('uys_tedarikler')
+      const freshTed = (freshTedRaw ?? []).filter((t: any) => !t.geldi)
+      freshTedarikler = freshTed.map((r: any): Tedarik => ({
+        id: r.id, malkod: r.malkod || '', malad: r.malad || '', miktar: r.miktar || 0,
+        birim: r.birim || 'Adet', orderId: r.order_id || '', siparisNo: r.siparis_no || '',
+        durum: r.durum || '', geldi: !!r.geldi, teslimTarihi: r.teslim_tarihi || '',
+        tarih: r.tarih || '', not: r.not_ || '', autoOlusturuldu: !!r.auto_olusturuldu,
+      }))
     } catch { /* stale fallback */ }
     // v16.32 IE #14 Faz A Slice 3 — cache wrap. Cache HIT/MISS otomatik.
     mrpSonuc = await hesaplaMRPCached(
@@ -457,9 +455,10 @@ export async function autoZincir(
       // Kesim WO'larının tümü planlı mı kontrol et
       const { data: kesimWOs } = await supabase.from('uys_work_orders')
         .select('id,ie_no').eq('order_id', orderId).not('durum', 'in', '(iptal,tamamlandi)').ilike('op_ad', '%KES%')
-      const { data: planRows } = await supabase.from('uys_kesim_planlari').select('satirlar').not('durum', 'eq', 'iptal')
+      const { data: planRowsRaw } = await fetchAll<any>('uys_kesim_planlari')
+      const planRows = (planRowsRaw ?? []).filter((k: any) => k.durum !== 'iptal')
       const planliIds = new Set<string>()
-      planRows?.forEach((p: any) => (p.satirlar || []).forEach((s: any) =>
+      planRows.forEach((p: any) => (p.satirlar || []).forEach((s: any) =>
         (s.kesimler || []).forEach((k: any) => { if (k.woId) planliIds.add(k.woId); if (k.ieNo) planliIds.add(k.ieNo) })
       ))
       const allPlanned = !kesimWOs?.length || kesimWOs.every(w => planliIds.has(w.id) || planliIds.has(w.ie_no))

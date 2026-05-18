@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { useProductionStore, useWarehouseStore, loadAllStores } from '@/store'
-import { supabase } from '@/lib/supabase'
+import { supabase, fetchAll } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm, showPrompt } from '@/lib/prompt'
@@ -390,9 +390,9 @@ export function Materials() {
       if (!rows.length) { toast.error('Excel boş'); return }
       let created = 0; let updated = 0; let errors = 0; let cascadeBom = 0; let cascadeRc = 0; let cascadeWo = 0
       const [{ data: freshBom }, { data: freshRc }, { data: freshWo }] = await Promise.all([
-        supabase.from('uys_bom_trees').select('*'),
-        supabase.from('uys_recipes').select('*'),
-        supabase.from('uys_work_orders').select('*'),
+        fetchAll('uys_bom_trees'),
+        fetchAll('uys_recipes'),
+        fetchAll('uys_work_orders'),
       ])
       for (const row of rows) {
         const kod = String(row['Kod'] || row['kod'] || row['Malzeme Kodu'] || '').trim()
@@ -863,9 +863,9 @@ function MatFormModal({ initial, operations, tipler: _tipler, hmTipler, onClose,
     if (!adChanged && !kodChanged) return
     let bomC = 0, rcC = 0, woC = 0, abC = 0, kpC = 0, stkC = 0, fireC = 0, logC = 0
     const [{ data: freshBom }, { data: freshRc }, { data: freshWo }] = await Promise.all([
-      supabase.from('uys_bom_trees').select('*'),
-      supabase.from('uys_recipes').select('*'),
-      supabase.from('uys_work_orders').select('*'),
+      fetchAll('uys_bom_trees'),
+      fetchAll('uys_recipes'),
+      fetchAll('uys_work_orders'),
     ])
     for (const bt of (freshBom || [])) {
       const btRows = bt.rows || []

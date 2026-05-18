@@ -66,7 +66,7 @@ export async function listBildirimler(opts: ListeOpts = {}): Promise<Bildirim[]>
   if (opts.refId) q = q.eq('ref_id', opts.refId)
   if (opts.refTip) q = q.eq('ref_tip', opts.refTip)
   if (opts.hedefKullaniciId) q = q.eq('hedef_kullanici_id', opts.hedefKullaniciId)
-  if (opts.limit !== undefined) q = q.limit(opts.limit)
+  q = q.limit(opts?.limit ?? 200)
 
   const { data, error } = await q
   wrap(error, { table: TABLO, op: 'select' })
