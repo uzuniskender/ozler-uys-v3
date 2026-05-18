@@ -60,6 +60,7 @@ const STORE_WHITELIST = new Set([
   'uys_ie_hazirlama_kalemler',  // v16.83 — İE kalemleri; IeHazirlama.tsx kendi yönetiyor.
   'uys_ie_hazirlama_log',       // v16.83 — İE audit log; Tip C, store'a girmez.
   'uys_ie_log',                 // v16.83 — İE event log; Tip C, store'a girmez.
+  'uys_stok_hareketler_arsiv', // v17.16+ — Stok hareket arşiv tablosu; büyük, store'a girmez.
 ])
 
 // Kodda var ama migration henüz uygulanmamış tablolar (planlı, yazım hatası değil).
@@ -94,6 +95,8 @@ const DATA_MGMT_WHITELIST = new Set([
 
   // v17.07 — WMS Faz 1
   'uys_lokasyonlar',             // v17.07 — Depo lokasyon tanımları; Faz 2'de DataManagement'a eklenir.
+
+  'uys_stok_hareketler_arsiv', // v17.16+ — Stok hareket arşiv tablosu; arşiv, backup'a girmez.
 ])
 
 // ═══════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 import type { Sevk, Material } from '@/types'
-import { newPdf, ozlerHeader, ozlerFooter } from '@/lib/pdf-utils'
+import { newPdf, ozlerHeader, ozlerFooter } from '.'
 
 const HEAD_DARK: [number, number, number] = [45, 45, 52]
 const HEAD_SUB:  [number, number, number] = [65, 65, 78]
@@ -30,7 +30,6 @@ export async function generateSevkiyatPDF(sevkler: Sevk[], materials: Material[]
     const kalemler = s.kalemler || []
     const topAdet = kalemler.reduce((a, k) => a + (k.miktar || 0), 0)
 
-    // Başlık satırı
     d.autoTable({
       startY: y,
       margin: { left: margin, right: margin },
@@ -43,7 +42,6 @@ export async function generateSevkiyatPDF(sevkler: Sevk[], materials: Material[]
     })
     y = d.lastAutoTable.finalY + 1
 
-    // Kalemler tablosu
     d.autoTable({
       startY: y,
       margin: { left: margin, right: margin },
@@ -69,7 +67,6 @@ export async function generateSevkiyatPDF(sevkler: Sevk[], materials: Material[]
     })
     y = d.lastAutoTable.finalY + (i < sevkler.length - 1 ? 7 : 4)
 
-    // Sonraki sevkiyat için yer yoksa yeni sayfa
     const pageH = d.internal.pageSize.getHeight()
     if (i < sevkler.length - 1 && y > pageH - 65) {
       d.addPage()

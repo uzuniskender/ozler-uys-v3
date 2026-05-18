@@ -234,17 +234,28 @@ export function Shipment() {
     const seciliSevkler = filtered.filter(s => selected.has(s.id))
     if (!seciliSevkler.length) return
     try {
-      const { generateSevkiyatPDF } = await import('@/lib/sevkiyat-pdf')
+      const { generateSevkiyatPDF } = await import('@/lib/pdf/sevkiyat-pdf')
       await generateSevkiyatPDF(seciliSevkler, materials)
     } catch (e: any) {
       toast.error('Sevkiyat PDF oluşturulamadı: ' + (e?.message || 'bilinmeyen hata'))
     }
   }
 
+  async function indirIrsaliyePDF() {
+    const seciliSevkler = filtered.filter(s => selected.has(s.id))
+    if (!seciliSevkler.length) return
+    try {
+      const { generateIrsaliyePDF } = await import('@/lib/pdf/irsaliye-pdf')
+      await generateIrsaliyePDF(seciliSevkler, materials)
+    } catch (e: any) {
+      toast.error('İrsaliye PDF oluşturulamadı: ' + (e?.message || 'bilinmeyen hata'))
+    }
+  }
+
   async function indirSevkBelgePDF(s: typeof sevkler[number]) {
     try {
       const ord = orders.find(o => o.id === s.orderId)
-      const { generateSevkBelgePDF } = await import('@/lib/sevk-belge-pdf')
+      const { generateSevkBelgePDF } = await import('@/lib/pdf/sevk-belge-pdf')
       await generateSevkBelgePDF({ sevk: s, order: ord })
       const sevkNo = (s as any).sevkNo || (s as any).sevk_no || s.id
       toast.success(sevkNo + ' Sevk Belgesi indirildi')
@@ -311,6 +322,12 @@ export function Shipment() {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 hover:text-white rounded-lg text-xs font-semibold"
           >
             <FileText size={13} /> Sevkiyat PDF
+          </button>
+          <button
+            onClick={indirIrsaliyePDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 hover:text-white rounded-lg text-xs font-semibold"
+          >
+            <FileText size={13} /> İrsaliye PDF
           </button>
           <span className="flex-1" />
           <button onClick={() => setSelected(new Set())} className="text-[10px] text-zinc-500 hover:text-white">Seçimi Kaldır</button>

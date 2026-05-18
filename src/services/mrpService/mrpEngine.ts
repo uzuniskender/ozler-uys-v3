@@ -21,7 +21,6 @@
 import type { Recipe, StokHareket, Tedarik, Material } from '@/types'
 import { getStok } from '@/lib/hammaddeHesap'
 import { hesaplaMRP } from './mrp'
-export { hesaplaMRPv2 } from './mrp'
 
 // ─── Tip tanımları ────────────────────────────────────────────────────────────
 

@@ -307,7 +307,7 @@ export function Reports() {
     try {
       const [{ default: html2canvas }, { newPdf, ozlerHeader, ozlerFooter }] = await Promise.all([
         import('html2canvas'),
-        import('@/lib/pdf-utils'),
+        import('@/lib/pdf'),
       ])
       const canvas = await html2canvas(contentRef.current, {
         scale: 1.5,

@@ -1,5 +1,5 @@
 import type { Problem } from '@/types'
-import { newPdf, ozlerHeader, ozlerFooter } from '@/lib/pdf-utils'
+import { newPdf, ozlerHeader, ozlerFooter } from '.'
 
 function fmtDate(iso: string): string {
   if (!iso) return '—'
@@ -58,7 +58,6 @@ export async function print8DPdf(p: Problem): Promise<void> {
     altBaslik: `Oluşturma: ${fmtDT(p.olusturma)}`,
   })
 
-  // D1 — Ekip + Durum/Tarih meta satırı
   d.autoTable({
     startY: y,
     margin: { left: margin, right: margin },
@@ -80,7 +79,6 @@ export async function print8DPdf(p: Problem): Promise<void> {
   y = section(d, y, margin, 'D4 — Kök Neden Analizi', p.kokNeden || '—', 20)
   y = section(d, y, margin, 'D5 — Kalıcı Düzeltici Aksiyon', p.kaliciCozum || '—', 20)
 
-  // D6 — D7 yan yana
   d.autoTable({
     startY: y,
     margin: { left: margin, right: margin },
@@ -94,7 +92,6 @@ export async function print8DPdf(p: Problem): Promise<void> {
   })
   y = d.lastAutoTable.finalY + 3
 
-  // D8 — Kapanış
   const d8 = p.durum === 'Kapandı'
     ? `Kapatma Tarihi: ${p.kapatmaTarihi ? fmtDate(p.kapatmaTarihi) : '—'} · Kapatan: ${p.sonDegistiren || '—'}\n\nProblem çözüldü ve kapatıldı.`
     : `Durum: ${p.durum} — Problem henüz kapatılmamış.\n`

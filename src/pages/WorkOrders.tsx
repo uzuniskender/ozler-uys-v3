@@ -347,7 +347,7 @@ export function WorkOrders() {
     try {
       const ord = orders.find(o => o.id === w.orderId)
       const woLogs = logs.filter(l => l.woId === w.id)
-      const { generateIsEmriPDF } = await import('@/lib/is-emri-pdf')
+      const { generateIsEmriPDF } = await import('@/lib/pdf/is-emri-pdf')
       await generateIsEmriPDF({ workOrder: w, order: ord, logs: woLogs })
       toast.success(w.ieNo + ' PDF indirildi')
     } catch (e: any) {

@@ -1,26 +1,7 @@
-/**
- * Sevk Belgesi PDF — v16.30 (Faz 3, profesyonel iç belge yaklaşımı)
- *
- * Bu belge YASAL DEĞİLDİR — yasal e-İrsaliye DİA üzerinden GİB'e gönderilir.
- * Bu PDF iç saha kullanım, ISO audit kanıt, şoföre verilen yardımcı belge amaçlıdır.
- * Bu mimari karar separation of concerns ilkesine dayanır:
- *   - DİA + MAVVO = ticari yasal evraklar (e-Fatura, e-İrsaliye)
- *   - UYS v3      = üretim/saha yönetimi (iş emri, kesim, MRP, iç sevk takip)
- *
- * İçerik:
- *  - Header: Özler bilgileri + "SEVK BELGESİ" + sevk_no
- *  - Sipariş bilgisi (sipariş no, müşteri, sevk tarihi)
- *  - Taşıma bilgisi (taşıyıcı, plaka)
- *  - Kalemler tablosu (sıra, malkod, malad, miktar, birim)
- *  - Notlar (varsa)
- *  - 3 İmza alanı (Gönderen / Şoför / Teslim Eden)
- *  - Disclaimer footer (yasal evrak değildir)
- */
-
 import type { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
 import type { Sevk, Order } from '@/types'
-import { newPdf, ozlerHeader, ozlerFooter, trTarih, trSayi, kisaltma } from './pdf-utils'
+import { newPdf, ozlerHeader, ozlerFooter, trTarih, trSayi, kisaltma } from '.'
 
 interface JsPDFWithAutoTable extends jsPDF {
   autoTable: (opts: any) => any
@@ -29,8 +10,7 @@ interface JsPDFWithAutoTable extends jsPDF {
 
 export interface SevkBelgePDFInput {
   sevk: Sevk
-  order?: Order // varsa sipariş başlık bilgisi (musteri, siparisNo, vb için ekstra zenginleştirme)
-  // Sevk üzerinde extra alanlar (DB'de var ama TS tipinde olmayabilir): sevkNo, tasiyici, plaka, musteriKod
+  order?: Order
   ekstraAlanlar?: {
     sevkNo?: string
     tasiyici?: string
@@ -42,7 +22,6 @@ export interface SevkBelgePDFInput {
 
 export async function generateSevkBelgePDF(input: SevkBelgePDFInput): Promise<void> {
   const { sevk: s, order, ekstraAlanlar = {} } = input
-  // Tip dışı alanları sevkin kendisinden de okuyalım (legacy + extras desteği)
   const sevkAny = s as any
   const sevkNo = ekstraAlanlar.sevkNo || sevkAny.sevkNo || sevkAny.sevk_no || s.id
   const tasiyici = ekstraAlanlar.tasiyici || sevkAny.tasiyici || ''
@@ -52,13 +31,11 @@ export async function generateSevkBelgePDF(input: SevkBelgePDFInput): Promise<vo
 
   const doc = (await newPdf()) as JsPDFWithAutoTable
 
-  // ═══ 1) HEADER ═══
   let y = ozlerHeader(doc, {
     baslik: 'SEVK BELGESİ',
     altBaslik: sevkNo,
   })
 
-  // ═══ 2) SİPARİŞ + MÜŞTERİ + TARİH KARTI (sol blok) + TAŞIMA (sağ blok) — yan yana 2 sütun ═══
   doc.setFontSize(10)
   doc.setFont('DejaVuSans', 'normal')
 
@@ -78,7 +55,6 @@ export async function generateSevkBelgePDF(input: SevkBelgePDFInput): Promise<vo
     ['Belge Türü', 'İç Sevk Belgesi'],
   ]
 
-  // İki tabloyu yan yana: pageWidth'i ikiye böl
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 15
   const sutunGenis = (pageWidth - 2 * margin - 5) / 2
@@ -117,7 +93,6 @@ export async function generateSevkBelgePDF(input: SevkBelgePDFInput): Promise<vo
 
   y = Math.max(solBitis, sagBitis) + 6
 
-  // ═══ 3) KALEMLER TABLOSU ═══
   doc.setFontSize(11)
   doc.text('Kalemler', margin, y)
   y += 4
@@ -156,7 +131,6 @@ export async function generateSevkBelgePDF(input: SevkBelgePDFInput): Promise<vo
     y += 8
   }
 
-  // ═══ 4) NOTLAR ═══
   if (s.not) {
     doc.setFontSize(10)
     doc.text('Notlar', margin, y)
@@ -164,16 +138,13 @@ export async function generateSevkBelgePDF(input: SevkBelgePDFInput): Promise<vo
     doc.setFontSize(9)
     const lines = doc.splitTextToSize(s.not, pageWidth - 2 * margin)
     doc.text(lines, margin, y)
-    y += lines.length * 4 + 4
   }
 
-  // ═══ 5) FOOTER (3 imza + disclaimer) ═══
   ozlerFooter(doc, {
     imzaLabels: ['Gönderen (Kaşe + İmza)', 'Şoför (İmza)', 'Teslim Eden (İmza)'],
     disclaimer: 'Resmi sevk irsaliyesi e-İrsaliye sisteminden basılır. Bu belge iç takip, saha kullanımı ve ISO audit kanıt amaçlıdır.',
   })
 
-  // ═══ 6) İNDİR ═══
   const dosyaAd = `Sevk-${(sevkNo || s.id).replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`
   doc.save(dosyaAd)
 }

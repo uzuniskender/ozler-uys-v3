@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { explodeBOM, aggregateBOM, netting, hesaplaMRPv2 } from '@/services/mrpService/mrpEngine'
+import { explodeBOM, aggregateBOM, netting } from '@/services/mrpService/mrpEngine'
+import { hesaplaMRPv2 } from '@/services/mrpService/mrp'
 import type { Recipe, StokHareket, Tedarik } from '@/types'
 import type { HesaplaMRPParams } from '@/services/mrpService/mrp'
 

@@ -1,24 +1,8 @@
-/**
- * İş Emri PDF — v16.29
- *
- * Operatöre verilen üretim emir belgesi. ISO 9001/45001 audit'lerinde delil olarak kullanılır.
- *
- * İçerik:
- *  - Header: Özler bilgileri + "İŞ EMRİ" + IE-NO
- *  - Sipariş ve mamul özet kartı (musteri, sipariş no, mamul kod/ad, hedef adet, termin)
- *  - Operasyon bilgisi (op kod/ad, istasyon kod/ad, kırno, hazırlık+işlem süresi)
- *  - Hammadde reçetesi tablosu (malkod, malad, miktar)
- *  - Üretim sonuçları (üretilen, fire, kalan) — ProductionLog'lardan hesap
- *  - Notlar
- *  - Footer: tek imza (Düzenleyen)
- */
-
 import type { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
 import type { WorkOrder, Order, ProductionLog } from '@/types'
-import { newPdf, ozlerHeader, ozlerFooter, trTarih, trSayi, kisaltma } from './pdf-utils'
+import { newPdf, ozlerHeader, ozlerFooter, trTarih, trSayi, kisaltma } from '.'
 
-// jspdf-autotable TypeScript module augmentation (autoTable instance methodu için)
 interface JsPDFWithAutoTable extends jsPDF {
   autoTable: (opts: any) => any
   lastAutoTable: { finalY: number }
@@ -26,21 +10,19 @@ interface JsPDFWithAutoTable extends jsPDF {
 
 export interface IsEmriPDFInput {
   workOrder: WorkOrder
-  order?: Order // varsa sipariş başlık bilgisi (bağımsız İE'lerde yok)
-  logs: ProductionLog[] // bu IE için tüm üretim logları
+  order?: Order
+  logs: ProductionLog[]
 }
 
 export async function generateIsEmriPDF(input: IsEmriPDFInput): Promise<void> {
   const { workOrder: w, order, logs } = input
   const doc = (await newPdf()) as JsPDFWithAutoTable
 
-  // ═══ 1) HEADER ═══
   let y = ozlerHeader(doc, {
     baslik: 'İŞ EMRİ',
     altBaslik: w.ieNo || w.id,
   })
 
-  // ═══ 2) SİPARİŞ + MAMUL KARTI ═══
   doc.setFontSize(10)
   doc.setFont('DejaVuSans', 'normal')
 
@@ -70,7 +52,6 @@ export async function generateIsEmriPDF(input: IsEmriPDFInput): Promise<void> {
   })
   y = doc.lastAutoTable.finalY + 6
 
-  // ═══ 3) OPERASYON BİLGİSİ ═══
   doc.setFontSize(11)
   doc.text('Operasyon', 15, y)
   y += 4
@@ -92,7 +73,6 @@ export async function generateIsEmriPDF(input: IsEmriPDFInput): Promise<void> {
   })
   y = doc.lastAutoTable.finalY + 6
 
-  // ═══ 4) HAMMADDE REÇETESİ ═══
   doc.setFontSize(11)
   doc.text('Hammadde Reçetesi', 15, y)
   y += 4
@@ -125,7 +105,6 @@ export async function generateIsEmriPDF(input: IsEmriPDFInput): Promise<void> {
     y += 8
   }
 
-  // ═══ 5) ÜRETİM SONUÇLARI (logs varsa) ═══
   const ueretilen = logs.reduce((s, l) => s + (Number(l.qty) || 0), 0)
   const fire = logs.reduce((s, l) => s + (Number(l.fire) || 0), 0)
   const kalan = Math.max(0, (w.hedef || 0) - ueretilen)
@@ -150,7 +129,6 @@ export async function generateIsEmriPDF(input: IsEmriPDFInput): Promise<void> {
   })
   y = doc.lastAutoTable.finalY + 6
 
-  // ═══ 6) NOT ALANI ═══
   if (w.not) {
     doc.setFontSize(10)
     doc.text('Notlar', 15, y)
@@ -158,16 +136,13 @@ export async function generateIsEmriPDF(input: IsEmriPDFInput): Promise<void> {
     doc.setFontSize(9)
     const lines = doc.splitTextToSize(w.not, 180)
     doc.text(lines, 15, y)
-    y += lines.length * 4 + 4
   }
 
-  // ═══ 7) FOOTER ═══
   ozlerFooter(doc, {
-    imzaIki: false, // İş Emri için tek imza yeterli (Düzenleyen — planlamacı)
+    imzaIki: false,
     notlar: 'Bu belge UYS v3 üretim yönetim sistemi tarafından otomatik oluşturulmuştur. Saha kayıtları DB ile sürekli senkronize edilir.',
   })
 
-  // ═══ 8) İNDİR ═══
   const dosyaAd = `IE-${(w.ieNo || w.id).replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`
   doc.save(dosyaAd)
 }
