@@ -596,7 +596,7 @@ export function hesaplaMRPv2(params: HesaplaMRPParams): MRPRow[] {
 //   "Tüm ihtiyaçlar karşılanmış" mesajını gösterir.
 export async function mrpTedarikOlustur(
   orderId: string, siparisNo: string, mrpRows: MRPRow[],
-  opts?: { mrpCalculationId?: string; auto?: boolean }
+  opts?: { mrpCalculationId?: string; auto?: boolean; createdIds?: string[] }
 ): Promise<number> {
   const ihtiyaclar = mrpRows.filter(r => r.net > 0)
   if (!ihtiyaclar.length) return 0
@@ -655,8 +655,9 @@ export async function mrpTedarikOlustur(
       kismiLog.push(`${r.malkod}@${termin || '-'}: ihtiyaç ${r.net}, mevcut ${mevcut}, fark ${fark}`)
     }
 
+    const tedId = uid()
     await supabase.from('uys_tedarikler').insert({
-      id: uid(), malkod: r.malkod, malad: r.malad, miktar: fark, birim: r.birim,
+      id: tedId, malkod: r.malkod, malad: r.malad, miktar: fark, birim: r.birim,
       order_id: orderId, siparis_no: siparisNo,
       durum: 'bekliyor', geldi: false, tarih: today(), teslim_tarihi: termin || null,
       not_: auto ? 'MRP otomatik' : 'MRP',
@@ -664,6 +665,7 @@ export async function mrpTedarikOlustur(
       mrp_calculation_id: calcId,
     })
     kayitliSay++
+    opts?.createdIds?.push(tedId)
 
     // Lookup'ı güncelle — aynı malkod + termin tekrar gelirse çift sayım olmasın
     mevcutMap[key] = mevcut + fark

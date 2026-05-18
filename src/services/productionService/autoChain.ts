@@ -161,6 +161,7 @@ export async function autoZincir(
 
   // Rollback izleme: bu zincirde oluşturulan kayıtların ID'leri
   const kesimPlanIds: string[] = []
+  const tedarikIds: string[] = []
   let calcId: string | null = null
   // freshTedarikler ADIM 3 ve ADIM 4 arasında paylaşılır (dış scope'ta tanımlanır)
   let freshTedarikler: Tedarik[] = tedarikler
@@ -177,10 +178,14 @@ export async function autoZincir(
         .eq('rezerv_order_id', orderId)
       cleaned.push('rezervler')
     } catch (_) {}
-    // 1. Tedarikler (bugün, bu sipariş için otomatik oluşturulanlar)
+    // 1. Tedarikler — ID izliyorsak exact delete, yoksa tarih+order fallback
     try {
-      await supabase.from('uys_tedarikler').delete()
-        .eq('order_id', orderId).eq('tarih', today()).eq('auto_olusturuldu', true)
+      if (tedarikIds.length > 0) {
+        await supabase.from('uys_tedarikler').delete().in('id', tedarikIds)
+      } else {
+        await supabase.from('uys_tedarikler').delete()
+          .eq('order_id', orderId).eq('tarih', today()).eq('auto_olusturuldu', true)
+      }
       cleaned.push('tedarikler')
     } catch {}
     // 2. MRP hesaplama snapshot
@@ -434,6 +439,7 @@ export async function autoZincir(
     tedCount = await mrpTedarikOlustur(orderId, ord?.siparisNo || '', filteredRows, {
       mrpCalculationId: calcId || undefined,
       auto: true,
+      createdIds: tedarikIds,
     })
     adimlar.push(tedCount > 0 ? `✅ ${tedCount} tedarik oluşturuldu` : '✅ Tüm malzemeler yeterli')
   } catch (e: any) {
