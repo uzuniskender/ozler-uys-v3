@@ -86,22 +86,28 @@ BEGIN
     END IF;
 
     -- b-c) Bakiye konsolidasyonu: her malkod için net hesapla ve kaydet
+    --      Semantik: buildStokMap (hammaddeHesap.ts) ile birebir aynı
+    --        giris → +miktar
+    --        cikis / bar_acilis / rezerv → -miktar  (bar_acilis stoku düşürür)
+    --        diğer → 0 (görmezden gel)
     FOR v_malkod, v_malad, v_net IN
         SELECT
             malkod,
             -- En son görülen ad'ı al (ORDER BY tarih DESC → first_value)
             (array_agg(malad ORDER BY tarih DESC))[1],
             SUM(CASE
-                WHEN tip IN ('giris', 'bar_acilis') THEN  miktar
-                ELSE                                      -miktar
+                WHEN tip = 'giris'                        THEN  miktar
+                WHEN tip IN ('cikis','bar_acilis','rezerv') THEN -miktar
+                ELSE 0
             END)
         FROM public.uys_stok_hareketler
         WHERE tarih < kesim_tarihi
           AND test_run_id IS NULL
         GROUP BY malkod
         HAVING SUM(CASE
-                WHEN tip IN ('giris', 'bar_acilis') THEN  miktar
-                ELSE                                      -miktar
+                WHEN tip = 'giris'                        THEN  miktar
+                WHEN tip IN ('cikis','bar_acilis','rezerv') THEN -miktar
+                ELSE 0
                END) <> 0
     LOOP
         INSERT INTO public.uys_stok_hareketler (

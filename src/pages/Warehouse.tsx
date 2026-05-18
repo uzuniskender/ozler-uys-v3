@@ -48,6 +48,7 @@ export function Warehouse() {
   const [secilenKritik, setSecilenKritik] = useState<Set<string>>(new Set())
   const [showKritik, setShowKritik] = useState(true)
   const [arsivleniyor, setArsivleniyor] = useState(false)
+  const [snapshotAliniyor, setSnapshotAliniyor] = useState(false)
 
   // Malzeme tipleri
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
@@ -198,6 +199,29 @@ export function Warehouse() {
     }
   }
 
+  async function snapshotAl() {
+    const tarih = today()
+    const onay = await showConfirm(
+      `${tarih} tarihi için net stok snapshot alınacak.\n\n` +
+      `• Aynı tarih için mevcut snapshot güncellenir (üzerine yazılır).\n` +
+      `• Tüm malzemelerin net stoku uys_stok_snapshot tablosuna kaydedilir.\n\n` +
+      `Devam edilsin mi?`
+    )
+    if (!onay) return
+
+    setSnapshotAliniyor(true)
+    try {
+      const { data, error } = await supabase.rpc('al_stok_snapshot', {
+        snapshot_tarihi: tarih,
+      })
+      if (error) { toast.error('Snapshot başarısız: ' + error.message); return }
+      const result = data as { snapshot_tarihi: string; malzeme_sayisi: number }
+      toast.success(`${result.snapshot_tarihi} snapshot alındı · ${result.malzeme_sayisi} malzeme`)
+    } finally {
+      setSnapshotAliniyor(false)
+    }
+  }
+
   // Stok Excel Import
   function importExcel() {
     const input = document.createElement('input')
@@ -248,6 +272,7 @@ export function Warehouse() {
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           {can('stok_onarim') && <button onClick={() => stokOnar()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-amber" title="Negatif stokları sıfırla">🔧 Onar</button>}
           {can('stok_arsivle') && <button onClick={arsivle} disabled={arsivleniyor} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-red disabled:opacity-50" title="1 yıldan eski hareketleri arşivle">{arsivleniyor ? '⏳ Arşivleniyor…' : '🗄 Arşivle'}</button>}
+          {can('stok_snapshot') && <button onClick={snapshotAl} disabled={snapshotAliniyor} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-blue-400 disabled:opacity-50" title="Anlık net stoku uys_stok_snapshot tablosuna kaydet">{snapshotAliniyor ? '⏳ Kaydediliyor…' : '📸 Snapshot Al'}</button>}
           <button onClick={async () => {
             const lines = await showPrompt('Toplu stok girişi (her satır: malzeme_kodu,miktar)', 'H-001,100')
             if (!lines) return
@@ -271,13 +296,14 @@ export function Warehouse() {
       </div>
 
       <div className="flex gap-1 mb-4">
-        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
+        <select value={tab} onChange={e => setTab(e.target.value as 'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'|'lokasyonlar')} className="px-3 py-2 bg-bg-2 border border-border rounded-lg text-xs text-zinc-300">
           <option value="stok">Anlık Stok</option>
           <option value="hareketler">Hareketler</option>
           <option value="sayim">Stok Sayım</option>
           <option value="acikBarlar">Açık Bar Havuzu</option>
           <option value="hurda">Hurdaya Gönderilen</option>
           <option value="tuketildi">Tüketilmiş Bar</option>
+          <option value="lokasyonlar">Lokasyonlar</option>
         </select>
       </div>
 
@@ -391,7 +417,7 @@ export function Warehouse() {
       <div className="bg-bg-2 border border-border rounded-lg overflow-hidden max-h-[65vh] overflow-y-auto">
         {tab === 'stok' && (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-right px-3 py-2.5 text-orange-400">İhtiyaç</th><th className="text-right px-3 py-2.5 text-cyan-400">Fark</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th><th className="text-right px-3 py-2.5">Aksiyon</th></tr></thead>
+            <thead className="sticky top-0 bg-bg-2"><tr className="border-b border-border text-zinc-500"><th className="text-left px-4 py-2.5">Kod</th><th className="text-left px-4 py-2.5">Malzeme</th><th className="text-left px-4 py-2.5">Tip</th><th className="text-right px-4 py-2.5">Stok</th><th className="text-right px-3 py-2.5 text-orange-400">İhtiyaç</th><th className="text-right px-3 py-2.5 text-cyan-400">Fark</th><th className="text-left px-3 py-2.5">Birim</th><th className="text-right px-3 py-2.5">Min</th><th className="text-left px-3 py-2.5 text-cyan-400/70">Lokasyon</th><th className="text-right px-3 py-2.5">Aksiyon</th></tr></thead>
             <tbody>
               {filteredStok.map(s => {
                 const mat = materials.find(m => m.kod === s.malkod)
@@ -415,6 +441,17 @@ export function Warehouse() {
                   </td>
                   <td className="px-3 py-1.5 text-zinc-600 text-[10px]">{mat?.birim || 'Ad'}</td>
                   <td className="px-3 py-1.5 text-right font-mono text-zinc-600 text-[10px]">{mat?.minStok || '—'}</td>
+                  <td className="px-3 py-1.5 text-[10px]">
+                    {mat && (mat.lokasyonKodu ? (
+                      <button onClick={() => setLokasyonAtaMalkod({ malkod: s.malkod, malad: s.malad, current: mat.lokasyonKodu || '' })}
+                        className="font-mono text-cyan-400 hover:underline" title="Lokasyon değiştir">
+                        {mat.lokasyonKodu}
+                      </button>
+                    ) : can('stok_giris') ? (
+                      <button onClick={() => setLokasyonAtaMalkod({ malkod: s.malkod, malad: s.malad, current: '' })}
+                        className="text-zinc-600 hover:text-accent">Ata</button>
+                    ) : <span className="text-zinc-700">—</span>)}
+                  </td>
                   <td className="px-3 py-1.5 text-right">
                     {kartYok && (
                       <a href="#/stok-log" className="px-2 py-0.5 bg-amber/10 border border-amber/30 text-amber rounded text-[10px] hover:bg-amber/20">
@@ -757,6 +794,66 @@ export function Warehouse() {
             </div>
           )
         })()}
+
+        {tab === 'lokasyonlar' && (
+          <div>
+            <div className="px-4 py-2 bg-bg-3/40 border-b border-border flex items-center justify-between">
+              <span className="text-[11px] text-zinc-500">{lokasyonlar.filter(l => l.aktif).length} aktif · {lokasyonlar.length} toplam lokasyon</span>
+              {can('stok_giris') && (
+                <button
+                  onClick={() => setLokasyonForm({ kod: '', ad: '', bolum: '', tip: 'raf', kapasite: '' })}
+                  className="flex items-center gap-1 px-2 py-1 bg-accent hover:bg-accent-hover text-white rounded text-[11px] font-semibold"
+                >
+                  <Plus size={11} /> Yeni Lokasyon
+                </button>
+              )}
+            </div>
+            {!lokasyonlar.length ? (
+              <div className="p-8 text-center text-zinc-500 text-xs">
+                Lokasyon kaydı yok. "Yeni Lokasyon" ile ekleyin.
+              </div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-bg-2">
+                  <tr className="border-b border-border text-zinc-500">
+                    <th className="text-left px-4 py-2.5">Kod</th>
+                    <th className="text-left px-4 py-2.5">Ad</th>
+                    <th className="text-left px-4 py-2.5">Bölüm</th>
+                    <th className="text-left px-4 py-2.5">Tip</th>
+                    <th className="text-right px-4 py-2.5">Kapasite</th>
+                    <th className="text-right px-4 py-2.5">Malzeme</th>
+                    <th className="text-right px-4 py-2.5 w-24">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lokasyonlar
+                    .filter(l => !search || (l.kod + l.ad + l.bolum).toLowerCase().includes(search.toLowerCase()))
+                    .map(l => {
+                      const malzemeSayisi = materials.filter(m => m.lokasyonKodu === l.kod).length
+                      return (
+                        <tr key={l.id} className={`border-b border-border/30 hover:bg-bg-3/30 ${!l.aktif ? 'opacity-50' : ''}`}>
+                          <td className="px-4 py-1.5 font-mono text-accent text-[11px]">{l.kod}</td>
+                          <td className="px-4 py-1.5 text-zinc-300">{l.ad || '—'}</td>
+                          <td className="px-4 py-1.5 text-zinc-500">{l.bolum || '—'}</td>
+                          <td className="px-4 py-1.5"><span className="px-1.5 py-0.5 rounded text-[9px] bg-bg-3 text-zinc-500">{l.tip}</span></td>
+                          <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{l.kapasite || '—'}</td>
+                          <td className="px-4 py-1.5 text-right font-mono text-zinc-300">{malzemeSayisi || '—'}</td>
+                          <td className="px-4 py-1.5 text-right">
+                            {can('stok_giris') && (
+                              <button
+                                onClick={() => setLokasyonForm({ id: l.id, kod: l.kod, ad: l.ad, bolum: l.bolum, tip: l.tip, kapasite: l.kapasite ? String(l.kapasite) : '' })}
+                                className="text-zinc-600 hover:text-accent text-[10px]"
+                              >Düzenle</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
       {detayHam && (
         <AcikBarHurdaModal
@@ -791,6 +888,25 @@ export function Warehouse() {
           currentUserAd={user?.username || ''}
           onClose={() => setCikisMalkod(null)}
           onSaved={() => { setCikisMalkod(null); loadOwn(); toast.success('Mamul cikis kaydedildi') }}
+        />
+      )}
+
+      {/* v17.07 — WMS Faz 1: Lokasyon ata + CRUD modallari */}
+      {lokasyonAtaMalkod && (
+        <LokasyonAtaModal
+          malkod={lokasyonAtaMalkod.malkod}
+          malad={lokasyonAtaMalkod.malad}
+          current={lokasyonAtaMalkod.current}
+          lokasyonlar={lokasyonlar}
+          onClose={() => setLokasyonAtaMalkod(null)}
+          onSaved={() => { setLokasyonAtaMalkod(null); loadOwn() }}
+        />
+      )}
+      {lokasyonForm !== null && (
+        <LokasyonFormModal
+          form={lokasyonForm}
+          onClose={() => setLokasyonForm(null)}
+          onSaved={() => { setLokasyonForm(null); loadOwn() }}
         />
       )}
     </div>
@@ -874,6 +990,124 @@ function StokGirisModal({ materials, onClose, onSaved }: {
           onClose={() => setShowMatSearch(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ═══ WMS FAZ 1 — LOKASYON MODALLARI — v17.07 ═══
+
+function LokasyonAtaModal({ malkod, malad, current, lokasyonlar, onClose, onSaved }: {
+  malkod: string; malad: string; current: string
+  lokasyonlar: import('@/types').Lokasyon[]
+  onClose: () => void; onSaved: () => void
+}) {
+  const [secilen, setSecilen] = useState(current || '')
+
+  async function save() {
+    const { error } = await supabase
+      .from('uys_malzemeler')
+      .update({ lokasyon_kodu: secilen || null })
+      .eq('kod', malkod)
+    if (error) { toast.error('Lokasyon atanamadı: ' + error.message); return }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <h2 className="text-base font-semibold mb-1">Lokasyon Ata</h2>
+        <p className="text-xs text-zinc-500 mb-4 font-mono">{malkod} — {malad}</p>
+        <div className="mb-4">
+          <label className="text-[11px] text-zinc-500 mb-1 block">Lokasyon</label>
+          <select value={secilen} onChange={e => setSecilen(e.target.value)}
+            className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+            <option value="">— Lokasyon yok —</option>
+            {lokasyonlar.filter(l => l.aktif).map(l => (
+              <option key={l.id} value={l.kod}>
+                {l.kod}{l.ad ? ` — ${l.ad}` : ''}{l.bolum ? ` (${l.bolum})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LokasyonFormModal({ form, onClose, onSaved }: {
+  form: { id?: string; kod: string; ad: string; bolum: string; tip: string; kapasite: string }
+  onClose: () => void; onSaved: () => void
+}) {
+  const [kod, setKod] = useState(form.kod)
+  const [ad, setAd] = useState(form.ad)
+  const [bolum, setBolum] = useState(form.bolum)
+  const [tip, setTip] = useState(form.tip)
+  const [kapasite, setKapasite] = useState(form.kapasite)
+
+  async function save() {
+    if (!kod.trim()) { toast.error('Kod zorunlu'); return }
+    const row = {
+      kod: kod.trim(), ad: ad.trim() || null,
+      bolum: bolum.trim() || null, tip: tip || 'raf',
+      kapasite: kapasite ? parseInt(kapasite) || null : null,
+    }
+    if (form.id) {
+      const { error } = await supabase.from('uys_lokasyonlar').update(row).eq('id', form.id)
+      if (error) { toast.error('Güncelleme başarısız: ' + error.message); return }
+    } else {
+      const { error } = await supabase.from('uys_lokasyonlar').insert({ id: uid(), ...row, aktif: true })
+      if (error) { toast.error('Oluşturma başarısız: ' + error.message); return }
+    }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-bg-1 border border-border rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <h2 className="text-base font-semibold mb-4">{form.id ? 'Lokasyon Düzenle' : 'Yeni Lokasyon'}</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Kod *</label>
+            <input value={kod} onChange={e => setKod(e.target.value)} placeholder="Örn: A-01-03"
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Ad</label>
+            <input value={ad} onChange={e => setAd(e.target.value)} placeholder="Opsiyonel"
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Bölüm</label>
+              <input value={bolum} onChange={e => setBolum(e.target.value)} placeholder="Örn: A Bölgesi"
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-1 block">Tip</label>
+              <select value={tip} onChange={e => setTip(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200">
+                <option value="raf">Raf</option>
+                <option value="zemin">Zemin</option>
+                <option value="dolap">Dolap</option>
+                <option value="palet">Palet</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-500 mb-1 block">Kapasite</label>
+            <input type="number" min={1} value={kapasite} onChange={e => setKapasite(e.target.value)} placeholder="Opsiyonel"
+              className="w-full px-3 py-2 bg-bg-2 border border-border rounded-lg text-sm text-zinc-200 focus:outline-none focus:border-accent" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 bg-bg-3 text-zinc-400 rounded-lg text-xs">İptal</button>
+          <button onClick={save} className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-xs font-semibold">Kaydet</button>
+        </div>
+      </div>
     </div>
   )
 }
