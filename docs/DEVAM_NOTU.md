@@ -19,9 +19,7 @@ Teknik: `bagimsiz=true` + recipe yok → stok bloku yok; `tipFilter` size=2 → 
 
 04–06 spec'leri (önceki oturumdan) da yeşil doğrulandı.
 
-### Bekleyen
-
-- **PROD index migration:** `sql/20260518_v17_16_performance_indexes.sql` TEST'te (`7c3efd9`), PROD için onay bekleniyor.
+- `20260518_v17_16_performance_indexes.sql` — TEST ✅ + PROD ✅
 
 ---
 
