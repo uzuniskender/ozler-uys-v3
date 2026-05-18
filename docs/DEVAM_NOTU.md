@@ -1,8 +1,35 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 18 Mayıs 2026
-**Versiyon:** v17.21
+**Versiyon:** v17.22
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
+
+---
+
+## 18 Mayıs 2026 — Rezervasyon Oturumu (v17.22)
+
+### Atomik Stok Rezervasyon Sistemi
+
+**Sorun:** İki eş zamanlı autoChain çağrısı aynı stoğu çifte tahsis edebiliyordu.
+**Çözüm:** DB seviyesinde advisory lock ile atomik rezervasyon.
+
+**Değişen dosyalar:**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `sql/20260518_v17_22_stok_rezervasyon.sql` | `chk_stok_tip` kısıtına 'rezerv' eklendi + `rezerv_et()` fonksiyonu |
+| `src/services/productionService/autoChain.ts` | ADIM 3.5 + rollback Adım 0 |
+| `src/types/rezervasyon.ts` | Yeni — StokRezervasyonu, RezervasyonDurumu tipleri |
+| `src/lib/permissions.ts` | stok_rezerv_ekle/iptal/goruntule key'leri |
+| `tests/e2e/specs/08-stok-rezervasyon.spec.ts` | 6 fixme test iskeleti |
+
+**DB:** TEST ✅ PROD ✅ (constraint + fonksiyon)
+**Build:** ✅ | **E2E:** 39/39 yeşil
+
+**Akış:**
+autoChain ADIM 3 (MRP tamam) → ADIM 3.5: her r.stok>0 için rezerv_et() RPC
+→ pg_advisory_xact_lock(malkod) → müsait stok kontrolü → uys_stok_hareketler INSERT
+→ Başarısız: rollback + rezerv temizleme + exception
 
 ---
 
