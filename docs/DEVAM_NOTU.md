@@ -1,8 +1,27 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 18 Mayıs 2026
-**Versiyon:** v17.20
+**Versiyon:** v17.21
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
+
+---
+
+## 18 Mayıs 2026 — Gece-2 Oturumu (v17.21)
+
+### E2E Test Genişletmesi
+
+**07-work-orders.spec.ts** (`fb55379`) — 3 test, 3/3 yeşil:
+1. İş Emirleri sayfası yüklenir, "Yeni İş Emri" butonu görünür
+2. DB bağımsız İE listede görünür, "Sipariş Dışı" rozeti doğrulanır
+3. Üretim girişi: WODetailModal → Kayıt Ekle → qty=hedef → ✅ Kaydet → h2 %100
+
+Teknik: `bagimsiz=true` + recipe yok → stok bloku yok; `tipFilter` size=2 → bagimsiz bypass; `collapsed=Set()` → gruplar açık; `onSaved` → `loadAllStores()` → pct güncellenir.
+
+04–06 spec'leri (önceki oturumdan) da yeşil doğrulandı.
+
+### Bekleyen
+
+- **PROD index migration:** `sql/20260518_v17_16_performance_indexes.sql` TEST'te (`7c3efd9`), PROD için onay bekleniyor.
 
 ---
 
