@@ -6,6 +6,18 @@
 
 ---
 
+## 18 Mayıs 2026 — MRP Unit Test Genişletmesi (v17.25)
+
+mrp.test.ts 9 → 15 test:
+- Multi-level BOM + ara YM stok netting
+- FIFO termin sırası stok paylaşımı  
+- Ortak hammadde çoklu reçete toplama
+
+Tüm beklenen değerler ilk seferinde doğru çıktı — mevcut davranış tutarlı.
+117/117 yeşil.
+
+---
+
 ## 18 Mayıs 2026 — Rollback Fix (v17.24)
 
 autoChain rollback tedarik silme riski giderildi.
