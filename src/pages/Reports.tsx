@@ -2015,6 +2015,27 @@ export function Reports() {
 
         const osFmtSaat = (dk: number) => Math.floor(dk / 60) + 's ' + (dk % 60) + 'dk'
 
+        // Haftalık chart — haftanın Pazartesi'ni key olarak kullan
+        const weekMonday = (ds: string) => {
+          const d = new Date(ds); const day = d.getDay() || 7
+          d.setDate(d.getDate() - day + 1); return d.toISOString().slice(0, 10)
+        }
+        const top5Opr = data.slice(0, 5)
+        const haftaDkMap: Record<string, Record<string, number>> = {}
+        data.forEach(opr => {
+          haftaDkMap[opr.ad] = {}
+          Object.values(opr.gunler).forEach(g => {
+            const hw = weekMonday(g.tarih)
+            haftaDkMap[opr.ad][hw] = (haftaDkMap[opr.ad][hw] || 0) + g.dk
+          })
+        })
+        const allWeeks = [...new Set(top5Opr.flatMap(o => Object.keys(haftaDkMap[o.ad] || {})))].sort().slice(-8)
+        const haftalikData = allWeeks.map(hw => {
+          const row: Record<string, string | number> = { hafta: hw.slice(5).replace('-', '.') }
+          top5Opr.forEach(o => { row[o.ad] = Math.round((haftaDkMap[o.ad]?.[hw] || 0) / 60 * 10) / 10 })
+          return row
+        })
+
         return (
           <div className="space-y-4">
             {/* Filtre */}
@@ -2072,6 +2093,37 @@ export function Reports() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* Haftalık çalışma saati — top 5 operatör, son 8 hafta */}
+                {haftalikData.length > 0 && (
+                  <div className="bg-bg-2 border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-semibold mb-3">
+                      Haftalık Çalışma Saati — Top {top5Opr.length} Operatör (son 8 hafta, saat)
+                    </h3>
+                    <ResponsiveContainer width="100%" height={230}>
+                      <BarChart data={haftalikData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+                        <XAxis dataKey="hafta" tick={{ fontSize: 9, fill: '#a1a1aa' }} />
+                        <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} unit="s" />
+                        <Tooltip
+                          contentStyle={{ background: '#1c1c24', border: '1px solid #3f3f46', fontSize: 11 }}
+                          formatter={(v: number, name: string) => [`${v}s`, name]}
+                        />
+                        {top5Opr.map((o, i) => (
+                          <Bar key={o.ad} dataKey={o.ad} stackId="a" fill={COLORS[i % COLORS.length]} name={o.ad} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                      {top5Opr.map((o, i) => (
+                        <div key={o.ad} className="flex items-center gap-1.5 cursor-pointer" onClick={() => setOsSecili(o.ad)}>
+                          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                          <span className="text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors">{o.ad}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Özet tablo */}
                 <div className="bg-bg-2 border border-border rounded-lg p-4">
