@@ -28,6 +28,7 @@ const stokInlineEditSchema = z.coerce.number().positive('Miktar sıfırdan büy�
 export function Warehouse() {
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const materials = useWarehouseStore(s => s.materials)
+  const lokasyonlar = useWarehouseStore(s => s.lokasyonlar)
   const loadOwn = useWarehouseStore(s => s.loadOwn)
   const acikBarlar = useProductionStore(s => s.acikBarlar)
   const workOrders = useProductionStore(s => s.workOrders)
@@ -36,7 +37,9 @@ export function Warehouse() {
   const { can, user } = useAuth()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'>('stok')
+  const [tab, setTab] = useState<'stok'|'hareketler'|'sayim'|'acikBarlar'|'hurda'|'tuketildi'|'lokasyonlar'>('stok')
+  const [lokasyonAtaMalkod, setLokasyonAtaMalkod] = useState<{ malkod: string; malad: string; current: string } | null>(null)
+  const [lokasyonForm, setLokasyonForm] = useState<{ id?: string; kod: string; ad: string; bolum: string; tip: string; kapasite: string } | null>(null)
   const [showGiris, setShowGiris] = useState(false)
   // v15.92 — mamul cikis modal state (2-asama akisi)
   const [cikisMalkod, setCikisMalkod] = useState<{ malkod: string; malad: string } | null>(null)
@@ -44,6 +47,7 @@ export function Warehouse() {
   const [detayHam, setDetayHam] = useState<string | null>(null)  // v15.34 — açık bar detay modal
   const [secilenKritik, setSecilenKritik] = useState<Set<string>>(new Set())
   const [showKritik, setShowKritik] = useState(true)
+  const [arsivleniyor, setArsivleniyor] = useState(false)
 
   // Malzeme tipleri
   const tipler = useMemo(() => [...new Set(materials.map(m => m.tip).filter(Boolean))].sort(), [materials])
@@ -158,6 +162,42 @@ export function Warehouse() {
     loadOwn(); toast.success(negatifler.length + ' malzeme düzeltildi')
   }
 
+  async function arsivle() {
+    const kesilmeTarihi = new Date()
+    kesilmeTarihi.setFullYear(kesilmeTarihi.getFullYear() - 1)
+    const kesilmeTarihiStr = kesilmeTarihi.toISOString().slice(0, 10)
+
+    const { count } = await supabase
+      .from('uys_stok_hareketler')
+      .select('*', { count: 'exact', head: true })
+      .lt('tarih', kesilmeTarihiStr)
+      .is('test_run_id', null)
+
+    if ((count ?? 0) === 0) { toast.info('Arşivlenecek kayıt yok (1 yıldan eski)'); return }
+
+    const onay = await showConfirm(
+      `${count} stok hareketi arşivlenecek (${kesilmeTarihiStr} öncesi).\n\n` +
+      `• Kayıtlar uys_stok_hareketler_arsiv tablosuna taşınır.\n` +
+      `• Her malzeme için bakiye konsolidasyonu yapılır — net stok KORUNUR.\n` +
+      `• Bu işlem geri alınamaz (sadece DB seviyesinde).\n\n` +
+      `Devam edilsin mi?`
+    )
+    if (!onay) return
+
+    setArsivleniyor(true)
+    try {
+      const { data, error } = await supabase.rpc('arsivle_stok_hareketleri', {
+        kesim_tarihi: kesilmeTarihiStr,
+      })
+      if (error) { toast.error('Arşivleme başarısız: ' + error.message); return }
+      const result = data as { arsivlendi: number; konsolide: number; kesim_tarihi: string }
+      toast.success(`${result.arsivlendi} kayıt arşivlendi · ${result.konsolide} malzeme konsolide edildi`)
+      loadOwn()
+    } finally {
+      setArsivleniyor(false)
+    }
+  }
+
   // Stok Excel Import
   function importExcel() {
     const input = document.createElement('input')
@@ -207,6 +247,7 @@ export function Warehouse() {
           <button onClick={importExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Upload size={13} /> Excel Yükle</button>
           <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-white"><Download size={13} /> Excel</button>
           {can('stok_onarim') && <button onClick={() => stokOnar()} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-amber" title="Negatif stokları sıfırla">🔧 Onar</button>}
+          {can('stok_arsivle') && <button onClick={arsivle} disabled={arsivleniyor} className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border rounded-lg text-xs text-zinc-400 hover:text-red disabled:opacity-50" title="1 yıldan eski hareketleri arşivle">{arsivleniyor ? '⏳ Arşivleniyor…' : '🗄 Arşivle'}</button>}
           <button onClick={async () => {
             const lines = await showPrompt('Toplu stok girişi (her satır: malzeme_kodu,miktar)', 'H-001,100')
             if (!lines) return
