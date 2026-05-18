@@ -168,6 +168,15 @@ export async function autoZincir(
   // ─── Rollback: başarıyla oluşturulan kayıtları sil, toast ile hata bildir ───
   async function rollback(failedStep: string) {
     const cleaned: string[] = []
+    // 0. Rezerv kayıtları (önce temizlenir)
+    try {
+      await supabase
+        .from('uys_stok_hareketler')
+        .delete()
+        .eq('tip', 'rezerv')
+        .eq('rezerv_order_id', orderId)
+      cleaned.push('rezervler')
+    } catch (_) {}
     // 1. Tedarikler (bugün, bu sipariş için otomatik oluşturulanlar)
     try {
       await supabase.from('uys_tedarikler').delete()
@@ -375,6 +384,25 @@ export async function autoZincir(
     // mrp_durum güncellemesi
     const yeniDurum = mrpSonuc.some(r => r.net > 0) ? 'eksik' : 'tamam'
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', orderId)
+
+    // ADIM 3.5: Atomik stok rezervasyonu (sadece tamam durumunda)
+    if (yeniDurum === 'tamam') {
+      const { test_run_id: aktifTestRunId = null } = withTestRunId({})
+      const rezervYapilacaklar = mrpSonuc.filter(r => r.stok > 0)
+      for (const r of rezervYapilacaklar) {
+        const { error: rezervHata } = await supabase.rpc('rezerv_et', {
+          p_malkod: r.malkod,
+          p_miktar: r.stok,
+          p_order_id: orderId,
+          p_wo_id: workOrders[0]?.id ?? orderId,
+          p_test_run_id: aktifTestRunId ?? null
+        })
+        if (rezervHata) {
+          await rollback('Stok rezervasyonu')
+          throw new Error(`Stok rezervasyonu başarısız (${r.malkod}): ${rezervHata.message}`)
+        }
+      }
+    }
   } catch (e: any) {
     adimlar.push('❌ MRP hatası: ' + e.message)
     try { await supabase.from('uys_orders').update({ mrp_durum: 'hata' }).eq('id', orderId) } catch {}
