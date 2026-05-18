@@ -84,13 +84,11 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
           password: oprSifre,
         })
         if (authErr) {
-          console.warn('[v16.22] Operatör Auth signIn başarısız (devam ediliyor):', authErr.message)
+          // Auth başarısız — devam ediliyor
         } else {
-          console.info('[v16.22] Operatör Auth signIn OK:', email)
           authBasarili = true
         }
-      } catch (e: any) {
-        console.warn('[v16.22] Operatör Auth bağlantı hatası (devam ediliyor):', e?.message)
+      } catch {
       }
     }
 
@@ -103,9 +101,8 @@ export function Login({ onLogin, onGoogleLogin, onGuest, onOperatorLogin }: Logi
           sicil_hash: newHash,
           sifre: null,  // plain'i temizle (lazy migration tamamlanır)
         }).eq('id', opr.id)
-      } catch (e) {
+      } catch {
         // Hash yazımı başarısız olsa bile login devam eder; bir sonraki girişte tekrar denenir
-        console.warn('[v15.52a] sicil_hash lazy migration failed:', e)
       }
     }
 

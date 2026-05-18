@@ -1,5 +1,5 @@
 import { isWorkOrderOpen } from '@/lib/statusUtils'
-import { getStok, getYolda } from '@/lib/hammaddeHesap'
+import { getStok } from '@/lib/hammaddeHesap'
 import { useAuth } from '@/hooks/useAuth'
 import { ACTION_GROUPS, ROLE_LIST, DEFAULTS, type AdminRole } from '@/lib/permissions'
 import { getActivityLog, clearActivityLog } from '@/services/activityLogService'
@@ -9,7 +9,7 @@ import { supabase, fetchAll } from '@/lib/supabase'
 import { Download, RefreshCw, AlertTriangle } from 'lucide-react'
 import { today, uid } from '@/lib/utils'
 import { toast } from 'sonner'
-import { showConfirm, showAlert, showPrompt } from '@/lib/prompt'
+import { showConfirm, showPrompt } from '@/lib/prompt'
 import { cuttingPlanTemizle, hesaplaMRP, hesaplaMRPCached } from '@/services/mrpService'
 import { tedarikStokId } from '@/services/tedarikciService'
 import { isActive as isStateActive } from '@/services/orderService/stateMachine'
@@ -1030,7 +1030,6 @@ export function DataManagement() {
       })
     } catch (e: any) {
       toast.error('Sağlık Raporu hatası: ' + e.message)
-      console.error(e)
       setRunning(false)
       return
     }
@@ -1121,82 +1120,6 @@ export function DataManagement() {
     { label: 'Chat Reactions', key: 'chatReactions', table: 'uys_chat_reactions' },
     { label: 'Chat Attachments', key: 'chatAttachments', table: 'uys_chat_attachments' },
   ]
-
-  function exportJSON() {
-    const data: Record<string, unknown> = {}
-    tables.forEach(t => { data[t.key] = (store as unknown as Record<string, unknown>)[t.key] })
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `uys_backup_${today()}.json`; a.click()
-    localStorage.setItem('uys_last_backup', today())
-    URL.revokeObjectURL(url)
-  }
-
-  // #17: JSON Import
-  // camelCase → snake_case converter
-  // Özel eşlemeler: 'not' → 'not_', icCap → 'ic_cap' gibi tüm kolonlar
-  function camelToSnake(s: string): string {
-    // 'not' özel — DB'de 'not_' (reserved keyword)
-    if (s === 'not') return 'not_'
-    // Özel eşlemeler — JSON alan adı DB kolon adıyla farklı olanlar
-    const specialMap: Record<string, string> = {
-      tedarikcId: 'tedarikci_id',
-      tedarikcAd: 'tedarikci_ad',
-    }
-    if (specialMap[s]) return specialMap[s]
-    return s.replace(/([A-Z])/g, '_$1').toLowerCase()
-  }
-
-  function convertRowToSnake(row: Record<string, unknown>): Record<string, unknown> {
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(row)) {
-      out[camelToSnake(key)] = row[key]
-    }
-    return out
-  }
-
-  async function importJSON() {
-    if (!await showConfirm('JSON yedeğini yüklemek mevcut verilerin ÜZERİNE YAZACAKTIR. Devam etmek istiyor musunuz?')) return
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = '.json'
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      try {
-        const text = await file.text()
-        const data = JSON.parse(text)
-        let restored = 0
-        const errors: string[] = []
-        for (const t of tables) {
-          const arr = data[t.key]
-          if (Array.isArray(arr) && arr.length > 0) {
-            // Tabloyu temizle ve yeniden yaz
-            await supabase.from(t.table).delete().neq('id', '___impossible___')
-            // camelCase alanları snake_case'e çevir
-            const snakeArr = arr.map(r => convertRowToSnake(r as Record<string, unknown>))
-            for (let i = 0; i < snakeArr.length; i += 100) {
-              const { error } = await supabase.from(t.table).upsert(snakeArr.slice(i, i + 100), { onConflict: 'id' })
-              if (error) {
-                errors.push(`${t.table}: ${error.message}`)
-                break
-              }
-            }
-            restored++
-          }
-        }
-        store.loadAll()
-        if (errors.length > 0) {
-          toast.error(`${restored} tablo yüklendi, ${errors.length} hata`)
-          await showAlert(errors.join('\n'), 'Yükleme Hataları')
-        } else {
-          toast.success(`${restored} tablo geri yüklendi`)
-        }
-      } catch (err) {
-        toast.error('JSON dosyası okunamadı: ' + (err as Error).message)
-      }
-    }
-    input.click()
-  }
 
   // #20: Min Stok Uyarı
   const minStokUyarilari = store.materials.filter(m => {
@@ -1696,7 +1619,6 @@ function TestModuPanel() {
       for (let i = 0; i < ids.length; i += 50) {
         const batch = ids.slice(i, i + 50)
         const { error } = await supabase.from(t.table).delete().in('id', batch)
-        if (error) console.error(`Silme hatası [${t.table}]:`, error)
       }
       deleted += ids.length
     }

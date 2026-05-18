@@ -170,7 +170,6 @@ export function TestMode() {
       )
     } catch (e: any) {
       toast.error(`Senaryo ${num} KRİTİK HATA: ${e?.message || e}`, { duration: 10000 })
-      console.error('[senaryo]', e)
     } finally {
       setCalisan(null)
     }
@@ -235,8 +234,7 @@ export function TestMode() {
         if (num < 13) await new Promise(r => setTimeout(r, 500))
       } catch (e: any) {
         toast.error(`Senaryo ${num} kritik hata: ${e?.message || e}`)
-        console.error('[senaryo]', e)
-      }
+        }
     }
     setCalisan(null)
 

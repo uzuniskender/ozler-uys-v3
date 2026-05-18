@@ -210,14 +210,14 @@ export function DevSync() {
       }
       try {
         const res = await fetch(`${GITHUB_RAW}/${file.path}`)
-        if (!res.ok) { console.warn('fetch fail:', file.path, res.status); continue }
+        if (!res.ok) { continue }
         const content = await res.text()
         await supabase.from('uys_dev_files').upsert({
           path: file.path, content, sha: file.sha, size_bytes: file.size,
           updated_at: new Date().toISOString(), updated_by: 'synced',
         }, { onConflict: 'path' })
         ok++
-      } catch (e) { console.warn('sync err:', file.path, e) }
+      } catch { }
       setSyncProgress(p => ({ ...p, done: p.done + 1 }))
     }
     await loadSynced()

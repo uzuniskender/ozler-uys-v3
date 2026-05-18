@@ -7,11 +7,11 @@ import { supabase } from '@/lib/supabase'
 import { uid, today } from '@/lib/utils'
 import { showConfirm } from '@/lib/prompt'
 import { toast } from 'sonner'
-import { optimizeKesim, kesimPlaniKaydet, kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy, havuzdanYenidenOptimize } from '@/services/productionService/cutting'
+import { kesimPlanOlustur, kesimPlanlariKaydet, getHamBoy, getParcaBoy, havuzdanYenidenOptimize } from '@/services/productionService/cutting'
 import { levhaKesimOptimum, levhaSonucunaKesimPlaniDonustur, wolardenParcaListesi } from '@/services/productionService/levhaKesim'
-import type { WorkOrder, AcikBar } from '@/types'
+import type { WorkOrder } from '@/types'
 import { isWorkOrderOpen, isCuttingPlanPending, isAcikBarAvailable } from '@/lib/statusUtils'
-import { Trash2, Plus, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
+import { Trash2, Scissors, Zap, Search, Package, ArrowRight } from 'lucide-react'
 import { MaterialSearchModal } from '@/components/MaterialSearchModal'
 import { advanceFlow } from '@/services/pendingFlowService'
 import { FlowProgress } from '@/components/FlowProgress'
@@ -38,7 +38,7 @@ export function CuttingPlans() {
   const logs = useProductionStore(s => s.logs)
   const acikBarlar = useProductionStore(s => s.acikBarlar)
   const materials = useWarehouseStore(s => s.materials)
-  const { can, isGuest } = useAuth()
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const activeFlowId = searchParams.get('flow') || ''  // v15.36 — flow akışı
@@ -91,8 +91,7 @@ export function CuttingPlans() {
           await advanceFlow(activeFlowId, 'mrp')
           setTimeout(() => navigate('/mrp?flow=' + activeFlowId), 1500)
         }
-      } catch (e) {
-        console.error('[flow] auto plan:', e)
+      } catch {
         toast.error('Otomatik plan hatası')
       } finally {
         setFlowAutoDone(true)
@@ -759,7 +758,6 @@ function KesimOlusturModal({ materials, workOrders, onClose, onSaved }: {
   const operations = useProductionStore(s => s.operations)
   const recipes = useProductionStore(s => s.recipes)
   const logs = useProductionStore(s => s.logs)
-  const cuttingPlans = useProductionStore(s => s.cuttingPlans)
   const [hamMalkod, setHamMalkod] = useState('')
   const [seciliIEler, setSeciliIEler] = useState<Record<string, number>>({}) // woId → adet
   const [showMatSearch, setShowMatSearch] = useState(false)
@@ -1065,7 +1063,7 @@ function HavuzOneriModal({
         })
         .eq('id', plan.id)
 
-      if (error) { console.error('[havuz] plan update:', error); toast.error('Plan güncellenemedi: ' + error.message); return }
+      if (error) { toast.error('Plan güncellenemedi: ' + error.message); return }
 
       // v15.35.1 — Kullanılan / havuzda kalan havuz bar sayısı
       const havuzKullanilan = yeniSatirlar.filter(s => s.havuzBarId).length
@@ -1078,7 +1076,6 @@ function HavuzOneriModal({
       }
       onSaved()
     } catch (e: any) {
-      console.error('[havuz] exception:', e)
       toast.error('İşlem başarısız: ' + (e?.message || 'bilinmeyen hata'))
     } finally {
       setLoading(false)
