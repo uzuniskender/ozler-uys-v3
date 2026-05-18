@@ -79,6 +79,7 @@ export const ACTION_GROUPS: { group: string; actions: { key: string; label: stri
     { key: 'acikbar_havuz_geri_al', label: 'Tüketilmiş barı geri alma (admin)' },
     { key: 'stok_arsivle', label: 'Stok hareketi arşivleme (admin)' },
     { key: 'stok_snapshot', label: 'Net stok snapshot alma (admin)' },
+    { key: 'stok_lokasyon', label: 'Lokasyon tanımları yönetimi' },
   ]},
   { group: 'Tedarik', actions: [
     { key: 'ted_add', label: 'Ekleme' }, { key: 'ted_edit', label: 'Düzenleme' },
@@ -162,6 +163,7 @@ export const DEFAULTS: Record<string, AdminRole[]> = {
   acikbar_havuz_geri_al:[],   // v15.44 — admin only (geri alma yetkisi)
   stok_arsivle:[],            // v17.15 — admin only (geri dönüşü zor işlem)
   stok_snapshot:[],           // v17.16 — admin only (toplu DB yazma)
+  stok_lokasyon:['planlama','depocu'], // v17.17 — lokasyon CRUD (RLS ile uyumlu)
   ted_add:['planlama','depocu'], ted_edit:['planlama','depocu'], ted_delete:['planlama','depocu'], ted_geldi:['planlama','depocu'],
   tedci_add:['planlama'], tedci_edit:['planlama'], tedci_delete:['planlama'],
   must_add:['planlama'], must_edit:['planlama'], must_delete:['planlama'],

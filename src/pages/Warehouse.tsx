@@ -25,6 +25,14 @@ const stokGirisSchema = z.object({
 
 const stokInlineEditSchema = z.coerce.number().positive('Miktar sıfırdan büyük olmalı')
 
+const lokasyonFormSchema = z.object({
+  kod: z.string().trim().min(1, 'Kod zorunlu').max(30, 'Kod en fazla 30 karakter'),
+  ad: z.string().trim().max(100),
+  bolum: z.string().trim().max(50),
+  tip: z.string().min(1),
+  kapasite: z.string(),
+})
+
 export function Warehouse() {
   const stokHareketler = useWarehouseStore(s => s.stokHareketler)
   const materials = useWarehouseStore(s => s.materials)
@@ -447,7 +455,7 @@ export function Warehouse() {
                         className="font-mono text-cyan-400 hover:underline" title="Lokasyon değiştir">
                         {mat.lokasyonKodu}
                       </button>
-                    ) : can('stok_giris') ? (
+                    ) : can('stok_lokasyon') ? (
                       <button onClick={() => setLokasyonAtaMalkod({ malkod: s.malkod, malad: s.malad, current: '' })}
                         className="text-zinc-600 hover:text-accent">Ata</button>
                     ) : <span className="text-zinc-700">—</span>)}
@@ -799,7 +807,7 @@ export function Warehouse() {
           <div>
             <div className="px-4 py-2 bg-bg-3/40 border-b border-border flex items-center justify-between">
               <span className="text-[11px] text-zinc-500">{lokasyonlar.filter(l => l.aktif).length} aktif · {lokasyonlar.length} toplam lokasyon</span>
-              {can('stok_giris') && (
+              {can('stok_lokasyon') && (
                 <button
                   onClick={() => setLokasyonForm({ kod: '', ad: '', bolum: '', tip: 'raf', kapasite: '' })}
                   className="flex items-center gap-1 px-2 py-1 bg-accent hover:bg-accent-hover text-white rounded text-[11px] font-semibold"
@@ -839,7 +847,7 @@ export function Warehouse() {
                           <td className="px-4 py-1.5 text-right font-mono text-zinc-500">{l.kapasite || '—'}</td>
                           <td className="px-4 py-1.5 text-right font-mono text-zinc-300">{malzemeSayisi || '—'}</td>
                           <td className="px-4 py-1.5 text-right">
-                            {can('stok_giris') && (
+                            {can('stok_lokasyon') && (
                               <button
                                 onClick={() => setLokasyonForm({ id: l.id, kod: l.kod, ad: l.ad, bolum: l.bolum, tip: l.tip, kapasite: l.kapasite ? String(l.kapasite) : '' })}
                                 className="text-zinc-600 hover:text-accent text-[10px]"
@@ -1049,17 +1057,19 @@ function LokasyonFormModal({ form, onClose, onSaved }: {
   const [kapasite, setKapasite] = useState(form.kapasite)
 
   async function save() {
-    if (!kod.trim()) { toast.error('Kod zorunlu'); return }
+    const parsed = lokasyonFormSchema.safeParse({ kod, ad, bolum, tip, kapasite })
+    if (!parsed.success) { toast.error(parsed.error.issues[0]?.message || 'Geçersiz form'); return }
     const row = {
-      kod: kod.trim(), ad: ad.trim() || null,
-      bolum: bolum.trim() || null, tip: tip || 'raf',
+      kod: parsed.data.kod, ad: parsed.data.ad || null,
+      bolum: parsed.data.bolum || null, tip: parsed.data.tip || 'raf',
       kapasite: kapasite ? parseInt(kapasite) || null : null,
     }
     if (form.id) {
       const { error } = await supabase.from('uys_lokasyonlar').update(row).eq('id', form.id)
       if (error) { toast.error('Güncelleme başarısız: ' + error.message); return }
     } else {
-      const { error } = await supabase.from('uys_lokasyonlar').insert({ id: uid(), ...row, aktif: true })
+      // id atanmıyor — DB UUID gen_random_uuid() ile üretir
+      const { error } = await supabase.from('uys_lokasyonlar').insert({ ...row, aktif: true })
       if (error) { toast.error('Oluşturma başarısız: ' + error.message); return }
     }
     onSaved()

@@ -67,7 +67,7 @@ const STORE_WHITELIST = new Set([
 // Kodda var ama migration henüz uygulanmamış tablolar (planlı, yazım hatası değil).
 // Migration uygulanınca bu listeden çıkar (audit otomatik geçer).
 const CODE_AHEAD_WHITELIST = new Set([
-  'uys_lokasyonlar',  // depo lokasyon yönetimi — migration hazırlanıyor
+  // uys_lokasyonlar kaldırıldı — v17.07 migration TEST+PROD'a uygulandı (d0264c5)
 ])
 
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
