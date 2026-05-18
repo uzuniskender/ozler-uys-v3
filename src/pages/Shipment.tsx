@@ -230,6 +230,17 @@ export function Shipment() {
     })
   }
 
+  async function indirSevkiyatPDF() {
+    const seciliSevkler = filtered.filter(s => selected.has(s.id))
+    if (!seciliSevkler.length) return
+    try {
+      const { generateSevkiyatPDF } = await import('@/lib/sevkiyat-pdf')
+      await generateSevkiyatPDF(seciliSevkler, materials)
+    } catch (e: any) {
+      toast.error('Sevkiyat PDF oluşturulamadı: ' + (e?.message || 'bilinmeyen hata'))
+    }
+  }
+
   async function indirSevkBelgePDF(s: typeof sevkler[number]) {
     try {
       const ord = orders.find(o => o.id === s.orderId)
@@ -294,6 +305,12 @@ export function Shipment() {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-hover"
           >
             <Printer size={13} /> Paketleme Listesi Yazdır
+          </button>
+          <button
+            onClick={indirSevkiyatPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-2 border border-border text-zinc-300 hover:text-white rounded-lg text-xs font-semibold"
+          >
+            <FileText size={13} /> Sevkiyat PDF
           </button>
           <span className="flex-1" />
           <button onClick={() => setSelected(new Set())} className="text-[10px] text-zinc-500 hover:text-white">Seçimi Kaldır</button>
