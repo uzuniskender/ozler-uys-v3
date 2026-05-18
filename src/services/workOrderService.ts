@@ -84,8 +84,27 @@ export async function topluDurumGuncelle(
   ids: string[],
   durum: string,
   workOrders: WorkOrder[],
-  orders: { id: string; siparisNo?: string }[]
+  orders: { id: string; siparisNo?: string }[],
+  logs: { woId: string; qty: number }[],
+  stokHareketler: any[]
 ): Promise<void> {
+  if (durum === 'iptal') {
+    for (const id of ids) {
+      const wo = workOrders.find(w => w.id === id)
+      if (!wo) continue
+      const prod = logs.filter(l => l.woId === id).reduce((a, l) => a + l.qty, 0)
+      const order = orders.find(o => o.id === wo.orderId)
+      await setWoDurum(id, 'iptal', {
+        wo,
+        siparisNo: order?.siparisNo,
+        neden: 'Toplu iptal',
+        prod,
+        stokHareketler,
+      })
+    }
+    return
+  }
+
   for (const id of ids) {
     const wo = workOrders.find(w => w.id === id)
     const eskiDurum = wo?.durum || 'bekliyor'

@@ -159,7 +159,7 @@ export function WorkOrders() {
       }
     }
     if (!await showConfirm(`${selected.size} İE'nin durumu "${durum}" olarak güncellenecek. Devam?`)) return
-    await wos.topluDurumGuncelle([...selected], durum, workOrders, orders)
+    await wos.topluDurumGuncelle([...selected], durum, workOrders, orders, logs, stokHareketler)
     const cnt = selected.size; setSelected(new Set()); loadAllStores(); toast.success(`${cnt} İE güncellendi`)
   }
 
