@@ -1,7 +1,7 @@
 -- Migration: rezerv_et() atomik stok rezervasyon fonksiyonu
 -- Mevcut tablo kullanılır: uys_stok_hareketler (tip='rezerv', rezerv_order_id)
 -- Not: chk_stok_tip kısıtı 'rezerv' tipini dışlıyordu — bu migration düzeltir.
--- TEST: bekliyor | PROD: bekliyor
+-- TEST: 2026-05-18 | PROD: 2026-05-18
 
 -- 1. Eski tip kısıtını kaldır ('giris'|'cikis'|'bar_acilis' → 'rezerv' eksikti)
 ALTER TABLE uys_stok_hareketler DROP CONSTRAINT IF EXISTS chk_stok_tip;
