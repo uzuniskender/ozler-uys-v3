@@ -62,6 +62,15 @@ export async function setWoDurum(
     await supabase.from('uys_work_orders')
       .update({ durum: 'iptal', not_: (wo.not || '') + '\n[İPTAL] ' + neden })
       .eq('id', id)
+
+    // İE iptali — siparişe bağlı rezervleri serbest bırak
+    if (opts.wo.orderId) {
+      await supabase
+        .from('uys_stok_hareketler')
+        .delete()
+        .eq('tip', 'rezerv')
+        .eq('rezerv_order_id', opts.wo.orderId)
+    }
     return
   }
 

@@ -386,10 +386,24 @@ export async function autoZincir(
 
     // mrp_durum güncellemesi
     const yeniDurum = mrpSonuc.some(r => r.net > 0) ? 'eksik' : 'tamam'
+    // mrp_durum eksik → hayalet rezervleri temizle
+    if (yeniDurum === 'eksik') {
+      await supabase
+        .from('uys_stok_hareketler')
+        .delete()
+        .eq('tip', 'rezerv')
+        .eq('rezerv_order_id', orderId)
+    }
     await supabase.from('uys_orders').update({ mrp_durum: yeniDurum }).eq('id', orderId)
 
     // ADIM 3.5: Atomik stok rezervasyonu (sadece tamam durumunda)
     if (yeniDurum === 'tamam') {
+      // Önceki autoChain çalışmasından kalan rezervleri temizle (idempotent)
+      await supabase
+        .from('uys_stok_hareketler')
+        .delete()
+        .eq('tip', 'rezerv')
+        .eq('rezerv_order_id', orderId)
       const { test_run_id: aktifTestRunId = null } = withTestRunId({})
       const rezervYapilacaklar = mrpSonuc.filter(r => r.stok > 0)
       for (const r of rezervYapilacaklar) {

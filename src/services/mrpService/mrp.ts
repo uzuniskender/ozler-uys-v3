@@ -1254,6 +1254,8 @@ export async function siparisRevizeUygula(
       .neq('durum', 'iptal')
       .select('*', { count: 'exact', head: true })
     ozetler.push(`Sipariş iptal edildi · ${iptalSayisi || 0} İE iptal işaretlendi (loglar korundu)`)
+    // Sipariş iptalinde stok rezervlerini serbest bırak
+    await rezerveSil(delta.orderId)
     return { ozetler }
   }
 
