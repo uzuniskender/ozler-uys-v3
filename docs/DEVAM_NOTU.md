@@ -6,6 +6,21 @@
 
 ---
 
+## 18 Mayıs 2026 — Akşam Oturumu (v17.20 ek)
+
+### Reports — Kapasite Planlama tab (doğrulama)
+
+Önceki oturumda T1 tarafından commit edilen `e55f552` doğrulandı:
+- Tab tanımı, state (`kapGunKap`, `kapSeciliIst`) ve tam JSX implementasyonu mevcut
+- Build temiz: `Reports.js` 100.84 kB, `npm run build` hatasız geçti
+- Origin ile senkron: push gerekmedi
+
+### Bekleyen
+
+- **PROD index migration:** `sql/20260518_v17_16_performance_indexes.sql` TEST'e uygulandı (`7c3efd9`), PROD (`lmhcobrgrnvtprvmcito`) için henüz onay alınmadı.
+
+---
+
 ## 18 Mayıs 2026 — Gece Oturumu (v17.19–v17.20)
 
 ### Reports — Yeni Tablar
