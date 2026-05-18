@@ -921,3 +921,33 @@ hesaplaMRPv2({ ordIds, orders, workOrders: wos, recipes, stokHareketler, tedarik
 - WMS lokasyon migration (`sql/20260518_v17_07_wms_lokasyonlar.sql`) — TEST sonra PROD uygulanacak
 
 ---
+
+#### Stok hareketi arşivleme (`5869da0`)
+
+**Amaç:** 1 yıldan eski `uys_stok_hareketler` kayıtlarını ayrı arşiv tablosuna taşıyarak ana tablonun boyutunu yönetmek.
+
+**Değişen dosyalar (3):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `sql/20260518_v17_15_stok_arsivleme.sql` | `uys_stok_hareketler_arsiv` tablosu + `arsivle_stok_hareketleri(kesim_tarihi text)` RPC fonksiyonu |
+| `src/lib/permissions.ts` | `stok_arsivle: []` eylemi eklendi (admin-only, boş liste = sadece admin) |
+| `src/pages/Warehouse.tsx` | `arsivle()` fonksiyonu + `arsivleniyor` state + `🗄 Arşivle` butonu (`stok_arsivle` yetkisi) |
+
+**RPC fonksiyon mantığı (`arsivle_stok_hareketleri`):**
+- Güvenlik: `kesim_tarihi` en az 6 ay önce olmalı (aksi halde EXCEPTION)
+- Arşive kopyala: `tarih < kesim_tarihi AND test_run_id IS NULL` → `uys_stok_hareketler_arsiv` (`ON CONFLICT DO NOTHING`)
+- Bakiye konsolidasyonu: her `malkod` için net (giris/bar_acilis − çıkış) hesapla; ≠ 0 ise `arsiv-kons-` + md5(malkod||date) deterministik ID ile `kesim_tarihi` tarihli konsolidasyon kaydı ekle
+- Silme: orijinal tablo `tarih < kesim_tarihi AND test_run_id IS NULL` satırları sil (konsolidasyon kaydı `tarih = kesim_tarihi` → silinmez)
+- Dönüş: `{ arsivlendi, konsolide, kesim_tarihi }`
+
+**UI akışı (`arsivle()`):**
+1. Arşivlenecek kayıt sayısını sorgula (count)
+2. Count = 0 → "Arşivlenecek kayıt yok" toast
+3. `showConfirm` ile onay al (geri alınamaz uyarısı dahil)
+4. `supabase.rpc('arsivle_stok_hareketleri')` çağır
+5. Başarı → toast + `loadOwn()` (stok güncellenir)
+
+**⚠ PROD uygulaması:** Migration `sql/20260518_v17_15_stok_arsivleme.sql` henüz uygulanmadı. TEST sonra PROD (MCP ile).
+
+---
