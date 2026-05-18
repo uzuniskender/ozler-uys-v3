@@ -564,6 +564,18 @@ export function hesaplaMRP(
   })
 }
 
+/** Canonical MRP API — nesne parametreli. Tüm yeni çağrılar buraya. */
+export function hesaplaMRPv2(params: HesaplaMRPParams): MRPRow[] {
+  const {
+    ordIds, orders, workOrders = [], recipes, stokHareketler, tedarikler,
+    cuttingPlans = [], materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif,
+  } = params
+  return hesaplaMRP(
+    ordIds, orders, workOrders, recipes, stokHareketler, tedarikler,
+    cuttingPlans, materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif,
+  )
+}
+
 // ═══ BACKWARD COMPAT ═══
 // v15.50b — opts parametresi eklendi:
 //   - mrpCalculationId: uys_mrp_calculations snapshot id (varsa tedarikler.mrp_calculation_id'ye yazılır)
@@ -975,11 +987,11 @@ export async function rezerveleriSenkronla(
 
     const birlesikStok = [...stokHareketlerTemiz, ...fakeEktra] as StokHareket[]
 
-    const rows = hesaplaMRP(
-      [order.id], orders, workOrders, recipes,
-      birlesikStok, tedarikler, cuttingPlans, materials,
-      null, [], order.id
-    )
+    const rows = hesaplaMRPv2({
+      ordIds: [order.id], orders, workOrders, recipes,
+      stokHareketler: birlesikStok, tedarikler, cuttingPlans, materials,
+      secilenYMIds: null, mrpRezerve: [], currentOrderId: order.id,
+    })
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]

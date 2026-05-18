@@ -21,6 +21,7 @@
 import type { Recipe, StokHareket, Tedarik, Material } from '@/types'
 import { getStok } from '@/lib/hammaddeHesap'
 import { hesaplaMRP } from './mrp'
+export { hesaplaMRPv2 } from './mrp'
 
 // ─── Tip tanımları ────────────────────────────────────────────────────────────
 
@@ -436,25 +437,6 @@ export function applyCuttingPlanOverride(
   }
 
   return result
-}
-
-// ─── hesaplaMRPv2 ─────────────────────────────────────────────────────────────
-/**
- * Canonical MRP API — object parametreli wrapper. Tüm call site'lar buraya geçmeli.
- *
- * logs, retrospektif, secilenYMIds dahil tüm HesaplaMRPParams desteklenir.
- * Engine pipeline'a tam geçiş hazır olduğunda iç implementasyon değişecek;
- * call site'lar bu arayüzü koruyacak.
- */
-export function hesaplaMRPv2(params: import('./mrp').HesaplaMRPParams): import('./mrp').MRPRow[] {
-  const {
-    ordIds, orders, workOrders = [], recipes, stokHareketler, tedarikler,
-    cuttingPlans = [], materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif,
-  } = params
-  return hesaplaMRP(
-    ordIds, orders, workOrders, recipes, stokHareketler, tedarikler,
-    cuttingPlans, materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif,
-  )
 }
 
 // ─── FAZ 2: Çoklu Sipariş Orkestrasyonu ──────────────────────────────────────
