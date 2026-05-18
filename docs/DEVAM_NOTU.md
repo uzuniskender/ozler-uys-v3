@@ -6,6 +6,18 @@
 
 ---
 
+## 18 Mayıs 2026 — Rollback Fix (v17.24)
+
+autoChain rollback tedarik silme riski giderildi.
+
+- `mrp.ts`: mrpTedarikOlustur opts.createdIds collector eklendi
+- `autoChain.ts`: tedarikIds[] takibi + rollback `.in('id')` exact silme
+- Fallback: tedarikIds boşsa eski tarih+order_id filtresi (güvenlik ağı)
+
+Build: ✅ | E2E: 39/39 yeşil | Tag: `v17.24` (`56e9dcc`)
+
+---
+
 ## 18 Mayıs 2026 — fetchAll Audit (v17.23)
 
 Supabase 1000 satır limiti riski giderildi — 4 dosya:
