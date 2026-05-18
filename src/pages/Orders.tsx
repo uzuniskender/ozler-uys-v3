@@ -3,7 +3,7 @@ import { logAction } from '@/services/activityLogService'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildWorkOrders, autoZincir } from '@/services/productionService/autoChain'
-import { hesaplaMRP, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, siparisDelta, siparisRevizeUygula } from '@/services/mrpService'
+import { hesaplaMRPv2, hesaplaMRPCached, mrpTedarikOlustur, mrpTedarikDuzelt, rezerveSil, siparisSilKapsamli, siparisDelta, siparisRevizeUygula, type MRPRow } from '@/services/mrpService'
 import { useProductionStore, useOrderStore, useWarehouseStore, loadAllStores } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { auditLog } from '@/services/auditService'
@@ -264,7 +264,7 @@ export function Orders() {
 
     const ordIds = hedefOrders.map(o => o.id)
     const cpMapped = cp.map((p: any) => ({ hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '', gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [] }))
-    const mrpRows = hesaplaMRP(ordIds, orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, undefined, allLogs)
+    const mrpRows = hesaplaMRPv2({ ordIds, orders: orders as any, workOrders: wos, recipes: fullRecipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials: mats, mrpRezerve, logs: allLogs })
     const count = await mrpTedarikOlustur(ordIds[0] || '', hedefOrders[0]?.siparisNo || '', mrpRows)
 
     // Her siparişin kendi durumunu ayrı ayrı hesapla ve yaz
@@ -272,7 +272,7 @@ export function Orders() {
       // v16.32 IE #14 Faz A Slice 3 — cache wrap (tek-order scope)
       const tekMrpRows = await hesaplaMRPCached(
         { orderId: o.id },
-        () => hesaplaMRP([o.id], orders as any, wos, fullRecipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, o.id, allLogs)
+        () => hesaplaMRPv2({ ordIds: [o.id], orders: orders as any, workOrders: wos, recipes: fullRecipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials: mats, mrpRezerve, currentOrderId: o.id, logs: allLogs })
       )
       const yeniDurum = tekMrpRows.some(r => r.net > 0) ? 'eksik' : 'tamam'
       await updateOrderMrpDurum(o.id, yeniDurum)
@@ -1062,7 +1062,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
   const mrpRezerve = useOrderStore(s => s.mrpRezerve)
   const { can, user } = useAuth()
   const [tab, setTab] = useState<'ie' | 'mrp' | 'revizyon'>('ie')
-  const [mrpRows, setMrpRows] = useState<ReturnType<typeof hesaplaMRP>>([])
+  const [mrpRows, setMrpRows] = useState<MRPRow[]>([])
   const [mrpDone, setMrpDone] = useState(false)
   // v15.50b — Son MRP run snapshot id (uys_mrp_calculations.id).
   // Tedarik insert'lerinde mrp_calculation_id alanına yazılır → audit/raporlama için bağ.
@@ -1079,7 +1079,7 @@ function OrderDetailModal({ order, workOrders, logs, onClose }: { order: Order; 
     // v16.32 IE #14 Faz A Slice 3 — cache wrap (tek-order detail panel)
     const rows = await hesaplaMRPCached(
       { orderId: order.id },
-      () => hesaplaMRP([order.id], allOrders as any, allWOs, recipes, stokHareketler, tedarikler, cpMapped, mats, null, mrpRezerve, order.id, logs)
+      () => hesaplaMRPv2({ ordIds: [order.id], orders: allOrders as any, workOrders: allWOs, recipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials: mats, mrpRezerve, currentOrderId: order.id, logs })
     )
     setMrpRows(rows); setMrpDone(true); setTab('mrp')
 

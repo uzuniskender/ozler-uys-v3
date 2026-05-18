@@ -62,6 +62,12 @@ const STORE_WHITELIST = new Set([
   'uys_ie_log',                 // v16.83 — İE event log; Tip C, store'a girmez.
 ])
 
+// Kodda var ama migration henüz uygulanmamış tablolar (planlı, yazım hatası değil).
+// Migration uygulanınca bu listeden çıkar (audit otomatik geçer).
+const CODE_AHEAD_WHITELIST = new Set([
+  'uys_lokasyonlar',  // depo lokasyon yönetimi — migration hazırlanıyor
+])
+
 // DataManagement backup'a dahil etmesi gerekmeyen tablolar.
 // Örn: yalnızca göç/audit amaçlı, ömürlük tek-seferlik kayıtlar.
 // Veya: hesaplanabilen snapshot/cache tabloları (yedeği tutmaya gerek yok).
@@ -85,6 +91,9 @@ const DATA_MGMT_WHITELIST = new Set([
   'uys_ie_hazirlama_kalemler',  // v16.83 — İE kalemleri; IeHazirlama.tsx kendi yönetiyor.
   'uys_ie_hazirlama_log',       // v16.83 — İE audit log; restore edilemez, backup dışı.
   'uys_ie_log',                 // v16.83 — İE event log; restore edilemez, backup dışı.
+
+  // v17.07 — WMS Faz 1
+  'uys_lokasyonlar',             // v17.07 — Depo lokasyon tanımları; Faz 2'de DataManagement'a eklenir.
 ])
 
 // ═══════════════════════════════════════════════════════════════
@@ -211,9 +220,9 @@ function main() {
     console.log('✅ Store TABLE_MAP: tamam')
   }
 
-  // 3. Kodda var ama şemada yok (yazım hatası)
-  const dmPhantom = sortedArray(new Set([...dm].filter(t => !schema.has(t))))
-  const storePhantom = sortedArray(new Set([...store].filter(t => !schema.has(t))))
+  // 3. Kodda var ama şemada yok (yazım hatası veya henüz uygulanmamış migration)
+  const dmPhantom = sortedArray(new Set([...dm].filter(t => !schema.has(t) && !CODE_AHEAD_WHITELIST.has(t))))
+  const storePhantom = sortedArray(new Set([...store].filter(t => !schema.has(t) && !CODE_AHEAD_WHITELIST.has(t))))
   if (dmPhantom.length > 0 || storePhantom.length > 0) {
     console.log('\x1b[33m⚠ Kodda var ama şemada YOK (yazım hatası olabilir):\x1b[0m')
     const all = new Set([...dmPhantom, ...storePhantom])

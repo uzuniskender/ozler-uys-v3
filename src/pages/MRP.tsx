@@ -8,7 +8,7 @@ import { uid, today } from '@/lib/utils'
 import { toast } from 'sonner'
 import { showConfirm } from '@/lib/prompt'
 import { Download, ArrowRight, History, ChevronDown, ChevronRight } from 'lucide-react'
-import { hesaplaMRP, mrpTedarikOlustur, type MRPRow, hesaplaMRPCached } from '@/services/mrpService'
+import { hesaplaMRPv2, mrpTedarikOlustur, type MRPRow, hesaplaMRPCached } from '@/services/mrpService'
 import { loadAllStores } from '@/store'
 import { getStok } from '@/lib/hammaddeHesap'
 // v15.95 — Madde 15 P3: Hammadde tahsis FIFO
@@ -385,7 +385,7 @@ export function MRP() {
     const hmWOOrderIds = new Set(secilenWOlar.filter((w: any) => (w.hm || []).length > 0).map((w: any) => w.orderId))
     const hmEksikOrderIds = ordIds.filter(id => !hmWOOrderIds.has(id))
     if (hmEksikOrderIds.length > 0) {
-      const bomResult = hesaplaMRP(hmEksikOrderIds, orders as any, workOrders, recipes, stokGercek, tedarikler, cpMapped, materials, ymSet, mrpRezerve, undefined, logs, false)
+      const bomResult = hesaplaMRPv2({ ordIds: hmEksikOrderIds, orders: orders as any, workOrders, recipes, stokHareketler: stokGercek, tedarikler, cuttingPlans: cpMapped, materials, secilenYMIds: ymSet, mrpRezerve, logs, retrospektif: false })
       for (const r of bomResult) {
         const key = r.malkod.toLowerCase() + '__' + r.termin
         if (!brutMap[key]) brutMap[key] = { malkod: r.malkod, malad: r.malad, tip: r.tip, birim: r.birim, brut: 0, termin: r.termin }
@@ -489,7 +489,7 @@ export function MRP() {
           // v16.32 IE #14 Faz A Slice 3 — tek-order cache wrap
           const tekResult = await hesaplaMRPCached(
             { orderId: oid },
-            () => hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs)
+            () => hesaplaMRPv2({ ordIds: [oid], orders: orders as any, workOrders, recipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials, mrpRezerve, currentOrderId: oid, logs })
           )
           const eksikler = tekResult.filter(r => r.net > 0)
           if (eksikler.length === 0) continue
@@ -1037,7 +1037,7 @@ export function MRP() {
                         setArsivHesaplaniyor(prev => new Set([...prev, ...bekleyen]))
                         for (const oid of bekleyen) {
                           try {
-                            const r = hesaplaMRP([oid], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, oid, logs, true)
+                            const r = hesaplaMRPv2({ ordIds: [oid], orders: orders as any, workOrders, recipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials, mrpRezerve, currentOrderId: oid, logs, retrospektif: true })
                             setArsivSonucMap(prev => ({ ...prev, [oid]: r }))
                           } finally {
                             setArsivHesaplaniyor(prev => { const n = new Set(prev); n.delete(oid); return n })
@@ -1154,7 +1154,7 @@ export function MRP() {
                                 hamMalkod: p.hamMalkod, hamMalad: p.hamMalad, durum: p.durum || '',
                                 gerekliAdet: p.gerekliAdet || 0, satirlar: p.satirlar || [],
                               }))
-                              const r = hesaplaMRP([o.id], orders as any, workOrders, recipes, stokHareketler, tedarikler, cpMapped, materials, null, mrpRezerve, o.id, logs, true)
+                              const r = hesaplaMRPv2({ ordIds: [o.id], orders: orders as any, workOrders, recipes, stokHareketler, tedarikler, cuttingPlans: cpMapped, materials, mrpRezerve, currentOrderId: o.id, logs, retrospektif: true })
                               setArsivSonucMap(prev => ({ ...prev, [o.id]: r }))
                             } finally {
                               setArsivHesaplaniyor(prev => { const n = new Set(prev); n.delete(o.id); return n })

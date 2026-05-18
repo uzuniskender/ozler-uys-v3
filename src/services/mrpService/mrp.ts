@@ -217,6 +217,7 @@ export interface HesaplaMRPParams {
   retrospektif?: boolean
 }
 
+/** @deprecated hesaplaMRPv2 kullan — object API, named parametreler, call site'lar için daha güvenli. */
 export function hesaplaMRP(
   ordIds: string[] | null,
   orders: HesaplaMRPParams['orders'],

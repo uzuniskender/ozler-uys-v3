@@ -20,6 +20,7 @@
 
 import type { Recipe, StokHareket, Tedarik, Material } from '@/types'
 import { getStok } from '@/lib/hammaddeHesap'
+import { hesaplaMRP } from './mrp'
 
 // ─── Tip tanımları ────────────────────────────────────────────────────────────
 
@@ -439,57 +440,21 @@ export function applyCuttingPlanOverride(
 
 // ─── hesaplaMRPv2 ─────────────────────────────────────────────────────────────
 /**
- * hesaplaMRP ile aynı parametre şeklini alır; engine pipeline üzerinden çalışır.
- * Tek/çoklu sipariş + flat BOM + cutting plan override destekler.
- * Mevcut hesaplaMRP dokunulmadan kalır — bu wrapper onu override etmez.
+ * Canonical MRP API — object parametreli wrapper. Tüm call site'lar buraya geçmeli.
  *
- * Desteklenmeyen parametreler (engine'de karşılığı yok):
- *   mrpRezerve, logs, retrospektif, secilenYMIds
+ * logs, retrospektif, secilenYMIds dahil tüm HesaplaMRPParams desteklenir.
+ * Engine pipeline'a tam geçiş hazır olduğunda iç implementasyon değişecek;
+ * call site'lar bu arayüzü koruyacak.
  */
 export function hesaplaMRPv2(params: import('./mrp').HesaplaMRPParams): import('./mrp').MRPRow[] {
   const {
-    ordIds,
-    orders,
-    workOrders = [],
-    recipes,
-    stokHareketler,
-    tedarikler,
-    cuttingPlans = [],
-    materials,
+    ordIds, orders, workOrders = [], recipes, stokHareketler, tedarikler,
+    cuttingPlans = [], materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif,
   } = params
-
-  const kapsamOrders = ordIds
-    ? orders.filter(o => ordIds.includes(o.id))
-    : orders
-
-  const siparisler = kapsamOrders.flatMap(o => {
-    if (o.urunler?.length) {
-      return o.urunler.map(u => ({
-        mamulKod: u.mamulKod,
-        adet: u.adet,
-        termin: u.termin || o.termin,
-        orderId: o.id,
-      }))
-    }
-    return [{ mamulKod: o.mamulKod, adet: o.adet, termin: o.termin, orderId: o.id }]
-  })
-
-  const secilenWoIds = ordIds
-    ? new Set(workOrders.filter(w => ordIds.includes((w as any).orderId || '')).map(w => w.id as string))
-    : null
-
-  const nettingRows = hesaplaMRPEngineMulti({
-    siparisler,
-    recipes,
-    materials,
-    stokHareketler,
-    tedarikler,
-    workOrders,
-    cuttingPlans,
-    secilenWoIds,
-  })
-
-  return buildResult(nettingRows)
+  return hesaplaMRP(
+    ordIds, orders, workOrders, recipes, stokHareketler, tedarikler,
+    cuttingPlans, materials, secilenYMIds, mrpRezerve, currentOrderId, logs, retrospektif,
+  )
 }
 
 // ─── FAZ 2: Çoklu Sipariş Orkestrasyonu ──────────────────────────────────────
