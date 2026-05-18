@@ -1,6 +1,6 @@
 # UYS v3 — DEVAM NOTU
 **Tarih:** 18 Mayıs 2026
-**Versiyon:** v17.15
+**Versiyon:** v17.18
 **Repo:** uzuniskender/ozler-uys-v3
 **PROD:** lmhcobrgrnvtprvmcito | **TEST:** cowgxwmhlogmswatbltz (Frankfurt)
 
@@ -951,3 +951,96 @@ hesaplaMRPv2({ ordIds, orders, workOrders: wos, recipes, stokHareketler, tedarik
 **⚠ PROD uygulaması:** Migration `sql/20260518_v17_15_stok_arsivleme.sql` henüz uygulanmadı. TEST sonra PROD (MCP ile).
 
 ---
+
+### 18 Mayıs 2026 — Gündüz Oturumu (v17.12–v17.18)
+
+#### ProblemTakip 8D PDF raporu (`b7f4754`)
+
+`src/lib/problem-8d-pdf.ts` — yeni dosya (106 satır):
+- D1–D8 alanları tam format: problem başlığı, ekip, kök neden, düzeltici/kalıcı önlemler
+- OZLER başlığı + şirket bilgileri header
+- `src/pages/ProblemTakip.tsx` — "PDF İndir" butonu eklendi
+
+#### Performance index migration (`7c3efd9`)
+
+`sql/20260518_v17_16_performance_indexes.sql` — 8 index değişikliği:
+- `idx_stok_hareketler_tarih` — StokLog pagination `ORDER BY tarih DESC`
+- `idx_stok_hareketler_wo_id` / `idx_stok_hareketler_log_id` — WO+bar lookup (partial)
+- `idx_stok_hareket_rezerv` — duplicate DROP
+- `idx_uys_logs_wo_id_tarih` — composite: wo_id prefix + tarih sort
+- `idx_uys_logs_malkod` — fn_malkod_cascade_update trigger (partial)
+- `idx_uys_work_orders_durum` / `idx_uys_work_orders_ist_id` — trigger + autoChain (partial)
+
+**⚠ TEST uygulandı. PROD için ayrı onay gerekli.**
+
+#### Reports PDF indir (`3bbe3fd`)
+
+`src/pages/Reports.tsx` +234 satır:
+- `html2canvas` + `jsPDF` ile aktif tab içeriğini PNG gömülü PDF olarak indir
+- "PDF İndir" butonu Reports header'ına eklendi; tablo + Recharts chart birlikte yakalanıyor
+
+#### Shipment Sevkiyat PDF (`a6123c7`)
+
+`src/lib/sevkiyat-pdf.ts` — yeni dosya (85 satır):
+- Seçili sevkiyatlar için jsPDF tabanlı PDF (kalem listesi, müşteri, miktar/birim)
+- `src/pages/Shipment.tsx` — çoklu seçim + "PDF İndir" butonu eklendi
+
+#### PWA — Service Worker + offline banner (`0cc0d05`)
+
+`vite-plugin-pwa` eklendi (generateSW modu, autoUpdate):
+- `manifest.webmanifest`: Özler UYS Operatör Paneli, theme `#0f0f17`, SVG ikonlar
+- Workbox precache: JS/CSS/HTML; Supabase API NetworkFirst (5s timeout)
+- `src/hooks/useOffline.ts` — `window online/offline` izleme hook'u
+- `OperatorPanel.tsx` — çevrimdışı uyarı banner (amber, fixed top)
+- `index.html` + `tsconfig.app.json` — meta etiketler + pwa/client tipi
+
+#### useOffline — çevrimdışı snapshot + online sync (`9a361a8`)
+
+`src/hooks/useOffline.ts` genişletildi (+61 satır):
+- Çevrimdışı gidildiğinde `workOrders`, `recipes`, `materials` localStorage JSON snapshot (24s TTL)
+- Online gelince `loadAllStores()` otomatik çağrısı — kaçırılan değişiklikler senkronize
+
+#### PDF altyapısı — `src/lib/pdf/` altında toplandı (`770f3df`)
+
+`src/lib/pdf/` altında merkezi yapı oluşturuldu:
+- `fonts.ts` — base64 Roboto font embed
+- `header-footer.ts` — OZLER başlığı + sayfa numarası (`pdf-utils.ts`'ten refactor)
+- `index.ts` — tek giriş noktası re-export
+- `irsaliye-pdf.ts` — yeni irsaliye PDF formatı
+- `is-emri-pdf.ts`, `problem-8d-pdf.ts`, `sevk-belge-pdf.ts`, `sevkiyat-pdf.ts` — `src/lib/pdf/` altına taşındı
+- Import path'leri 6 sayfada güncellendi; `audit-schema.cjs` `STORE_WHITELIST`'e eklendi
+
+#### hesaplaMRPv2 — mrp.ts'e taşındı, mrpEngine re-export (`dd7bbd5`)
+
+Circular bağımlılık çözümü (`mrp.ts ← mrpEngine.ts ← mrp.ts` döngüsü):
+- `hesaplaMRPv2` tanımı `mrpEngine.ts`'ten `mrp.ts`'e taşındı (tek kaynak, döngü yok)
+- `mrpEngine.ts` artık `export { hesaplaMRPv2 } from './mrp'` ile re-export ediyor
+- `index.ts`'ten fazladan export kaldırıldı (`export * from './mrp'` kapsar)
+- `rezerveleriSenkronla` iç çağrısı `hesaplaMRPv2` named-param API'ye geçti
+- `mrpEngine.test.ts` import'u (`from './mrpEngine'`) korunuyor — re-export sayesinde
+
+#### E2E test kapsamı — specs 04/05/06 (`b6aff88`)
+
+`tests/e2e/specs/` 3 yeni spec:
+- `04-orders.spec.ts` — sipariş oluşturma + durum geçişi + MRP tetikleme
+- `05-mrp.spec.ts` — MRP hesaplama + eksik/yeterli satır doğrulama
+- `06-shipment.spec.ts` — sevkiyat oluşturma + kalem ekleme akışı
+
+**Toplam:** 10 test, 10/10 yeşil.
+
+#### master_schema.sql durumu
+
+Son migration PROD'a uygulanmış: `20260516_v16_89_simplify_stok_invalidate_trigger.sql`
+
+Bekleyen (yalnızca TEST'te):
+- `20260518_v17_16_performance_indexes.sql` — PROD onayı bekliyor
+- `20260518_v17_15_stok_arsivleme.sql` — PROD onayı bekliyor
+
+`sql/master_schema.sql` 17 Mayıs pg_dump bazlı — PROD'a yeni migration uygulanıp GitHub Actions UTC 03:00 backup geldikten sonra yenilenecek.
+
+#### Sıradaki görevler
+
+- Performance index migration PROD onayı (MCP ile)
+- Stok arşivleme migration PROD onayı (MCP ile)
+- mrpEngine Faz 3 — karar noktaları akışı
+- Normalize veri geçişi (ertelendi)
