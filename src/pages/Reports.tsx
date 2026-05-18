@@ -51,6 +51,10 @@ export function Reports() {
   const [osBitis, setOsBitis] = useState(today())
   const [osSecili, setOsSecili] = useState('')
 
+  // Kapasite Planlama
+  const [kapGunKap, setKapGunKap] = useState(8)
+  const [kapSeciliIst, setKapSeciliIst] = useState('')
+
   const tabs = [
     { id: 'ozet', label: 'Özet' },
     { id: 'detayli', label: '📋 Detaylı Üretim' },
@@ -66,6 +70,7 @@ export function Reports() {
     { id: 'istperf', label: 'İstasyon Perf.' },
     { id: 'oprsaat', label: 'Operatör Saat' },
     { id: 'stokdurum', label: 'Stok Durumu' },
+    { id: 'kapasite', label: 'Kapasite Planlama' },
   ]
 
   const todayStr = today()
@@ -2221,6 +2226,250 @@ export function Reports() {
                               </td>
                             </tr>
                           ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Kapasite Planlama */}
+      {tab === 'kapasite' && (() => {
+        const haftaKapDk = kapGunKap * 60 * 5
+        const haftaKapSaat = kapGunKap * 5
+
+        const baseDate = new Date(todayStr)
+        const haftalar = Array.from({ length: 4 }, (_, i) => {
+          const bas = new Date(baseDate); bas.setDate(baseDate.getDate() + i * 7)
+          const bit = new Date(bas); bit.setDate(bas.getDate() + 6)
+          const fmt = (d: Date) => d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })
+          return { label: `H${i + 1} (${fmt(bas)}–${fmt(bit)})`, kisa: `H${i + 1}`, bas: bas.toISOString().slice(0, 10), bit: bit.toISOString().slice(0, 10) }
+        })
+        const h4Bit = haftalar[3].bit
+
+        type WOEntry = { wo: typeof workOrders[0]; kalan: number; kalanDk: number; hafta: number | null }
+        type IstVeri = { ad: string; haftaDk: number[]; gecmisDk: number; tarihsizDk: number; wolar: WOEntry[] }
+        const istMap: Record<string, IstVeri> = {}
+
+        workOrders
+          .filter(w => w.durum !== 'tamamlandi' && w.durum !== 'iptal')
+          .forEach(w => {
+            const ist = w.istAd || w.istKod || 'Tanımsız'
+            if (!istMap[ist]) istMap[ist] = { ad: ist, haftaDk: [0, 0, 0, 0], gecmisDk: 0, tarihsizDk: 0, wolar: [] }
+            const uretilen = uretimByWo.get(w.id) ?? 0
+            const kalan = Math.max(0, (w.hedef || 0) - uretilen)
+            const kalanDk = kalan > 0 ? kalan * (w.islemSure || 0) + (w.hazirlikSure || 0) : 0
+            let hafta: number | null = null
+            if (!w.termin) {
+              istMap[ist].tarihsizDk += kalanDk
+            } else if (w.termin < todayStr) {
+              istMap[ist].gecmisDk += kalanDk; hafta = -1
+            } else if (w.termin > h4Bit) {
+              hafta = 4
+            } else {
+              for (let i = 0; i < 4; i++) {
+                if (w.termin >= haftalar[i].bas && w.termin <= haftalar[i].bit) {
+                  istMap[ist].haftaDk[i] += kalanDk; hafta = i; break
+                }
+              }
+            }
+            istMap[ist].wolar.push({ wo: w, kalan, kalanDk, hafta })
+          })
+
+        const kapData = Object.values(istMap)
+          .filter(ist => ist.wolar.length > 0)
+          .sort((a, b) => Math.max(...b.haftaDk) - Math.max(...a.haftaDk))
+
+        const chartData = kapData.map(ist => {
+          const r: Record<string, any> = { ist: ist.ad.length > 12 ? ist.ad.slice(0, 11) + '…' : ist.ad, istTam: ist.ad }
+          ist.haftaDk.forEach((dk, i) => {
+            r[`H${i + 1}`] = Math.round(dk / 60 * 10) / 10
+            r[`H${i + 1}p`] = haftaKapDk > 0 ? Math.round(dk / haftaKapDk * 100) : 0
+          })
+          return r
+        })
+
+        const asimlar = kapData.flatMap(ist =>
+          ist.haftaDk.map((dk, hi) => {
+            const pct = haftaKapDk > 0 ? Math.round(dk / haftaKapDk * 100) : 0
+            return pct > 100 ? { ist: ist.ad, hi, pct } : null
+          }).filter((x): x is NonNullable<typeof x> => x !== null)
+        )
+
+        const drillIst = kapSeciliIst ? istMap[kapSeciliIst] : null
+
+        return (
+          <div className="space-y-4">
+            {/* Filtre */}
+            <div className="flex flex-wrap gap-4 items-center">
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-0.5">Günlük kapasite (saat/istasyon)</label>
+                <div className="flex items-center gap-2">
+                  <input type="range" min={4} max={24} step={0.5} value={kapGunKap}
+                    onChange={e => setKapGunKap(parseFloat(e.target.value))}
+                    className="w-28 accent-accent" />
+                  <span className="text-xs font-mono text-accent w-24">{kapGunKap}s/gün ({haftaKapSaat}s/hafta)</span>
+                </div>
+              </div>
+              {kapSeciliIst && (
+                <button onClick={() => setKapSeciliIst('')} className="text-[10px] text-zinc-500 hover:text-white px-2 py-1.5 self-end">
+                  ✕ Drill-down kapat
+                </button>
+              )}
+            </div>
+
+            {/* Aşım uyarıları */}
+            {asimlar.length > 0 && (
+              <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-3">
+                <div className="text-xs font-semibold text-red-400 mb-1.5">⚠ Kapasite aşımı — {asimlar.length} istasyon/hafta kombinasyonu</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {asimlar.map((a, i) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 bg-red-500/20 text-red-300 rounded-full">
+                      {a.ist} · {haftalar[a.hi].kisa}: %{a.pct}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {kapData.length === 0 ? (
+              <div className="p-8 text-center text-zinc-600 bg-bg-2 border border-border rounded-lg">
+                Önümüzdeki 4 haftada planlanan aktif iş emri yok
+              </div>
+            ) : (
+              <>
+                {/* Bar chart */}
+                <div className="bg-bg-2 border border-border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-3 gap-4">
+                    <h3 className="text-sm font-semibold">İstasyon Bazlı Haftalık Yük (saat)</h3>
+                    <div className="flex flex-wrap gap-3 text-[10px] text-zinc-500">
+                      {haftalar.map((h, i) => (
+                        <span key={i} className="flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: COLORS[i] }} />
+                          {h.label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={chartData} margin={{ top: 4, right: 20, left: 0, bottom: 50 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+                      <XAxis dataKey="ist" tick={{ fontSize: 10, fill: '#a1a1aa' }} angle={-30} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} unit="s" />
+                      <Tooltip
+                        contentStyle={{ background: '#1c1c24', border: '1px solid #3f3f46', fontSize: 11 }}
+                        formatter={(v: number, name: string, p: any) => {
+                          const hIdx = parseInt(name.replace('H', '')) - 1
+                          const pct = p.payload[`${name}p`]
+                          return [`${v}s (%${pct})`, haftalar[hIdx]?.label || name]
+                        }}
+                      />
+                      <ReferenceLine y={haftaKapSaat} stroke="#ef4444" strokeDasharray="4 3"
+                        label={{ value: `Kap. ${haftaKapSaat}s`, fill: '#ef4444', fontSize: 9, position: 'insideTopRight' }} />
+                      {(['H1', 'H2', 'H3', 'H4'] as const).map((hk, i) => (
+                        <Bar key={hk} dataKey={hk} fill={COLORS[i]} radius={[2, 2, 0, 0]} maxBarSize={22}
+                          onClick={(d: any) => setKapSeciliIst(kapSeciliIst === d.istTam ? '' : d.istTam)}
+                          cursor="pointer" />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Doluluk matrisi */}
+                <div className="bg-bg-2 border border-border rounded-lg p-4">
+                  <h3 className="text-sm font-semibold mb-3">Doluluk Oranı Matrisi</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-zinc-500">
+                          <th className="text-left px-3 py-2 min-w-[130px]">İstasyon</th>
+                          <th className="text-center px-2 py-2 text-red-400 min-w-[72px]">Gecikmiş</th>
+                          {haftalar.map((h, i) => (
+                            <th key={i} className="text-center px-2 py-2 min-w-[72px]">{h.kisa}</th>
+                          ))}
+                          <th className="text-center px-2 py-2 text-zinc-600 min-w-[72px]">Tarihsiz</th>
+                          <th className="text-center px-2 py-2 min-w-[52px]">İE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kapData.map(ist => (
+                          <tr key={ist.ad}
+                            onClick={() => setKapSeciliIst(kapSeciliIst === ist.ad ? '' : ist.ad)}
+                            className={`border-b border-border/30 cursor-pointer transition-colors ${kapSeciliIst === ist.ad ? 'bg-accent/10' : 'hover:bg-bg-3'}`}>
+                            <td className="px-3 py-2 font-medium text-zinc-300">{ist.ad}</td>
+                            <td className="px-2 py-2 text-center">
+                              {ist.gecmisDk > 0
+                                ? <span className="text-red-400 font-mono">{Math.round(ist.gecmisDk / 60 * 10) / 10}s</span>
+                                : <span className="text-zinc-700">—</span>}
+                            </td>
+                            {ist.haftaDk.map((dk, hi) => {
+                              const pct = haftaKapDk > 0 ? Math.round(dk / haftaKapDk * 100) : 0
+                              const cl = pct === 0 ? 'text-zinc-700' : pct > 100 ? 'text-red-400 font-semibold' : pct > 80 ? 'text-amber-400' : 'text-green-400'
+                              const bg = pct > 100 ? 'bg-red-500/10' : pct > 80 ? 'bg-amber-500/10' : ''
+                              return (
+                                <td key={hi} className={`px-2 py-2 text-center font-mono text-[11px] ${cl} ${bg}`}>
+                                  {dk > 0 ? (
+                                    <div><div>{Math.round(dk / 60 * 10) / 10}s</div><div className="text-[9px] opacity-60">%{pct}</div></div>
+                                  ) : <span className="text-zinc-700">—</span>}
+                                </td>
+                              )
+                            })}
+                            <td className="px-2 py-2 text-center">
+                              {ist.tarihsizDk > 0
+                                ? <span className="text-zinc-500 font-mono">{Math.round(ist.tarihsizDk / 60 * 10) / 10}s</span>
+                                : <span className="text-zinc-700">—</span>}
+                            </td>
+                            <td className="px-2 py-2 text-center font-mono text-zinc-400">{ist.wolar.length}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Drill-down */}
+                {drillIst && (
+                  <div className="bg-bg-2 border border-accent/30 rounded-lg p-4">
+                    <h3 className="text-sm font-semibold mb-3">
+                      İş Emri Detayı — <span className="text-accent">{kapSeciliIst}</span>
+                      <span className="ml-2 text-xs text-zinc-500 font-normal">{drillIst.wolar.length} İE</span>
+                    </h3>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-zinc-500">
+                          <th className="text-left px-3 py-1.5">İE No</th>
+                          <th className="text-left px-3 py-1.5">Mamul</th>
+                          <th className="text-right px-3 py-1.5">Hedef</th>
+                          <th className="text-right px-3 py-1.5">Kalan</th>
+                          <th className="text-right px-3 py-1.5">Tahmini Süre</th>
+                          <th className="text-center px-3 py-1.5">Termin</th>
+                          <th className="text-center px-3 py-1.5">Hafta</th>
+                          <th className="text-center px-3 py-1.5">Durum</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {drillIst.wolar
+                          .sort((a, b) => (a.wo.termin || 'z').localeCompare(b.wo.termin || 'z'))
+                          .map(({ wo, kalan, kalanDk, hafta }) => {
+                            const gecmis = hafta === -1
+                            const haftaLabel = hafta === -1 ? 'Gecikmiş' : hafta === null ? 'Tarihsiz' : hafta === 4 ? '>4H' : haftalar[hafta!].kisa
+                            const haftaCl = hafta === -1 ? 'text-red-400' : hafta === null ? 'text-zinc-500' : 'text-accent'
+                            return (
+                              <tr key={wo.id} className={`border-b border-border/30 ${gecmis ? 'bg-red-900/5' : ''}`}>
+                                <td className="px-3 py-1 font-mono text-zinc-400">{wo.ieNo || wo.id.slice(0, 8)}</td>
+                                <td className="px-3 py-1 text-zinc-300 max-w-[130px] truncate" title={wo.mamulAd || ''}>{wo.mamulAd || '—'}</td>
+                                <td className="px-3 py-1 text-right font-mono">{wo.hedef}</td>
+                                <td className="px-3 py-1 text-right font-mono text-amber-400">{kalan}</td>
+                                <td className="px-3 py-1 text-right font-mono text-accent">{kalanDk > 0 ? `${Math.round(kalanDk / 60 * 10) / 10}s` : '—'}</td>
+                                <td className={`px-3 py-1 text-center font-mono text-[10px] ${gecmis ? 'text-red-400' : 'text-zinc-400'}`}>{wo.termin || '—'}</td>
+                                <td className={`px-3 py-1 text-center text-[10px] font-semibold ${haftaCl}`}>{haftaLabel}</td>
+                                <td className="px-3 py-1 text-center text-[10px] text-zinc-500">{wo.durum}</td>
+                              </tr>
+                            )
+                          })}
                       </tbody>
                     </table>
                   </div>
