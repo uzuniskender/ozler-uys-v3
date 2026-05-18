@@ -15,6 +15,7 @@ import type { IzinTip } from '@/types/izin'
 import { barModelSync } from '@/services/productionService/barModel'
 import { canProduceWO, canDurus } from '@/services/productionService/validations'
 import { getEffectiveStatus , isWorkOrderOpen} from '@/lib/statusUtils'
+import { useOffline } from '@/hooks/useOffline'
 
 const mesajSchema = z.object({
   mesaj: z.string().min(1, 'Mesaj boş olamaz').max(1000, 'Mesaj en fazla 1000 karakter'),
@@ -207,6 +208,7 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
   const materials = useWarehouseStore(s => s.materials)
   const operators = useAuthStore(s => s.operators)
   const izinler = useAuthStore(s => s.izinler)
+  const offline = useOffline()
   // v16.82 — Operatör filtreler
   const [filterSiparis, setFilterSiparis] = useState('')
   const [filterOlcu, setFilterOlcu] = useState('')
@@ -331,7 +333,12 @@ function OperatorMain({ oprId, opr, tab, setTab, isAdmin, onLogout, onBack }: {
 
   return (
     <div className="min-h-screen bg-bg-0 px-4 py-3">
-      <div className="max-w-lg mx-auto">
+      {offline && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500/90 text-black text-xs font-semibold text-center py-1.5 backdrop-blur-sm">
+          ⚠ Çevrimdışı — Veriler önbellekten gösteriliyor
+        </div>
+      )}
+      <div className={`max-w-lg mx-auto${offline ? ' pt-7' : ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4 bg-gradient-to-r from-accent/20 to-bg-2 border border-accent/30 rounded-xl p-4">
           <div>
