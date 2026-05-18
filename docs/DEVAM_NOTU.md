@@ -6,6 +6,19 @@
 
 ---
 
+## 18 Mayıs 2026 — Rezerv Lifecycle (v17.26)
+
+Rezerv kayıtlarının lifecycle yönetimi tamamlandı:
+
+- mrp.ts: Sipariş iptalinde rezerveSil() — hayalet rezerv yok
+- autoChain.ts: ADIM 3.5 başında idempotent temizlik (birikimli rezerv yok)
+- autoChain.ts: mrp_durum=eksik ise rezerv sil (tamam→eksik geçiş)
+- workOrderService.ts: İE iptalinde orderId bazlı rezerv temizleme
+
+Build: ✅ | E2E: 39/39 (2 flaky izole geçti)
+
+---
+
 ## 18 Mayıs 2026 — MRP Unit Test Genişletmesi (v17.25)
 
 mrp.test.ts 9 → 15 test:
