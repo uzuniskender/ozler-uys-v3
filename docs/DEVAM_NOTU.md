@@ -950,6 +950,40 @@ hesaplaMRPv2({ ordIds, orders, workOrders: wos, recipes, stokHareketler, tedarik
 
 **⚠ PROD uygulaması:** Migration `sql/20260518_v17_15_stok_arsivleme.sql` henüz uygulanmadı. TEST sonra PROD (MCP ile).
 
+#### Arşivleme SQL bug fix — bar_acilis semantiği (`970c7d0`)
+
+`sql/20260518_v17_15_stok_arsivleme.sql` konsolidasyon formülü düzeltildi.
+
+**Hata:** `WHEN tip IN ('giris', 'bar_acilis') THEN miktar` — bar_acilis pozitif sayılıyordu.
+
+**Doğru:** `hammaddeHesap.ts:_stokDelta` semantiği: `bar_acilis` stoku DÜŞÜRÜR (bar genel stoktan çıkar, `uys_acik_barlar` havuzuna girer). Eski ELSE `catch-all` da kaldırıldı — bilinmeyen tipler artık `ELSE 0` ile görmezden geliniyor.
+
+Migration henüz uygulanmamıştı → dosyayı doğrudan güncelleme fırsatı.
+
+#### Günlük net stok snapshot (`970c7d0`)
+
+**Amaç:** İstenilen tarih için malkod bazında net stoku `uys_stok_snapshot` tablosuna kaydet. Tarihsel trend analizi, raporlama ve dış sistem entegrasyonu için hazır referans.
+
+**Değişen dosyalar (5):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `sql/20260518_v17_16_stok_snapshot.sql` | `uys_stok_snapshot` tablosu (`tarih+malkod` unique) + `al_stok_snapshot(snapshot_tarihi text)` RPC |
+| `src/lib/permissions.ts` | `stok_snapshot: []` eylemi eklendi (admin-only) |
+| `src/pages/Warehouse.tsx` | `snapshotAl()` fonksiyonu + `📸 Snapshot Al` butonu |
+| `scripts/audit-schema.cjs` | `uys_stok_snapshot` → `STORE_WHITELIST` + `DATA_MGMT_WHITELIST` |
+| `sql/20260518_v17_15_stok_arsivleme.sql` | `bar_acilis` bug fix (yukarıdaki bölüm) |
+
+**RPC mantığı (`al_stok_snapshot`):**
+- `buildStokMap` ile birebir aynı semantik (giris=+, cikis/bar_acilis/rezerv=-, diğer=0)
+- `ON CONFLICT (tarih, malkod) DO UPDATE` → aynı gün tekrar çalıştırılabilir (idempotent)
+- Deterministik ID: `snap-` + md5(snapshot_tarihi || malkod)
+- E2E kayıtları hariç (`test_run_id IS NULL`)
+
+**⚠ Versiyon çakışması notu:** İkinci makine aynı gün `20260518_v17_16_performance_indexes.sql` oluşturmuş. İki dosya da v17.16 prefix'li ama farklı isimde — DB'de sıralı bağımsız uygulanacak; BUILD'e etkisi yok.
+
+**⚠ PROD uygulaması:** Migration `sql/20260518_v17_16_stok_snapshot.sql` henüz uygulanmadı. TEST sonra PROD (MCP ile).
+
 ---
 
 ### 18 Mayıs 2026 — Gündüz Oturumu (v17.12–v17.18)
@@ -1034,7 +1068,8 @@ Son migration PROD'a uygulanmış: `20260516_v16_89_simplify_stok_invalidate_tri
 
 Bekleyen (yalnızca TEST'te):
 - `20260518_v17_16_performance_indexes.sql` — PROD onayı bekliyor
-- `20260518_v17_15_stok_arsivleme.sql` — PROD onayı bekliyor
+- `20260518_v17_15_stok_arsivleme.sql` — henüz TEST'e bile uygulanmadı (PROD onayı bekliyor)
+- `20260518_v17_16_stok_snapshot.sql` — henüz TEST'e bile uygulanmadı (PROD onayı bekliyor)
 
 `sql/master_schema.sql` 17 Mayıs pg_dump bazlı — PROD'a yeni migration uygulanıp GitHub Actions UTC 03:00 backup geldikten sonra yenilenecek.
 
@@ -1042,5 +1077,6 @@ Bekleyen (yalnızca TEST'te):
 
 - Performance index migration PROD onayı (MCP ile)
 - Stok arşivleme migration PROD onayı (MCP ile)
+- Stok snapshot migration TEST + PROD uygulaması (MCP ile)
 - mrpEngine Faz 3 — karar noktaları akışı
 - Normalize veri geçişi (ertelendi)
