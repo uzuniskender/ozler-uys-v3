@@ -1,7 +1,7 @@
 # ozler-uys-v3 - SALT GitHub Pages HOST (STUB)
 
 Bu repo artik GELISTIRME yeri DEGILDIR. Sadece canli UYS'in GitHub Pages
-host'udur: https://uzuniskender.github.io/ozler-uys-v3/ (gh-pages branch).
+host'udur: https://uzuniskender.github.io/ozler-uys-v3/ (gh-pages branch).. 
 
 ## Gelistirme nerede?
 - Kaynak kod: PRIVATE monorepo -> github.com/uzuniskender/ozler-platform -> apps/uys
