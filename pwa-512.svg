@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="80" fill="#0f0f17"/>
+  <rect width="512" height="512" rx="80" fill="#863bff" fill-opacity="0.15"/>
+  <!-- Bolt icon -->
+  <path d="M290 52 L178 276 H256 L222 460 L400 212 H310 Z" fill="#863bff" stroke="#863bff" stroke-width="4" stroke-linejoin="round"/>
+  <!-- UYS text -->
+  <text x="256" y="494" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="700" fill="#863bff" fill-opacity="0.7" text-anchor="middle" letter-spacing="10">UYS</text>
+</svg>
