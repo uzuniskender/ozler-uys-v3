@@ -1,0 +1,55 @@
+import{r as l}from"./supabase-BYHBnSSI.js";var $={VAR:"bg-emerald-400 text-black",KARDES_AYNI_GRUP:"bg-amber-400 text-black",KARDES_FARKLI_GRUP:"bg-orange-500 text-black",YOK:"bg-zinc-700 text-zinc-300",SORULAMADI:"bg-zinc-800 text-zinc-300 border border-dashed border-zinc-500"},d={VAR:"Resim var",KARDES_AYNI_GRUP:"Kardeşte var",KARDES_FARKLI_GRUP:"Kardeşte var (farklı grup)",YOK:"Resim yok",SORULAMADI:"Sorulamadı (kartı yok)"};function k(e){return e==="VAR"?"VAR":e&&e.startsWith("KARDEŞTE VAR (aynı")?"KARDES_AYNI_GRUP":e&&e.startsWith("KARDEŞTE VAR")?"KARDES_FARKLI_GRUP":"YOK"}async function _(e){const n=new Map,t=Array.from(new Set(e.map(r=>(r||"").trim()).filter(Boolean)));if(t.length===0)return n;for(const r of t)n.set(r,{kod:r,ad:null,durum:"SORULAMADI",kardesKod:null,etiket:d.SORULAMADI,analiz:"SORULAMADI",analizKardes:null});for(let r=0;r<t.length;r+=200){const{data:o,error:i}=await l.from("uys_teknik_resim_durum_v").select("kod, ad, ortak_alan_durum, ortak_alan_kardes, analiz_durum, analiz_kardes").in("kod",t.slice(r,r+200));if(i)throw i;for(const a of o??[]){const s=String(a.kod),u=k(a.ortak_alan_durum==null?null:String(a.ortak_alan_durum));n.set(s,{kod:s,ad:a.ad==null?null:String(a.ad),durum:u,kardesKod:a.ortak_alan_kardes==null?null:String(a.ortak_alan_kardes),etiket:d[u],analiz:k(a.analiz_durum==null?null:String(a.analiz_durum)),analizKardes:a.analiz_kardes==null?null:String(a.analiz_kardes)})}}return n}var m="O:\\ARGE\\TEKNIK_RESIM";function y(e,n=m){const t=Array.from(new Set(e.map(o=>(o||"").trim()).filter(Boolean))),r=t.map(o=>'"'+o+'"').join(",");return`# UYS — Teknik Resim Toplayici (${t.length} kod)
+# Bulunanlari masaustune kopyalar + zipler, bulunamayanlari listeler.
+# Kardes kurali: kod bulunamazsa ilk 8 hane sabit, son hane serbest aranir (_KARDES).
+
+$kaynak = "${n}"
+$kodlar = @(${r})
+
+$hedef = Join-Path ([Environment]::GetFolderPath("Desktop")) "teknik_resim_$(Get-Date -Format yyyyMMdd_HHmm)"
+New-Item -ItemType Directory -Path $hedef -Force | Out-Null
+
+Write-Host "Taraniyor: $kaynak ..." -ForegroundColor Cyan
+$tumu = Get-ChildItem -Path $kaynak -Recurse -File -Include *.pdf -ErrorAction SilentlyContinue
+Write-Host "$($tumu.Count) pdf tarandi."
+
+$eksik = @()
+foreach ($kod in $kodlar) {
+    $bul = $tumu | Where-Object { $_.Name -like "*$kod*" }
+    $etiket = $kod
+    if (-not $bul -and $kod.Length -ge 9) {
+        $taban = $kod.Substring(0,8)
+        $bul = $tumu | Where-Object { $_.Name -match "$taban[0-9]" }
+        if ($bul) { $etiket = ($kod + "_KARDES") }
+    }
+    if ($bul) {
+        $kl = Join-Path $hedef $etiket
+        New-Item -ItemType Directory -Path $kl -Force | Out-Null
+        $bul | ForEach-Object { Copy-Item $_.FullName -Destination (Join-Path $kl $_.Name) -Force }
+        Write-Host ("{0,-16} {1} dosya" -f $etiket, $bul.Count) -ForegroundColor Green
+    } else {
+        $eksik += $kod
+        Write-Host ("{0,-16} BULUNAMADI" -f $kod) -ForegroundColor Yellow
+    }
+}
+
+if (Get-ChildItem $hedef -ErrorAction SilentlyContinue) {
+    Compress-Archive -Path (Join-Path $hedef "*") -DestinationPath ($hedef + ".zip") -Force
+    Remove-Item $hedef -Recurse -Force
+    Write-Host "Hazir: $hedef.zip" -ForegroundColor Cyan
+} else {
+    Remove-Item $hedef -Recurse -Force
+    Write-Host "Hicbir dosya bulunamadi." -ForegroundColor Red
+}
+
+if ($eksik.Count -gt 0) {
+    $eksikDosya = ($hedef + "_BULUNAMAYANLAR.txt")
+    $eksik | Set-Content -Path $eksikDosya -Encoding UTF8
+    Write-Host "BULUNAMAYANLAR ($($eksik.Count)):" -ForegroundColor Yellow
+    $eksik | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    Write-Host "Liste: $eksikDosya" -ForegroundColor Yellow
+}
+`}async function A(){const{data:e,error:n}=await l.from("uys_teknik_resim_envanter_tarama").select("ts").order("ts",{ascending:!1}).limit(1);if(n||!e||e.length===0)return{tarih:null,yasGun:null};const t=String(e[0].ts);return{tarih:t,yasGun:Math.round((Date.now()-new Date(t).getTime())/864e5)}}async function f(e,n){const t=e.map(a=>a.trim()).filter(a=>/\.pdf$/i.test(a));if(t.length===0)throw new Error("Listede .pdf ile biten satır yok");const{data:r,error:o}=await l.rpc("uys_teknik_resim_envanter_yaz",{p_dosyalar:t,p_kullanici:n??null});if(o)throw o;const i=Array.isArray(r)?r[0]:r;return{dosya:Number(i?.r_dosya??0),kod:Number(i?.r_kod??0),yeni:Number(i?.r_yeni??0),kaybolan:Number(i?.r_kaybolan??0)}}function h(e=m){return`# UYS — Ortak alan envanteri. Sadece DOSYA ADLARINI panoya kopyalar (dosya kopyalanmaz).
+Get-ChildItem "${e}" -Recurse -File -Include *.pdf |
+  Select-Object -ExpandProperty Name | Set-Clipboard
+Write-Host "Dosya adlari panoya kopyalandi. UYS > Teknik Resim Toplayici sayfasina yapistirin." -ForegroundColor Cyan
+`}export{f as a,h as i,$ as n,y as o,A as r,_ as s,d as t};
